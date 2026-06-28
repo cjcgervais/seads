@@ -7,6 +7,7 @@
 #include "kernel.h"
 #include "golden_params.h"
 #include "../det_math/det_math.h"
+#include "../det_math/detmath_coeffs.h"  // for detm::PI used by deg2rad
 #include "../replay/sha256.h"
 
 #include <cstdio>
