@@ -1,0 +1,29 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python tools/*)",
+      "Bash(python -m pytest*)",
+      "Bash(python -m pip install*)",
+      "Bash(cmake*)",
+      "Bash(ctest*)",
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git add*)",
+      "Bash(git commit*)",
+      "Bash(git log*)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python tools/lint_determinism.py"
+          }
+        ]
+      }
+    ]
+  }
+}

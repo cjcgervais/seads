@@ -1,0 +1,30 @@
+# Build artifacts
+/build/
+/out/
+*.obj
+*.o
+*.exe
+*.dll
+*.so
+*.dylib
+*.lib
+*.a
+*.pdb
+
+# Golden run candidates (regenerated; only the sealed expected hash is tracked)
+*.candidate.bin
+/run_*.bin
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.hypothesis/
+.pytest_cache/
+
+# Editor / OS
+.vs/
+.vscode/
+*.user
+.DS_Store
+Thumbs.db

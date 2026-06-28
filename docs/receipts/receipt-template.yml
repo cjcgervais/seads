@@ -1,0 +1,28 @@
+# Chronicle Receipt template — one per merge (Ledger Discipline).
+# Generate with: python tools/make_receipt.py
+seal: ATM-Sphere vX.YrZ
+realm: ATM-only
+geometry:
+  radius_m: 15000
+  flattening: 0
+tick_dt_s: 0.01
+gravity_mps2: 9.80665
+ceiling:
+  atm_top_m: 8000
+  soft_band_m: 100
+wire_hash: GEO-001
+change_summary: "<what changed>"
+rail_change: false        # true => a new seal is mandatory
+gates:
+  spec_monotone_check: PASS
+  det_math_oracle: PASS
+  tuning_probe: PASS
+  atm_top_probe: PASS
+  validate_snapshot: PASS
+  property_tests: PASS
+golden_sha256: "<world_hash>"
+commit_sha: "<PR head>"
+toolchain_matrix: [MSVC2022, Clang18, GCC13, x64, AArch64]
+date: "YYYY-MM-DD"
+notes: "<freeform>"
+signoff: "<agent/human> — <role>"

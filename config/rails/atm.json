@@ -1,0 +1,80 @@
+{
+  "header": {
+    "id": "SEADS-RAILS",
+    "version": 120,
+    "seal": "ATM-Sphere v1.2r0",
+    "note": "Data-driven immutable rails. Any change here REQUIRES a new seal (ADR + Forge audit card + Chronicle receipt). See CLAUDE.md > Change-Control Law."
+  },
+  "rails": {
+    "realm": "ATM",
+    "mode": 1,
+    "geometry": {
+      "radius_m": 15000,
+      "flattening": 0
+    },
+    "dt_s": 0.01,
+    "tick_hz": 100,
+    "gravity_mps2": 9.80665,
+    "atm_top_m": 8000,
+    "atm_soft_band_m": 100,
+    "atmosphere": "still_air",
+    "kinematics": {
+      "model": "intrinsic_S2",
+      "turn_law": "psi_dot = g0 * tan(phi) / V",
+      "step": "closed_form_great_circle",
+      "cartesian_fallback": false
+    },
+    "determinism": {
+      "math_lib": "det_math",
+      "bans": [
+        "NO_LIBM",
+        "NO_FAST_MATH",
+        "NO_FMA",
+        "NO_VINCENTY",
+        "NO_KEPLER",
+        "NO_X87"
+      ],
+      "banned_symbols": [
+        "std::sin", "std::cos", "std::tan",
+        "std::atan2", "std::asin", "std::acos",
+        "std::sqrt", "std::pow",
+        "sin", "cos", "tan", "atan2", "asin", "acos", "sqrt", "pow"
+      ],
+      "flags": "NO_LIBM NO_FAST_MATH NO_FMA NO_VINCENTY NO_KEPLER NO_X87",
+      "fp_model": "strict",
+      "rounding": "nearest_even"
+    },
+    "wire": {
+      "format": "GEO-001",
+      "latlon_scale": 10000000,
+      "bearing_scale": 1000000,
+      "alt_scale": 1000,
+      "encoding": "ZigZag+LEB128"
+    },
+    "networking": {
+      "physics_hz": 100,
+      "snapshot_hz": 20,
+      "model": "server_authoritative_state_sync"
+    }
+  },
+  "golden": {
+    "id": "GOLDEN-SK-Sphere-001",
+    "ticks": 10000,
+    "start_lat_deg": 0.0,
+    "start_lon_deg": 0.0,
+    "start_psi_deg": 45.0,
+    "start_tas_mps": 250.0,
+    "start_alt_m": 1000.0,
+    "start_phi_deg": 0.0
+  },
+  "roster": [
+    "P-47D Thunderbolt",
+    "Bf 109 F-4",
+    "Ki-61 Hien",
+    "A6M2 Zero",
+    "Yak-3",
+    "La-7",
+    "Spitfire Mk V",
+    "P-51 Mustang"
+  ]
+}

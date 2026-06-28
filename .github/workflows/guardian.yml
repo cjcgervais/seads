@@ -1,0 +1,137 @@
+name: Guardian — Determinism Gate
+
+# Proves the SEADS bit-for-bit promise: GOLDEN-SK-Sphere-001 world_hash must be
+# IDENTICAL across MSVC / Clang / GCC on x64 + AArch64, and equal to the sealed hash.
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  python-gates:
+    name: Python gates (reference + probes)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - run: pip install gmpy2 hypothesis pytest
+      - name: Generated headers in sync
+        run: |
+          python tools/gen_coeffs.py --check
+          python tools/gen_golden_params.py --check
+          python tools/gen_detmath_vectors.py --check
+      - name: Rails + roster
+        run: python tools/spec_monotone_check.py config/rails/atm.json
+      - name: det_math oracle (vs MPFR)
+        run: python tools/det_math_oracle.py --samples 8000
+      - name: Tuning + flight probes
+        run: python tools/tuning_probe.py data/tuning/envelopes/*.json
+      - name: Ceiling probe
+        run: python tools/atm_top_probe.py --ceil 8000 --soft 100
+      - name: Property tests (metamorphic)
+        run: python -m pytest tests/property -q
+      - name: Reference golden matches seal
+        run: |
+          python tools/ref_kernel.py --out /tmp/ref.bin
+          python tools/validate_snapshot.py \
+            --golden tests/golden/GOLDEN-SK-Sphere-001/expected.world_hash \
+            --candidate /tmp/ref.bin
+
+  build-matrix:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: "MSVC x64",   os: windows-latest,   gen: "msvc" }
+          - { name: "GCC x64",    os: ubuntu-latest,    gen: "unix", cc: gcc,   cxx: g++ }
+          - { name: "Clang x64",  os: ubuntu-latest,    gen: "unix", cc: clang, cxx: clang++ }
+          - { name: "GCC arm64",  os: ubuntu-24.04-arm, gen: "unix", cc: gcc,   cxx: g++ }
+          - { name: "Clang arm64",os: macos-14,         gen: "unix", cc: clang, cxx: clang++ }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+
+      - name: Configure + build (MSVC)
+        if: matrix.gen == 'msvc'
+        run: |
+          cmake -B build -G "Visual Studio 17 2022" -A x64
+          cmake --build build --config Release
+
+      - name: Configure + build (Unix)
+        if: matrix.gen == 'unix'
+        env:
+          CC: ${{ matrix.cc }}
+          CXX: ${{ matrix.cxx }}
+        run: |
+          cmake -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build -j
+
+      - name: Locate binaries
+        id: bin
+        shell: bash
+        run: |
+          if [ "${{ matrix.gen }}" = "msvc" ]; then
+            echo "golden=build/Release/seads_golden.exe" >> "$GITHUB_OUTPUT"
+            echo "dtest=build/Release/seads_detmath_test.exe" >> "$GITHUB_OUTPUT"
+          else
+            echo "golden=build/seads_golden" >> "$GITHUB_OUTPUT"
+            echo "dtest=build/seads_detmath_test" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: det_math bit-exact test
+        shell: bash
+        run: "${{ steps.bin.outputs.dtest }}"
+
+      - name: Run golden + hash
+        shell: bash
+        run: |
+          "${{ steps.bin.outputs.golden }}" --out run.bin
+          python - <<'PY'
+          import hashlib
+          h = hashlib.sha256(open("run.bin","rb").read()).hexdigest()
+          open("hash.txt","w").write(h+"\n")
+          print("world_hash", h)
+          PY
+
+      - name: Validate against sealed golden
+        shell: bash
+        run: |
+          python tools/validate_snapshot.py \
+            --golden tests/golden/GOLDEN-SK-Sphere-001/expected.world_hash \
+            --candidate run.bin
+
+      - name: Upload hash artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: hash-${{ matrix.name }}
+          path: hash.txt
+
+  verify-determinism:
+    name: Cross-toolchain hash aggregation
+    needs: [ python-gates, build-matrix ]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { path: hashes }
+      - name: All world_hashes identical and equal to seal
+        run: |
+          set -e
+          SEAL=$(tr -d ' \n' < tests/golden/GOLDEN-SK-Sphere-001/expected.world_hash)
+          echo "sealed: $SEAL"
+          fail=0
+          for f in hashes/*/hash.txt; do
+            H=$(tr -d ' \n' < "$f")
+            echo "$(dirname "$f"): $H"
+            if [ "$H" != "$SEAL" ]; then echo "  MISMATCH"; fail=1; fi
+          done
+          if [ "$fail" -ne 0 ]; then
+            echo "DETERMINISM GATE FAILED"; exit 1
+          fi
+          echo "DETERMINISM GATE PASSED — all toolchains agree with the seal."
