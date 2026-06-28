@@ -11,6 +11,16 @@ endif()
 
 include(${CMAKE_SOURCE_DIR}/cmake/DeterminismFlags.cmake)
 
+# Self-contained deterministic binaries (no runtime libstdc++/libgcc DLL dependency).
+# winpthread is appended last so static libstdc++'s pthread refs resolve under both the
+# GCC and Clang (mingw) drivers.
+if(NOT MSVC)
+  add_link_options(-static -static-libgcc -static-libstdc++ -pthread)
+  # Belt-and-suspenders: ensure winpthread is available at the end of the link line so
+  # static libstdc++'s pthread_* references resolve under the Clang (mingw) driver too.
+  set(CMAKE_CXX_STANDARD_LIBRARIES "${CMAKE_CXX_STANDARD_LIBRARIES} -Wl,--start-group -lstdc++ -lwinpthread -Wl,--end-group")
+endif()
+
 # --- deterministic math (the only sanctioned FP primitives) ---
 add_library(seads_det_math STATIC src/det_math/det_math.cpp)
 target_include_directories(seads_det_math PUBLIC src/det_math)
