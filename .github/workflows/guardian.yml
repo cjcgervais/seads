@@ -47,7 +47,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: "MSVC x64",   os: windows-latest,   gen: "msvc" }
+          # Pinned to windows-2022 so the "Visual Studio 17 2022" generator below resolves:
+          # windows-latest is now windows-2025-vs2026 (VS 18), which has no VS17 instance.
+          - { name: "MSVC x64",   os: windows-2022,     gen: "msvc" }
           - { name: "GCC x64",    os: ubuntu-latest,    gen: "unix", cc: gcc,   cxx: g++ }
           - { name: "Clang x64",  os: ubuntu-latest,    gen: "unix", cc: clang, cxx: clang++ }
           - { name: "GCC arm64",  os: ubuntu-24.04-arm, gen: "unix", cc: gcc,   cxx: g++ }
