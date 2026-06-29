@@ -30,11 +30,17 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--signoff", default="Forge")
     ap.add_argument("--notes", default="Automated Chronicle receipt.")
+    ap.add_argument("--rail-change", action="store_true",
+                    help="record this receipt as covering a rail change (Tier-1 reseal)")
     args = ap.parse_args()
 
     rails = json.loads((ROOT / "config/rails/atm.json").read_text(encoding="utf-8"))
     seal = rails["header"]["seal"]
     gid = rails["golden"]["id"]
+    wire = rails["rails"].get("wire", {})
+    wire_label = wire.get("format", "GEO-001")
+    if "kin" in wire:
+        wire_label += "+" + wire["kin"].get("format", "KIN-001")
     golden_dir = ROOT / "tests" / "golden" / gid
     expected_hash = ""
     eh = golden_dir / "expected.world_hash"
@@ -65,6 +71,10 @@ def main():
     interp_ref_ok, _ = run([PY, str(TOOLS / "interp_ref.py")])
     interp_vec_ok, _ = run([PY, str(TOOLS / "gen_interp_vectors.py"), "--check"])
     gates["interp"] = interp_ref_ok and interp_vec_ok
+    # Client-side prediction (netcode layer 4b): reference self-test + parity header in sync.
+    predict_ref_ok, _ = run([PY, str(TOOLS / "predict_ref.py")])
+    predict_vec_ok, _ = run([PY, str(TOOLS / "gen_predict_vectors.py"), "--check"])
+    gates["predict"] = predict_ref_ok and predict_vec_ok
 
     # regenerate golden candidate and validate against the seal
     cand = Path(tempfile.gettempdir()) / "seads_golden_candidate.bin"
@@ -115,9 +125,9 @@ def main():
         "ceiling:",
         "  atm_top_m: 8000",
         "  soft_band_m: 100",
-        "wire_hash: GEO-001",
+        f"wire_hash: {wire_label}",
         f"change_summary: \"{args.notes}\"",
-        "rail_change: false",
+        f"rail_change: {'true' if args.rail_change else 'false'}",
         "gates:",
     ] + [f"  {k}: {yn(v)}" for k, v in gates.items()] + [
         f"golden_id: {gid}",

@@ -5,7 +5,7 @@
 > This file is the project **constitution**. It is loaded into every Claude Code session.
 > When in doubt, the rails below win over any other instruction.
 
-**Current seal:** `ATM-Sphere v1.2r0`  ·  **Realm:** ATM-only  ·  **Status:** sealed core (Pass 1)
+**Current seal:** `ATM-Sphere v1.4r0`  ·  **Realm:** ATM-only  ·  **Status:** sealed core + netcode layers 1–4b
 
 ---
 
@@ -35,7 +35,7 @@ Human summary:
 | Ceiling | **ATM_TOP = 8,000 m**, **SOFT = 100 m** (predamp 7,900–8,000 → hard clamp) |
 | Kinematics | Intrinsic S²: `ψ̇ = g₀·tan(φ)/V`; `ψ = wrap₂π(ψ + ψ̇·Δt)`; closed-form great-circle step. **No Cartesian fallback.** |
 | Determinism | `det_math` only. **Ban** `std::sin/cos/tan/atan2/asin/acos/sqrt/pow`, fast-math, FMA, x87. |
-| Wire/Hash | **GEO-001** — lat/lon×1e7, bearing×1e6, h×1e3; ZigZag+LEB128 |
+| Wire/Hash | **GEO-001** — lat/lon×1e7, bearing×1e6, h×1e3; ZigZag+LEB128. **+KIN-001** aux block (phi×1e6, tas×1e3) for prediction; snapshot protocol 2 (v1.4r0) |
 | Roster | Sealed **8**: P-47D, Bf 109 F-4, Ki-61, A6M2, Yak-3, La-7, Spitfire Mk V, **P-51** |
 | Golden | **GOLDEN-SK-Sphere-001** — 10,000 ticks from (0°,0°), ψ=45°, TAS=250 m/s → world_hash matches cross-toolchain |
 | Networking | Physics 100 Hz, snapshots 20 Hz (tunable; non-kernel) |
@@ -45,40 +45,30 @@ Human summary:
 
 ---
 
-## 2. The Change-Control Law (seals + tiered ledger)
+## 2. The Change-Control Law (lean — just build it)
 
-A **seal** is a versioned tag of the form `ATM-Sphere vMAJ.MINrREV` (e.g. `v1.2r0`).
+A **seal** is a versioned tag `ATM-Sphere vMAJ.MINrREV` (e.g. `v1.4r0`) naming the current
+sealed state. Solo, agent-built project: governance protects exactly **one** thing that's hard to
+recover — bit-for-bit cross-toolchain determinism. The automated gates (§4) do that and are nearly
+free. Everything else is **optional**. Default posture: **build it, keep the gates green, move on.**
 
-This is a **solo, agent-built** project. Governance exists to protect the **one** promise that's
-hard to recover if broken — bit-for-bit cross-toolchain determinism — and nothing more. The
-automated gates (§4) do the real protecting and are nearly free; hand-written paperwork is scaled
-to risk. **Two tiers:**
+**The whole law — four lines:**
+1. **Gates stay green (§4).** Non-negotiable, always — they are the real protection.
+2. **If a rail value or a golden `world_hash` changes, bump the seal** (`/seal`, or `/reseal` for
+   a value-only rail tweak) and say why in the commit message. Rails are never edited, and a golden
+   hash never changes, *silently* — that legitimacy note is the one hard rule. Everything else
+   (new net layers, tooling, tests, renderer, docs, data-only tuning) just **rides the current
+   seal**.
+3. **Continuity is what matters.** Keep the auto-receipt (`tools/make_receipt.py` — it's free; run
+   it, it's the ledger) and keep **`NEXT_STEPS.md` current** so the next agent picks up cold. That
+   pair *is* the paperwork.
+4. **ADRs (`docs/adr/`) and Forge cards (`docs/cards/`) are OPTIONAL** — write one only when a
+   decision is a genuine architectural fork worth remembering (e.g. the `seads_predict`-as-its-own-
+   lib split, or the KIN-001 wire-shape choice). Skip them by default; don't let paperwork gate work.
 
-### Tier 1 — Core changes (full ritual, rare)
-Triggered by a change to **any rail or the determinism core**: R, Δt, roster, ceiling, geometry,
-gravity, determinism bans, **wire format**, `det_math`, the kernel kinematics, the canonical
-snapshot byte layout, **or any change that moves a golden `world_hash`**. These get the works:
-1. **New seal** (`/seal`, or `/reseal` for a value-only rail change). Rails are never edited silently.
-2. **ADR** in `docs/adr/` (Nygard template) — context, decision, consequences.
-3. **Forge Audit Card** in `docs/cards/` — gates run + results.
-4. **Chronicle Receipt** in `docs/receipts/` (`tools/make_receipt.py`).
-5. A **golden `world_hash` change is an approval/seal event**, never a silent fixture overwrite —
-   explain *why the behavior legitimately changed* and bump the seal.
-
-### Tier 2 — Everything else (lightweight, the common case)
-New net layers, tooling, tests, renderer, docs, and **data-only** tuning (e.g.
-`data/tuning/envelopes/`) that **cannot move a golden** ride the current seal and need only:
-1. **Gates green** (§4) — non-negotiable, always.
-2. A **clear commit message** describing what changed and why (this replaces the ADR/card).
-3. The **auto-generated Chronicle Receipt** (`tools/make_receipt.py` — it's free; keep it).
-
-Write an ADR for a Tier-2 change only when it makes a genuinely architectural decision worth
-remembering (e.g. the `seads_lockstep`-vs-`seads_net` library split). Optional, not required.
-
-**The bright line:** if you can't tell which tier a change is in, ask "could this move a golden
-`world_hash` or touch a rail/det_math/wire?" If yes → Tier 1. If no → Tier 2. When still unsure,
-treat it as Tier 1. The receipt's `validate_snapshot`/`validate_scenarios` gates are the backstop:
-they fail loudly if a "Tier 2" change actually moved a hash, forcing it up to Tier 1.
+No tiers, no mandatory cards, no approval ritual. The receipt's `validate_snapshot` /
+`validate_scenarios` gates fail loudly if a change moves a hash, so you cannot break the promise by
+accident — trust the gates and ship.
 
 ---
 
@@ -86,12 +76,12 @@ they fail loudly if a "Tier 2" change actually moved a hash, forcing it up to Ti
 
 Four roles (see `.claude/agents/`) — a **mental model**, not a mandatory per-task ceremony. One
 agent may wear all four hats in a single change; spin them up as separate subagents only when the
-work is big enough to benefit (e.g. an adversarial Auditor pass on a Tier-1 core change). For a
-routine Tier-2 change, just implement → run the gates → commit.
+work is big enough to benefit (e.g. an adversarial Auditor pass on a rail/det_math/golden change).
+For routine work, just implement → run the gates → commit.
 
 | Role | Mandate | Tools |
 |------|---------|-------|
-| **Forge** | Implement kernel/det_math/data changes; write the ADR (Tier-1 only). | full edit |
+| **Forge** | Implement kernel/det_math/data changes; write an ADR only if the call is worth remembering. | full edit |
 | **Auditor** | Adversarially verify: rails untouched, probes/relations hold, det_math vs MPFR oracle. | read + run |
 | **Guardian** | Run the determinism gate (build matrix where available + golden hash compare); block on red. | run |
 | **Chronicler** | Generate the Chronicle receipt; keep the ledger consistent. | run + write `docs/receipts` |
@@ -154,5 +144,9 @@ docs/{adr,annex,cards,receipts,seals}  governance ledger  .claude/{agents,skills
 
 ## 7. Roadmap (seals)
 - **v1.2r0** — sealed deterministic core + harness; golden green (Pass 1).
-- next — complete det_math (cos/atan2/asin) → 8-aircraft envelopes → custom C++ renderer →
-  netcode state-sync (multiplayer flight) → guns/projectiles (post-MVP, new seal).
+- **v1.3r0** — full det_math coverage + 8-aircraft envelopes + envelope-driven flight inputs
+  (bank/climb) + scripted-timeline goldens (Turn/Climb/TurnClimb).
+- **v1.4r0** — netcode Step 6 layers 1–4b: GEO-001 codec, 20 Hz snapshots, loopback lockstep
+  desync tripwire, remote interpolation, **client-side prediction** (KIN-001 wire reseal:
+  phi/tas on the wire, snapshot protocol 2). Multiplayer-flight MVP loop complete.
+- next — custom C++ renderer (Step 5, read-only, no seal) → guns/projectiles (post-MVP, new seal).

@@ -1,29 +1,31 @@
 # SEADS 2026 — Next Steps (handoff)
 
-> Resume doc for a fresh session. State as of seal **ATM-Sphere v1.3r0**, git `main` at the
-> **loopback-lockstep commit** (layer 3 done; clean — push and confirm **CI green**). Read
-> `CLAUDE.md` first (the constitution). Background facts also live in Claude memory
-> (`seads-canon`, `seads-harness`).
+> Resume doc for a fresh session. State as of seal **ATM-Sphere v1.4r0**, git `main` after the
+> **client-side-prediction commit** (Step 6 layers 1–4b done; commit + push and confirm **CI
+> green**). Read `CLAUDE.md` first (the constitution). Background facts also live in Claude
+> memory (`seads-canon`, `seads-harness`).
 >
 > ## ► START HERE (next task)
-> **Step 6 layer 4b — client-side prediction (needs a rail reseal).** Layers 1–3 and **4a
-> (remote interpolation)** are done. The remaining half is predicting your *own* aircraft forward
-> from local input + reconciling against authoritative snapshots. Accurate dead-reckoning needs
-> bank (`phi`) and speed (`tas`), which are **NOT** on the GEO-001 wire — carrying them is a
-> **rail reseal**: run `/reseal` (new GEO-001 scales for phi/tas, or an auxiliary non-geographic
-> block), write the ADR + Forge card + receipt, bump the seal. This is a **Tier-1** change (see
-> CLAUDE.md §2) — decide the wire shape explicitly before coding. See **§6** below.
+> **Step 6 (netcode) is COMPLETE through layer 4b — the multiplayer-flight MVP loop is done**
+> (predict own aircraft + interpolate remotes + `world_hash` desync tripwire + snapshot
+> correction/late-join). The two open tracks now are: **(A) Step 5 — custom C++ renderer**
+> (read-only, no seal; the natural consumer of the 4a interpolated remotes + 4b predicted own
+> state — recommended next for something to *look at*), and **(B)** non-roadmap: replace the
+> constant-TAS approximation with an energy/drag model (new seal, moves goldens). See **§5/§6**.
+> Layer 4b shipped under seal **v1.4r0** (KIN-001 wire reseal: phi/tas on the wire, snapshot
+> protocol 2; GEO-001 codec + all 4 goldens unchanged).
 
 ## Where things stand (DONE)
 
 Deterministic core + governance harness up; bit-for-bit promise **proven in CI**; aircraft now
 maneuver within their tuning envelopes. Roadmap steps **1, 2, 3, 4 are DONE**; **Step 6 (netcode)
-is now IN PROGRESS** — layer 1 (GEO-001 wire codec), layer 2 (20 Hz snapshot serialization),
-layer 3 (loopback lockstep desync tripwire), and layer 4a (remote interpolation buffer) are all
-**DONE** (details in §6 below). The next pickup is **Step 6 layer 4b: client-side prediction**
-(predict own aircraft from local input + reconcile from authoritative snapshots) — which needs a
-**rail reseal** to put `phi`/`tas` on the wire. Step 5 (renderer) remains the alternative visual
-track, and is now the natural consumer of the layer-4a interpolated remote states.
+is COMPLETE through layer 4b** — layer 1 (GEO-001 wire codec), layer 2 (20 Hz snapshot
+serialization), layer 3 (loopback lockstep desync tripwire), layer 4a (remote interpolation
+buffer), and **layer 4b (client-side prediction)** are all **DONE** (details in §6 below). Layer
+4b carried a **Tier-1 reseal** (v1.3r0 → **v1.4r0**) to put `phi`/`tas` on the wire via the new
+auxiliary **KIN-001** block. The multiplayer-flight MVP loop is complete. Step 5 (renderer)
+remains the alternative visual track, and is now the natural consumer of the 4a interpolated
+remote states + 4b predicted own state.
 
 - **Remote:** `origin` = `https://github.com/cjcgervais/seads` (public). Single branch `main` (feature
   branches merged + deleted). `guardian.yml` is **green on `main` at `eb0dabd`**
@@ -32,23 +34,26 @@ track, and is now the natural consumer of the layer-4a interpolated remote state
   + `seads_snapshot_test` parity vectors byte-for-byte, with a per-golden cross-toolchain aggregation
   gate. (No `gh` CLI here; watch CI via the public Actions API — `curl -s
   ".../actions/runs/<id>/jobs"` — and use a GCM token from `git credential fill` for log downloads.)
-- **Seal:** ATM-Sphere **v1.3r0**. Four goldens, all cross-toolchain-verified:
+- **Seal:** ATM-Sphere **v1.4r0** (v1.3r0 + KIN-001 wire reseal for prediction). Four goldens,
+  all cross-toolchain-verified and **unchanged** by the reseal:
   - GOLDEN-SK-Sphere-001 (straight) `529c6a05…9218fe16` — unchanged since Pass 1
   - GOLDEN-SK-Turn-001 `6160540c…13f152ee` · Climb-001 `74b9d556…2d9b6682` · TurnClimb-001 `f7193b99…7cedd413`
 - **Roster:** all 8 tuning envelopes exist (`data/tuning/envelopes/`); the kernel consumes them for
   bank/climb limits via `Kernel::step(cmd,env)`.
-- **Gates:** all Python gates green; **44** Hypothesis property tests pass (incl. 7 geo001 + 5
-  snapshot + 4 lockstep + 8 interp); det_math ≤2 ULP vs MPFR; C++ det_math + geo001 + snapshot
-  byte-exact + lockstep digest-exact + interp bit-exact vs reference; **9** generated headers in
-  sync (`gen_*.py --check`). ctest is **5/5** under GCC + Clang.
-- **Netcode (Step 6) so far:** `src/net/` holds the GEO-001 wire codec (`geo001.{h,cpp}`), the
-  20 Hz snapshot framing (`snapshot.{h,cpp}`), and the remote interpolation buffer
-  (`interp.{h,cpp}`) — all in the `seads_net` lib (pure transport: no det_math/kernel) — plus the
-  loopback lockstep harness (`lockstep.{h,cpp}`) in its **own** `seads_lockstep` lib (it drives the
-  kernel, so it links `seads_kernel`+`seads_replay`). Each mirrors a Python reference
-  (`geo001_ref.py`, `snapshot_ref.py`, `lockstep_ref.py`, `interp_ref.py`) with a generated-vector
-  parity gate (`seads_geo001_test`, `seads_snapshot_test`, `seads_lockstep_test`, `seads_interp_test`).
-- **Ledger:** receipts in `docs/receipts/` (latest `…v1.3r0-733b8a3.yml`), all `overall: PASS`.
+- **Gates:** all Python gates green; **52** Hypothesis property tests pass (incl. 7 geo001 + 7
+  snapshot + 4 lockstep + 8 interp + 6 predict); det_math ≤2 ULP vs MPFR; C++ det_math + geo001 +
+  snapshot byte-exact + lockstep/predict digest-exact + interp bit-exact vs reference; **10**
+  generated headers in sync (`gen_*.py --check`). ctest is **6/6** under GCC + Clang (added
+  `predict_equal`).
+- **Netcode (Step 6):** `src/net/` holds the GEO-001 wire codec (`geo001.{h,cpp}`), the 20 Hz
+  snapshot framing (`snapshot.{h,cpp}`, **now protocol 2** with the KIN section), and the remote
+  interpolation buffer (`interp.{h,cpp}`) — all in the `seads_net` lib (pure transport: no
+  det_math/kernel) — plus two **kernel-driving** libs: the loopback lockstep harness
+  (`lockstep.{h,cpp}` → `seads_lockstep`) and the client-side prediction harness
+  (`predict.{h,cpp}` → `seads_predict`), both linking `seads_kernel`+`seads_replay`. Each mirrors
+  a Python reference (`geo001_ref`, `snapshot_ref`, `lockstep_ref`, `interp_ref`, `predict_ref`)
+  with a generated-vector parity gate (`seads_{geo001,snapshot,lockstep,interp,predict}_test`).
+- **Ledger:** receipts in `docs/receipts/` (latest `…v1.4r0-11e07d4.yml`), all `overall: PASS`.
 - **Deferred (owner's call, not blocking):** (a) make `Cross-toolchain hash aggregation` a **required
   status check** on `main` (branch protection — needs a PAT or `gh`); (b) `hash_sign_json.py` signing
   of the 8 envelopes.
@@ -251,29 +256,35 @@ Suggested first moves for the next agent (build bottom-up, each layer gated befo
   (CLAUDE.md §2): commit message + receipt `…v1.3r0-733b8a3.yml`, no ADR/seal. *Uses only
   lat/lon/bearing/alt — all on the wire today, so NO reseal.* It NEVER feeds the sim (downstream
   presentation only). Step 5's renderer is the natural consumer.
-- **Client-side prediction (layer 4b)** ← **NEXT PICKUP — needs a rail reseal (Tier 1).** Predict
-  your OWN aircraft forward from local input each frame and reconcile against authoritative
-  snapshots (snap to authoritative; replay local input from the corrected base). Accurate
-  dead-reckoning needs bank (`phi`) and speed (`tas`), which are **NOT** on the GEO-001 wire
-  (layer-2 field-scope deferral). Carrying them is a **rail reseal**: run `/reseal` (new GEO-001
-  scales for phi/tas, or an auxiliary non-geographic block), write the ADR + Forge card + receipt,
-  bump the seal. Decide the wire shape explicitly first; don't smuggle new wire fields in under the
-  current seal. `world_hash` from layer 3 remains the desync tripwire; late-join reuses the
-  snapshot transport. Its own gated layer + Tier-1 ledger entry.
+- **Client-side prediction (layer 4b)**  ✅ DONE (2026-06-28, seal **v1.4r0** — Tier-1 reseal).
+  Predict the OWN aircraft from local input each tick (running the **real sealed kernel**) and
+  reconcile against authoritative snapshots: snap to authoritative @ server_tick, drop inputs ≤
+  that tick, **replay** the buffered local inputs forward. `tools/predict_ref.py` is the canonical
+  reference (`PREDICT-SK-001`: 1 own aircraft, 300 ticks, 20 Hz snapshots, ~100 ms lag);
+  `src/net/predict.{h,cpp}` mirrors it in its **own** `seads_predict` lib (drives the kernel, like
+  lockstep). Reconcile re-seeds via the public `Kernel::add()`+`step()` — kernel math + snapshot
+  layout **untouched** (only additive read-only getters `Kernel::phi()/tas()`). Cross-impl parity
+  is digest-exact: `gen_predict_vectors.py` → `predict_vectors.h`; `seads_predict_test` asserts
+  seamless (predicted == truth every tick) + digest == reference + **heal control** (a 2⁻²⁰ m
+  initial-alt desync diverges at tick 1, reconciles back at tick 15) + **negative control** (no
+  reconcile ⇒ stays broken). 6 new Hypothesis tests (`tests/property/test_predict.py`; 44 → 52,
+  incl. +2 snapshot for phi/tas). **The reseal:** GEO-001 stays geography-only; `phi`/`tas` ride a
+  new auxiliary **KIN-001** block (phi×1e6, tas×1e3) as a 2nd self-delimiting snapshot section
+  (`protocol 1→2`) — the chosen wire shape (vs extending the GeoPoint). The **bit-exact** path
+  reconciles against CANONICAL state (layer-3 doctrine); the **lossy-wire** reseed (real
+  remote/late-join) is bounded by the quantum (property test) — *that* is why phi/tas are on the
+  wire. PASS under GCC + Clang (ctest 6/6); all 4 goldens unchanged (`529c6a05…` et al.). Ledger:
+  ADR-Step6-Prediction-v1.4r0, Forge card, SEAL_CARD v1.4r0, receipt `…v1.4r0-11e07d4.yml`.
 - The kernel itself should not change; if it must, that's a seal event — keep net code strictly
   outside the kernel boundary (no feeding bits back in). Ledger per layer (ADR + card + receipt).
 
 ### 7. (Post-MVP) Guns/projectiles — new seal, deferred per doctrine.
 
-## Governance reminder (tiered — see CLAUDE.md §2)
-Governance is scaled to risk now (solo, agent-built project). **Two tiers:**
-- **Tier 1 (full ritual):** a change to a **rail** (R, Δt, roster, ceiling, geometry, gravity,
-  determinism bans, wire), to `det_math`/the kernel/the canonical snapshot layout, or anything that
-  **moves a golden world_hash** → new seal (`/seal`, or `/reseal` for a value-only rail change) +
-  ADR + Forge card + receipt. Never re-baseline a golden silently.
-- **Tier 2 (lightweight, the common case):** net layers, tooling, tests, renderer, docs, data-only
-  tuning that **can't move a golden** → gates green + a clear commit message + the auto-generated
-  receipt. ADR optional (write one only for a genuinely architectural decision). Layers 1–3 of
-  Step 6 were Tier-2-shaped; the heavy ADR/card on layer 3 was more than that tier requires.
-- **The backstop:** `make_receipt.py`'s `validate_snapshot`/`validate_scenarios` gates fail loudly
-  if a "Tier 2" change actually moved a hash — forcing it up to Tier 1. Trust the gates.
+## Governance reminder (lean — see CLAUDE.md §2)
+Governance is now minimal. **The whole law:** (1) keep the §4 gates green; (2) if a rail value or a
+golden `world_hash` changes, bump the seal (`/seal` or `/reseal`) and say *why* in the commit
+message — never silently; (3) keep the auto-receipt (`make_receipt.py`) and **this file** current —
+that pair is the ledger and the continuity that actually matters; (4) ADRs/Forge cards are
+**optional** (write one only for a genuine architectural fork). Everything else just rides the
+current seal. The `validate_snapshot`/`validate_scenarios` gates fail loudly if anything moves a
+hash, so trust the gates and ship.

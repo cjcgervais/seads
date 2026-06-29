@@ -61,6 +61,16 @@ add_library(seads_lockstep STATIC src/net/lockstep.cpp)
 target_include_directories(seads_lockstep PUBLIC src/net)
 target_link_libraries(seads_lockstep PUBLIC seads_kernel seads_replay seads_det_flags)
 
+# --- net / client-side prediction harness (netcode layer 4b) ---
+# Predicts the OWN aircraft from local input and reconciles against authoritative snapshots
+# (snap-to-authoritative + replay buffered inputs). Like lockstep it DRIVES the kernel, so it
+# is its OWN lib (links seads_kernel + seads_replay), not folded into the pure wire lib. The
+# bit-exact path reconciles against CANONICAL state; the lossy GEO-001/KIN wire path is bounded
+# (tested in tests/property). Reconcile re-seeds via the public Kernel::add()+step() only.
+add_library(seads_predict STATIC src/net/predict.cpp)
+target_include_directories(seads_predict PUBLIC src/net)
+target_link_libraries(seads_predict PUBLIC seads_kernel seads_replay seads_det_flags)
+
 # --- golden runner ---
 add_executable(seads_golden src/kernel/golden_main.cpp)
 target_link_libraries(seads_golden PRIVATE seads_kernel seads_replay seads_det_math seads_det_flags)
@@ -89,10 +99,15 @@ target_link_libraries(seads_lockstep_test PRIVATE seads_lockstep seads_kernel se
 add_executable(seads_interp_test src/net/interp_test_main.cpp)
 target_link_libraries(seads_interp_test PRIVATE seads_net seads_det_flags)
 
+# --- client-side prediction parity test (seamless reconcile + digest + heal control) ---
+add_executable(seads_predict_test src/net/predict_test_main.cpp)
+target_link_libraries(seads_predict_test PRIVATE seads_predict seads_kernel seads_replay seads_det_math seads_det_flags)
+
 enable_testing()
 add_test(NAME detmath_bitexact COMMAND seads_detmath_test)
 add_test(NAME geo001_byteexact COMMAND seads_geo001_test)
 add_test(NAME snapshot_byteexact COMMAND seads_snapshot_test)
 add_test(NAME lockstep_equal COMMAND seads_lockstep_test)
 add_test(NAME interp_bitexact COMMAND seads_interp_test)
+add_test(NAME predict_equal COMMAND seads_predict_test)
 # Golden hash compare is run in CI (guardian.yml) across the toolchain matrix.

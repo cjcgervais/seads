@@ -1,13 +1,13 @@
 # Master Seal Card
 
-**Seal:** ATM-Sphere v1.3r0
+**Seal:** ATM-Sphere v1.4r0
 **Realm:** ATM-only
 **Geometry:** R=15000 m, flattening=0
 **Tick:** Δt=0.01 s (100 Hz)
 **Gravity:** g₀=9.80665 m/s² (constant)
 **Ceiling:** ATM_TOP=8000 m, SOFT=100 m
 **Determinism:** det_math only; ban libm/fast-math/FMA/x87
-**Wire/Hash:** GEO-001 (lat/lon×1e7, bearing×1e6, h×1e3; ZigZag+LEB128)
+**Wire/Hash:** GEO-001 (lat/lon×1e7, bearing×1e6, h×1e3; ZigZag+LEB128) + **KIN-001** aux block (phi×1e6, tas×1e3) for client-side prediction — snapshot protocol 2
 **Roster (8):** P-47D · Bf 109 F-4 · Ki-61 · A6M2 · Yak-3 · La-7 · Spitfire Mk V · P-51
 **Goldens:**
 - GOLDEN-SK-Sphere-001 — 10,000 ticks; (0°,0°), ψ=45°, TAS=250 m/s — `529c6a05…9218fe16`
@@ -22,3 +22,4 @@
 | v1.2r0 | 2025-10-12 | ATM_TOP 6000→8000 m (+100 m soft band); kernel/wire unchanged |
 | v1.2r0 (repo) | (Pass 1) | Deterministic core + harness stood up; golden sealed |
 | v1.3r0 | 2026-06-28 | Envelope-driven flight inputs (bank/climb) + scripted-timeline goldens (Turn/Climb/TurnClimb). Sphere hash unchanged; no rail change. |
+| v1.4r0 | 2026-06-28 | **Wire reseal:** auxiliary KIN-001 block (phi×1e6, tas×1e3) carries bank/speed for client-side prediction (netcode layer 4b); snapshot protocol 1→2 (KIN as a 2nd self-delimiting section). GEO-001 codec byte-unchanged; kernel/det_math/snapshot-layout untouched; **all 4 goldens unchanged**. |

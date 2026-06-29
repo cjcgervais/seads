@@ -5,19 +5,29 @@ namespace seads {
 namespace netsnap {
 
 EntityState from_kernel(int64_t id, double lat_rad, double lon_rad, double psi_rad,
-                        double alt_m) {
-    return EntityState{id, lat_rad * RAD2DEG, lon_rad * RAD2DEG, psi_rad * RAD2DEG, alt_m};
+                        double alt_m, double phi_rad, double tas_mps) {
+    return EntityState{id, lat_rad * RAD2DEG, lon_rad * RAD2DEG, psi_rad * RAD2DEG, alt_m,
+                       phi_rad * RAD2DEG, tas_mps};
 }
 
-// Wire framing: header (protocol, server_tick, n) then n * (id, GeoPoint).
+// Wire framing: header (protocol, server_tick, n), then the GEO section n*(id, GeoPoint),
+// then — iff protocol >= 2 — the KIN section n*(id, phi_q, tas_q). Both self-delimiting; the
+// GEO-001 codec is reused verbatim so its byte layout / parity vectors are untouched.
 void encode_snapshot(const Snapshot& s, std::vector<uint8_t>& out) {
     geo001::encode_i64(s.protocol, out);
     geo001::encode_i64(s.server_tick, out);
     geo001::encode_i64(static_cast<int64_t>(s.entities.size()), out);
-    for (const auto& e : s.entities) {
+    for (const auto& e : s.entities) {  // GEO section
         geo001::encode_i64(e.id, out);
         geo001::encode_point(geo001::GeoPoint{e.lat_deg, e.lon_deg, e.bearing_deg, e.alt_m},
                              out);
+    }
+    if (s.protocol >= 2) {              // KIN section (auxiliary, non-geographic)
+        for (const auto& e : s.entities) {
+            geo001::encode_i64(e.id, out);
+            geo001::encode_i64(geo001::quantize(e.phi_deg, PHI_SCALE), out);
+            geo001::encode_i64(geo001::quantize(e.tas_mps, SPEED_SCALE), out);
+        }
     }
 }
 
@@ -29,7 +39,7 @@ bool decode_snapshot(const uint8_t* data, size_t len, size_t& pos, Snapshot& out
     if (n < 0) return false;
     out.entities.clear();
     out.entities.reserve(static_cast<size_t>(n));
-    for (int64_t i = 0; i < n; ++i) {
+    for (int64_t i = 0; i < n; ++i) {  // GEO section
         EntityState e{};
         geo001::GeoPoint pt{};
         if (!geo001::decode_i64(data, len, pos, e.id)) return false;
@@ -39,6 +49,17 @@ bool decode_snapshot(const uint8_t* data, size_t len, size_t& pos, Snapshot& out
         e.bearing_deg = pt.bearing;
         e.alt_m = pt.alt;
         out.entities.push_back(e);
+    }
+    if (out.protocol >= 2) {           // KIN section
+        for (int64_t i = 0; i < n; ++i) {
+            int64_t kid = 0, phi_q = 0, tas_q = 0;
+            if (!geo001::decode_i64(data, len, pos, kid)) return false;
+            if (kid != out.entities[static_cast<size_t>(i)].id) return false;
+            if (!geo001::decode_i64(data, len, pos, phi_q)) return false;
+            if (!geo001::decode_i64(data, len, pos, tas_q)) return false;
+            out.entities[static_cast<size_t>(i)].phi_deg = geo001::dequantize(phi_q, PHI_SCALE);
+            out.entities[static_cast<size_t>(i)].tas_mps = geo001::dequantize(tas_q, SPEED_SCALE);
+        }
     }
     return true;
 }

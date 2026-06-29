@@ -1,8 +1,8 @@
 {
   "header": {
     "id": "SEADS-RAILS",
-    "version": 130,
-    "seal": "ATM-Sphere v1.3r0",
+    "version": 140,
+    "seal": "ATM-Sphere v1.4r0",
     "note": "Data-driven immutable rails. Any change here REQUIRES a new seal (ADR + Forge audit card + Chronicle receipt). See CLAUDE.md > Change-Control Law."
   },
   "rails": {
@@ -49,7 +49,13 @@
       "latlon_scale": 10000000,
       "bearing_scale": 1000000,
       "alt_scale": 1000,
-      "encoding": "ZigZag+LEB128"
+      "encoding": "ZigZag+LEB128",
+      "kin": {
+        "format": "KIN-001",
+        "note": "Auxiliary NON-geographic block for client-side prediction (netcode layer 4b). Carries per-aircraft bank (phi) + true airspeed (tas) so a remote/late-join can re-seed a kernel. Same ZigZag+LEB128 encoding as GEO-001; transmitted as a SEPARATE snapshot section so GEO-001 stays geography-only. Lossy by quantization — never fed back as canonical (see CLAUDE.md determinism rules).",
+        "phi_scale": 1000000,
+        "speed_scale": 1000
+      }
     },
     "networking": {
       "physics_hz": 100,

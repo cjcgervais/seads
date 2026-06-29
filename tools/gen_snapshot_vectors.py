@@ -39,18 +39,20 @@ def bytes_literal(b):
     return "{" + ",".join("0x%02x" % x for x in b) + "}"
 
 
-# Snapshots specified by (server_tick, [entities]) with entity fields in DEGREES.
-# Origin (0,0) is the sealed golden start; extremes exercise multi-byte LEB128 framing.
+# Snapshots specified by (server_tick, [entities]) with entity fields in DEGREES (GEO) and
+# KIN units (phi deg, tas m/s). Origin (0,0) is the sealed golden start; extremes exercise
+# multi-byte LEB128 framing in BOTH the GEO and KIN sections.
 def snapshot_inputs():
     E = s.EntityState
     return [
-        (0, []),                                              # empty world
-        (1, [E(1, 0.0, 0.0, 45.0, 1000.0)]),                  # single, golden start + 45deg
-        (12345, [E(1, 12.3456789, -98.7654321, 359.999999, 7999.999),
-                 E(2, -45.5, 180.0, 0.0, 0.0),
-                 E(7, 89.9999999, -179.9999999, 270.0, 8000.0)]),
-        (100000, [E(i, (i * 7) % 90, (i * 13) % 180 - 90, (i * 11) % 360, (i * 137) % 8000)
-                  for i in range(1, 9)]),                      # full 8-aircraft roster sized
+        (0, []),                                                       # empty world
+        (1, [E(1, 0.0, 0.0, 45.0, 1000.0, 0.0, 250.0)]),               # golden start, wings level
+        (12345, [E(1, 12.3456789, -98.7654321, 359.999999, 7999.999, 39.999999, 175.25),
+                 E(2, -45.5, 180.0, 0.0, 0.0, -60.5, 0.0),
+                 E(7, 89.9999999, -179.9999999, 270.0, 8000.0, 0.000001, 305.999)]),
+        (100000, [E(i, (i * 7) % 90, (i * 13) % 180 - 90, (i * 11) % 360, (i * 137) % 8000,
+                    (i * 17) % 80 - 40, (i * 29) % 320)
+                  for i in range(1, 9)]),                              # full 8-aircraft roster sized
     ]
 
 
@@ -76,7 +78,7 @@ def build():
          "namespace seads { namespace snap_vec {",
          "",
          "struct SnapEntity { long long id; double lat_deg; double lon_deg;",
-         "                    double bearing_deg; double alt_m; };",
+         "                    double bearing_deg; double alt_m; double phi_deg; double tas_mps; };",
          ""]
 
     snaps = snapshot_inputs()
@@ -86,7 +88,7 @@ def build():
             L.append(f"constexpr SnapEntity SNAP{idx}_ENTS[] = {{")
             for e in ents:
                 L.append(f"  {{ {i64lit(e.id)}, {hx(e.lat_deg)}, {hx(e.lon_deg)}, "
-                         f"{hx(e.bearing_deg)}, {hx(e.alt_m)} }},")
+                         f"{hx(e.bearing_deg)}, {hx(e.alt_m)}, {hx(e.phi_deg)}, {hx(e.tas_mps)} }},")
             L.append("};")
         snap = s.Snapshot(tick, ents)
         wire = s.encode_snapshot(snap)

@@ -29,6 +29,7 @@ jobs:
           python tools/gen_snapshot_vectors.py --check
           python tools/gen_lockstep_vectors.py --check
           python tools/gen_interp_vectors.py --check
+          python tools/gen_predict_vectors.py --check
       - name: Rails + roster
         run: python tools/spec_monotone_check.py config/rails/atm.json
       - name: det_math oracle (vs MPFR)
@@ -45,6 +46,8 @@ jobs:
         run: python tools/lockstep_ref.py
       - name: Remote interpolation reference self-test
         run: python tools/interp_ref.py
+      - name: Client-side prediction reference self-test
+        run: python tools/predict_ref.py
       - name: Property tests (metamorphic)
         run: python -m pytest tests/property -q
       - name: Reference golden matches seal
@@ -107,6 +110,7 @@ jobs:
             echo "stest=build/Release/seads_snapshot_test.exe" >> "$GITHUB_OUTPUT"
             echo "ltest=build/Release/seads_lockstep_test.exe" >> "$GITHUB_OUTPUT"
             echo "itest=build/Release/seads_interp_test.exe" >> "$GITHUB_OUTPUT"
+            echo "ptest=build/Release/seads_predict_test.exe" >> "$GITHUB_OUTPUT"
           else
             echo "golden=build/seads_golden" >> "$GITHUB_OUTPUT"
             echo "scenario=build/seads_scenario" >> "$GITHUB_OUTPUT"
@@ -115,6 +119,7 @@ jobs:
             echo "stest=build/seads_snapshot_test" >> "$GITHUB_OUTPUT"
             echo "ltest=build/seads_lockstep_test" >> "$GITHUB_OUTPUT"
             echo "itest=build/seads_interp_test" >> "$GITHUB_OUTPUT"
+            echo "ptest=build/seads_predict_test" >> "$GITHUB_OUTPUT"
           fi
 
       - name: det_math bit-exact test
@@ -136,6 +141,10 @@ jobs:
       - name: Remote interpolation parity test
         shell: bash
         run: "${{ steps.bin.outputs.itest }}"
+
+      - name: Client-side prediction parity test
+        shell: bash
+        run: "${{ steps.bin.outputs.ptest }}"
 
       - name: Run all goldens + hash + validate
         shell: bash

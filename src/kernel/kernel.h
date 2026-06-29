@@ -35,7 +35,9 @@ public:
     double lat(std::size_t i) const { return lat_[i]; }
     double lon(std::size_t i) const { return lon_[i]; }
     double psi(std::size_t i) const { return psi_[i]; }
+    double phi(std::size_t i) const { return phi_[i]; }
     double alt(std::size_t i) const { return alt_[i]; }
+    double tas(std::size_t i) const { return tas_[i]; }
 
 private:
     // Kinematic tail for aircraft i (coordinated-turn + great-circle + ceiling-clamped vertical).
