@@ -1,10 +1,11 @@
 # SEADS 2026 — Next Steps (handoff)
 
 > Resume doc for a fresh session. State as of seal **ATM-Sphere v1.4r0**, git `main` at the
-> **client-side-prediction commit `7ff21ab`** (Step 6 layers 1–4b done) — pushed to `origin/main`,
-> guardian CI **GREEN** (run [28349459869](https://github.com/cjcgervais/seads/actions/runs/28349459869):
+> **Step 5 renderer commit `e4ef652`** (Steps 1–6 done + a working downstream renderer) — pushed to
+> `origin/main`, guardian CI **GREEN** (run [28355716358](https://github.com/cjcgervais/seads/actions/runs/28355716358):
 > MSVC + GCC/Clang × x64/AArch64 reproduce all 4 goldens + the geo001/snapshot/lockstep/interp/predict
-> parity vectors bit-for-bit). Clean slate — **start on Step 5 (renderer), §5 below**. Read `CLAUDE.md`
+> parity vectors bit-for-bit **and now the client-presentation test on every leg**). **Next: Step 5
+> polish (live input loop) or track B (energy/drag model) — see START HERE + §5/§6.** Read `CLAUDE.md`
 > first (the constitution — governance is now lean, §2). Background facts also live in Claude memory
 > (`seads-canon`, `seads-harness`).
 >
@@ -32,15 +33,16 @@ all downstream-only, ctest 7/7, no seal; §5); **Step 6 (netcode) is COMPLETE th
 serialization), layer 3 (loopback lockstep desync tripwire), layer 4a (remote interpolation
 buffer), and **layer 4b (client-side prediction)** are all **DONE** (details in §6 below). Layer
 4b carried a **Tier-1 reseal** (v1.3r0 → **v1.4r0**) to put `phi`/`tas` on the wire via the new
-auxiliary **KIN-001** block. The multiplayer-flight MVP loop is complete. Step 5 (renderer)
-remains the alternative visual track, and is now the natural consumer of the 4a interpolated
-remote states + 4b predicted own state.
+auxiliary **KIN-001** block. The multiplayer-flight MVP loop is complete. **Step 5 (renderer) now
+has a working first cut** — the downstream consumer of the 4a interpolated remote states (the 4b
+predicted own state is the next polish step). See §5.
 
 - **Remote:** `origin` = `https://github.com/cjcgervais/seads` (public). Single branch `main` (feature
-  branches merged + deleted). `guardian.yml` is **green on `main` at `eb0dabd`**
-  (run [28345458656](https://github.com/cjcgervais/seads/actions/runs/28345458656)) — MSVC + GCC +
-  Clang × x64 + AArch64 reproduce **all 4 sealed goldens** bit-for-bit AND the new `seads_geo001_test`
-  + `seads_snapshot_test` parity vectors byte-for-byte, with a per-golden cross-toolchain aggregation
+  branches merged + deleted). `guardian.yml` is **green on `main` at `e4ef652`**
+  (run [28355716358](https://github.com/cjcgervais/seads/actions/runs/28355716358)) — MSVC + GCC +
+  Clang × x64 + AArch64 reproduce **all 4 sealed goldens** bit-for-bit AND the
+  `seads_{geo001,snapshot,lockstep,interp,predict,client}_test` parity/presentation tests, with a
+  per-golden cross-toolchain aggregation
   gate. (No `gh` CLI here; watch CI via the public Actions API — `curl -s
   ".../actions/runs/<id>/jobs"` — and use a GCM token from `git credential fill` for log downloads.)
 - **Seal:** ATM-Sphere **v1.4r0** (v1.3r0 + KIN-001 wire reseal for prediction). Four goldens,
