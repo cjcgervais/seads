@@ -1,19 +1,30 @@
 # SEADS 2026 — Next Steps (handoff)
 
-> Resume doc for a fresh session. State as of seal **ATM-Sphere v1.2r0**, git `main`.
+> Resume doc for a fresh session. State as of seal **ATM-Sphere v1.3r0**, git `main` (clean, pushed).
 > Read `CLAUDE.md` first (the constitution). Background facts also live in Claude memory
 > (`seads-canon`, `seads-harness`).
 
 ## Where things stand (DONE)
 
-Pass 1 is complete: the deterministic core + governance harness is up and the bit-for-bit
-promise is **proven locally**.
+Deterministic core + governance harness up; bit-for-bit promise **proven in CI**; aircraft now
+maneuver within their tuning envelopes. Roadmap steps **1, 3, 4 are DONE** (details in the numbered
+sections below). Working tree clean and in sync with `origin/main`.
 
-- Sealed golden **GOLDEN-SK-Sphere-001** world_hash = `529c6a0598eccd41facdbb69bbc4bff18e0a743c3b1cc5ff43ad14f89218fe16`.
-- Reproduced bit-identically by 3 implementations: Python reference, **GCC 14.2.0** (x64), **Clang 19.1.1** (x64).
-- All Python gates green; 13 Hypothesis property tests pass; det_math verified ≤2 ULP vs MPFR.
-- C++ det_math is bit-exact vs the reference (64-vector `ctest`).
-- Ledger receipts written (`docs/receipts/`), all `overall: PASS`. Working tree clean.
+- **Remote:** `origin` = `https://github.com/cjcgervais/seads` (public). `guardian.yml` is **green on
+  `main`** — MSVC + GCC + Clang × x64 + AArch64 reproduce **all 4 sealed goldens** bit-for-bit, with a
+  per-golden cross-toolchain aggregation gate. (No `gh` CLI here; watch CI via the public Actions API,
+  and use a GCM token from `git credential fill` for log downloads.)
+- **Seal:** ATM-Sphere **v1.3r0**. Four goldens, all cross-toolchain-verified:
+  - GOLDEN-SK-Sphere-001 (straight) `529c6a05…9218fe16` — unchanged since Pass 1
+  - GOLDEN-SK-Turn-001 `6160540c…13f152ee` · Climb-001 `74b9d556…2d9b6682` · TurnClimb-001 `f7193b99…7cedd413`
+- **Roster:** all 8 tuning envelopes exist (`data/tuning/envelopes/`); the kernel consumes them for
+  bank/climb limits via `Kernel::step(cmd,env)`.
+- **Gates:** all Python gates green; **20** Hypothesis property tests pass; det_math ≤2 ULP vs MPFR;
+  C++ det_math bit-exact vs reference; 5 generated headers in sync (`gen_*.py --check`).
+- **Ledger:** receipts in `docs/receipts/` (latest `…v1.3r0-8b85a32.yml`), all `overall: PASS`.
+- **Deferred (owner's call, not blocking):** (a) make `Cross-toolchain hash aggregation` a **required
+  status check** on `main` (branch protection — needs a PAT or `gh`); (b) `hash_sign_json.py` signing
+  of the 8 envelopes.
 
 ## Environment notes (important for a cold start)
 
@@ -38,20 +49,30 @@ python tools/det_math_oracle.py --samples 8000
 python tools/spec_monotone_check.py config/rails/atm.json
 python tools/tuning_probe.py data/tuning/envelopes/*.json
 python tools/atm_top_probe.py --ceil 8000 --soft 100
-python -m pytest tests/property -q
-python tools/make_receipt.py            # runs all gates -> receipt, overall: PASS
+for g in gen_coeffs gen_golden_params gen_detmath_vectors gen_envelope_tables gen_scenario_params; do \
+  python tools/$g.py --check; done          # all 5 generated headers in sync
+python -m pytest tests/property -q          # 20 pass (incl. 3 scenario sealed-hash)
+python tools/make_receipt.py                # runs all gates (incl. 3 scenario goldens) -> overall: PASS
 ```
 ```powershell
-# C++ side (PATH set as above)
+# C++ side (PATH set as above). Builds seads_golden (Sphere) + seads_scenario (Turn/Climb/TurnClimb).
 cmake -S . -B build-gcc   -G Ninja -DCMAKE_CXX_COMPILER=g++     -DCMAKE_BUILD_TYPE=Release; cmake --build build-gcc
 cmake -S . -B build-clang -G Ninja -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_BUILD_TYPE=Release; cmake --build build-clang
 .\build-gcc\seads_golden.exe   --out run_gcc.bin
-.\build-clang\seads_golden.exe --out run_clang.bin
 python tools\validate_snapshot.py --golden tests\golden\GOLDEN-SK-Sphere-001\expected.world_hash --candidate run_gcc.bin
-python tools\validate_snapshot.py --golden tests\golden\GOLDEN-SK-Sphere-001\expected.world_hash --candidate run_clang.bin
+foreach ($id in "GOLDEN-SK-Turn-001","GOLDEN-SK-Climb-001","GOLDEN-SK-TurnClimb-001") {
+  .\build-gcc\seads_scenario.exe --id $id --out run_scen.bin
+  python tools\validate_snapshot.py --golden "tests\golden\$id\expected.world_hash" --candidate run_scen.bin }
+# (repeat the two scenario/validate blocks with build-clang to confirm cross-compiler parity)
 ```
 
 ## Next steps — pick up here (in priority order)
+
+> **Recommended start: Step 2** (broaden C++ det_math coverage) — self-contained, **no seal**, lowest
+> risk, and tightens the determinism guarantee. Steps 1/3/4 are done. Bigger pushes after that:
+> Step 5 (renderer) or Step 6 (netcode). A non-roadmap option worth a seal someday: replace the
+> constant-TAS approximation (step 4) with an energy/drag model. Whatever you pick that touches a rail
+> or a golden hash → follow the seal ritual (see Governance reminder at the bottom).
 
 ### 1. Finish the cross-arch determinism proof (MSVC + AArch64)  ✅ DONE (2026-06-28)
 **Cross-toolchain bit-identity is now PROVEN in CI.** Remote `origin` =
@@ -73,10 +94,19 @@ Green run: https://github.com/cjcgervais/seads/actions/runs/28340968855
   later: binary-search to the first divergent tick (add per-tick hashing in `src/replay`);
   SoftFloat is the fallback.
 
-### 2. Broaden C++ det_math coverage
-Currently the bit-exact C++ test uses a fixed 64-vector table. Add a randomized sweep
-(seeded) comparing C++ vs the reference over each function's full SEADS domain, and grow
-`tools/gen_detmath_vectors.py` ranges. Keep tolerances exact (bit-equal) for C++↔reference.
+### 2. Broaden C++ det_math coverage  ← recommended start (no seal, low risk)
+Currently the bit-exact C++ test (`src/det_math/detmath_test_main.cpp`, driven by the generated
+`src/det_math/detmath_vectors.h`) uses a fixed 64-vector table. Goal: prove C++ == Python reference
+bit-for-bit over each function's **full SEADS domain**, not just 64 points.
+- Where to work: `tools/gen_detmath_vectors.py` generates `detmath_vectors.h` (input x + expected
+  hex-float result straight from `tools/detmath_ref.py`). Grow its per-function ranges/sampling
+  (seeded, deterministic — no wall-clock RNG; vary by index) to cover the real argument ranges each
+  function sees (sin/cos/tan over wrapped angles, atan2/asin over the great-circle domain, sqrt).
+- Keep tolerance **exact (bit-equal)** for C++↔reference (this is parity, not the ≤2-ULP MPFR oracle
+  in `tools/det_math_oracle.py`, which stays as the accuracy gate).
+- Regenerate the header, rebuild, run `seads_detmath_test` (it's already in CI per toolchain), and add
+  `gen_detmath_vectors.py --check` is already gated in CI. No rail/golden change → no seal; just an
+  ADR + Forge card + receipt per Ledger Discipline. Mirror the determinism rules (no FMA, det_math only).
 
 ### 3. Complete the 8-aircraft tuning envelopes (data-only)  ✅ DONE (2026-06-28)
 All 8 roster envelopes now exist under `data/tuning/envelopes/` (p47d, bf109f4, a6m2, yak3, la7,
