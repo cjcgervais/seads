@@ -18,11 +18,26 @@
 > an optional **raylib viewer** (`-DSEADS_CLIENT=ON`, off in CI). All read-only, outside the
 > `world_hash`, **no seal** (rides v1.4r0). See **§5**.
 >
-> The open tracks now are: **(A) Step 5 polish** — wire a *live* local-input loop into the viewer
-> (the recorder/playback path is replay-only today), aircraft-model meshes + a chase/cockpit
-> camera, and feed `seads_predict` (4b) so the OWN ship is predicted live rather than replayed; and
-> **(B)** non-roadmap: replace the constant-TAS approximation with an energy/drag model (new seal,
-> moves goldens). After that, Step 7 (guns/projectiles — new seal, post-MVP). See **§5/§6/§7**.
+> **Recommended next task → Track A: a live local-input loop** (closes the multiplayer-flight MVP
+> visually; no seal). Today the whole renderer is *replay-only* — it plays a pre-recorded
+> `.seadsrec`. The piece that makes it a "flight sim you fly" is feeding live keyboard input through
+> the already-built **`seads_predict`** (layer 4b) so the OWN ship is predicted each tick. Concrete
+> first moves, in order:
+>   1. In the raylib viewer (`src/client/viewer_main.cpp`, built with `-DSEADS_CLIENT=ON`), add an
+>      input→`seads::Command` mapping (e.g. A/D → `target_phi`, W/S → `target_climb`, clamped to an
+>      envelope) and drive a `predict::Predictor` (`src/net/predict.h`) at 100 Hz from wall-clock,
+>      rendering the predicted own ship. Reuse `globe.h`/`playback.h` for the camera + remotes.
+>   2. Keep remotes on the replay/interp path (`Playback`) so you have both prediction (own) and
+>      interpolation (remote) on screen at once — the full layer-4a+4b loop, finally visible.
+>   3. Stay downstream-only: input feeds `Command`s into the kernel-driving `seads_predict`, never
+>      the wire; no rail/golden/`world_hash` touched → **no seal**, lean ledger (commit + receipt).
+>   Stretch within Track A: aircraft-model meshes (vs the marker sphere), a chase/cockpit camera,
+>   and vendoring Three.js so the web viewer works fully offline (CDN today).
+>
+> **Alternatives:** **(B)** non-roadmap — replace the constant-TAS approximation with an energy/drag
+> model (this *does* reseal: it moves all 4 goldens → `/seal`). **(Step 7)** guns/projectiles (new
+> seal, post-MVP). See **§5/§6/§7**. Whatever you pick, run the §4 gates first to confirm the
+> green baseline, then again before committing.
 
 ## Where things stand (DONE)
 
@@ -103,8 +118,8 @@ python tools/lockstep_ref.py                # loopback lockstep reference self-t
 for g in gen_coeffs gen_golden_params gen_detmath_vectors gen_envelope_tables gen_scenario_params \
          gen_geo001_vectors gen_snapshot_vectors gen_lockstep_vectors; do \
   python tools/$g.py --check; done          # all 8 generated headers in sync
-python -m pytest tests/property -q          # 36 pass (3 scenario sealed-hash + 7 geo001 + 5 snapshot + 4 lockstep)
-python tools/make_receipt.py                # runs all gates (incl. geo001_codec + snapshot_codec) -> overall: PASS
+python -m pytest tests/property -q          # 52 pass (scenario + geo001 + snapshot + lockstep + interp + predict)
+python tools/make_receipt.py                # runs all 12 gates -> overall: PASS (writes docs/receipts/...yml)
 ```
 ```powershell
 # C++ side (PATH set as above). Builds seads_golden (Sphere) + seads_scenario (Turn/Climb/TurnClimb).
@@ -116,22 +131,29 @@ foreach ($id in "GOLDEN-SK-Turn-001","GOLDEN-SK-Climb-001","GOLDEN-SK-TurnClimb-
   .\build-gcc\seads_scenario.exe --id $id --out run_scen.bin
   python tools\validate_snapshot.py --golden "tests\golden\$id\expected.world_hash" --candidate run_scen.bin }
 # (repeat the two scenario/validate blocks with build-clang to confirm cross-compiler parity)
-# Net codec parity tests (also built by the same cmake): fastest full check is ctest.
-ctest --test-dir build-gcc --output-on-failure    # 4/4: detmath, geo001, snapshot, lockstep
-ctest --test-dir build-clang --output-on-failure   # 4/4 under Clang too
+# Net codec + client parity tests (also built by the same cmake): fastest full check is ctest.
+ctest --test-dir build-gcc --output-on-failure    # 7/7: detmath, geo001, snapshot, lockstep, interp, predict, client
+ctest --test-dir build-clang --output-on-failure   # 7/7 under Clang too
+
+# OPTIONAL — the renderer (Step 5). Record a flight, then view it:
+.\build-gcc\seads_record.exe --demo --out flight.seadsrec --js src\client\web\trajectory.js
+#   web viewer:    open src\client\web\index.html  (trajectory.js sits beside it; file:// works)
+#   native viewer: cmake -S . -B build-client -G Ninja -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -DSEADS_CLIENT=ON
+#                  cmake --build build-client --target seads_viewer
+#                  .\build-client\seads_viewer.exe flight.seadsrec            # GUI
+#                  .\build-client\seads_viewer.exe flight.seadsrec --selfcheck 6   # headless, no GPU
 ```
 
 ## Next steps — pick up here (in priority order)
 
-> Steps **1/2/3/4 are DONE.** The two remaining roadmap pushes are **Step 5 (renderer)** and
-> **Step 6 (netcode)** — both are larger, multi-session efforts. **Recommendation: Step 6 (netcode)**
-> if the goal is the multiplayer-flight MVP — it stays inside the deterministic/headless world this
-> harness is built for, reuses the kernel + `world_hash` directly (as a desync tripwire), and needs no
-> new external dependency. Pick **Step 5 (renderer)** instead if you want something to *look at* first;
-> it's lower-stakes (read-only, can never break determinism) but pulls in a graphics lib. A non-roadmap
-> option worth a seal someday: replace the constant-TAS approximation (step 4) with an energy/drag
-> model. Whatever you pick that touches a rail or a golden hash → follow the seal ritual (Governance
-> reminder at the bottom). Neither Step 5 nor Step 6 changes a rail or a golden by itself.
+> Steps **1/2/3/4 DONE**, **Step 6 (netcode) DONE through layer 4b**, **Step 5 (renderer) first cut
+> DONE** (§5). The entries below (§1–§6) are the **history** of what shipped — read them for context
+> on how each layer was built and gated. **The actual next task is in `► START HERE` at the top:**
+> recommended Track A (a live local-input loop feeding `seads_predict` so the own ship is *flown*,
+> not replayed — closes the visual MVP, no seal). Alternatives: Track B (energy/drag model — a real
+> reseal that moves all 4 goldens) or Step 7 (guns). Anything touching a rail or a golden hash →
+> follow the seal ritual (`/seal` or `/reseal`; Governance reminder at the bottom). The renderer
+> tracks don't touch a rail or a golden.
 
 ### 1. Finish the cross-arch determinism proof (MSVC + AArch64)  ✅ DONE (2026-06-28)
 **Cross-toolchain bit-identity is now PROVEN in CI.** Remote `origin` =
