@@ -7,8 +7,9 @@
 ## Where things stand (DONE)
 
 Deterministic core + governance harness up; bit-for-bit promise **proven in CI**; aircraft now
-maneuver within their tuning envelopes. Roadmap steps **1, 3, 4 are DONE** (details in the numbered
-sections below). Working tree clean and in sync with `origin/main`.
+maneuver within their tuning envelopes. Roadmap steps **1, 2, 3, 4 are DONE** (details in the
+numbered sections below). The recommended next pickup is now **Step 5 (renderer)** or **Step 6
+(netcode)**.
 
 - **Remote:** `origin` = `https://github.com/cjcgervais/seads` (public). `guardian.yml` is **green on
   `main`** — MSVC + GCC + Clang × x64 + AArch64 reproduce **all 4 sealed goldens** bit-for-bit, with a
@@ -94,19 +95,20 @@ Green run: https://github.com/cjcgervais/seads/actions/runs/28340968855
   later: binary-search to the first divergent tick (add per-tick hashing in `src/replay`);
   SoftFloat is the fallback.
 
-### 2. Broaden C++ det_math coverage  ← recommended start (no seal, low risk)
-Currently the bit-exact C++ test (`src/det_math/detmath_test_main.cpp`, driven by the generated
-`src/det_math/detmath_vectors.h`) uses a fixed 64-vector table. Goal: prove C++ == Python reference
-bit-for-bit over each function's **full SEADS domain**, not just 64 points.
-- Where to work: `tools/gen_detmath_vectors.py` generates `detmath_vectors.h` (input x + expected
-  hex-float result straight from `tools/detmath_ref.py`). Grow its per-function ranges/sampling
-  (seeded, deterministic — no wall-clock RNG; vary by index) to cover the real argument ranges each
-  function sees (sin/cos/tan over wrapped angles, atan2/asin over the great-circle domain, sqrt).
-- Keep tolerance **exact (bit-equal)** for C++↔reference (this is parity, not the ≤2-ULP MPFR oracle
-  in `tools/det_math_oracle.py`, which stays as the accuracy gate).
-- Regenerate the header, rebuild, run `seads_detmath_test` (it's already in CI per toolchain), and add
-  `gen_detmath_vectors.py --check` is already gated in CI. No rail/golden change → no seal; just an
-  ADR + Forge card + receipt per Ledger Discipline. Mirror the determinism rules (no FMA, det_math only).
+### 2. Broaden C++ det_math coverage  ✅ DONE (2026-06-28, seal v1.3r0 — no seal needed)
+`tools/gen_detmath_vectors.py` rewritten: per-function **structured boundary rows** (Cody-Waite
+quadrant edges k·π/2, fdlibm atan regions 7/16·11/16·19/16·39/16, asin ±1 clamp, atan2 axis cases,
+wrap edges ±k·2π, tiny/large magnitudes) **+ 512 seeded random rows/group** (integer SplitMix64 +
+`+−*/` only → header is byte-reproducible cross-platform, so CI `--check` stays green). Domains
+mirror `det_math_oracle.py`. **64 → 4878 vectors**, tolerance exact (bit-equal). Added previously-
+**uncovered** `det_atan2`, `wrap_pi`, `wrap_2pi` to the parity gate (all live kernel calls,
+`kernel.cpp:29,66`). `detmath_vectors.h` `Vec` gained a `double y` second-operand column;
+`detmath_test_main.cpp` dispatcher extended. **PASS** under GCC + Clang locally; golden hashes
+unchanged (no kernel/det_math/reference edit). Ledger: ADR-Step2-DetMathParity-v1.3r0, Forge card
+Step2, receipt `…v1.3r0-d5e5e44.yml`. CI (guardian.yml L25 `--check`, L102 runs `seads_detmath_test`
+per leg) exercises all 4878 vectors cross-toolchain/cross-arch on push.
+- To re-tune breadth: change `N_RANDOM` (or a function's sub-ranges) in `gen_detmath_vectors.py`,
+  regenerate, rebuild. Mirrors determinism rules (det_math-only, no FMA, hex-float constants).
 
 ### 3. Complete the 8-aircraft tuning envelopes (data-only)  ✅ DONE (2026-06-28)
 All 8 roster envelopes now exist under `data/tuning/envelopes/` (p47d, bf109f4, a6m2, yak3, la7,
