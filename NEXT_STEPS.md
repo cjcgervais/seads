@@ -87,11 +87,18 @@ receipt `docs/receipts/receipt-ATM-Sphere_v1.2r0-0a7a258.yml` (overall PASS). CI
 - Values are an initial balance pass (relative airframe strengths; retuning later stays data-only).
 - Optional follow-up: `hash_sign_json.py` to sign each envelope (not yet applied).
 
-### 4. Wire the kernel to use envelopes + climb/bank inputs
-Today the kernel ignores tuning (golden flies straight, φ=0, no climb). Feed `phi`, `tas`, and
-climb commands from envelopes/inputs; extend `Kernel::step` (currently climb input hardcoded 0).
-This changes dynamics, NOT the sealed golden (golden inputs are fixed) — but add new goldens for
-turning/climbing scenarios and seal them.
+### 4. Wire the kernel to use envelopes + climb/bank inputs  ✅ DONE (2026-06-28, seal v1.3r0)
+`Kernel::step(cmd,env)` now banks toward a commanded angle at the envelope roll_rate (clamped to
+phi_max(TAS)) and climbs at a commanded rate (clamped to the envelope band + ceiling predamp).
+Straight golden preserved byte-for-byte via shared `advance_(i,req)`; Sphere hash unchanged. Three
+new sealed goldens with scripted-timeline inputs: GOLDEN-SK-{Turn,Climb,TurnClimb}-001
+(`config/scenarios/*.json` → `tests/golden/<id>/`). Runner `seads_scenario --id <id>`. Generators
+`gen_envelope_tables.py`/`gen_scenario_params.py` → `src/kernel/{envelope_tables,scenario_params}.h`
+(+ `flight_types.h`); `lut_eval` shared bit-identical in detmath_ref.py + kernel.cpp (no new det_math).
+Guardian green for all 4 goldens × MSVC/GCC/Clang × x64/AArch64 (run 28342235633). Ledger:
+ADR-Step4-Scenarios-v1.3r0, Forge card, SEAL_CARD v1.3r0, receipt -8b85a32.
+- TAS held constant (no energy/drag model) — a documented step-4 approximation to revisit in a later seal.
+- New goldens use scripted step-function schedules; richer maneuver scripting can extend the schema.
 
 ### 5. Custom C++ renderer (post-core, decision 1A)
 Thin raylib/SDL+bgfx client reading kernel state read-only, with render-interpolation between
