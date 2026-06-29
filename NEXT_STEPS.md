@@ -6,23 +6,24 @@
 > (`seads-canon`, `seads-harness`).
 >
 > ## ► START HERE (next task)
-> **Step 6 layer 4 — client-side prediction + remote interpolation.** Layers 1–3 are done (wire
-> codec, 20 Hz snapshot, loopback lockstep desync tripwire). Next: predict your own aircraft
-> forward from local input and interpolate remotes over a ~100 ms buffer, with authoritative
-> snapshots correcting drift. See **§6** below. Follow the ledger ritual (ADR + Forge card +
-> receipt) and keep every gate green. **Heads-up:** full *prediction* needs bank/energy state
-> (`phi`/`tas`) which is **not** on the GEO-001 wire today — adding it is a **rail reseal** (see
-> the layer-2 field-scope deferral). Interpolation of position/heading/altitude needs no reseal.
+> **Step 6 layer 4b — client-side prediction (needs a rail reseal).** Layers 1–3 and **4a
+> (remote interpolation)** are done. The remaining half is predicting your *own* aircraft forward
+> from local input + reconciling against authoritative snapshots. Accurate dead-reckoning needs
+> bank (`phi`) and speed (`tas`), which are **NOT** on the GEO-001 wire — carrying them is a
+> **rail reseal**: run `/reseal` (new GEO-001 scales for phi/tas, or an auxiliary non-geographic
+> block), write the ADR + Forge card + receipt, bump the seal. This is a **Tier-1** change (see
+> CLAUDE.md §2) — decide the wire shape explicitly before coding. See **§6** below.
 
 ## Where things stand (DONE)
 
 Deterministic core + governance harness up; bit-for-bit promise **proven in CI**; aircraft now
 maneuver within their tuning envelopes. Roadmap steps **1, 2, 3, 4 are DONE**; **Step 6 (netcode)
-is now IN PROGRESS** — layer 1 (GEO-001 wire codec), layer 2 (20 Hz snapshot serialization), and
-layer 3 (loopback lockstep desync tripwire) are all **DONE** (details in §6 below). The next
-pickup is **Step 6 layer 4: client-side prediction + remote interpolation** (predict own aircraft,
-interpolate remotes over a ~100 ms buffer, correct from authoritative snapshots). Step 5
-(renderer) remains the alternative visual track.
+is now IN PROGRESS** — layer 1 (GEO-001 wire codec), layer 2 (20 Hz snapshot serialization),
+layer 3 (loopback lockstep desync tripwire), and layer 4a (remote interpolation buffer) are all
+**DONE** (details in §6 below). The next pickup is **Step 6 layer 4b: client-side prediction**
+(predict own aircraft from local input + reconcile from authoritative snapshots) — which needs a
+**rail reseal** to put `phi`/`tas` on the wire. Step 5 (renderer) remains the alternative visual
+track, and is now the natural consumer of the layer-4a interpolated remote states.
 
 - **Remote:** `origin` = `https://github.com/cjcgervais/seads` (public). Single branch `main` (feature
   branches merged + deleted). `guardian.yml` is **green on `main` at `eb0dabd`**
@@ -36,16 +37,18 @@ interpolate remotes over a ~100 ms buffer, correct from authoritative snapshots)
   - GOLDEN-SK-Turn-001 `6160540c…13f152ee` · Climb-001 `74b9d556…2d9b6682` · TurnClimb-001 `f7193b99…7cedd413`
 - **Roster:** all 8 tuning envelopes exist (`data/tuning/envelopes/`); the kernel consumes them for
   bank/climb limits via `Kernel::step(cmd,env)`.
-- **Gates:** all Python gates green; **36** Hypothesis property tests pass (incl. 7 geo001 + 5
-  snapshot + 4 lockstep); det_math ≤2 ULP vs MPFR; C++ det_math + geo001 + snapshot byte-exact +
-  lockstep digest-exact vs reference; **8** generated headers in sync (`gen_*.py --check`).
-- **Netcode (Step 6) so far:** `src/net/` holds the GEO-001 wire codec (`geo001.{h,cpp}`) and the
-  20 Hz snapshot framing (`snapshot.{h,cpp}`) in the `seads_net` lib, plus the loopback lockstep
-  harness (`lockstep.{h,cpp}`) in its **own** `seads_lockstep` lib (it drives the kernel, so it
-  links `seads_kernel`+`seads_replay`; `seads_net` stays pure — no det_math/kernel). Each mirrors a
-  Python reference (`geo001_ref.py`, `snapshot_ref.py`, `lockstep_ref.py`) with a generated-vector
-  parity gate (`seads_geo001_test`, `seads_snapshot_test`, `seads_lockstep_test`).
-- **Ledger:** receipts in `docs/receipts/` (latest `…v1.3r0-13726a4.yml`), all `overall: PASS`.
+- **Gates:** all Python gates green; **44** Hypothesis property tests pass (incl. 7 geo001 + 5
+  snapshot + 4 lockstep + 8 interp); det_math ≤2 ULP vs MPFR; C++ det_math + geo001 + snapshot
+  byte-exact + lockstep digest-exact + interp bit-exact vs reference; **9** generated headers in
+  sync (`gen_*.py --check`). ctest is **5/5** under GCC + Clang.
+- **Netcode (Step 6) so far:** `src/net/` holds the GEO-001 wire codec (`geo001.{h,cpp}`), the
+  20 Hz snapshot framing (`snapshot.{h,cpp}`), and the remote interpolation buffer
+  (`interp.{h,cpp}`) — all in the `seads_net` lib (pure transport: no det_math/kernel) — plus the
+  loopback lockstep harness (`lockstep.{h,cpp}`) in its **own** `seads_lockstep` lib (it drives the
+  kernel, so it links `seads_kernel`+`seads_replay`). Each mirrors a Python reference
+  (`geo001_ref.py`, `snapshot_ref.py`, `lockstep_ref.py`, `interp_ref.py`) with a generated-vector
+  parity gate (`seads_geo001_test`, `seads_snapshot_test`, `seads_lockstep_test`, `seads_interp_test`).
+- **Ledger:** receipts in `docs/receipts/` (latest `…v1.3r0-733b8a3.yml`), all `overall: PASS`.
 - **Deferred (owner's call, not blocking):** (a) make `Cross-toolchain hash aggregation` a **required
   status check** on `main` (branch protection — needs a PAT or `gh`); (b) `hash_sign_json.py` signing
   of the 8 envelopes.
@@ -234,22 +237,29 @@ Suggested first moves for the next agent (build bottom-up, each layer gated befo
   earlier suggestion (documented):** lockstep is its **own** lib `seads_lockstep` (not folded into
   `seads_net`) because it drives the kernel — folding it in would make the pure wire-codec lib pull
   det_math+kernel transitively. See ADR §4.
-- **Prediction + remote interpolation (layer 4)** ← **NEXT PICKUP.** Predict your own aircraft forward
-  from local input each frame; interpolate remote aircraft over a ~100 ms buffer from the 20 Hz
-  snapshot stream; correct/reconcile against authoritative snapshots; handle late-join. Concrete first
-  moves (build bottom-up, gate each before the next):
-  - **Interpolation first (no reseal):** a remote-buffer that holds recent decoded snapshots and
-    interpolates position/heading/altitude between them at render time. Uses only lat/lon/bearing/alt
-    — all on the GEO-001 wire today. Mirror the harness style: a `tools/*_ref.py` reference + generated
-    vectors + a `seads_*_test` byte/clamp gate; net stays outside the kernel.
-  - **Prediction needs a rail decision:** dead-reckoning your own aircraft accurately needs bank
-    (`phi`) and speed (`tas`), which are **NOT** on the GEO-001 wire (layer-2 field-scope deferral).
-    Carrying them is a **rail reseal** — run `/reseal` (new GEO-001 scales for phi/tas, or an auxiliary
-    non-geographic block), write the ADR + Forge card + receipt, bump the seal. Decide this explicitly
-    before coding prediction; don't smuggle new wire fields in under the current seal.
-  - **Correction/late-join:** snapshot-driven reconciliation (snap remote to authoritative; replay
-    local input from the corrected base). `world_hash` from layer 3 remains the desync tripwire.
-  - Each sub-layer its own gated layer + ledger entry.
+- **Remote interpolation buffer (layer 4a)**  ✅ DONE (2026-06-28, seal v1.3r0 — no seal needed).
+  Client-side, downstream-only: a buffer of decoded GEO-001 snapshots that interpolates remote
+  aircraft at a render time ~100 ms in the past (smooth motion despite 20 Hz / jitter / loss).
+  `tools/interp_ref.py` is the canonical reference (`SnapshotBuffer.sample(render_tick)`; LINEAR
+  lat/alt, SHORTEST-ARC lon across the antimeridian + bearing across 360°, CLAMP/HOLD at edges).
+  `src/net/interp.{h,cpp}` mirrors it in `seads_net` (pure IEEE +−×÷, no det_math/kernel — so it
+  reproduces **bit-for-bit** cross-toolchain under the strict-FP/no-FMA flags, like the codecs).
+  `gen_interp_vectors.py` → `src/net/interp_vectors.h` (10 cases, hex-float, byte-reproducible);
+  `seads_interp_test` asserts bit-exact vs reference. 8 new Hypothesis tests
+  (`tests/property/test_interp.py`; 36 → 44). Gates wired: guardian.yml + make_receipt.py
+  (`interp` gate). PASS under GCC + Clang (ctest 5/5); all 4 goldens unchanged. Tier-2 ledger
+  (CLAUDE.md §2): commit message + receipt `…v1.3r0-733b8a3.yml`, no ADR/seal. *Uses only
+  lat/lon/bearing/alt — all on the wire today, so NO reseal.* It NEVER feeds the sim (downstream
+  presentation only). Step 5's renderer is the natural consumer.
+- **Client-side prediction (layer 4b)** ← **NEXT PICKUP — needs a rail reseal (Tier 1).** Predict
+  your OWN aircraft forward from local input each frame and reconcile against authoritative
+  snapshots (snap to authoritative; replay local input from the corrected base). Accurate
+  dead-reckoning needs bank (`phi`) and speed (`tas`), which are **NOT** on the GEO-001 wire
+  (layer-2 field-scope deferral). Carrying them is a **rail reseal**: run `/reseal` (new GEO-001
+  scales for phi/tas, or an auxiliary non-geographic block), write the ADR + Forge card + receipt,
+  bump the seal. Decide the wire shape explicitly first; don't smuggle new wire fields in under the
+  current seal. `world_hash` from layer 3 remains the desync tripwire; late-join reuses the
+  snapshot transport. Its own gated layer + Tier-1 ledger entry.
 - The kernel itself should not change; if it must, that's a seal event — keep net code strictly
   outside the kernel boundary (no feeding bits back in). Ledger per layer (ADR + card + receipt).
 

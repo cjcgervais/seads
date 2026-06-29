@@ -61,6 +61,10 @@ def main():
     lock_ref_ok, _ = run([PY, str(TOOLS / "lockstep_ref.py")])
     lock_vec_ok, _ = run([PY, str(TOOLS / "gen_lockstep_vectors.py"), "--check"])
     gates["lockstep"] = lock_ref_ok and lock_vec_ok
+    # Remote interpolation (netcode layer 4a): reference self-test + parity header in sync.
+    interp_ref_ok, _ = run([PY, str(TOOLS / "interp_ref.py")])
+    interp_vec_ok, _ = run([PY, str(TOOLS / "gen_interp_vectors.py"), "--check"])
+    gates["interp"] = interp_ref_ok and interp_vec_ok
 
     # regenerate golden candidate and validate against the seal
     cand = Path(tempfile.gettempdir()) / "seads_golden_candidate.bin"

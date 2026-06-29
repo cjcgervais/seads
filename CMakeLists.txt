@@ -47,7 +47,7 @@ target_link_libraries(seads_replay PUBLIC seads_det_flags)
 # Deliberately does NOT link det_math: the wire layer uses no transcendentals, and it
 # must never be on the path that feeds the deterministic sim. It links the strict FP
 # flags only so float->fixed quantization rounds identically cross-toolchain.
-add_library(seads_net STATIC src/net/geo001.cpp src/net/snapshot.cpp)
+add_library(seads_net STATIC src/net/geo001.cpp src/net/snapshot.cpp src/net/interp.cpp)
 target_include_directories(seads_net PUBLIC src/net)
 target_link_libraries(seads_net PUBLIC seads_det_flags)
 
@@ -85,9 +85,14 @@ target_link_libraries(seads_snapshot_test PRIVATE seads_net seads_det_flags)
 add_executable(seads_lockstep_test src/net/lockstep_test_main.cpp)
 target_link_libraries(seads_lockstep_test PRIVATE seads_lockstep seads_kernel seads_replay seads_det_math seads_det_flags)
 
+# --- remote interpolation parity test (bit-exact C++ vs Python reference) ---
+add_executable(seads_interp_test src/net/interp_test_main.cpp)
+target_link_libraries(seads_interp_test PRIVATE seads_net seads_det_flags)
+
 enable_testing()
 add_test(NAME detmath_bitexact COMMAND seads_detmath_test)
 add_test(NAME geo001_byteexact COMMAND seads_geo001_test)
 add_test(NAME snapshot_byteexact COMMAND seads_snapshot_test)
 add_test(NAME lockstep_equal COMMAND seads_lockstep_test)
+add_test(NAME interp_bitexact COMMAND seads_interp_test)
 # Golden hash compare is run in CI (guardian.yml) across the toolchain matrix.
