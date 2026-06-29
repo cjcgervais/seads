@@ -22,10 +22,19 @@
 > Goldens (v1.8r0):
 > - **Sphere `db777327…d13ac394` (UNCHANGED)** · Turn `a1dc8116…c0e13254` · Climb `de78ba92…2801eea0`
 > - TurnClimb `a502600c…ccdfe020` · Accel `476cfb3f…ad84325f` · Pitch `3efaff43…569d35e4` · Stall `8b2f4a85…5d937389`
-> Ledger: ADR-Step8-FlightModel-B4-v1.8r0, SEAL_CARD v1.8r0, receipt `…v1.8r0-*.yml`, rails version 170→180,
+> Ledger: ADR-Step8-FlightModel-B4-v1.8r0, SEAL_CARD v1.8r0, receipt `…v1.8r0-a716400.yml`, rails version 170→180,
 > guardian.yml **needs no edit** (reads hashes from `expected.world_hash`, already lists all 7 IDs).
-> **GIT: committed locally (push pending — see below).** Cross-arch (MSVC + AArch64) reproduction is proven
-> by guardian CI on push. Branch protection / required-check setup is still the deferred owner task.
+> **GIT: committed + pushed to `origin/main` at `75b2104` (2026-06-29). guardian CI GREEN**
+> (run [28397404805](https://github.com/cjcgervais/seads/actions/runs/28397404805)) — Python gates +
+> MSVC x64 + GCC/Clang × x64 + **GCC/Clang arm64** reproduce all 7 goldens bit-for-bit + the
+> cross-toolchain hash aggregation gate. **v1.8r0 is fully landed.** Branch protection / required-check
+> setup is still the deferred owner task.
+>
+> **The entire sealed flight-model arc B1→B4 is now COMPLETE.** Remaining roadmap (see §5 / §7):
+> renderer polish (meshes, vendored Three.js, offline web — all **no-seal**) and **guns/projectiles
+> (Step 7 — a major NEW seal)** with real scope forks (deterministic projectile sim, weapon roster,
+> hit/damage model) that warrant an owner scope decision before starting. Optional **B5** (ISA
+> atmosphere; rail + seal) stays deferred.
 >
 > _(Prior: v1.6r0 B2 lift & pitch — γ stored state, KIN-002 wire reseal, all goldens regenerated + Pitch;
 > committed + pushed, guardian green on `12a1830` run 28392491160.)_
