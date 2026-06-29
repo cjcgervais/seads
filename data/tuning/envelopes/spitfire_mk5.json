@@ -1,0 +1,17 @@
+{
+  "header": {
+    "id": "TUNE-Spitfire-Mk-V",
+    "version": 120,
+    "seal": "ATM-Sphere v1.2r0",
+    "adr": "docs/adr/ADR-roster-envelopes-v1.2r0.md"
+  },
+  "aircraft": "Spitfire Mk V",
+  "tuning": {
+    "v_ne_mps": 190.0,
+    "stall_tas_mps": 40.0,
+    "phi_max_deg_vs_tas": [[40, 63], [80, 59], [120, 53], [160, 47], [190, 44]],
+    "climb_rate_max_mps_vs_tas": [[40, 18], [80, 15], [120, 12], [160, 10], [190, 9]],
+    "climb_rate_min_mps_vs_tas": [[40, -21], [80, -24], [120, -27], [160, -30], [190, -32]],
+    "roll_rate_degps_vs_tas": [[40, 72], [80, 80], [120, 82], [160, 78], [190, 72]]
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "header": {
+    "id": "TUNE-La-7",
+    "version": 120,
+    "seal": "ATM-Sphere v1.2r0",
+    "adr": "docs/adr/ADR-roster-envelopes-v1.2r0.md"
+  },
+  "aircraft": "La-7",
+  "tuning": {
+    "v_ne_mps": 195.0,
+    "stall_tas_mps": 43.0,
+    "phi_max_deg_vs_tas": [[43, 58], [85, 55], [125, 50], [165, 45], [195, 42]],
+    "climb_rate_max_mps_vs_tas": [[43, 19], [85, 16], [125, 13], [165, 11], [195, 10]],
+    "climb_rate_min_mps_vs_tas": [[43, -22], [85, -25], [125, -28], [165, -31], [195, -33]],
+    "roll_rate_degps_vs_tas": [[43, 82], [85, 90], [125, 96], [165, 94], [195, 90]]
+  }
+}

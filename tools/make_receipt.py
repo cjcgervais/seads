@@ -45,8 +45,8 @@ def main():
     gates["spec_monotone_check"], _ = run([PY, str(TOOLS / "spec_monotone_check.py"),
                                            str(ROOT / "config/rails/atm.json")])
     gates["det_math_oracle"], _ = run([PY, str(TOOLS / "det_math_oracle.py"), "--samples", "2000"])
-    gates["tuning_probe"], _ = run([PY, str(TOOLS / "tuning_probe.py"),
-                                    str(ROOT / "data/tuning/envelopes/ki61.json")])
+    envelopes = sorted(str(p) for p in (ROOT / "data/tuning/envelopes").glob("*.json"))
+    gates["tuning_probe"], _ = run([PY, str(TOOLS / "tuning_probe.py"), *envelopes])
     gates["atm_top_probe"], _ = run([PY, str(TOOLS / "atm_top_probe.py"),
                                      "--ceil", "8000", "--soft", "100"])
 

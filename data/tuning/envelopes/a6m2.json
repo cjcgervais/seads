@@ -1,0 +1,17 @@
+{
+  "header": {
+    "id": "TUNE-A6M2",
+    "version": 120,
+    "seal": "ATM-Sphere v1.2r0",
+    "adr": "docs/adr/ADR-roster-envelopes-v1.2r0.md"
+  },
+  "aircraft": "A6M2 Zero",
+  "tuning": {
+    "v_ne_mps": 165.0,
+    "stall_tas_mps": 38.0,
+    "phi_max_deg_vs_tas": [[38, 65], [70, 62], [110, 56], [140, 50], [165, 46]],
+    "climb_rate_max_mps_vs_tas": [[38, 16], [70, 14], [110, 12], [140, 9], [165, 8]],
+    "climb_rate_min_mps_vs_tas": [[38, -18], [70, -20], [110, -22], [140, -24], [165, -26]],
+    "roll_rate_degps_vs_tas": [[38, 70], [70, 68], [110, 55], [140, 45], [165, 38]]
+  }
+}

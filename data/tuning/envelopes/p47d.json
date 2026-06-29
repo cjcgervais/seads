@@ -1,0 +1,17 @@
+{
+  "header": {
+    "id": "TUNE-P-47D",
+    "version": 120,
+    "seal": "ATM-Sphere v1.2r0",
+    "adr": "docs/adr/ADR-roster-envelopes-v1.2r0.md"
+  },
+  "aircraft": "P-47D Thunderbolt",
+  "tuning": {
+    "v_ne_mps": 205.0,
+    "stall_tas_mps": 46.0,
+    "phi_max_deg_vs_tas": [[46, 52], [90, 50], [140, 46], [180, 42], [205, 40]],
+    "climb_rate_max_mps_vs_tas": [[46, 14], [90, 13], [140, 11], [180, 9], [205, 8]],
+    "climb_rate_min_mps_vs_tas": [[46, -22], [90, -26], [140, -30], [180, -34], [205, -36]],
+    "roll_rate_degps_vs_tas": [[46, 75], [90, 85], [140, 95], [180, 100], [205, 105]]
+  }
+}
