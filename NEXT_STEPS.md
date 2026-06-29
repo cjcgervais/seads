@@ -4,10 +4,11 @@
 > **Step 5 renderer commit `e4ef652`** (Steps 1–6 done + a working downstream renderer) — pushed to
 > `origin/main`, guardian CI **GREEN** (run [28355716358](https://github.com/cjcgervais/seads/actions/runs/28355716358):
 > MSVC + GCC/Clang × x64/AArch64 reproduce all 4 goldens + the geo001/snapshot/lockstep/interp/predict
-> parity vectors bit-for-bit **and now the client-presentation test on every leg**). **Next: Step 5
-> polish (live input loop) or track B (energy/drag model) — see START HERE + §5/§6.** Read `CLAUDE.md`
-> first (the constitution — governance is now lean, §2). Background facts also live in Claude memory
-> (`seads-canon`, `seads-harness`).
+> parity vectors bit-for-bit **and now the client-presentation test on every leg**). **The Track A
+> live-input loop is now DONE** (the native viewer's `--fly` mode flies the own ship through
+> `seads_predict`); **next: Step 5 polish (meshes / chase cam / offline web) or track B (energy/drag
+> model) — see START HERE + §5/§6.** Read `CLAUDE.md` first (the constitution — governance is now
+> lean, §2). Background facts also live in Claude memory (`seads-canon`, `seads-harness`).
 >
 > ## ► START HERE (next task)
 > **Steps 1–6 are DONE and Step 5 (renderer) now has a working first cut.** The deterministic
@@ -18,21 +19,29 @@
 > an optional **raylib viewer** (`-DSEADS_CLIENT=ON`, off in CI). All read-only, outside the
 > `world_hash`, **no seal** (rides v1.4r0). See **§5**.
 >
-> **Recommended next task → Track A: a live local-input loop** (closes the multiplayer-flight MVP
-> visually; no seal). Today the whole renderer is *replay-only* — it plays a pre-recorded
-> `.seadsrec`. The piece that makes it a "flight sim you fly" is feeding live keyboard input through
-> the already-built **`seads_predict`** (layer 4b) so the OWN ship is predicted each tick. Concrete
-> first moves, in order:
->   1. In the raylib viewer (`src/client/viewer_main.cpp`, built with `-DSEADS_CLIENT=ON`), add an
->      input→`seads::Command` mapping (e.g. A/D → `target_phi`, W/S → `target_climb`, clamped to an
->      envelope) and drive a `predict::Predictor` (`src/net/predict.h`) at 100 Hz from wall-clock,
->      rendering the predicted own ship. Reuse `globe.h`/`playback.h` for the camera + remotes.
->   2. Keep remotes on the replay/interp path (`Playback`) so you have both prediction (own) and
->      interpolation (remote) on screen at once — the full layer-4a+4b loop, finally visible.
->   3. Stay downstream-only: input feeds `Command`s into the kernel-driving `seads_predict`, never
->      the wire; no rail/golden/`world_hash` touched → **no seal**, lean ledger (commit + receipt).
->   Stretch within Track A: aircraft-model meshes (vs the marker sphere), a chase/cockpit camera,
->   and vendoring Three.js so the web viewer works fully offline (CDN today).
+> **Track A (a live local-input loop) is DONE ✅ (2026-06-29, no seal).** The native viewer's new
+> **`--fly`** mode (`src/client/viewer_main.cpp`, `-DSEADS_CLIENT=ON`) flies the OWN ship from live
+> keyboard input (A/D → `target_phi`, W/S → `target_climb`) through the already-built
+> **`seads_predict`** (`predict::Predictor`, layer 4b) at a fixed 100 Hz from wall-clock, while
+> remotes stay on the `Playback`/interp path (layer 4a) — prediction (own) + interpolation (remote)
+> on the same globe at once, the full 4a+4b loop finally visible. Headless proof:
+> `seads_viewer --fly --selfcheck 6` (no GPU/recording needed) drives the real sealed kernel and
+> prints the own state. Downstream-only: input feeds `Command`s into the kernel-driving Predictor,
+> never the wire; no rail/golden/`world_hash` touched → no seal; ctest 7/7, golden
+> `529c6a05…9218fe16` unchanged, receipt `…v1.4r0-89a1974.yml`. CMake now links `seads_predict` +
+> kernel/replay/det_math into `seads_viewer` (guarded by `SEADS_CLIENT`, so CI is untouched).
+> *(Note: this single-process viewer has no authoritative server, so only `Predictor::predict()`
+> runs in `--fly`; `reconcile()` (snap+replay) stays exercised by the layer-4b parity tests and
+> engages against a real server.)*
+>
+> **Recommended next task → finish the Track A stretch / pick an alternative:**
+>   - **Track A stretch (no seal):** aircraft-model **meshes** (vs the marker sphere), a
+>     **chase/cockpit camera** that follows the own ship (today's `--fly` cam orbits the globe
+>     centre), and **vendoring Three.js** so the web viewer works fully offline (CDN today). A
+>     `--fly` web path (predict in JS mirroring `predict_ref`) is a bigger lift but possible.
+>   - First moves for the chase cam: in `run_fly` set `cam.target` to the own ship's display
+>     position (`to_display(geo_to_cartesian(pred.kernel()...))`) instead of the origin, and place
+>     the eye behind it along the velocity/heading; reuse `orbit_eye` for a free-look offset.
 >
 > **Alternatives:** **(B)** non-roadmap — replace the constant-TAS approximation with an energy/drag
 > model (this *does* reseal: it moves all 4 goldens → `/seal`). **(Step 7)** guns/projectiles (new
@@ -234,9 +243,16 @@ green, **lean ledger** (commit + receipt `…v1.4r0-*.yml`, no ADR per owner's c
   3-ship demo. (`dt` clamp guards tab-background rAF leaps.)
 - **Optional native viewer** `seads_viewer` (`viewer_main.cpp`, `-DSEADS_CLIENT=ON`) — raylib 3D
   globe, wall-clock render-interpolation, trails, HUD, orbit camera, `--selfcheck N` headless mode.
-- **Remaining polish (track A):** live local-input loop (replay-only today) feeding `seads_predict`
-  (4b) so the OWN ship is predicted live; aircraft-model meshes; chase/cockpit camera; vendor
-  Three.js for fully-offline web. None touch a rail/golden.
+- **Live local-input loop (track A)**  ✅ DONE (2026-06-29, no seal). The native viewer's `--fly`
+  mode flies the OWN ship from keyboard input through `predict::Predictor` (layer 4b) at a fixed
+  100 Hz wall-clock step; remotes stay on the layer-4a interp path — prediction + interpolation on
+  one globe. Input maps A/D→`target_phi`, W/S→`target_climb` into a `seads::Command` (kernel
+  re-clamps to the envelope). Headless `--fly --selfcheck N` proves the input→prediction path with
+  no GPU/recording. `seads_viewer` now links `seads_predict`+kernel/replay/det_math (guarded by
+  `SEADS_CLIENT`, CI untouched). ctest 7/7; golden `529c6a05…` unchanged; receipt `…-89a1974.yml`.
+- **Remaining polish (track A stretch):** aircraft-model meshes (vs the marker sphere); a
+  chase/cockpit camera following the own ship (today's `--fly` cam orbits the globe centre);
+  vendor Three.js for fully-offline web; an optional `--fly` web path. None touch a rail/golden.
 
 ### 6. Netcode state-sync (multiplayer flight MVP)  ← IN PROGRESS (option B: recommended)
 Server-authoritative state synchronization: kernel both ends, predict own aircraft, interpolate

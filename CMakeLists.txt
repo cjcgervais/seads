@@ -132,8 +132,12 @@ if(SEADS_CLIENT)
     GIT_TAG 5.5)
   set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
   FetchContent_MakeAvailable(raylib)
+  # --fly mode drives the real sealed kernel through the layer-4b prediction harness, so the
+  # viewer now also links seads_predict (+ kernel/replay/det_math). Still read-only over the sim:
+  # input feeds Commands into the Predictor, never the world_hash — no seal (rides v1.4r0).
   add_executable(seads_viewer src/client/viewer_main.cpp)
-  target_link_libraries(seads_viewer PRIVATE seads_client seads_net raylib)
+  target_link_libraries(seads_viewer PRIVATE seads_client seads_net seads_predict
+                        seads_kernel seads_replay seads_det_math raylib)
 endif()
 
 enable_testing()

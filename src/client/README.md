@@ -7,7 +7,10 @@ with **no seal bump** (and the `lint_determinism` scan deliberately excludes `sr
 globe projection is free to use libm trig).
 
 It is the natural consumer of the netcode work: it replays the exact **GEO-001/KIN-001 wire
-stream** (protocol 2) and smooths remotes with the **layer-4a** interpolation buffer.
+stream** (protocol 2) and smooths remotes with the **layer-4a** interpolation buffer. The native
+viewer also has a **`--fly`** mode that *flies* the own aircraft from live keyboard input through
+the **layer-4b** prediction harness (`seads_predict`), so prediction (own) and interpolation
+(remotes) run on the same globe at once.
 
 ## Pieces
 
@@ -18,7 +21,7 @@ stream** (protocol 2) and smooths remotes with the **layer-4a** interpolation bu
 | `globe.{h}` | Pure projection math: sphere(lat,lon,alt) → cartesian (Y = polar axis), orbit camera, perspective project, near/far-hemisphere cull. All pure functions → unit-tested headlessly. |
 | `playback.{h,cpp}` | Wraps a decoded recording in `interp::SnapshotBuffer` and samples it at a render tick ~100 ms in the past (the 4a delay). Pure given a render tick. |
 | `client_test_main.cpp` → **`seads_client_test`** | ctest gate: globe invariants + container round-trip + playback == layer-4a interp. Built in CI; **no GPU needed.** |
-| `viewer_main.cpp` → **`seads_viewer`** | OPTIONAL raylib 3D globe (built only with `-DSEADS_CLIENT=ON`). Wall-clock render-interpolation, trails, HUD, orbit camera. Has a `--selfcheck N` headless data-path mode. |
+| `viewer_main.cpp` → **`seads_viewer`** | OPTIONAL raylib 3D globe (built only with `-DSEADS_CLIENT=ON`). Replay mode: wall-clock render-interpolation, trails, HUD, orbit camera, `--selfcheck N` headless data-path mode. **`--fly` mode:** own ship flown live (A/D bank, W/S climb) via a fixed-100 Hz `predict::Predictor` driving the real sealed kernel; remotes stay on the layer-4a interp path. `--fly --selfcheck N` is a headless (no-GPU, no-recording) proof of the input→prediction path. Links `seads_predict` for fly mode. |
 | `web/` | Zero-build Three.js globe viewer. Same interpolation (mirrored in JS), opens in any browser. |
 
 ## Quick start
@@ -36,8 +39,10 @@ start src\client\web\index.html
 # 2b. native viewer (optional graphics dep)
 cmake -S . -B build-client -G Ninja -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -DSEADS_CLIENT=ON
 cmake --build build-client --target seads_viewer
-.\build-client\seads_viewer.exe flight.seadsrec            # GUI
+.\build-client\seads_viewer.exe flight.seadsrec            # GUI (replay)
 .\build-client\seads_viewer.exe flight.seadsrec --selfcheck 8   # headless data-path check
+.\build-client\seads_viewer.exe flight.seadsrec --fly      # FLY: own ship live (A/D bank, W/S climb)
+.\build-client\seads_viewer.exe --fly --selfcheck 6        # headless fly-path proof (no recording/GPU)
 ```
 
 ## Boundaries (why this can't break determinism)
