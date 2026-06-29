@@ -69,11 +69,15 @@ foreach ($id in "GOLDEN-SK-Turn-001","GOLDEN-SK-Climb-001","GOLDEN-SK-TurnClimb-
 
 ## Next steps — pick up here (in priority order)
 
-> **Recommended start: Step 2** (broaden C++ det_math coverage) — self-contained, **no seal**, lowest
-> risk, and tightens the determinism guarantee. Steps 1/3/4 are done. Bigger pushes after that:
-> Step 5 (renderer) or Step 6 (netcode). A non-roadmap option worth a seal someday: replace the
-> constant-TAS approximation (step 4) with an energy/drag model. Whatever you pick that touches a rail
-> or a golden hash → follow the seal ritual (see Governance reminder at the bottom).
+> Steps **1/2/3/4 are DONE.** The two remaining roadmap pushes are **Step 5 (renderer)** and
+> **Step 6 (netcode)** — both are larger, multi-session efforts. **Recommendation: Step 6 (netcode)**
+> if the goal is the multiplayer-flight MVP — it stays inside the deterministic/headless world this
+> harness is built for, reuses the kernel + `world_hash` directly (as a desync tripwire), and needs no
+> new external dependency. Pick **Step 5 (renderer)** instead if you want something to *look at* first;
+> it's lower-stakes (read-only, can never break determinism) but pulls in a graphics lib. A non-roadmap
+> option worth a seal someday: replace the constant-TAS approximation (step 4) with an energy/drag
+> model. Whatever you pick that touches a rail or a golden hash → follow the seal ritual (Governance
+> reminder at the bottom). Neither Step 5 nor Step 6 changes a rail or a golden by itself.
 
 ### 1. Finish the cross-arch determinism proof (MSVC + AArch64)  ✅ DONE (2026-06-28)
 **Cross-toolchain bit-identity is now PROVEN in CI.** Remote `origin` =
@@ -132,14 +136,43 @@ ADR-Step4-Scenarios-v1.3r0, Forge card, SEAL_CARD v1.3r0, receipt -8b85a32.
 - TAS held constant (no energy/drag model) — a documented step-4 approximation to revisit in a later seal.
 - New goldens use scripted step-function schedules; richer maneuver scripting can extend the schema.
 
-### 5. Custom C++ renderer (post-core, decision 1A)
+### 5. Custom C++ renderer (post-core, decision 1A)  ← next pickup (option A: visual)
 Thin raylib/SDL+bgfx client reading kernel state read-only, with render-interpolation between
 100 Hz ticks. Renderer must never feed the sim. New `src/client/`. Needs a graphics lib added.
+**Hard rule:** the renderer is downstream-only — it reads a snapshot/`KernelState` and never writes
+back into sim state, never advances a tick, never seeds RNG the kernel sees. It lives **outside** the
+determinism gate, so it does **not** go through `det_math` and does **not** affect any `world_hash`
+(no seal). Suggested first moves for the next agent:
+- Add the graphics dep behind an **optional** CMake switch (e.g. `option(SEADS_CLIENT "build the
+  renderer" OFF)`) so `guardian.yml` and the headless gates never pull a GUI lib — keep CI kernel-only.
+  raylib is the least-friction choice (single dep, trivial CMake `FetchContent`).
+- Expose a read-only accessor on `Kernel` (positions/bearings/φ for each aircraft) — do **not** widen
+  the canonical snapshot used for hashing; add a separate view struct if needed.
+- Render-interpolate between ticks using a wall-clock alpha **in the client only** (wall-clock is
+  banned *inside* the kernel; the client is allowed it). Map sphere (lat,lon,h) → a camera/globe view.
+- Drive it from a golden replay first (feed `seads_scenario` output) before any live input loop.
+- Ledger: ADR + Forge card + receipt; no rail/golden touched, so no seal. Determinism gate unaffected.
 
-### 6. Netcode state-sync (multiplayer flight MVP)
+### 6. Netcode state-sync (multiplayer flight MVP)  ← next pickup (option B: recommended)
 Server-authoritative state synchronization: kernel both ends, predict own aircraft, interpolate
 remotes ~100 ms, `world_hash` as desync tripwire, snapshots for correction/late-join. Build out
 `src/net/` GEO-001 codec first (lat/lon×1e7, bearing×1e6, h×1e3, ZigZag+LEB128) + loopback tests.
+Suggested first moves for the next agent (build bottom-up, each layer gated before the next):
+- **GEO-001 codec first, in isolation.** New `src/net/geo001.{h,cpp}`: ZigZag+LEB128 encode/decode for
+  the quantized fields (lat/lon×1e7 as i64, bearing×1e6, h×1e3). Mirror it in a Python reference
+  (`tools/geo001_ref.py`) the same way det_math is mirrored, and add a **round-trip + cross-impl
+  parity** gate (encode in C++, decode in Python and vice-versa; byte-identical wire). This is the
+  natural, self-contained next deliverable and is **no-seal** (wire format is already a sealed rail —
+  GEO-001 — so *implementing* it to spec rather than changing it does not reseal; but any deviation
+  from the GEO-001 rail *would* need a seal, so match the rail exactly).
+- **Snapshot serialization** of `KernelState` over GEO-001 at the 20 Hz snapshot cadence (physics stays
+  100 Hz). Keep the canonical little-endian hashing snapshot as the source of truth; the wire snapshot
+  is a separate, quantized transport.
+- **Loopback harness**: two in-process kernels stepped in lockstep from the same inputs must keep
+  identical `world_hash` every tick (desync tripwire). Then add prediction (own aircraft) +
+  remote interpolation (~100 ms buffer) + correction from authoritative snapshots.
+- The kernel itself should not change; if it must, that's a seal event — keep net code strictly
+  outside the kernel boundary (no feeding bits back in). Ledger per layer (ADR + card + receipt).
 
 ### 7. (Post-MVP) Guns/projectiles — new seal, deferred per doctrine.
 
