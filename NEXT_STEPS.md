@@ -53,14 +53,25 @@ python tools\validate_snapshot.py --golden tests\golden\GOLDEN-SK-Sphere-001\exp
 
 ## Next steps — pick up here (in priority order)
 
-### 1. Finish the cross-arch determinism proof (MSVC + AArch64)  ← recommended first
-Only the x64/GCC/Clang legs are proven locally. Push to GitHub to run `guardian.yml`
-(MSVC/Clang/GCC × x64/AArch64 with hash aggregation).
-- `git remote add origin <url>` then `git push -u origin main`.
-- Watch the **verify-determinism** job: it fails if any toolchain's world_hash != the seal.
-- If AArch64 ever diverges: most likely FMA contraction or a stray libm path; binary-search to
-  the first divergent tick (add per-tick hashing in `src/replay`). SoftFloat is the fallback.
-- Make `verify-determinism` a required status check (branch protection on `main`).
+### 1. Finish the cross-arch determinism proof (MSVC + AArch64)  ✅ DONE (2026-06-28)
+**Cross-toolchain bit-identity is now PROVEN in CI.** Remote `origin` =
+`https://github.com/cjcgervais/seads` (public). `guardian.yml` green on `main` —
+all six legs reproduce the seal `529c6a05…9218fe16`:
+MSVC x64 · GCC x64 · Clang x64 · **GCC arm64** · **Clang arm64** + the aggregation gate.
+Green run: https://github.com/cjcgervais/seads/actions/runs/28340968855
+- The AArch64 legs (highest divergence risk: FMA/libm) reproduce the seal exactly — no
+  divergence ever occurred. All failures en route were harness/CI bugs, not the kernel:
+  (a) `-lwinpthread` was hardcoded for all compilers → scoped to `if(MINGW)`, portable
+  threads on Linux/macOS (`CMakeLists.txt`);
+  (b) MSVC generator `VS 17 2022` vs the new `windows-2025-vs2026` runner → pinned the MSVC
+  leg to `windows-2022` (`guardian.yml`);
+  (c) aggregation hash compare used `tr -d ' \n'` which left a stray `\r` from the CRLF
+  `expected.world_hash` → now `tr -d '[:space:]'` (`guardian.yml`).
+  All three ride seal v1.2r0 (no rail/golden/kernel change).
+- **STILL TODO (deferred by owner):** make **`Cross-toolchain hash aggregation`** a required
+  status check (Settings → Branches → branch protection on `main`). If AArch64 ever diverges
+  later: binary-search to the first divergent tick (add per-tick hashing in `src/replay`);
+  SoftFloat is the fallback.
 
 ### 2. Broaden C++ det_math coverage
 Currently the bit-exact C++ test uses a fixed 64-vector table. Add a randomized sweep
