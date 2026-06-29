@@ -1,8 +1,14 @@
 # SEADS 2026 — Next Steps (handoff)
 
-> Resume doc for a fresh session. State as of seal **ATM-Sphere v1.3r0**, git `main` (clean, pushed).
-> Read `CLAUDE.md` first (the constitution). Background facts also live in Claude memory
-> (`seads-canon`, `seads-harness`).
+> Resume doc for a fresh session. State as of seal **ATM-Sphere v1.3r0**, git `main` at **`eb0dabd`**
+> (clean, pushed, **CI green**). Read `CLAUDE.md` first (the constitution). Background facts also live
+> in Claude memory (`seads-canon`, `seads-harness`).
+>
+> ## ► START HERE (next task)
+> **Step 6 layer 3 — the loopback lockstep harness.** Two in-process kernels stepped from the same
+> inputs must produce an identical `world_hash` every tick (the desync tripwire). Build it bottom-up
+> per **§6** below; follow the ledger ritual (ADR + Forge card + receipt) and keep every gate green.
+> **No seal** unless you touch a rail/golden (you won't). Net code stays strictly outside the kernel.
 
 ## Where things stand (DONE)
 
@@ -14,18 +20,26 @@ loopback lockstep harness** (two in-process kernels, same inputs, identical `wor
 tick = desync tripwire), then prediction + remote interpolation. Step 5 (renderer) remains the
 alternative visual track.
 
-- **Remote:** `origin` = `https://github.com/cjcgervais/seads` (public). `guardian.yml` is **green on
-  `main`** — MSVC + GCC + Clang × x64 + AArch64 reproduce **all 4 sealed goldens** bit-for-bit, with a
-  per-golden cross-toolchain aggregation gate. (No `gh` CLI here; watch CI via the public Actions API,
-  and use a GCM token from `git credential fill` for log downloads.)
+- **Remote:** `origin` = `https://github.com/cjcgervais/seads` (public). Single branch `main` (feature
+  branches merged + deleted). `guardian.yml` is **green on `main` at `eb0dabd`**
+  (run [28345458656](https://github.com/cjcgervais/seads/actions/runs/28345458656)) — MSVC + GCC +
+  Clang × x64 + AArch64 reproduce **all 4 sealed goldens** bit-for-bit AND the new `seads_geo001_test`
+  + `seads_snapshot_test` parity vectors byte-for-byte, with a per-golden cross-toolchain aggregation
+  gate. (No `gh` CLI here; watch CI via the public Actions API — `curl -s
+  ".../actions/runs/<id>/jobs"` — and use a GCM token from `git credential fill` for log downloads.)
 - **Seal:** ATM-Sphere **v1.3r0**. Four goldens, all cross-toolchain-verified:
   - GOLDEN-SK-Sphere-001 (straight) `529c6a05…9218fe16` — unchanged since Pass 1
   - GOLDEN-SK-Turn-001 `6160540c…13f152ee` · Climb-001 `74b9d556…2d9b6682` · TurnClimb-001 `f7193b99…7cedd413`
 - **Roster:** all 8 tuning envelopes exist (`data/tuning/envelopes/`); the kernel consumes them for
   bank/climb limits via `Kernel::step(cmd,env)`.
-- **Gates:** all Python gates green; **20** Hypothesis property tests pass; det_math ≤2 ULP vs MPFR;
-  C++ det_math bit-exact vs reference; 5 generated headers in sync (`gen_*.py --check`).
-- **Ledger:** receipts in `docs/receipts/` (latest `…v1.3r0-8b85a32.yml`), all `overall: PASS`.
+- **Gates:** all Python gates green; **32** Hypothesis property tests pass (incl. 7 geo001 + 5
+  snapshot); det_math ≤2 ULP vs MPFR; C++ det_math + geo001 + snapshot byte-exact vs reference;
+  **7** generated headers in sync (`gen_*.py --check`).
+- **Netcode (Step 6) so far:** `src/net/` holds the GEO-001 wire codec (`geo001.{h,cpp}`) and the
+  20 Hz snapshot framing (`snapshot.{h,cpp}`), both in the `seads_net` lib. Each mirrors a Python
+  reference (`tools/geo001_ref.py`, `tools/snapshot_ref.py`) with a generated-vector parity gate
+  (`seads_geo001_test`, `seads_snapshot_test`). `seads_net` deliberately does **not** link `det_math`.
+- **Ledger:** receipts in `docs/receipts/` (latest `…v1.3r0-13726a4.yml`), all `overall: PASS`.
 - **Deferred (owner's call, not blocking):** (a) make `Cross-toolchain hash aggregation` a **required
   status check** on `main` (branch protection — needs a PAT or `gh`); (b) `hash_sign_json.py` signing
   of the 8 envelopes.
@@ -53,10 +67,13 @@ python tools/det_math_oracle.py --samples 8000
 python tools/spec_monotone_check.py config/rails/atm.json
 python tools/tuning_probe.py data/tuning/envelopes/*.json
 python tools/atm_top_probe.py --ceil 8000 --soft 100
-for g in gen_coeffs gen_golden_params gen_detmath_vectors gen_envelope_tables gen_scenario_params; do \
-  python tools/$g.py --check; done          # all 5 generated headers in sync
-python -m pytest tests/property -q          # 20 pass (incl. 3 scenario sealed-hash)
-python tools/make_receipt.py                # runs all gates (incl. 3 scenario goldens) -> overall: PASS
+python tools/geo001_ref.py                  # GEO-001 codec reference self-test
+python tools/snapshot_ref.py                # GEO-001 snapshot reference self-test
+for g in gen_coeffs gen_golden_params gen_detmath_vectors gen_envelope_tables gen_scenario_params \
+         gen_geo001_vectors gen_snapshot_vectors; do \
+  python tools/$g.py --check; done          # all 7 generated headers in sync
+python -m pytest tests/property -q          # 32 pass (3 scenario sealed-hash + 7 geo001 + 5 snapshot)
+python tools/make_receipt.py                # runs all gates (incl. geo001_codec + snapshot_codec) -> overall: PASS
 ```
 ```powershell
 # C++ side (PATH set as above). Builds seads_golden (Sphere) + seads_scenario (Turn/Climb/TurnClimb).
@@ -68,6 +85,9 @@ foreach ($id in "GOLDEN-SK-Turn-001","GOLDEN-SK-Climb-001","GOLDEN-SK-TurnClimb-
   .\build-gcc\seads_scenario.exe --id $id --out run_scen.bin
   python tools\validate_snapshot.py --golden "tests\golden\$id\expected.world_hash" --candidate run_scen.bin }
 # (repeat the two scenario/validate blocks with build-clang to confirm cross-compiler parity)
+# Net codec parity tests (also built by the same cmake): fastest full check is ctest.
+ctest --test-dir build-gcc --output-on-failure    # 3/3: detmath_bitexact, geo001_byteexact, snapshot_byteexact
+ctest --test-dir build-clang --output-on-failure   # 3/3 under Clang too
 ```
 
 ## Next steps — pick up here (in priority order)
@@ -187,9 +207,24 @@ Suggested first moves for the next agent (build bottom-up, each layer gated befo
   receipt `…v1.3r0-13726a4.yml`. **Field-scope deferral (documented, not silent):** `phi`/`tas`
   are NOT on the wire — GEO-001 has no scale for them, so adding them is a reseal. Layer 2 supports
   remote **interpolation**; full prediction (bank/energy) awaits a later layer.
-- **Loopback harness** ← NEXT PICKUP. Two in-process kernels stepped in lockstep from the same inputs must keep
-  identical `world_hash` every tick (desync tripwire). Then add prediction (own aircraft) +
-  remote interpolation (~100 ms buffer) + correction from authoritative snapshots.
+- **Loopback lockstep harness (layer 3)** ← **NEXT PICKUP.** Two in-process kernels stepped from the
+  same input stream must produce an identical `world_hash` every tick — the desync tripwire. Concrete
+  first moves (build bottom-up, gate each before the next):
+  - **Tick-hash accessor.** Add a way to hash one tick cheaply. `Kernel::snapshot(tick)` already gives
+    the canonical LE-f64 bytes; reuse `src/replay/sha256` to get a per-tick `world_hash`. Do **not**
+    change the snapshot byte layout (it's the sealed-golden source of truth) — just hash it per tick.
+  - **`src/net/lockstep.{h,cpp}`** (in `seads_net`): an `applyInputs(tick, cmds)` driver that steps two
+    `Kernel` instances from one shared input timeline and asserts equal per-tick hash. Keep it a thin
+    harness over the existing kernel API — net code stays **outside** the kernel; never feed wire bits
+    back in (the GEO-001 wire is lossy — decode is for remotes/rendering, not for advancing the sim).
+  - **`seads_lockstep_test`** exe + `add_test` (mirror `seads_geo001_test` wiring in `CMakeLists.txt`):
+    run a scripted multi-aircraft timeline through both kernels for N ticks; FAIL on the first divergent
+    tick (print the tick index — that's your binary-search handle if AArch64 ever drifts).
+  - **Gate wiring** like the prior layers: add to `guardian.yml` (build + run the exe per toolchain leg)
+    and `make_receipt.py` (a `lockstep` gate). A Python mirror via `ref_kernel.py` (two instances, same
+    inputs, equal hash) makes a no-compiler gate too — optional but consistent with the harness style.
+  - Then layer 4+: prediction (own aircraft), remote interpolation (~100 ms buffer), correction from
+    authoritative snapshots, late-join. Each its own gated layer + ledger entry.
 - The kernel itself should not change; if it must, that's a seal event — keep net code strictly
   outside the kernel boundary (no feeding bits back in). Ledger per layer (ADR + card + receipt).
 
