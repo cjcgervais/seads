@@ -57,6 +57,10 @@ def main():
     snap_ref_ok, _ = run([PY, str(TOOLS / "snapshot_ref.py")])
     snap_vec_ok, _ = run([PY, str(TOOLS / "gen_snapshot_vectors.py"), "--check"])
     gates["snapshot_codec"] = snap_ref_ok and snap_vec_ok
+    # Loopback lockstep (netcode layer 3): reference self-test + parity header in sync.
+    lock_ref_ok, _ = run([PY, str(TOOLS / "lockstep_ref.py")])
+    lock_vec_ok, _ = run([PY, str(TOOLS / "gen_lockstep_vectors.py"), "--check"])
+    gates["lockstep"] = lock_ref_ok and lock_vec_ok
 
     # regenerate golden candidate and validate against the seal
     cand = Path(tempfile.gettempdir()) / "seads_golden_candidate.bin"

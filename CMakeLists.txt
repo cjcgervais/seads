@@ -51,6 +51,16 @@ add_library(seads_net STATIC src/net/geo001.cpp src/net/snapshot.cpp)
 target_include_directories(seads_net PUBLIC src/net)
 target_link_libraries(seads_net PUBLIC seads_det_flags)
 
+# --- net / loopback lockstep harness (netcode layer 3 — the desync tripwire) ---
+# Drives TWO kernels from one input timeline and compares per-tick canonical world_hash.
+# It lives under src/net/ (a net concern) but it is a kernel DRIVER, so it links seads_kernel
+# + seads_replay and is its OWN lib — seads_net stays pure (geo001/snapshot wire codecs only,
+# no det_math/kernel). Net code stays outside the kernel: the timeline carries sim Commands,
+# never wire bits (the GEO-001 wire is lossy; decode is for remotes/rendering, not the sim).
+add_library(seads_lockstep STATIC src/net/lockstep.cpp)
+target_include_directories(seads_lockstep PUBLIC src/net)
+target_link_libraries(seads_lockstep PUBLIC seads_kernel seads_replay seads_det_flags)
+
 # --- golden runner ---
 add_executable(seads_golden src/kernel/golden_main.cpp)
 target_link_libraries(seads_golden PRIVATE seads_kernel seads_replay seads_det_math seads_det_flags)
@@ -71,8 +81,13 @@ target_link_libraries(seads_geo001_test PRIVATE seads_net seads_det_flags)
 add_executable(seads_snapshot_test src/net/snapshot_test_main.cpp)
 target_link_libraries(seads_snapshot_test PRIVATE seads_net seads_det_flags)
 
+# --- loopback lockstep parity test (two kernels, same inputs, identical per-tick hash) ---
+add_executable(seads_lockstep_test src/net/lockstep_test_main.cpp)
+target_link_libraries(seads_lockstep_test PRIVATE seads_lockstep seads_kernel seads_replay seads_det_math seads_det_flags)
+
 enable_testing()
 add_test(NAME detmath_bitexact COMMAND seads_detmath_test)
 add_test(NAME geo001_byteexact COMMAND seads_geo001_test)
 add_test(NAME snapshot_byteexact COMMAND seads_snapshot_test)
+add_test(NAME lockstep_equal COMMAND seads_lockstep_test)
 # Golden hash compare is run in CI (guardian.yml) across the toolchain matrix.
