@@ -1,8 +1,8 @@
 {
   "id": "GOLDEN-SK-TurnClimb-001",
-  "seal": "ATM-Sphere v1.3r0",
+  "seal": "ATM-Sphere v1.5r0",
   "ticks": 4000,
-  "world_hash": "f7193b998bf55956dc648a08c4c94f7c5d387fc3cff1c4b7fbcb61ce7cedd413",
+  "world_hash": "cd705c4a684390234399bbdfa612a34565c8322e036afcc8a2cda09a4bda5c9c",
   "snapshot_format": "see ref_kernel.py docstring",
   "generated_by": "tools/ref_kernel.py (Python det_math reference)"
 }

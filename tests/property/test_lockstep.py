@@ -4,7 +4,7 @@ Byte-exact C++<->reference parity of the per-tick hash sequence is proven by the
 gate (src/net/lockstep_test_main.cpp). Here we prove the reference harness itself is sound:
 two kernels stepped from the SAME randomized timeline stay bit-identical every tick, ANY desync
 trips the tripwire, and the sequence digest is reproducible. Net code stays outside the kernel:
-inputs are sim Commands (bank/climb), never wire bits."""
+inputs are sim Commands (bank / g-command / throttle), never wire bits."""
 import sys
 from pathlib import Path
 
@@ -16,12 +16,14 @@ import lockstep_ref as ls
 
 # Random shared timelines: a few aircraft, a handful of phases, modest tick counts (fast).
 BANK = st.floats(min_value=-80.0, max_value=80.0, allow_nan=False, allow_infinity=False)
-CLIMB = st.floats(min_value=-30.0, max_value=30.0, allow_nan=False, allow_infinity=False)
+# commanded load factor (g): bounded so a few hundred ticks keeps gamma well clear of the
+# cos(gamma)->0 vertical singularity (determinism holds regardless; this keeps it physical).
+GLOAD = st.floats(min_value=-1.0, max_value=5.0, allow_nan=False, allow_infinity=False)
 ENVNAMES = ["ki61", "bf109f4", "spitfire_mk5", "p47d", "a6m2", "yak3", "la7", "p51"]
 
 
-def _phase(start_tick, bank, climb):
-    return {"start_tick": start_tick, "bank_deg": bank, "climb_mps": climb}
+def _phase(start_tick, bank, g_cmd, throttle=0.5):
+    return {"start_tick": start_tick, "bank_deg": bank, "g_cmd": g_cmd, "throttle": throttle}
 
 
 @st.composite
@@ -42,7 +44,7 @@ def scenarios(draw, max_ac=3, max_ticks=80):
                                           min_size=n_ph, max_size=n_ph))))
         if not starts or starts[0] != 0:
             starts = [0] + starts
-        sched = [_phase(s, draw(BANK), draw(CLIMB)) for s in starts]
+        sched = [_phase(s, draw(BANK), draw(GLOAD)) for s in starts]
         aircraft.append({"envelope": env,
                          "start": {"lat_deg": lat, "lon_deg": lon, "psi_deg": psi,
                                    "phi_deg": 0.0, "alt_m": alt, "tas_mps": tas},
@@ -85,8 +87,8 @@ def test_command_desync_trips():
         cmds = ls.commands_at(sched, t)
         cmds_b = list(cmds)
         if t == 10:  # inject a one-tick input desync on aircraft 0
-            phi, climb = cmds_b[0]
-            cmds_b[0] = (phi + 0.1, climb)
+            phi, g_cmd, thr = cmds_b[0]
+            cmds_b[0] = (phi + 0.1, g_cmd, thr)
         k_a.step_scenario(cmds, envs)
         k_b.step_scenario(cmds_b, envs)
         ha = hashlib.sha256(k_a.snapshot(t + 1)).hexdigest()

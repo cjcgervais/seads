@@ -38,7 +38,8 @@ static Command command_at(unsigned t) {
     for (unsigned j = 0; j < pred_vec::N_PHASE; ++j) {
         if (pred_vec::SCHED[j].start_tick <= t) idx = j; else break;
     }
-    return Command{pred_vec::SCHED[idx].target_phi, pred_vec::SCHED[idx].target_climb};
+    return Command{pred_vec::SCHED[idx].target_phi, pred_vec::SCHED[idx].target_g,
+                   pred_vec::SCHED[idx].throttle};
 }
 
 static std::string sequence_digest(const std::vector<std::string>& seq) {
@@ -59,7 +60,8 @@ int main() {
     for (unsigned t = 1; t <= ticks; ++t) timeline.push_back(command_at(t - 1));
 
     const predict::OwnState start{pred_vec::START.lat, pred_vec::START.lon, pred_vec::START.psi,
-                                  pred_vec::START.phi, pred_vec::START.alt, pred_vec::START.tas};
+                                  pred_vec::START.phi, pred_vec::START.alt, pred_vec::START.tas,
+                                  0.0};  // own ship starts level (gamma=0)
 
     // --- truth (server) run: record canonical states[0..ticks] + per-tick hashes[1..ticks] ---
     std::vector<predict::OwnState> truth_states;
@@ -73,7 +75,7 @@ int main() {
             std::vector<const Envelope*> e{env};
             k.step(c, e);
             truth_states.push_back(predict::OwnState{k.lat(0), k.lon(0), k.psi(0),
-                                                     k.phi(0), k.alt(0), k.tas(0)});
+                                                     k.phi(0), k.alt(0), k.tas(0), k.gamma(0)});
             truth_hashes.push_back(predict::tick_hash(k, t));
         }
     }

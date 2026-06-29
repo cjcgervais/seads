@@ -56,9 +56,9 @@ SCENARIO = {
             "start": {"lat_deg": 0.0, "lon_deg": 0.0, "psi_deg": 45.0,
                       "phi_deg": 0.0, "alt_m": 2000.0, "tas_mps": 140.0},
             "schedule": [
-                {"start_tick": 0,   "bank_deg": 0.0,   "climb_mps": 0.0},
-                {"start_tick": 150, "bank_deg": 45.0,  "climb_mps": 5.0},
-                {"start_tick": 400, "bank_deg": -30.0, "climb_mps": -3.0},
+                {"start_tick": 0,   "bank_deg": 0.0,   "g_cmd": 1.0, "throttle": 0.85},
+                {"start_tick": 150, "bank_deg": 45.0,  "g_cmd": 1.5, "throttle": 0.85},
+                {"start_tick": 400, "bank_deg": -30.0, "g_cmd": 0.7, "throttle": 0.85},
             ],
         },
         {
@@ -66,8 +66,8 @@ SCENARIO = {
             "start": {"lat_deg": 10.0, "lon_deg": -20.0, "psi_deg": 90.0,
                       "phi_deg": 0.0, "alt_m": 3000.0, "tas_mps": 160.0},
             "schedule": [
-                {"start_tick": 0,   "bank_deg": 0.0,  "climb_mps": 8.0},
-                {"start_tick": 250, "bank_deg": 60.0, "climb_mps": 0.0},
+                {"start_tick": 0,   "bank_deg": 0.0,  "g_cmd": 1.3, "throttle": 0.9},   # pull -> climb
+                {"start_tick": 250, "bank_deg": 60.0, "g_cmd": 1.2, "throttle": 0.9},   # hard bank
             ],
         },
         {
@@ -75,8 +75,8 @@ SCENARIO = {
             "start": {"lat_deg": -15.0, "lon_deg": 30.0, "psi_deg": 270.0,
                       "phi_deg": 0.0, "alt_m": 7950.0, "tas_mps": 150.0},
             "schedule": [
-                {"start_tick": 0,   "bank_deg": 0.0,   "climb_mps": 20.0},  # -> ceiling predamp
-                {"start_tick": 300, "bank_deg": -40.0, "climb_mps": 0.0},
+                {"start_tick": 0,   "bank_deg": 0.0,   "g_cmd": 1.25, "throttle": 0.9},  # climb -> ceiling predamp
+                {"start_tick": 300, "bank_deg": -40.0, "g_cmd": 1.0,  "throttle": 0.9},
             ],
         },
     ],
@@ -99,7 +99,7 @@ def build_kernel(rails=RAILS, scenario=SCENARIO):
 
 
 def commands_at(schedules, t):
-    """Per-aircraft (target_phi_rad, target_climb_mps) at tick t. Integer phase select:
+    """Per-aircraft (target_phi_rad, target_g, throttle) at tick t. Integer phase select:
     largest start_tick <= t (mirrors ref_kernel.run_scenario / scenario_main.cpp)."""
     cmds = []
     for sched in schedules:
@@ -110,7 +110,7 @@ def commands_at(schedules, t):
             else:
                 break
         ph = sched[idx]
-        cmds.append((rk.deg2rad(ph["bank_deg"]), float(ph["climb_mps"])))
+        cmds.append((rk.deg2rad(ph["bank_deg"]), float(ph["g_cmd"]), float(ph.get("throttle", 0.0))))
     return cmds
 
 

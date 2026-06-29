@@ -1,9 +1,9 @@
 {
   "header": {
     "id": "GOLDEN-SK-Turn-001",
-    "version": 130,
-    "seal": "ATM-Sphere v1.3r0",
-    "description": "Ki-61 rolls into a sustained 45-deg banked coordinated turn and holds. Exercises roll-rate slew toward phi_max(TAS) and the coordinated-turn great-circle on a curved path. TAS 140 m/s sits in the ki61 LUT domain where phi_max=45 deg."
+    "version": 160,
+    "seal": "ATM-Sphere v1.6r0",
+    "description": "Ki-61 rolls into a sustained, LEVEL 45-deg coordinated turn and holds it. B2: a level turn now requires commanding g = 1/cos(45 deg) ~= 1.414 (the lift that both turns and holds altitude); gamma stays ~0 so altitude is held by physics, not teleported. Exercises roll-rate slew toward phi_max(TAS), the load-factor->induced-drag bleed, and the coordinated-turn great-circle. TAS 140 m/s sits in the ki61 LUT domain where phi_max=45 deg."
   },
   "ticks": 6000,
   "aircraft": [
@@ -11,9 +11,9 @@
       "envelope": "ki61",
       "start": { "lat_deg": 0.0, "lon_deg": 0.0, "psi_deg": 45.0, "phi_deg": 0.0, "alt_m": 1000.0, "tas_mps": 140.0 },
       "schedule": [
-        { "start_tick": 0,    "bank_deg": 0.0,  "climb_mps": 0.0 },
-        { "start_tick": 200,  "bank_deg": 45.0, "climb_mps": 0.0 },
-        { "start_tick": 6000, "bank_deg": 45.0, "climb_mps": 0.0 }
+        { "start_tick": 0,    "bank_deg": 0.0,  "g_cmd": 1.0,                "throttle": 0.85 },
+        { "start_tick": 200,  "bank_deg": 45.0, "g_cmd": 1.4142135623730951, "throttle": 0.85 },
+        { "start_tick": 6000, "bank_deg": 45.0, "g_cmd": 1.4142135623730951, "throttle": 0.85 }
       ]
     }
   ]

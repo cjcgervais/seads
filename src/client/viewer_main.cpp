@@ -13,14 +13,35 @@
 //   seads_viewer flight.seadsrec [--speed 1.0]
 //
 // --- FLY mode (Track A: live local-input loop, netcode layer 4b) ---------------------------------
-// With --fly the OWN aircraft is no longer replayed: it is FLOWN. Keyboard input (A/D bank,
-// W/S climb) maps to a seads::Command that drives a predict::Predictor — the same client-side
-// prediction harness used in netcode layer 4b, running the REAL sealed kernel at a fixed 100 Hz
-// from the wall clock. The remotes keep coming from the recording on the layer-4a interpolation
-// path (Playback), so prediction (own, crisp, zero-latency) and interpolation (remote, ~100 ms in
-// the past) are visible on the same globe at once — the full 4a+4b loop.
+// With --fly the OWN aircraft is no longer replayed: it is FLOWN. Local input maps to a
+// seads::Command that drives a predict::Predictor — the same client-side prediction harness used in
+// netcode layer 4b, running the REAL sealed kernel at a fixed 100 Hz from the wall clock. The
+// remotes keep coming from the recording on the layer-4a interpolation path (Playback), so
+// prediction (own, crisp, zero-latency) and interpolation (remote, ~100 ms in the past) are visible
+// on the same globe at once — the full 4a+4b loop.
 //   seads_viewer flight.seadsrec --fly [--speed 1.0]
 //   seads_viewer --fly --selfcheck 6        (headless; no recording or GPU needed)
+//
+// CAMERA + CONTROLS (GUI --fly):
+//   * CHASE CAM — the camera rides behind/above the own ship, following its heading; the mouse
+//     wheel zooms in/out of the plane focus.
+//   * MOUSE-AIM (default) — a central aim reticle follows the mouse inside a circular zone; the
+//     plane flies toward it (reticle right/left -> bank, up/down -> climb). Auto-coordinated:
+//     bank produces a coordinated turn (heading is slaved to bank by the kernel).
+//   * FREE-LOOK (hold SPACE) — mouse-aim is suspended; the mouse pans the camera freely around the
+//     plane (all the way around, and up/down). Releasing SPACE restabilizes the chase cam. While
+//     in free-look the plane is flown by KEYBOARD ONLY (these keys also work as gross input in
+//     mouse-aim mode):
+//         A/D = bank left/right   W/S = pitch (push/pull g)   Q/E = yaw   Shift/Ctrl = throttle
+//     B2 (seal v1.6r0): the kernel's pitch axis is a commanded LOAD FACTOR g (Command.target_g);
+//     W/S pull/push g, the kernel integrates the real flight-path angle gamma (the marker now
+//     tilts by the TRUE gamma — the old pitch-cue exaggeration is gone). A/D->bank, W/S->g and
+//     Shift/Ctrl->throttle are all real kernel inputs. Yaw (Q/E) still has NO kernel axis (the
+//     kernel turns only by banking, auto-coordinated), so it alone is applied DOWNSTREAM by
+//     re-seeding the predictor's own-state through the public Kernel API (the same path a netcode
+//     reconcile uses) — kernel math, snapshot layout, rails and golden untouched (no seal).
+//     P pauses, R resets.
+//
 // Still DOWNSTREAM-ONLY: input feeds Commands into the kernel-driving Predictor, never the wire;
 // no rail/golden/world_hash is touched (no seal). NOTE: there is no authoritative server in this
 // single-process viewer, so only Predictor::predict() runs here — reconcile() (snap+replay against
@@ -49,8 +70,21 @@ constexpr float DISPLAY_R = 10.0f;  // globe radius in raylib units (world metre
 // FLY-mode tuning (presentation-only; the kernel re-clamps every command to the envelope anyway).
 constexpr double RAD2DEG_V = 180.0 / PI_C;            // PI_C from globe.h
 constexpr double DEG2RAD_V = PI_C / 180.0;
-constexpr double MAX_BANK_RAD = 60.0 * DEG2RAD_V;     // commanded bank at full A/D deflection
-constexpr double MAX_CLIMB_MPS = 10.0;                // commanded climb/descent at full W/S
+constexpr double MAX_BANK_RAD = 60.0 * DEG2RAD_V;     // commanded bank at full A/D (or reticle x)
+// B2 pitch axis: the stick commands a LOAD FACTOR g (Command.target_g), not a climb rate. The
+// pitch axis p in [-1,1] (W/S or reticle y) maps to g = 1 + p*G_GAIN (1 g neutral = hold level
+// wings-level); clamped at the stick, then the kernel re-clamps to its structural envelope.
+constexpr double G_GAIN    = 2.0;                     // pitch axis [-1,1] -> g = 1 + p*2
+constexpr double G_MIN_CMD = -1.0;                    // full push-over (negative g)
+constexpr double G_MAX_CMD = 4.0;                     // full hard pull
+constexpr double YAW_RATE_RAD = 35.0 * DEG2RAD_V;     // Q/E direct heading (yaw) rate, rad/s
+
+// Chase camera (display units; DISPLAY_R = 10 is the globe radius on screen).
+constexpr double CHASE_DIST_DEF = 1.3;               // default distance behind the own ship
+constexpr double CHASE_DIST_MIN = 0.45;              // closest zoom
+constexpr double CHASE_DIST_MAX = 6.0;               // farthest zoom
+constexpr double CHASE_ELEV = 0.22;                  // baseline look-down angle (rad) behind plane
+constexpr float  RETICLE_ZONE_PX = 150.0f;          // radius of the mouse-aim circle (pixels)
 
 bool read_file(const std::string& path, std::vector<uint8_t>& out) {
     std::FILE* f = std::fopen(path.c_str(), "rb");
@@ -66,10 +100,13 @@ bool read_file(const std::string& path, std::vector<uint8_t>& out) {
 }
 
 // Map a world position (metres, globe frame) to raylib display units (globe radius -> DISPLAY_R).
+// NOTE: the globe frame {up=+X, north=+Y, east=+Z} is a LEFT-handed ENU, which would render a
+// MIRROR image (a geographic right turn would look like a left turn on screen). We un-mirror by
+// reflecting Z here; local_basis() reflects Z to match, so positions and bases stay consistent.
 Vector3 to_display(const Vec3& p, double radius_m) {
     float s = DISPLAY_R / static_cast<float>(radius_m);
     return Vector3{static_cast<float>(p.x) * s, static_cast<float>(p.y) * s,
-                   static_cast<float>(p.z) * s};
+                   -static_cast<float>(p.z) * s};
 }
 
 // Headless data-path proof: advance render_tick across the recording, print sampled positions.
@@ -199,20 +236,76 @@ Rails fly_rails() {
 // Own aircraft spawn (radians): mid-band altitude, heading east, cruising. KI-61 envelope.
 const Envelope& kFlyEnv = envtab::KI61;
 predict::OwnState fly_start() {
-    return predict::OwnState{0.0, 0.0, 90.0 * DEG2RAD_V, 0.0, 2500.0, 180.0};
+    // TAS 150 m/s: inside the Ki-61 envelope LUTs. B2: gamma (flight-path angle) starts at 0 (level).
+    return predict::OwnState{0.0, 0.0, 90.0 * DEG2RAD_V, 0.0, 2500.0, 150.0, 0.0};
 }
 
-// Current keyboard state -> a per-tick Command (sampled once per frame, applied to every substep).
-Command fly_input_command() {
-    double tphi = 0.0, tclimb = 0.0;
-    if (IsKeyDown(KEY_A)) tphi += MAX_BANK_RAD;     // bank left
-    if (IsKeyDown(KEY_D)) tphi -= MAX_BANK_RAD;     // bank right
-    if (IsKeyDown(KEY_W)) tclimb += MAX_CLIMB_MPS;  // climb
-    if (IsKeyDown(KEY_S)) tclimb -= MAX_CLIMB_MPS;  // descend
-    return Command{tphi, tclimb};
+// Control axes pulled from the keyboard: A/D -> bank (rad), W/S -> pitch axis in [-1,1].
+// bank: A=left(-), D=right(+); a +phi banks right and the kernel turns right (psi increases).
+// pitch: W nose-down (push, p<0), S nose-up (pull, p>0). Yaw (Q/E) and throttle (Shift/Ctrl)
+// are handled separately in run_fly (yaw has no kernel axis; throttle is a real B1 input).
+struct FlyAxes { double bank_rad; double pitch; };
+FlyAxes fly_keyboard_axes() {
+    FlyAxes ax{0.0, 0.0};
+    if (IsKeyDown(KEY_A)) ax.bank_rad -= MAX_BANK_RAD;   // bank left
+    if (IsKeyDown(KEY_D)) ax.bank_rad += MAX_BANK_RAD;   // bank right
+    if (IsKeyDown(KEY_W)) ax.pitch -= 1.0;               // push (nose down)
+    if (IsKeyDown(KEY_S)) ax.pitch += 1.0;               // pull (nose up)
+    return ax;
 }
 
-void draw_fly_hud(const predict::Predictor& pred, uint32_t tick, size_t n_remote, bool paused) {
+// Pitch axis p in [-1,1] -> commanded load factor g (B2). 1 g neutral holds level wings-level.
+double g_from_pitch(double p) {
+    double g = 1.0 + p * G_GAIN;
+    if (g < G_MIN_CMD) g = G_MIN_CMD;
+    if (g > G_MAX_CMD) g = G_MAX_CMD;
+    return g;
+}
+
+// Wrap an angle into (-pi, pi] (used to keep the free-look azimuth bounded for restabilization).
+double wrap_pi(double a) {
+    while (a >  PI_C) a -= 2.0 * PI_C;
+    while (a <= -PI_C) a += 2.0 * PI_C;
+    return a;
+}
+
+// Local geographic tangent basis at (lat, lon) in radians, in the globe display frame (the same
+// right-handed frame as geo_to_cartesian; uniform scaling means unit directions are scale-free).
+// up = radial (outward), north = +lat tangent, east = +lon tangent.
+void local_basis(double lat, double lon, Vec3& up, Vec3& north, Vec3& east) {
+    double cl = std::cos(lat), sl = std::sin(lat), co = std::cos(lon), so = std::sin(lon);
+    // Z reflected to match to_display() (un-mirror the left-handed ENU). fwd/right/up2 are then all
+    // built in this reflected display space, so the rendered turn matches the bank input.
+    up    = Vec3{cl * co, sl, -cl * so};
+    north = Vec3{-sl * co, cl, sl * so};
+    east  = Vec3{-so, 0.0, -co};
+}
+
+// Draw an aircraft marker that visibly BANKS (rolls about its heading axis) and PITCHES (nose
+// up/down) so control input reads instantly, even though the motion itself is gradual on a real
+// sphere. od = display position; lat/lon/psi/phi/pitch in radians; scale ~ marker size.
+void draw_aircraft(Vector3 od, double lat, double lon, double psi, double phi, double pitch, Color c,
+                   float scale) {
+    Vec3 up_h, north_h, east_h;
+    local_basis(lat, lon, up_h, north_h, east_h);
+    Vec3 fwd = normalize(north_h * std::cos(psi) + east_h * std::sin(psi));
+    Vec3 right = normalize(cross(fwd, up_h));
+    Vec3 up2 = cross(right, fwd);
+    Vec3 wing  = right * std::cos(phi) - up2 * std::sin(phi);   // wingspan, rolled by the bank angle
+    Vec3 b_up  = up2 * std::cos(phi) + right * std::sin(phi);   // canopy "up", rolled with it
+    Vec3 nose  = normalize(fwd * std::cos(pitch) + b_up * std::sin(pitch));  // heading, pitched
+    auto P = [&](Vec3 d, float len) {
+        return Vector3{od.x + static_cast<float>(d.x) * len, od.y + static_cast<float>(d.y) * len,
+                       od.z + static_cast<float>(d.z) * len};
+    };
+    DrawSphere(od, 0.06f * scale, c);
+    DrawLine3D(P(wing, -0.5f * scale), P(wing, 0.5f * scale), c);        // wings (visibly bank)
+    DrawLine3D(od, P(nose, 0.7f * scale), YELLOW);                       // nose (heading + pitch)
+    DrawLine3D(od, P(b_up, 0.4f * scale), Fade(c, 0.7f));               // canopy up
+}
+
+void draw_fly_hud(const predict::Predictor& pred, uint32_t tick, size_t n_remote, bool paused,
+                  bool freelook, const Command& cmd) {
     DrawText("SEADS — FLY  (own = predicted / layer-4b   remotes = interpolated / layer-4a)", 12,
              12, 20, RAYWHITE);
     const Kernel& k = pred.kernel();
@@ -221,13 +314,19 @@ void draw_fly_hud(const predict::Predictor& pred, uint32_t tick, size_t n_remote
     char line[200];
     std::snprintf(line, sizeof(line),
                   "OWN  t=%u (%.2fs)  lat %+7.3f  lon %+8.3f  alt %5.0fm  hdg %5.1f  bank %+5.1f  "
-                  "tas %5.1f%s",
+                  "gamma %+5.1f  tas %5.1f%s",
                   tick, tick * 0.01, k.lat(0) * RAD2DEG_V, k.lon(0) * RAD2DEG_V, k.alt(0), brg,
-                  k.phi(0) * RAD2DEG_V, k.tas(0), paused ? "   [PAUSED]" : "");
+                  k.phi(0) * RAD2DEG_V, k.gamma(0) * RAD2DEG_V, k.tas(0),
+                  paused ? "   [PAUSED]" : "");
     DrawText(line, 12, 40, 16, Color{255, 120, 120, 255});
-    std::snprintf(line, sizeof(line), "remotes (interp): %zu", n_remote);
-    DrawText(line, 12, 62, 16, SKYBLUE);
-    DrawText("A/D bank   W/S climb   mouse-drag: orbit   wheel: zoom   space: pause   R: reset", 12,
+    std::snprintf(line, sizeof(line), "remotes (interp): %zu    mode: %s", n_remote,
+                  freelook ? "FREE-LOOK (keyboard fly)" : "MOUSE-AIM");
+    DrawText(line, 12, 62, 16, freelook ? GOLD : SKYBLUE);
+    std::snprintf(line, sizeof(line), "INPUT  bank %+5.1f deg   g %+4.2f   throttle %3.0f%%",
+                  cmd.target_phi * RAD2DEG_V, cmd.target_g, cmd.throttle * 100.0);
+    DrawText(line, 12, 84, 16, GREEN);
+    DrawText("A/D bank  W/S pull/push g  Q/E yaw  Shift/Ctrl throttle   |   mouse: fine aim   hold "
+             "SPACE: free-look (keys only)   wheel: zoom   P: pause   R: reset", 12,
              GetScreenHeight() - 28, 16, GRAY);
 }
 
@@ -237,19 +336,20 @@ int run_fly_selfcheck(int n) {
     if (n < 1) n = 1;
     Rails rails = fly_rails();
     predict::Predictor pred(rails, &kFlyEnv, fly_start());
-    const Command cmd{MAX_BANK_RAD * 0.6, 4.0};  // banked left + climbing
+    const Command cmd{MAX_BANK_RAD * 0.6, 1.5, 0.8};  // banked + pulling 1.5 g, near-full throttle
     const uint32_t TICKS = 600;
-    std::printf("fly selfcheck: %u ticks @ %d Hz, input target_phi=%.4frad climb=%.1fm/s\n", TICKS,
-                static_cast<int>(1.0 / rails.dt), cmd.target_phi, cmd.target_climb);
+    std::printf("fly selfcheck: %u ticks @ %d Hz, input target_phi=%.4frad g=%.2f\n", TICKS,
+                static_cast<int>(1.0 / rails.dt), cmd.target_phi, cmd.target_g);
     const uint32_t every = (TICKS / static_cast<uint32_t>(n)) ? (TICKS / static_cast<uint32_t>(n)) : 1;
     for (uint32_t t = 1; t <= TICKS; ++t) {
         pred.predict(t, cmd);
         if (t % every == 0 || t == TICKS) {
             const Kernel& k = pred.kernel();
             double brg = k.psi(0) * RAD2DEG_V; if (brg < 0) brg += 360.0;
-            std::printf("  t=%4u  lat=%+8.4f lon=%+8.4f alt=%7.1f hdg=%6.1f bank=%+6.2f tas=%6.1f\n",
+            std::printf("  t=%4u  lat=%+8.4f lon=%+8.4f alt=%7.1f hdg=%6.1f bank=%+6.2f tas=%6.1f "
+                        "gamma=%+6.2f\n",
                         t, k.lat(0) * RAD2DEG_V, k.lon(0) * RAD2DEG_V, k.alt(0), brg,
-                        k.phi(0) * RAD2DEG_V, k.tas(0));
+                        k.phi(0) * RAD2DEG_V, k.tas(0), k.gamma(0) * RAD2DEG_V);
         }
     }
     return 0;
@@ -275,13 +375,19 @@ int run_fly(Playback& pb, double speed) {
     bool paused = false;
     double last_wall = GetTime();
 
-    // Manual orbit camera (mouse) — WASD is reserved for flight, so we can't use raylib's built-in.
-    double az = -PI_C * 0.5, el = 0.55, dist = DISPLAY_R * 2.8;
+    // Chase camera that rides behind/above the own ship. Free-look (hold SPACE) adds an azimuth/
+    // elevation offset driven by the mouse; on release it lerps back to the stable behind view.
+    double chase_dist = CHASE_DIST_DEF;     // zoom (display units behind the plane)
+    double throttle = 0.7;                   // real B1 throttle [0,1], Shift/Ctrl adjust it
+    double look_az = 0.0;                   // free-look yaw offset (0 = directly behind)
+    double look_el = 0.0;                   // free-look pitch offset added to CHASE_ELEV
+    bool freelook = false, prev_freelook = false;
     Camera3D cam{};
     cam.up = Vector3{0, 1, 0};
     cam.fovy = 45.0f;
     cam.projection = CAMERA_PERSPECTIVE;
-    cam.target = Vector3{0, 0, 0};
+
+    SetMousePosition(GetScreenWidth() / 2, GetScreenHeight() / 2);  // neutral reticle at start
 
     std::vector<Vector3> own_trail;
     std::vector<std::vector<Vector3>> rem_trails;
@@ -291,38 +397,119 @@ int run_fly(Playback& pb, double speed) {
         double dt = now - last_wall;
         last_wall = now;
         if (dt > 0.25) dt = 0.25;  // clamp huge stalls (tab background) — no spiral of death
-        if (IsKeyPressed(KEY_SPACE)) paused = !paused;
+        if (IsKeyPressed(KEY_P)) paused = !paused;
         if (IsKeyPressed(KEY_R)) {
             pred = predict::Predictor(rails, &kFlyEnv, start);
             own_tick = 0; accumulator = 0.0; sim_clock = 0.0;
             own_trail.clear(); rem_trails.clear();
         }
 
-        // Camera: drag to orbit, wheel to zoom.
-        if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
-            Vector2 md = GetMouseDelta();
-            az -= md.x * 0.005;
-            el += md.y * 0.005;
+        // Mode: hold SPACE for free-look. Lock/hide the cursor in free-look so mouse delta is
+        // unbounded for panning; restore it (centered) for mouse-aim so the reticle starts neutral.
+        freelook = IsKeyDown(KEY_SPACE);
+        if (freelook && !prev_freelook) DisableCursor();
+        if (!freelook && prev_freelook) {
+            EnableCursor();
+            SetMousePosition(GetScreenWidth() / 2, GetScreenHeight() / 2);
         }
-        if (el > 1.5) el = 1.5;
-        if (el < -1.5) el = -1.5;
-        dist *= (1.0 - GetMouseWheelMove() * 0.1);
-        if (dist < DISPLAY_R * 1.2) dist = DISPLAY_R * 1.2;
-        if (dist > DISPLAY_R * 8.0) dist = DISPLAY_R * 8.0;
-        Vec3 eye = orbit_eye(az, el, dist, Vec3{0, 0, 0});
-        cam.position = Vector3{static_cast<float>(eye.x), static_cast<float>(eye.y),
-                               static_cast<float>(eye.z)};
+        prev_freelook = freelook;
+
+        // Zoom (both modes): wheel scrolls the chase distance.
+        chase_dist *= (1.0 - GetMouseWheelMove() * 0.1);
+        if (chase_dist < CHASE_DIST_MIN) chase_dist = CHASE_DIST_MIN;
+        if (chase_dist > CHASE_DIST_MAX) chase_dist = CHASE_DIST_MAX;
+
+        // Flight command + free-look camera offset.
+        double rx = 0.0, ry = 0.0;          // reticle offset (mouse-aim), for HUD draw
+        Command cmd{0.0, 1.0};              // neutral = wings level, 1 g
+        if (freelook) {
+            // Mouse pans the camera around the plane; keyboard flies it.
+            Vector2 md = GetMouseDelta();
+            look_az = wrap_pi(look_az + md.x * 0.005);   // all the way around
+            look_el += md.y * 0.005;
+            if (look_el >  1.3) look_el =  1.3;          // up/down, short of straight over
+            if (look_el < -1.3) look_el = -1.3;
+            FlyAxes ax = fly_keyboard_axes();
+            cmd = Command{ax.bank_rad, g_from_pitch(ax.pitch)};
+        } else {
+            // Restabilize the chase cam toward the behind view.
+            double k = 1.0 - std::exp(-dt * 6.0);
+            look_az -= look_az * k;
+            look_el -= look_el * k;
+            // Mouse-aim reticle: cursor offset from screen center, clamped to the zone disk.
+            Vector2 mp = GetMousePosition();
+            double dx = mp.x - GetScreenWidth() * 0.5;
+            double dy = mp.y - GetScreenHeight() * 0.5;
+            rx = dx / RETICLE_ZONE_PX;
+            ry = -dy / RETICLE_ZONE_PX;                  // screen-up -> positive (pull g)
+            double m = std::sqrt(rx * rx + ry * ry);
+            if (m > 1.0) { rx /= m; ry /= m; }           // clamp into the unit disk
+            // Mouse = fine aim; keyboard = gross (full-deflection) input layered on top. Bank and
+            // the pitch axis are summed and clamped; the pitch axis maps to a g-command (kernel
+            // re-clamps to the structural envelope regardless).
+            FlyAxes kb = fly_keyboard_axes();
+            double tphi = rx * MAX_BANK_RAD + kb.bank_rad;
+            double pitch = ry + kb.pitch;
+            if (tphi >  MAX_BANK_RAD) tphi =  MAX_BANK_RAD;
+            if (tphi < -MAX_BANK_RAD) tphi = -MAX_BANK_RAD;
+            if (pitch >  1.0) pitch =  1.0;
+            if (pitch < -1.0) pitch = -1.0;
+            cmd = Command{tphi, g_from_pitch(pitch)};
+        }
+
+        // THROTTLE (Shift/Ctrl) is now a REAL kernel input (B1, seal v1.5r0): drive it into the
+        // Command and let the energy model integrate TAS. (No more re-seed hack for speed.)
+        if (IsKeyDown(KEY_LEFT_SHIFT)  || IsKeyDown(KEY_RIGHT_SHIFT))   throttle += 0.6 * dt;
+        if (IsKeyDown(KEY_LEFT_CONTROL)|| IsKeyDown(KEY_RIGHT_CONTROL)) throttle -= 0.6 * dt;
+        if (throttle < 0.0) throttle = 0.0;
+        if (throttle > 1.0) throttle = 1.0;
+        cmd.throttle = throttle;
+
+        // YAW (Q/E) still has NO kernel axis (the kernel turns only by banking, auto-coordinated;
+        // B2 added a real PITCH axis, not yaw), so it alone is applied DOWNSTREAM by re-seeding
+        // heading through the public Kernel API — the path a netcode reconcile uses. No kernel
+        // math/rail/golden touched.
+        double yaw = 0.0;
+        if (IsKeyDown(KEY_Q)) yaw -= YAW_RATE_RAD;        // yaw left
+        if (IsKeyDown(KEY_E)) yaw += YAW_RATE_RAD;        // yaw right
 
         // Fly the own ship: fixed-timestep prediction from the current input.
-        Command cmd = fly_input_command();
         if (!paused) {
             accumulator += dt * speed;
             sim_clock += dt * speed;
+            if (yaw != 0.0) {
+                const Kernel& k = pred.kernel();
+                pred = predict::Predictor(rails, &kFlyEnv,
+                    predict::OwnState{k.lat(0), k.lon(0), k.psi(0) + yaw * dt * speed, k.phi(0),
+                                      k.alt(0), k.tas(0), k.gamma(0)});
+            }
             while (accumulator >= DT) {
                 pred.predict(++own_tick, cmd);
                 accumulator -= DT;
             }
         }
+
+        // Chase camera: build a frame at the own ship (forward = heading) and place the eye behind
+        // and above it, offset by the free-look az/el.
+        Vec3 up_h, north_h, east_h;
+        local_basis(pred.kernel().lat(0), pred.kernel().lon(0), up_h, north_h, east_h);
+        double psi = pred.kernel().psi(0);
+        Vec3 fwd = normalize(north_h * std::cos(psi) + east_h * std::sin(psi));
+        Vec3 right = normalize(cross(fwd, up_h));
+        Vec3 up2 = cross(right, fwd);
+        double A = look_az, E = CHASE_ELEV + look_el;
+        // Direction from the plane to the eye (behind = -fwd at A=0), swung by az/el.
+        Vec3 back = fwd * (-std::cos(E) * std::cos(A)) + right * (std::cos(E) * std::sin(A)) +
+                    up2 * std::sin(E);
+        Vec3 owp_now = geo_to_cartesian(pred.kernel().lat(0), pred.kernel().lon(0),
+                                        pred.kernel().alt(0), pb.radius_m());
+        Vector3 od_cam = to_display(owp_now, pb.radius_m());
+        Vec3 eye = Vec3{od_cam.x, od_cam.y, od_cam.z} + back * chase_dist;
+        cam.position = Vector3{static_cast<float>(eye.x), static_cast<float>(eye.y),
+                               static_cast<float>(eye.z)};
+        cam.target = od_cam;
+        cam.up = Vector3{static_cast<float>(up2.x), static_cast<float>(up2.y),
+                         static_cast<float>(up2.z)};
 
         // Remotes: interpolate at (looped playback time - layer-4a delay).
         double played = sim_clock * pb.tick_hz();
@@ -331,9 +518,7 @@ int run_fly(Playback& pb, double speed) {
         if (render_tick < t0) render_tick = t0;
         std::vector<RenderEntity> rem = pb.sample(render_tick);
 
-        Vec3 owp = geo_to_cartesian(pred.kernel().lat(0), pred.kernel().lon(0), pred.kernel().alt(0),
-                                    pb.radius_m());
-        Vector3 od = to_display(owp, pb.radius_m());
+        Vector3 od = od_cam;  // own-ship display position (already computed for the chase cam)
         if (!paused) {
             own_trail.push_back(od);
             if (own_trail.size() > 600) own_trail.erase(own_trail.begin());
@@ -356,22 +541,32 @@ int run_fly(Playback& pb, double speed) {
             for (size_t k = 1; k < rem_trails[i].size(); ++k)
                 DrawLine3D(rem_trails[i][k - 1], rem_trails[i][k], Fade(c, 0.5f));
             Vector3 d = to_display(rem[i].pos, pb.radius_m());
-            DrawSphere(d, 0.10f, c);
-            Vector3 up = to_display(geo_deg_to_cartesian(rem[i].lat_deg, rem[i].lon_deg,
-                                                         rem[i].alt_m + pb.radius_m() * 0.05,
-                                                         pb.radius_m()),
-                                    pb.radius_m());
-            DrawLine3D(d, up, Fade(c, 0.7f));
+            draw_aircraft(d, rem[i].lat_deg * DEG2RAD_V, rem[i].lon_deg * DEG2RAD_V,
+                          rem[i].bearing_deg * DEG2RAD_V, rem[i].phi_deg * DEG2RAD_V, 0.0, c, 1.0f);
         }
-        // Own ship: hot, larger, with a longer trail.
+        // Own ship: hot, larger, with a longer trail. The marker rolls with bank, tilts with pitch.
         for (size_t k = 1; k < own_trail.size(); ++k)
             DrawLine3D(own_trail[k - 1], own_trail[k], Fade(RED, 0.8f));
-        DrawSphere(od, 0.16f, RED);
-        Vec3 oup_geo = geo_to_cartesian(pred.kernel().lat(0), pred.kernel().lon(0),
-                                        pred.kernel().alt(0) + pb.radius_m() * 0.07, pb.radius_m());
-        DrawLine3D(od, to_display(oup_geo, pb.radius_m()), Fade(RED, 0.9f));
+        // B2 (seal v1.6r0): pitch is REAL — tilt the marker by the kernel's true flight-path angle
+        // gamma. The old presentation-only exaggeration band-aid is gone.
+        double own_pitch = pred.kernel().gamma(0);
+        draw_aircraft(od, pred.kernel().lat(0), pred.kernel().lon(0), pred.kernel().psi(0),
+                      pred.kernel().phi(0), own_pitch, RED, 1.6f);
         EndMode3D();
-        draw_fly_hud(pred, own_tick, rem.size(), paused);
+        // Mouse-aim reticle (2D overlay, only when not in free-look).
+        if (!freelook) {
+            float cx = GetScreenWidth() * 0.5f, cy = GetScreenHeight() * 0.5f;
+            DrawCircleLines(static_cast<int>(cx), static_cast<int>(cy), RETICLE_ZONE_PX,
+                            Fade(GREEN, 0.35f));
+            float ax = cx + static_cast<float>(rx) * RETICLE_ZONE_PX;
+            float ay = cy - static_cast<float>(ry) * RETICLE_ZONE_PX;  // ry up -> screen up
+            DrawCircleLines(static_cast<int>(ax), static_cast<int>(ay), 10.0f, GREEN);
+            DrawLine(static_cast<int>(ax) - 16, static_cast<int>(ay), static_cast<int>(ax) + 16,
+                     static_cast<int>(ay), Fade(GREEN, 0.8f));
+            DrawLine(static_cast<int>(ax), static_cast<int>(ay) - 16, static_cast<int>(ax),
+                     static_cast<int>(ay) + 16, Fade(GREEN, 0.8f));
+        }
+        draw_fly_hud(pred, own_tick, rem.size(), paused, freelook, cmd);
         EndDrawing();
     }
     CloseWindow();

@@ -54,7 +54,8 @@ static std::vector<std::vector<Command>> build_timeline() {
             for (unsigned j = 0; j < ac.n_phase; ++j) {
                 if (ac.sched[j].start_tick <= t) idx = j; else break;
             }
-            tl[t][a] = Command{ac.sched[idx].target_phi, ac.sched[idx].target_climb};
+            tl[t][a] = Command{ac.sched[idx].target_phi, ac.sched[idx].target_g,
+                               ac.sched[idx].throttle};
         }
     }
     return tl;

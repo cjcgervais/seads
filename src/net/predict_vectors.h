@@ -12,7 +12,8 @@ constexpr Envelope ENV_KI61 = {
   /*phi_max*/ {{0x1.4000000000000p+5, 0x1.e000000000000p+5, 0x1.9000000000000p+6, 0x1.1800000000000p+7, 0x1.5400000000000p+7}, {0x1.0c152382d7365p+0, 0x1.eb7c166fdfe3ap-1, 0x1.becde5da115a9p-1, 0x1.921fb54442d18p-1, 0x1.657184ae74487p-1}},
   /*roll_rate*/ {{0x1.4000000000000p+5, 0x1.4000000000000p+6, 0x1.e000000000000p+6, 0x1.4000000000000p+7, 0x1.5400000000000p+7}, {0x1.657184ae74487p+0, 0x1.921fb54442d18p+0, 0x1.becde5da115a9p+0, 0x1.a876cd8f2a161p+0, 0x1.921fb54442d18p+0}},
   /*climb_max*/ {{0x1.4000000000000p+5, 0x1.4000000000000p+6, 0x1.e000000000000p+6, 0x1.4000000000000p+7, 0x1.5400000000000p+7}, {0x1.e000000000000p+3, 0x1.8000000000000p+3, 0x1.4000000000000p+3, 0x1.0000000000000p+3, 0x1.c000000000000p+2}},
-  /*climb_min*/ {{0x1.4000000000000p+5, 0x1.4000000000000p+6, 0x1.e000000000000p+6, 0x1.4000000000000p+7, 0x1.5400000000000p+7}, {-0x1.4000000000000p+4, -0x1.2000000000000p+4, -0x1.e000000000000p+3, -0x1.8000000000000p+3, -0x1.4000000000000p+3}}
+  /*climb_min*/ {{0x1.4000000000000p+5, 0x1.4000000000000p+6, 0x1.e000000000000p+6, 0x1.4000000000000p+7, 0x1.5400000000000p+7}, {-0x1.4000000000000p+4, -0x1.2000000000000p+4, -0x1.e000000000000p+3, -0x1.8000000000000p+3, -0x1.4000000000000p+3}},
+  0x1.8380000000000p+11, 0x1.4000000000000p+4, 0x1.89374bc6a7efap-6, 0x1.db22d0e560419p-5, 0x1.b580000000000p+13, 0x1.7200000000000p+7
 };
 constexpr const Envelope* ENVELOPE = &ENV_KI61;
 
@@ -21,11 +22,11 @@ struct Start { double lat, lon, psi, phi, alt, tas; };
 constexpr Start START = { 0x0.0p+0, 0x0.0p+0, 0x1.921fb54442d18p-1, 0x0.0p+0, 0x1.f400000000000p+10, 0x1.2c00000000000p+7 };
 
 // --- command schedule (target_phi in RADIANS, pre-converted; integer phase select) ---
-struct Phase { unsigned start_tick; double target_phi; double target_climb; };
+struct Phase { unsigned start_tick; double target_phi; double target_g; double throttle; };
 constexpr Phase SCHED[] = {
-  {0u, 0x0.0p+0, 0x0.0p+0},
-  {60u, 0x1.921fb54442d18p-1, 0x1.4000000000000p+2},
-  {180u, -0x1.0c152382d7365p-1, -0x1.0000000000000p+2},
+  {0u, 0x0.0p+0, 0x1.0000000000000p+0, 0x1.999999999999ap-1},
+  {60u, 0x1.921fb54442d18p-1, 0x1.8000000000000p+0, 0x1.999999999999ap-1},
+  {180u, -0x1.0c152382d7365p-1, 0x1.3333333333333p-1, 0x1.999999999999ap-1},
 };
 constexpr unsigned N_PHASE    = 3u;
 constexpr unsigned TICKS      = 300u;
@@ -37,16 +38,16 @@ constexpr unsigned HEAL_TICK   = 15u;             // perturbed predictor heals h
 // --- expected nominal predicted per-tick hash checkpoints + whole-sequence digest ---
 struct Checkpoint { unsigned tick; const char* hash; };
 constexpr Checkpoint CHECKPOINTS[] = {
-  { 1u, "b0e723a552668ea61a7072735b7861f643e2af656ea01137cd614a1dc8f29cb5" },
-  { 50u, "38a158cbac5dadb7d57a2cc6ea59dc51f4980e66c5bfd04c1fe3393fe458816c" },
-  { 100u, "a3708352a5e0091118a2f6396c1d635fe85f6012fb8c8ad825730ea88ae27f50" },
-  { 150u, "281c6470f6fb8abb4965eaa0d394e2bcb181debe361273ee5d37f31c1c129d72" },
-  { 200u, "224ebc033d07eeec02e234fc0084ca6df3b4f8849949d4d1a40e20b73be5b547" },
-  { 250u, "c3f599e4e505bca7d1706e14a2b693f2d85ee7920f91ac41d500b98794c6e609" },
-  { 300u, "3ba788bffed0c4c46c4e80bbbf8914df4fad5eadefeb9e4c050d67efcfa1f38d" },
+  { 1u, "3b39ccbdb74a386898db29bee4a17129d02b34b35abe889c69a67ba4b4e75f16" },
+  { 50u, "ee15f68b51050ff018abc282c5aee5d6c7ba9b90d754900ff779927dfd6bee72" },
+  { 100u, "f47b7e6f48f35a4f56ebb67d252ab9bd52bb127f92b930789cbcb1653c09078f" },
+  { 150u, "ab615fa14edc3e638825547d2ad970f18794933c1adeaf52f83db86f645e81d6" },
+  { 200u, "3aa96e81b0440994f584fd683fc0667fab3645c083c7a17889b9b0ebbd89c351" },
+  { 250u, "1f61875bd4726303c85b432518aa5c3369d3a5ef0dea2500f64b123625283859" },
+  { 300u, "495fbc81f41a390cbbe5425f17ccc1f906ae30d3a00dcd2d591ddc9e6869ea3a" },
 };
 constexpr int CHECKPOINT_COUNT = sizeof(CHECKPOINTS)/sizeof(CHECKPOINTS[0]);
 
-constexpr const char* SEQUENCE_DIGEST = "6f6699f21ba4763089e2c58670978817f09ca1913acd77df4c1fab3f7f006b8f";
+constexpr const char* SEQUENCE_DIGEST = "992ccc58cc9a5a1c62a886b2c443c740496abaa5b068fb40980314067b697fcc";
 
 }} // namespace seads::pred_vec

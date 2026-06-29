@@ -58,7 +58,8 @@ int main(int argc, char** argv) {
                 if (ac.sched[j].start_tick <= t) idx = j; else break;
             }
             cmd[a].target_phi = ac.sched[idx].target_phi;
-            cmd[a].target_climb = ac.sched[idx].target_climb;
+            cmd[a].target_g = ac.sched[idx].target_g;
+            cmd[a].throttle = ac.sched[idx].throttle;
         }
         k.step(cmd, env);
     }

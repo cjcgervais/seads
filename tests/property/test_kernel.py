@@ -17,7 +17,8 @@ ROOT = Path(__file__).resolve().parents[2]
 RAILS = json.loads((ROOT / "config/rails/atm.json").read_text(encoding="utf-8"))
 R = 15000.0
 
-SCENARIO_IDS = ["GOLDEN-SK-Turn-001", "GOLDEN-SK-Climb-001", "GOLDEN-SK-TurnClimb-001"]
+SCENARIO_IDS = ["GOLDEN-SK-Turn-001", "GOLDEN-SK-Climb-001", "GOLDEN-SK-TurnClimb-001",
+                "GOLDEN-SK-Accel-001", "GOLDEN-SK-Pitch-001"]
 
 
 def sph_dist(lat1, lon1, lat2, lon2):
@@ -111,12 +112,18 @@ def test_scenario_bank_within_envelope(sid):
         assert abs(ac.phi) <= phimax + 1e-12
 
 
-def test_zero_command_equals_straight_flight():
-    # commanding bank=0, climb=0 through the scenario step must equal the straight golden step.
+def test_kinematic_anchor_vs_energy_path():
+    # B1 (seal v1.5r0) INTENTIONALLY breaks the old "zero-command scenario == straight flight"
+    # equivalence: the no-arg step() is the pure-kinematic determinism anchor (GOLDEN-SK-Sphere-001)
+    # and holds TAS constant, while the energy step_scenario bleeds TAS via drag even at idle. Both
+    # keep heading constant with wings level; they diverge only in speed, by design.
     env = rk.envmod.load_envelope("ki61")
     a = rk.Kernel(RAILS); a.aircraft.append(rk.Aircraft(0.0, 0.0, 0.7, 0.0, 1000.0, 140.0))
     b = rk.Kernel(RAILS); b.aircraft.append(rk.Aircraft(0.0, 0.0, 0.7, 0.0, 1000.0, 140.0))
     for _ in range(200):
-        a.step_scenario([(0.0, 0.0)], [env])
-        b.step()
-    assert a.snapshot(200) == b.snapshot(200)
+        a.step_scenario([(0.0, 1.0, 0.0)], [env])    # energy path: 1 g wings level, idle throttle
+        b.step()                                     # kinematic anchor (constant TAS)
+    assert b.aircraft[0].tas == 140.0                # anchor: speed unchanged
+    assert a.aircraft[0].tas < b.aircraft[0].tas     # energy path bled speed (drag) — diverges
+    assert abs(dm.wrap_2pi(a.aircraft[0].psi) - 0.7) < 1e-9   # wings level: heading held (both)
+    assert abs(dm.wrap_2pi(b.aircraft[0].psi) - 0.7) < 1e-9

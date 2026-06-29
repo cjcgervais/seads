@@ -1,0 +1,21 @@
+{
+  "header": {
+    "id": "GOLDEN-SK-Accel-001",
+    "version": 160,
+    "seal": "ATM-Sphere v1.6r0",
+    "description": "P-51 flies wings-level at 1 g (no bank, gamma stays 0) through a throttle program that exercises the longitudinal-energy model: idle to settle, full throttle to accelerate toward the thrust=drag equilibrium, then a chop to idle to decelerate toward the V_MIN floor. With g=1 wings level this is PURE longitudinal flight (B2 reduces to B1 here, modulo the appended gamma=0 state), pinning the energy integrator bit-for-bit."
+  },
+  "ticks": 5000,
+  "aircraft": [
+    {
+      "envelope": "p51",
+      "start": { "lat_deg": 0.0, "lon_deg": 0.0, "psi_deg": 90.0, "phi_deg": 0.0, "alt_m": 2000.0, "tas_mps": 120.0 },
+      "schedule": [
+        { "start_tick": 0,    "bank_deg": 0.0, "g_cmd": 1.0, "throttle": 0.0 },
+        { "start_tick": 500,  "bank_deg": 0.0, "g_cmd": 1.0, "throttle": 1.0 },
+        { "start_tick": 3000, "bank_deg": 0.0, "g_cmd": 1.0, "throttle": 0.0 },
+        { "start_tick": 5000, "bank_deg": 0.0, "g_cmd": 1.0, "throttle": 0.0 }
+      ]
+    }
+  ]
+}

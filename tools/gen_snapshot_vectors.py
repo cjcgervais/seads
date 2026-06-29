@@ -46,12 +46,12 @@ def snapshot_inputs():
     E = s.EntityState
     return [
         (0, []),                                                       # empty world
-        (1, [E(1, 0.0, 0.0, 45.0, 1000.0, 0.0, 250.0)]),               # golden start, wings level
-        (12345, [E(1, 12.3456789, -98.7654321, 359.999999, 7999.999, 39.999999, 175.25),
-                 E(2, -45.5, 180.0, 0.0, 0.0, -60.5, 0.0),
-                 E(7, 89.9999999, -179.9999999, 270.0, 8000.0, 0.000001, 305.999)]),
+        (1, [E(1, 0.0, 0.0, 45.0, 1000.0, 0.0, 250.0, 0.0)]),          # golden start, wings level
+        (12345, [E(1, 12.3456789, -98.7654321, 359.999999, 7999.999, 39.999999, 175.25, 12.5),
+                 E(2, -45.5, 180.0, 0.0, 0.0, -60.5, 0.0, -8.25),
+                 E(7, 89.9999999, -179.9999999, 270.0, 8000.0, 0.000001, 305.999, 0.000001)]),
         (100000, [E(i, (i * 7) % 90, (i * 13) % 180 - 90, (i * 11) % 360, (i * 137) % 8000,
-                    (i * 17) % 80 - 40, (i * 29) % 320)
+                    (i * 17) % 80 - 40, (i * 29) % 320, (i * 19) % 60 - 30)
                   for i in range(1, 9)]),                              # full 8-aircraft roster sized
     ]
 
@@ -78,7 +78,8 @@ def build():
          "namespace seads { namespace snap_vec {",
          "",
          "struct SnapEntity { long long id; double lat_deg; double lon_deg;",
-         "                    double bearing_deg; double alt_m; double phi_deg; double tas_mps; };",
+         "                    double bearing_deg; double alt_m; double phi_deg; double tas_mps;",
+         "                    double gamma_deg; };",
          ""]
 
     snaps = snapshot_inputs()
@@ -88,7 +89,8 @@ def build():
             L.append(f"constexpr SnapEntity SNAP{idx}_ENTS[] = {{")
             for e in ents:
                 L.append(f"  {{ {i64lit(e.id)}, {hx(e.lat_deg)}, {hx(e.lon_deg)}, "
-                         f"{hx(e.bearing_deg)}, {hx(e.alt_m)}, {hx(e.phi_deg)}, {hx(e.tas_mps)} }},")
+                         f"{hx(e.bearing_deg)}, {hx(e.alt_m)}, {hx(e.phi_deg)}, {hx(e.tas_mps)}, "
+                         f"{hx(e.gamma_deg)} }},")
             L.append("};")
         snap = s.Snapshot(tick, ents)
         wire = s.encode_snapshot(snap)

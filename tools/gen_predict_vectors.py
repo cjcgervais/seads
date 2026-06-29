@@ -76,7 +76,8 @@ def build():
         "",
         "// --- tuning envelope used by the scenario (deg->rad baked, hex-float, kernel-identical) ---",
         f"constexpr Envelope ENV_{cpp_ident(name)} = {{",
-        ",\n".join(_lut_literal(f, env) for f in envmod.LUT_FIELDS),
+        ",\n".join(_lut_literal(f, env) for f in envmod.LUT_FIELDS) + ",",
+        "  " + ", ".join(hx(env[f]) for f in envmod.AERO_FIELDS),
         "};",
         f"constexpr const Envelope* ENVELOPE = &ENV_{cpp_ident(name)};",
         "",
@@ -87,12 +88,12 @@ def build():
         f"{hx(pr.rk.deg2rad(s['phi_deg']))}, {hx(s['alt_m'])}, {hx(s['tas_mps'])} }};",
         "",
         "// --- command schedule (target_phi in RADIANS, pre-converted; integer phase select) ---",
-        "struct Phase { unsigned start_tick; double target_phi; double target_climb; };",
+        "struct Phase { unsigned start_tick; double target_phi; double target_g; double throttle; };",
         "constexpr Phase SCHED[] = {",
     ]
     for ph in sc["schedule"]:
         L.append(f"  {{{int(ph['start_tick'])}u, {hx(pr.rk.deg2rad(ph['bank_deg']))}, "
-                 f"{hx(ph['climb_mps'])}}},")
+                 f"{hx(ph['g_cmd'])}, {hx(ph.get('throttle', 0.0))}}},")
     L += [
         "};",
         f"constexpr unsigned N_PHASE    = {len(sc['schedule'])}u;",

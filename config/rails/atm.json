@@ -1,8 +1,8 @@
 {
   "header": {
     "id": "SEADS-RAILS",
-    "version": 140,
-    "seal": "ATM-Sphere v1.4r0",
+    "version": 160,
+    "seal": "ATM-Sphere v1.6r0",
     "note": "Data-driven immutable rails. Any change here REQUIRES a new seal (ADR + Forge audit card + Chronicle receipt). See CLAUDE.md > Change-Control Law."
   },
   "rails": {
@@ -20,9 +20,10 @@
     "atmosphere": "still_air",
     "kinematics": {
       "model": "intrinsic_S2",
-      "turn_law": "psi_dot = g0 * tan(phi) / V",
+      "turn_law": "3-DOF point mass (B2, v1.6r0): psi_dot = (g0/V)*(n*sin(phi)/cos(gamma)); gamma_dot = (g0/V)*(n*cos(phi)-cos(gamma)); reduces to psi_dot = g0*tan(phi)/V for the level coordinated turn (gamma=0, n=1/cos(phi)). The no-arg straight golden keeps the pure great-circle kinematic tail.",
       "step": "closed_form_great_circle",
-      "cartesian_fallback": false
+      "cartesian_fallback": false,
+      "flight_model": "B2 lift-&-pitch: tas integrated from thrust-drag (B1); flight-path angle gamma is a stored state driven by commanded load factor n; altitude earned (alt_dot=V*sin gamma). Constant density rho0=1.225; n clamped to placeholder [-3,9] (per-airframe C_Lmax/stall = B3)."
     },
     "determinism": {
       "math_lib": "det_math",
@@ -51,10 +52,11 @@
       "alt_scale": 1000,
       "encoding": "ZigZag+LEB128",
       "kin": {
-        "format": "KIN-001",
-        "note": "Auxiliary NON-geographic block for client-side prediction (netcode layer 4b). Carries per-aircraft bank (phi) + true airspeed (tas) so a remote/late-join can re-seed a kernel. Same ZigZag+LEB128 encoding as GEO-001; transmitted as a SEPARATE snapshot section so GEO-001 stays geography-only. Lossy by quantization — never fed back as canonical (see CLAUDE.md determinism rules).",
+        "format": "KIN-002",
+        "note": "Auxiliary NON-geographic block for client-side prediction (netcode layer 4b). Carries per-aircraft bank (phi), true airspeed (tas), and — since KIN-002 (seal v1.6r0, snapshot protocol 3) — flight-path angle (gamma), so a remote/late-join can re-seed a kernel from the full 7-tuple state (lat,lon,psi,phi,alt,tas,gamma). Same ZigZag+LEB128 encoding as GEO-001; transmitted as a SEPARATE snapshot section so GEO-001 stays geography-only. Lossy by quantization — never fed back as canonical (see CLAUDE.md determinism rules).",
         "phi_scale": 1000000,
-        "speed_scale": 1000
+        "speed_scale": 1000,
+        "gamma_scale": 1000000
       }
     },
     "networking": {

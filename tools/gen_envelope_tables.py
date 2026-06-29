@@ -58,7 +58,9 @@ def build():
     for name in referenced_envelopes():
         env = envmod.load_envelope(name)
         L.append(f"constexpr Envelope {cpp_name(name)} = {{")
-        L.append(",\n".join(_lut(f, env) for f in envmod.LUT_FIELDS))
+        L.append(",\n".join(_lut(f, env) for f in envmod.LUT_FIELDS) + ",")
+        scal = ", ".join(hx(env[f]) for f in envmod.AERO_FIELDS)
+        L.append(f"  /*{'/'.join(envmod.AERO_FIELDS)}*/ {scal}")
         L.append("};")
     L.append("}} // namespace seads::envtab")
     return "\n".join(L) + "\n"

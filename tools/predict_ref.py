@@ -21,7 +21,7 @@ What this is / is NOT
   doctrine as lockstep: net code DRIVES the kernel, so this lib links the kernel; it stays
   OUTSIDE the kernel boundary (it never edits kernel math / the snapshot byte layout).
 - The bit-exact digest gate reconciles against the CANONICAL authoritative state (the raw
-  full-precision 6-tuple), NOT the lossy GEO-001/KIN wire — consistent with layer 3 comparing
+  full-precision 7-tuple), NOT the lossy GEO-001/KIN wire — consistent with layer 3 comparing
   the canonical snapshot, never the quantized wire. The lossy-wire reseed path (what a real
   remote / late-join uses) is exercised separately and is bounded by the quantum, not exact —
   see tests/property/test_predict.py. THAT lossy path is *why* phi/tas are on the wire
@@ -62,9 +62,9 @@ SCENARIO = {
     "start": {"lat_deg": 0.0, "lon_deg": 0.0, "psi_deg": 45.0,
               "phi_deg": 0.0, "alt_m": 2000.0, "tas_mps": 150.0},
     "schedule": [
-        {"start_tick": 0,   "bank_deg": 0.0,   "climb_mps": 0.0},
-        {"start_tick": 60,  "bank_deg": 45.0,  "climb_mps": 5.0},
-        {"start_tick": 180, "bank_deg": -30.0, "climb_mps": -4.0},
+        {"start_tick": 0,   "bank_deg": 0.0,   "g_cmd": 1.0, "throttle": 0.8},
+        {"start_tick": 60,  "bank_deg": 45.0,  "g_cmd": 1.5, "throttle": 0.8},
+        {"start_tick": 180, "bank_deg": -30.0, "g_cmd": 0.6, "throttle": 0.8},
     ],
     # negative control: a 1-part-in-a-million altitude desync injected into the predictor's
     # INITIAL state (mirrors lockstep's negative control). Reconcile must heal it exactly.
@@ -89,7 +89,7 @@ _RAILS = json.loads(
 
 
 def command_at(schedule, t):
-    """(target_phi_rad, target_climb_mps) at tick t. Integer phase select: largest
+    """(target_phi_rad, target_g, throttle) at tick t. Integer phase select: largest
     start_tick <= t (mirrors ref_kernel.run_scenario / scenario_main.cpp)."""
     idx = 0
     for j, ph in enumerate(schedule):
@@ -98,12 +98,12 @@ def command_at(schedule, t):
         else:
             break
     ph = schedule[idx]
-    return (rk.deg2rad(ph["bank_deg"]), float(ph["climb_mps"]))
+    return (rk.deg2rad(ph["bank_deg"]), float(ph["g_cmd"]), float(ph.get("throttle", 0.0)))
 
 
-def state6(ac):
-    """The canonical full-precision own-aircraft state a reconcile re-seeds from."""
-    return (ac.lat, ac.lon, ac.psi, ac.phi, ac.alt, ac.tas)
+def own_state(ac):
+    """The canonical full-precision own-aircraft state a reconcile re-seeds from (7-tuple, B2)."""
+    return (ac.lat, ac.lon, ac.psi, ac.phi, ac.alt, ac.tas, ac.gamma)
 
 
 def tick_hash(kernel, tick):
@@ -113,17 +113,17 @@ def tick_hash(kernel, tick):
 
 def run_truth(scenario=SCENARIO):
     """Server/authoritative kernel: step the own aircraft over the whole command timeline.
-    Returns (per_tick_hash[1..ticks], states[0..ticks]) — states[t] is the canonical 6-tuple
+    Returns (per_tick_hash[1..ticks], states[0..ticks]) — states[t] is the canonical 7-tuple
     AFTER t ticks (states[0] = initial), the source a reconcile re-seeds from."""
     ticks = int(scenario["ticks"])
     env = envmod.load_envelope(scenario["envelope"])
     k = _new_kernel(scenario["start"])
-    states = [state6(k.aircraft[0])]
+    states = [own_state(k.aircraft[0])]
     hashes = []
     for t in range(ticks):
         cmd = command_at(scenario["schedule"], t)
         k.step_scenario([cmd], [env])
-        states.append(state6(k.aircraft[0]))
+        states.append(own_state(k.aircraft[0]))
         hashes.append(tick_hash(k, t + 1))
     return hashes, states
 
@@ -143,11 +143,11 @@ class Predictor:
         self.k.step_scenario([cmd], [self.env])
         self.buffer.append((tick, cmd))
 
-    def reconcile(self, server_tick, auth6):
+    def reconcile(self, server_tick, auth7):
         """Authoritative snapshot for `server_tick` arrived: snap the own aircraft to it, drop
         inputs at/older than server_tick, and REPLAY the rest forward to re-derive 'now'."""
         ac = self.k.aircraft[0]
-        ac.lat, ac.lon, ac.psi, ac.phi, ac.alt, ac.tas = auth6
+        ac.lat, ac.lon, ac.psi, ac.phi, ac.alt, ac.tas, ac.gamma = auth7
         remaining = [(t, c) for (t, c) in self.buffer if t > server_tick]
         for (_t, c) in remaining:
             self.k.step_scenario([c], [self.env])
@@ -294,13 +294,13 @@ def _lossy_reseed_error(truth_states, scenario=SCENARIO):
         p.predict(t, cmd)
         if t % snap_every == 0 and t > lag:
             st = t - lag
-            lat, lon, psi, phi, alt, tas = truth_states[st]
+            lat, lon, psi, phi, alt, tas, gamma = truth_states[st]
             # round-trip the authoritative state through the wire (quantize -> dequantize)
-            e = snap.from_kernel(1, lat, lon, psi, alt, phi, tas)
+            e = snap.from_kernel(1, lat, lon, psi, alt, phi, tas, gamma)
             wire = snap.encode_snapshot(snap.Snapshot(st, [e]))
             dec, _ = snap.decode_snapshot(wire)
-            lat_r, lon_r, psi_r, alt_r, phi_r, tas_r = snap.to_kernel(dec.entities[0])
-            p.reconcile(st, (lat_r, lon_r, psi_r, phi_r, alt_r, tas_r))
+            lat_r, lon_r, psi_r, alt_r, phi_r, tas_r, gamma_r = snap.to_kernel(dec.entities[0])
+            p.reconcile(st, (lat_r, lon_r, psi_r, phi_r, alt_r, tas_r, gamma_r))
         ac = p.k.aircraft[0]
         tl = truth_states[t]
         worst = max(worst, abs(ac.lat - tl[0]), abs(ac.lon - tl[1]))

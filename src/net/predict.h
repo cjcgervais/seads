@@ -26,9 +26,9 @@
 namespace seads {
 namespace predict {
 
-// The canonical full-precision own-aircraft state a reconcile re-seeds from.
+// The canonical full-precision own-aircraft state a reconcile re-seeds from (7-tuple, B2).
 struct OwnState {
-    double lat, lon, psi, phi, alt, tas;
+    double lat, lon, psi, phi, alt, tas, gamma;
 };
 
 // Canonical per-tick world_hash: SHA-256 of Kernel::snapshot(tick) (raw LE-f64, sealed layout).

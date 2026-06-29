@@ -80,7 +80,8 @@ def build():
     for name in env_names:
         env = envmod.load_envelope(name)
         L.append(f"constexpr Envelope ENV_{cpp_ident(name)} = {{")
-        L.append(",\n".join(_lut_literal(f, env) for f in envmod.LUT_FIELDS))
+        L.append(",\n".join(_lut_literal(f, env) for f in envmod.LUT_FIELDS) + ",")
+        L.append("  " + ", ".join(hx(env[f]) for f in envmod.AERO_FIELDS))
         L.append("};")
     L.append("constexpr const Envelope* ENVELOPES[] = {")
     L.append("    " + ", ".join(f"&ENV_{cpp_ident(n)}" for n in env_names))
@@ -88,7 +89,7 @@ def build():
     L.append("")
 
     # --- per-aircraft command schedules (target_phi in RADIANS, pre-converted) ---
-    L += ["struct Phase  { unsigned start_tick; double target_phi; double target_climb; };",
+    L += ["struct Phase  { unsigned start_tick; double target_phi; double target_g; double throttle; };",
           "struct AcSpec { double lat, lon, psi, phi, alt, tas; int env_idx;",
           "                const Phase* sched; unsigned n_phase; };",
           ""]
@@ -96,7 +97,7 @@ def build():
         L.append(f"constexpr Phase AC{ai}_SCHED[] = {{")
         for ph in ac["schedule"]:
             L.append(f"  {{{int(ph['start_tick'])}u, {hx(ls.rk.deg2rad(ph['bank_deg']))}, "
-                     f"{hx(ph['climb_mps'])}}},")
+                     f"{hx(ph['g_cmd'])}, {hx(ph.get('throttle', 0.0))}}},")
         L.append("};")
 
     L.append("constexpr AcSpec AIRCRAFT[] = {")

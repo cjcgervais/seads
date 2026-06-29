@@ -1,6 +1,29 @@
 # SEADS 2026 — Next Steps (handoff)
 
-> Resume doc for a fresh session. State as of seal **ATM-Sphere v1.4r0**, git `main` at the
+> ## ►► CURRENT STATE (2026-06-29): seal **ATM-Sphere v1.6r0** — flight model **B2 (lift & pitch) DONE ✅**
+> The flight model now has **real pitch**: flight-path angle **γ is a stored kernel state** driven by a
+> commanded load factor (`Command.target_g`), altitude is *earned* (`alṫ=V·sinγ`), and pulling g bleeds
+> speed (induced drag). Full **3-DOF point mass**; generalizes B1's level turn. Per-aircraft state is now
+> the **7-tuple** `(lat,lon,psi,phi,alt,tas,gamma)`. **Wire reseal KIN-001→KIN-002** (γ×1e6 on the wire,
+> snapshot **protocol 3**). **All goldens regenerated** + new **GOLDEN-SK-Pitch-001**. No new det_math.
+> Proven locally **C++≡Python bit-for-bit under GCC + Clang** (all 6 goldens), **ctest 7/7** both,
+> **12/12** receipt gates PASS, **64** property tests. Viewer band-aids retired (W/S = real g, marker
+> tilts by real γ). **NEXT: §8.3 Phase B3 (limits & stall: C_Lmax / accelerated stall / structural-g /
+> corner speed → seal v1.7r0).** New goldens (B2):
+> - Sphere `db777327…d13ac394` (anchor; trajectory identical, hash moved only because γ=0 was appended)
+> - Turn `3faca110…9fc8e57f` · Climb `9d0eb912…4a0c3026` · TurnClimb `cd705c4a…4bda5c9c`
+> - Accel `9fb59805…de8c3aaf` · **Pitch `c0332e9e…6fd379ea` (new)**
+> Ledger: ADR-Step8-FlightModel-B2-v1.6r0, SEAL_CARD v1.6r0, receipt `…v1.6r0-*.yml`. **GIT: committed +
+> pushed to `origin/main` (2026-06-29)** in a single Track-B commit that lands BOTH B1 (v1.5r0) and B2
+> (v1.6r0) — the prior session shipped B1 to the tree but never committed it, and its kernel/golden state
+> is superseded in-file by B2, so a clean B1-then-B2 split wasn't reconstructable; the ADRs + SEAL_CARD
+> history + per-seal receipts preserve the B1/B2 distinction. guardian CI runs on the push (MSVC + GCC +
+> Clang × x64/AArch64 reproduce all 6 goldens incl. Pitch). **Watch the run** and confirm green before
+> declaring v1.6r0 fully landed. Branch protection / required-check setup is still the deferred owner task.
+>
+> ---
+>
+> Resume doc for a fresh session. (Pre-B2 history below.) State was seal **ATM-Sphere v1.4r0**, git `main` at the
 > **Step 5 renderer commit `e4ef652`** (Steps 1–6 done + a working downstream renderer) — pushed to
 > `origin/main`, guardian CI **GREEN** (run [28355716358](https://github.com/cjcgervais/seads/actions/runs/28355716358):
 > MSVC + GCC/Clang × x64/AArch64 reproduce all 4 goldens + the geo001/snapshot/lockstep/interp/predict
@@ -34,19 +57,37 @@
 > runs in `--fly`; `reconcile()` (snap+replay) stays exercised by the layer-4b parity tests and
 > engages against a real server.)*
 >
-> **Recommended next task → finish the Track A stretch / pick an alternative:**
->   - **Track A stretch (no seal):** aircraft-model **meshes** (vs the marker sphere), a
->     **chase/cockpit camera** that follows the own ship (today's `--fly` cam orbits the globe
->     centre), and **vendoring Three.js** so the web viewer works fully offline (CDN today). A
->     `--fly` web path (predict in JS mirroring `predict_ref`) is a bigger lift but possible.
->   - First moves for the chase cam: in `run_fly` set `cam.target` to the own ship's display
->     position (`to_display(geo_to_cartesian(pred.kernel()...))`) instead of the origin, and place
->     the eye behind it along the velocity/heading; reuse `orbit_eye` for a free-look offset.
+> **Chase cam + flight-control scheme is now DONE ✅ (2026-06-29, no seal)** — see §5. The `--fly`
+> viewer now rides a **chase camera** behind/above the own ship (follows heading, wheel zooms),
+> with **mouse-aim** (a central reticle drives bank/climb) as the default and **hold-SPACE
+> free-look** (mouse pans freely around the plane; A/D bank, W/S pitch, Q/E yaw, Shift/Ctrl
+> throttle by keyboard; release restabilizes). P pauses, R resets. Yaw + throttle are applied
+> DOWNSTREAM by re-seeding the predictor (the kernel has no such axis). All presentation-only;
+> golden `529c6a05…` unchanged, 12/12 gates + ctest 7/7 green.
 >
-> **Alternatives:** **(B)** non-roadmap — replace the constant-TAS approximation with an energy/drag
-> model (this *does* reseal: it moves all 4 goldens → `/seal`). **(Step 7)** guns/projectiles (new
-> seal, post-MVP). See **§5/§6/§7**. Whatever you pick, run the §4 gates first to confirm the
-> green baseline, then again before committing.
+> ### ⇒ Flight model Track B: **B1 DONE ✅ (v1.5r0) · B2 DONE ✅ (2026-06-29, seal v1.6r0)**. NEXT: **§8.3 Phase B3 (limits & stall)**.
+> **B1 (longitudinal energy) is shipped and sealed.** TAS is now a real integrated state: thrust −
+> drag (parasitic + induced from the bank load factor) − climb cost. `Command` carries **throttle
+> [0,1]**; per-airframe aero params (mass, S, cd0, k, T₀, V_max) live on the envelope. Energy lives
+> in `step(cmd,env)` only, so **GOLDEN-SK-Sphere-001 is unchanged** (kinematic anchor) while
+> Turn/Climb/TurnClimb regenerated + new **GOLDEN-SK-Accel-001**; C++≡Python bit-for-bit under
+> GCC+Clang, 12/12 gates + ctest 7/7 + 57 property tests green, receipt `…v1.5r0-*.yml`. The viewer's
+> Shift/Ctrl is now a **real throttle** (re-seed hack retired). Details in **§8.1**.
+>
+> **What's still a band-aid (fixed by B3):** **pitch is now REAL** (B2 — γ is a kernel state, the
+> viewer marker tilts by the true γ, W/S = real g-command, the pitch-cue exaggeration is gone). What
+> remains: **no stall / unbounded C_L** — `n` is only globally clamped to `[-3,9]` (placeholder);
+> per-airframe `C_Lmax`, accelerated stall, structural-g and the corner speed are **B3**. The
+> **vertical singularity** (`ψ̇` has `cosγ` in the denominator → undefined at γ=±90°) is documented,
+> not handled — scenarios/viewer stay well inside ±90°; full loops/verticals need a different
+> formulation (post-B3). **Yaw (Q/E) in the viewer remains a downstream re-seed** by design (the
+> coordinated-flight kernel has no independent yaw axis). Every phase stays a seal with the full
+> ritual (det_math+MPFR if needed, Auditor, ADR, `/seal`). **Start at §8.3.**
+>
+> **Smaller no-seal alternatives if you're not ready for core work:** Track A stretch — aircraft
+> **meshes** (vs the marker sphere) and **vendoring Three.js** for offline web (§5). **Step 7**
+> (guns/projectiles) is a *new* seal, best deferred until the flight model lands. Whatever you pick,
+> run the §4 gates first to confirm the green baseline, then again before committing.
 
 ## Where things stand (DONE)
 
@@ -127,7 +168,7 @@ python tools/lockstep_ref.py                # loopback lockstep reference self-t
 for g in gen_coeffs gen_golden_params gen_detmath_vectors gen_envelope_tables gen_scenario_params \
          gen_geo001_vectors gen_snapshot_vectors gen_lockstep_vectors; do \
   python tools/$g.py --check; done          # all 8 generated headers in sync
-python -m pytest tests/property -q          # 52 pass (scenario + geo001 + snapshot + lockstep + interp + predict)
+python -m pytest tests/property -q          # 64 pass (scenario/energy/pitch + geo001 + snapshot + lockstep + interp + predict)
 python tools/make_receipt.py                # runs all 12 gates -> overall: PASS (writes docs/receipts/...yml)
 ```
 ```powershell
@@ -136,7 +177,7 @@ cmake -S . -B build-gcc   -G Ninja -DCMAKE_CXX_COMPILER=g++     -DCMAKE_BUILD_TY
 cmake -S . -B build-clang -G Ninja -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_BUILD_TYPE=Release; cmake --build build-clang
 .\build-gcc\seads_golden.exe   --out run_gcc.bin
 python tools\validate_snapshot.py --golden tests\golden\GOLDEN-SK-Sphere-001\expected.world_hash --candidate run_gcc.bin
-foreach ($id in "GOLDEN-SK-Turn-001","GOLDEN-SK-Climb-001","GOLDEN-SK-TurnClimb-001") {
+foreach ($id in "GOLDEN-SK-Turn-001","GOLDEN-SK-Climb-001","GOLDEN-SK-TurnClimb-001","GOLDEN-SK-Accel-001","GOLDEN-SK-Pitch-001") {
   .\build-gcc\seads_scenario.exe --id $id --out run_scen.bin
   python tools\validate_snapshot.py --golden "tests\golden\$id\expected.world_hash" --candidate run_scen.bin }
 # (repeat the two scenario/validate blocks with build-clang to confirm cross-compiler parity)
@@ -250,8 +291,29 @@ green, **lean ledger** (commit + receipt `…v1.4r0-*.yml`, no ADR per owner's c
   re-clamps to the envelope). Headless `--fly --selfcheck N` proves the input→prediction path with
   no GPU/recording. `seads_viewer` now links `seads_predict`+kernel/replay/det_math (guarded by
   `SEADS_CLIENT`, CI untouched). ctest 7/7; golden `529c6a05…` unchanged; receipt `…-89a1974.yml`.
-- **Remaining polish (track A stretch):** aircraft-model meshes (vs the marker sphere); a
-  chase/cockpit camera following the own ship (today's `--fly` cam orbits the globe centre);
+- **Chase camera + flight-control scheme (track A stretch)**  ✅ DONE (2026-06-29, no seal).
+  `src/client/viewer_main.cpp` `run_fly` now builds a **chase camera** from the own ship's local
+  tangent frame (`local_basis` at lat/lon + heading psi → forward; eye placed behind/above along
+  `-forward`, offset by a free-look az/el). Two input modes:
+    - **Mouse-aim (default):** a central reticle (clamped to a unit disk inside `RETICLE_ZONE_PX`)
+      maps x→bank, y→climb (`fly_reticle_command`); drawn as a 2D overlay. Keyboard works too as
+      gross input.
+    - **Free-look (hold SPACE):** cursor is disabled so mouse delta pans the camera all the way
+      around + up/down the plane; flight is keyboard-only.
+  **Controls:** A/D bank, W/S pitch→climb (`fly_keyboard_command` → kernel `Command`); **Q/E yaw**
+  and **Shift/Ctrl throttle** are NOT kernel commands (the kernel has no yaw axis and constant TAS)
+  so they are applied DOWNSTREAM by **re-seeding `predict::Predictor`** through the public Kernel API
+  (the reconcile path) — no kernel/rail/golden touched. Wheel zooms `chase_dist`; P pauses, R resets.
+  The marker (`draw_aircraft`) visibly rolls with bank and tilts with pitch; remotes drawn the same.
+  Presentation-only: golden `529c6a05…` unchanged, 12/12 gates + ctest 7/7 (GCC). Receipt
+  `…v1.4r0-6d3b06b.yml`.
+  - **⚠ INTERIM BAND-AIDS to remove once Track B (§8) lands** (flagged in code): (a) the bank/turn
+    is real but **pitch is NOT** — `target_climb` is a clamped vertical rate, so the marker's pitch
+    is an **exaggerated presentation cue** (`own_pitch = cmd fraction × 25°`), not a flight-path
+    angle; (b) **yaw and throttle are re-seed hacks**, not physics; (c) the own ship spawns at TAS
+    150 to stay inside the Ki-61 LUTs. All three exist only because the kernel is a constant-TAS
+    placeholder — **§8 B1/B2 make pitch, throttle and energy real in the kernel and these come out.**
+- **Remaining polish (track A stretch, no seal):** aircraft-model meshes (vs the marker sphere);
   vendor Three.js for fully-offline web; an optional `--fly` web path. None touch a rail/golden.
 
 ### 6. Netcode state-sync (multiplayer flight MVP)  ← IN PROGRESS (option B: recommended)
@@ -342,6 +404,126 @@ Suggested first moves for the next agent (build bottom-up, each layer gated befo
   outside the kernel boundary (no feeding bits back in). Ledger per layer (ADR + card + receipt).
 
 ### 7. (Post-MVP) Guns/projectiles — new seal, deferred per doctrine.
+
+## 8. Track B — the REAL flight model (the "flight kernel")  ← THE NEXT BIG TASK
+
+> **Why:** SEADS today flies a *constant-TAS kinematic placeholder*. To be an actual dogfight sim
+> the kernel must model **energy and aerodynamics**: thrust vs drag (so speed changes and there is a
+> throttle), lift vs weight at an angle of attack (so **pitch is real** and altitude is *earned*),
+> and load factor (so turn rate trades against speed and you can stall/black out). This is the heart
+> of the product. **It must live in the kernel** — physical truth has to be bit-for-bit identical
+> across toolchains/arch for lockstep multiplayer (CLAUDE.md §0/§1). Therefore **every phase below is
+> a SEAL** (moves all four goldens) and runs the **full ritual**: det_math additions proven vs the
+> MPFR oracle first, an adversarial **Auditor** pass, an **ADR**, then `/seal`. Do NOT shortcut this
+> with `/fp:fast`, FMA, or libm — that breaks the one promise the whole project exists to keep (§5).
+
+### 8.0 Design decisions to lock FIRST (write an ADR — this is a genuine architectural fork)
+- **State vector.** Today `(lat, lon, psi, phi, alt, tas)`. The model adds longitudinal state. Pick
+  the variable set and FIX it: recommended **add flight-path angle `gamma`** (vertical channel) and
+  keep **`tas` as a true integrated state**; treat **bank `phi`** as before; derive **load factor
+  `n`** and **angle-of-attack `alpha`** per tick from the aero solve (don't store what you can
+  recompute — fewer states = fewer wire fields = smaller reseal). Decide explicitly whether `gamma`
+  and `alpha` are *states* or *derived*; the golden hashes depend on it.
+- **Inputs.** `Command` grows from `{target_phi, target_climb}` to roughly
+  `{target_phi, pitch_or_g_cmd, throttle}`. Decide the pitch axis semantics NOW: **commanded load
+  factor `n`** (arcade, stable, easy to clamp to a structural/`CLmax` limit) **vs commanded AoA**
+  (sim-y, needs a stall model). Recommended: **commanded-g** for B2, add an AoA/stall layer in B3.
+- **Atmosphere/density.** Rails say "still air". DECIDE: keep **constant sea-level density ρ₀**
+  (avoids `det_exp`/`det_pow` entirely — strongly recommended for the first cut) **or** ISA density
+  vs altitude (forces new det_math transcendentals + full MPFR coverage — defer, and if adopted it
+  is itself a rail/seal change). Document the choice in the ADR; constant-ρ keeps B1–B4 to algebra +
+  `sqrt`.
+- **Integration scheme.** Δt is fixed at 0.01 s (rail). Pick the integrator and FREEZE the operation
+  order (semi-implicit Euler is fine and cheap). The golden is defined by the *exact* op sequence,
+  so `ref_kernel.py` and `kernel.cpp` must share it bit-for-bit (same trick as `lut_eval` today).
+- **det_math budget.** Energy/aero needs at minimum **`det_sqrt`** (true airspeed terms, stall
+  speed, `n`↔bank). If you keep constant density and commanded-g you can likely avoid `exp/log/pow`.
+  Every new det_math primitive: add to `det_math.{h,cpp}`, mirror in `detmath_ref.py`, extend
+  `det_math_oracle.py` + `gen_detmath_vectors.py` (structured boundaries + seeded random), prove
+  ≤ target ULP vs MPFR, and asm-audit for FMA — BEFORE any kernel call uses it.
+
+### 8.1 Phase B1 — Longitudinal energy: thrust/drag ⇒ real TAS + throttle  ✅ DONE (2026-06-29, seal v1.5r0)
+**Shipped.** Energy model in `Kernel::step(cmd,env)` + `ref_kernel.step_scenario` (bit-identical op
+order): `n=1/cos φ`, `q=½ρ₀V²`, `D = qS·cd0 + k·CL²·qS` (CL from `L=n·m·g₀`), `T = thr·T₀·(1−V/Vmax)`,
+`Vdot=(T−D)/m − g₀·req/V`, floor `V_MIN=30`. Constants `RHO0`/`V_MIN` as shared hex-floats; **no new
+det_math** (`+−×÷` + `det_cos`). `Command.throttle` added (default 0.0). Aero params on every
+envelope (`mass_kg, wing_area_m2, cd0, induced_k, thrust_static_n, v_max_mps`) via the shared
+`envelopes.py` loader → `gen_envelope_tables.py` + `gen_lockstep/predict_vectors.py` (all emit the
+scalars). Goldens: **Sphere unchanged** `529c6a05…`; Turn `1d15c57a…`, Climb `4119a280…`, TurnClimb
+`a1d9ce03…`, **Accel (new)** `225d5c13…`. Gates: 12/12 receipt PASS, ctest 7/7 GCC+Clang, 57 property
+tests (+5 `test_energy.py`). guardian.yml extended with Accel in all 3 golden lists. Ledger:
+ADR-Step8-FlightModel-B1-v1.5r0, SEAL_CARD v1.5r0, receipt `…v1.5r0-*.yml`. Viewer Shift/Ctrl now a
+real throttle. **Initial aero is a balance pass — top speeds run low; retune is data-only in B4.**
+The ORIGINAL B1 plan (kept for reference):
+Make speed a real integrated state. Per tick: `T(throttle) − D(V) − W·sin(gamma)` drives `V̇`;
+`V += V̇·dt`. Drag `D = ½·ρ₀·V²·S·C_d` (parasitic `C_d0` + induced `k·C_L²`); thrust from a simple
+prop curve `T = throttle · T_static · (1 − V/V_max)` (or a small LUT). Add per-airframe **mass,
+`S_ref`, `C_d0`, `k`, `T_static`, `V_max`** to the envelope schema (extends `data/tuning/envelopes/`
++ `gen_envelope_tables.py`). `Command` gains `throttle`. **Wire/reseal:** `tas` is already on the
+KIN-001 block; **`throttle` need not be on the wire** (it's an input, not a state) — but confirm the
+snapshot still captures enough to reconstruct (it does: `tas` is the state). Likely **no wire format
+change** in B1 → the reseal is "golden moved", not "protocol bumped". Deliverables: kernel + `ref_
+kernel.py` mirror, `det_sqrt` (if used) through the oracle, **regenerate all 4 goldens** + a new
+**GOLDEN-SK-Accel-001** (throttle step → speed up/slow down), property tests (energy monotonic under
+zero throttle = decel; level flight equilibrium), ADR + `/seal` (→ v1.5r0).
+
+### 8.2 Phase B2 — Lift & pitch: flight-path angle from commanded-g  ✅ DONE (2026-06-29, seal v1.6r0)
+**Shipped.** γ (flight-path angle) is a stored kernel state; `step(cmd,env)` is a full 3-DOF point mass
+(Vdot=(T−D)/m−g0·sinγ; γ̇=(g0/V)(n·cosφ−cosγ); ψ̇=(g0/V)(n·sinφ/cosγ); alṫ=V·sinγ; ground speed V·cosγ).
+`Command.target_climb`→**`target_g`** (commanded load factor n; global clamp [−3,9]). Generalizes B1
+(γ=0,n=1/cosφ ⇒ old ψ̇=g0·tanφ/V). **No new det_math.** State 6→7-tuple; canonical snapshot +γ ⇒ **all
+goldens moved incl. Sphere** (trajectory identical, γ=0 appended). **Wire reseal KIN-001→KIN-002** (γ×1e6,
+snapshot protocol 2→3). New **GOLDEN-SK-Pitch-001**. C++≡Python bit-for-bit GCC+Clang; 12/12 gates, ctest
+7/7, 64 property tests. Viewer band-aids retired. Ledger: ADR-Step8-FlightModel-B2-v1.6r0, SEAL_CARD
+v1.6r0, receipt `…v1.6r0-*.yml`. **Documented limits → B3:** no stall/C_Lmax (n only globally clamped);
+cosγ→0 vertical singularity (kept out of scenarios). The ORIGINAL B2 plan (kept for reference):
+Make pitch real. Vertical channel becomes `alṫ = V·sin(gamma)`, `gammȧ` from the net normal force:
+commanded load factor `n_cmd` → required `C_L` → if within `C_Lmax` the lift turns the velocity
+vector (`gammȧ = g·(n·cos(phi) − cos(gamma))/V` for the pitch plane; bank splits `n` between turn and
+climb). Replace `target_climb` with **`target_g`** (or pitch). Now W/S commands actual nose
+attitude/energy trade, not a teleported climb rate, and the viewer's nose tilt becomes *physical*
+(remove the exaggeration band-aid in `viewer_main.cpp`). Couples to B1: pulling g adds induced drag →
+bleeds speed. **Wire/reseal:** if `gamma` becomes a *state* it should join KIN-001 (→ KIN-002 or a
+protocol bump) so remotes/late-join reconstruct attitude — this is a **wire reseal** like layer 4b
+was. Deliverables: kernel + ref mirror, goldens regenerated + **GOLDEN-SK-Loop/Pitch-001**, property
+tests (sustained-vs-instantaneous turn, energy bleed in a pull), ADR + `/seal`.
+
+### 8.3 Phase B3 — Limits & stall: C_Lmax, accelerated stall, structural g  (SEAL)
+Clamp `C_L` to `C_Lmax(M?)`; exceeding → stall (lift breaks, `gammȧ`/turn collapse, optional
+departure). Add a **structural g limit** and a **corner speed** that falls out naturally (max
+sustained turn where `n·V` is maximized). This is what makes airframes *feel* different and makes
+energy fighting emergent. Deliverables: stall/corner property tests per airframe, goldens
+regenerated, ADR + `/seal`.
+
+### 8.4 Phase B4 — Per-airframe tuning pass (mostly data; seal only if a default rail moves)
+Re-tune all **8** envelopes to the new aero parameters so the roster's relative strengths read true
+(Spitfire turns, P-47 dives/zooms, A6M2 low-speed turn, etc.). Mostly **data-only** (rides the
+current seal) like §3 was — *unless* you change a shared kernel default. Add the energy/aero columns
+to each `data/tuning/envelopes/*.json`, re-run `tuning_probe.py` (extend it with energy checks),
+optionally `hash_sign_json.py` to sign them.
+
+### 8.5 Phase B5 — (optional, defer) ISA atmosphere vs altitude  (rail + seal)
+Only if you want altitude to change performance (thinner air up high). Forces `det_exp`/`det_pow`
+into det_math with full MPFR coverage, and changes the "still air / constant" atmosphere rail →
+**rail reseal** (`/reseal` for the rail value, `/seal` for the model). Big lift; not needed for a
+compelling dogfight. Keep constant-ρ until proven necessary.
+
+### Cross-cutting (every phase)
+- **Mirror-first determinism:** write/extend `tools/ref_kernel.py` (and `detmath_ref.py`) to the new
+  math, get the Python gate green, THEN bit-match it in `kernel.cpp`. The Python harness *defines*
+  the golden; C++ must reproduce it (CLAUDE.md §4).
+- **Goldens:** every phase regenerates the 4 existing goldens (their hashes WILL change — that's the
+  seal) and should ADD at least one scenario that exercises the new dynamic (accel, pitch/loop,
+  stall). Use the existing `config/scenarios/*.json` → `seads_scenario` machinery.
+- **Gates:** run the full §4 + §-verify sweep and `make_receipt.py` before and after; CI
+  (`guardian.yml`) must stay green across MSVC/GCC/Clang × x64/AArch64 — the AArch64 legs are the
+  real test of any new det_math (FMA/libm divergence risk).
+- **Wire & viewer:** if a new variable becomes wire state, bump the snapshot protocol (KIN-002) and
+  update `snapshot.{h,cpp}` + refs (reseal). The `--fly` viewer is the live test bed — after B2,
+  delete the pitch-cue exaggeration and the yaw/throttle re-seed hacks in `viewer_main.cpp` and feed
+  the real `Command` instead.
+- **Seal sequence:** v1.4r0 → **v1.5r0** (B1) → v1.6r0 (B2) → v1.7r0 (B3) → data (B4) → optional
+  v1.8r0 (B5). Don't batch phases into one seal; small seals keep the golden diffs auditable.
 
 ## Governance reminder (lean — see CLAUDE.md §2)
 Governance is now minimal. **The whole law:** (1) keep the §4 gates green; (2) if a rail value or a

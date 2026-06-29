@@ -19,10 +19,11 @@ BEAR = st.floats(min_value=0.0, max_value=360.0, allow_nan=False, allow_infinity
 ALT = st.floats(min_value=-100.0, max_value=8000.0, allow_nan=False, allow_infinity=False)
 PHI = st.floats(min_value=-90.0, max_value=90.0, allow_nan=False, allow_infinity=False)
 TAS = st.floats(min_value=0.0, max_value=400.0, allow_nan=False, allow_infinity=False)
+GAMMA = st.floats(min_value=-89.0, max_value=89.0, allow_nan=False, allow_infinity=False)
 ID = st.integers(min_value=0, max_value=(1 << 31) - 1)
 TICK = st.integers(min_value=0, max_value=(1 << 40))
 
-ENTITY = st.builds(s.EntityState, ID, LAT, LON, BEAR, ALT, PHI, TAS)
+ENTITY = st.builds(s.EntityState, ID, LAT, LON, BEAR, ALT, PHI, TAS, GAMMA)
 
 
 @given(TICK, st.lists(ENTITY, max_size=8))
@@ -42,6 +43,7 @@ def test_snapshot_roundtrip(tick, entities):
         assert abs(a.alt_m - b.alt_m) <= 1.0 / g.ALT_SCALE
         assert abs(a.phi_deg - b.phi_deg) <= 1.0 / s.PHI_SCALE
         assert abs(a.tas_mps - b.tas_mps) <= 1.0 / s.SPEED_SCALE
+        assert abs(a.gamma_deg - b.gamma_deg) <= 1.0 / s.GAMMA_SCALE
 
 
 def test_empty_snapshot():
@@ -59,20 +61,21 @@ def test_snapshot_is_self_delimiting(entities):
     assert len(dec.entities) == len(entities)
 
 
-@given(LAT, LON, BEAR, ALT, PHI, TAS)
-def test_from_to_kernel_roundtrip(lat_deg, lon_deg, bearing_deg, alt, phi_deg, tas):
+@given(LAT, LON, BEAR, ALT, PHI, TAS, GAMMA)
+def test_from_to_kernel_roundtrip(lat_deg, lon_deg, bearing_deg, alt, phi_deg, tas, gamma_deg):
     # build kernel-radian inputs, go to wire degrees and back; within one quantum (radians).
     import math
     lat_r, lon_r, psi_r = (math.radians(lat_deg), math.radians(lon_deg), math.radians(bearing_deg))
-    phi_r = math.radians(phi_deg)
-    e = s.from_kernel(3, lat_r, lon_r, psi_r, alt, phi_r, tas)
-    back_lat, back_lon, back_psi, back_alt, back_phi, back_tas = s.to_kernel(e)
+    phi_r, gamma_r = math.radians(phi_deg), math.radians(gamma_deg)
+    e = s.from_kernel(3, lat_r, lon_r, psi_r, alt, phi_r, tas, gamma_r)
+    back_lat, back_lon, back_psi, back_alt, back_phi, back_tas, back_gamma = s.to_kernel(e)
     assert abs(back_lat - lat_r) <= 2e-9
     assert abs(back_lon - lon_r) <= 2e-9
     assert abs(back_psi - psi_r) <= 2e-9
     assert back_alt == alt
     assert abs(back_phi - phi_r) <= 2e-9
     assert back_tas == tas
+    assert abs(back_gamma - gamma_r) <= 2e-9
 
 
 def test_protocol_constant_on_wire():

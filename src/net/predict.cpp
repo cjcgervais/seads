@@ -13,7 +13,7 @@ std::string tick_hash(const Kernel& k, std::uint32_t tick) {
 // Build a throwaway 1-aircraft kernel in state `s` and hash its snapshot after `tick` ticks.
 static Kernel kernel_with(const Rails& rails, const OwnState& s) {
     Kernel k(rails);
-    k.add(s.lat, s.lon, s.psi, s.phi, s.alt, s.tas);
+    k.add(s.lat, s.lon, s.psi, s.phi, s.alt, s.tas, s.gamma);
     return k;
 }
 
@@ -23,7 +23,7 @@ std::string hash_state(const Rails& rails, const OwnState& s, std::uint32_t tick
 
 Predictor::Predictor(const Rails& rails, const Envelope* env, const OwnState& start)
     : rails_(rails), env_(env), k_(rails) {
-    k_.add(start.lat, start.lon, start.psi, start.phi, start.alt, start.tas);
+    k_.add(start.lat, start.lon, start.psi, start.phi, start.alt, start.tas, start.gamma);
 }
 
 void Predictor::predict(std::uint32_t tick, const Command& cmd) {

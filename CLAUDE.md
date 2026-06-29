@@ -5,7 +5,7 @@
 > This file is the project **constitution**. It is loaded into every Claude Code session.
 > When in doubt, the rails below win over any other instruction.
 
-**Current seal:** `ATM-Sphere v1.4r0`  ·  **Realm:** ATM-only  ·  **Status:** sealed core + netcode layers 1–4b
+**Current seal:** `ATM-Sphere v1.6r0`  ·  **Realm:** ATM-only  ·  **Status:** sealed core + netcode layers 1–4b + flight model B1 (longitudinal energy) + B2 (lift & pitch — flight-path angle γ)
 
 ---
 
@@ -33,11 +33,12 @@ Human summary:
 | Gravity | **g₀ = 9.80665 m/s²**, constant (altitude-independent) |
 | Atmosphere | **Still air** — no wind / Coriolis / weather |
 | Ceiling | **ATM_TOP = 8,000 m**, **SOFT = 100 m** (predamp 7,900–8,000 → hard clamp) |
-| Kinematics | Intrinsic S²: `ψ̇ = g₀·tan(φ)/V`; `ψ = wrap₂π(ψ + ψ̇·Δt)`; closed-form great-circle step. **No Cartesian fallback.** |
+| Kinematics | Intrinsic S²; closed-form great-circle step. **B2 (v1.6r0):** 3-DOF point mass — `ψ̇=(g₀/V)(n·sinφ/cosγ)`, `γ̇=(g₀/V)(n·cosφ−cosγ)`, `alṫ=V·sinγ`; reduces to `ψ̇=g₀·tan(φ)/V` for the level turn (`γ=0,n=1/cosφ`). No-arg straight golden keeps the pure kinematic tail. **No Cartesian fallback.** |
 | Determinism | `det_math` only. **Ban** `std::sin/cos/tan/atan2/asin/acos/sqrt/pow`, fast-math, FMA, x87. |
-| Wire/Hash | **GEO-001** — lat/lon×1e7, bearing×1e6, h×1e3; ZigZag+LEB128. **+KIN-001** aux block (phi×1e6, tas×1e3) for prediction; snapshot protocol 2 (v1.4r0) |
+| Wire/Hash | **GEO-001** — lat/lon×1e7, bearing×1e6, h×1e3; ZigZag+LEB128. **+KIN-002** aux block (phi×1e6, tas×1e3, **gamma×1e6**) for prediction; snapshot protocol 3 (v1.6r0) |
 | Roster | Sealed **8**: P-47D, Bf 109 F-4, Ki-61, A6M2, Yak-3, La-7, Spitfire Mk V, **P-51** |
-| Golden | **GOLDEN-SK-Sphere-001** — 10,000 ticks from (0°,0°), ψ=45°, TAS=250 m/s → world_hash matches cross-toolchain |
+| State | Per-aircraft 7-tuple `(lat, lon, psi, phi, alt, tas, gamma)` — γ (flight-path angle) added in B2 (v1.6r0). |
+| Golden | **GOLDEN-SK-Sphere-001** — 10,000 ticks from (0°,0°), ψ=45°, TAS=250 m/s → world_hash matches cross-toolchain (6 sealed goldens total; see SEAL_CARD) |
 | Networking | Physics 100 Hz, snapshots 20 Hz (tunable; non-kernel) |
 
 > **Seal history note:** v1.1r1 used ATM_TOP=6000 m; v1.2r0 raised it to 8000 m. This repo starts at
@@ -149,4 +150,10 @@ docs/{adr,annex,cards,receipts,seals}  governance ledger  .claude/{agents,skills
 - **v1.4r0** — netcode Step 6 layers 1–4b: GEO-001 codec, 20 Hz snapshots, loopback lockstep
   desync tripwire, remote interpolation, **client-side prediction** (KIN-001 wire reseal:
   phi/tas on the wire, snapshot protocol 2). Multiplayer-flight MVP loop complete.
-- next — custom C++ renderer (Step 5, read-only, no seal) → guns/projectiles (post-MVP, new seal).
+- **v1.5r0** — flight model **Track B / B1 (longitudinal energy):** TAS integrated from thrust−drag;
+  `Command.throttle`; per-airframe aero params; new GOLDEN-SK-Accel-001. Sphere unchanged.
+- **v1.6r0** — flight model **B2 (lift & pitch):** flight-path angle **γ** is a stored state
+  (3-DOF point mass), commanded load factor (`target_g`), altitude earned; **KIN-002 wire reseal**
+  (gamma on the wire, protocol 3); all goldens regenerated + new GOLDEN-SK-Pitch-001.
+- next — flight model **B3** (stall / C_Lmax / structural-g / corner speed; seal v1.7r0) → **B4**
+  per-airframe aero retune (data) → custom C++ renderer polish (no seal) → guns/projectiles (new seal).

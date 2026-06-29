@@ -1,0 +1,22 @@
+{
+  "header": {
+    "id": "GOLDEN-SK-Pitch-001",
+    "version": 160,
+    "seal": "ATM-Sphere v1.6r0",
+    "description": "P-51 wings-level pitch program that pins the B2 flight-path-angle integrator and the pitch<->energy coupling. Settle at 1 g, then pull g=1.8 (nose rotates up, gamma climbs, altitude is earned, induced drag + gravity bleed speed = a zoom climb), then push to g=0.3 (nose drops, gamma goes negative, the dive rebuilds speed), then back to 1 g. Stays well inside +/-90 deg so the cos(gamma)->0 vertical singularity is never approached. NEW golden for B2 (seal v1.6r0)."
+  },
+  "ticks": 3000,
+  "aircraft": [
+    {
+      "envelope": "p51",
+      "start": { "lat_deg": 0.0, "lon_deg": 0.0, "psi_deg": 45.0, "phi_deg": 0.0, "alt_m": 3000.0, "tas_mps": 200.0 },
+      "schedule": [
+        { "start_tick": 0,    "bank_deg": 0.0, "g_cmd": 1.0, "throttle": 0.8 },
+        { "start_tick": 300,  "bank_deg": 0.0, "g_cmd": 1.8, "throttle": 0.8 },
+        { "start_tick": 1000, "bank_deg": 0.0, "g_cmd": 0.3, "throttle": 0.8 },
+        { "start_tick": 1900, "bank_deg": 0.0, "g_cmd": 1.0, "throttle": 0.8 },
+        { "start_tick": 3000, "bank_deg": 0.0, "g_cmd": 1.0, "throttle": 0.8 }
+      ]
+    }
+  ]
+}

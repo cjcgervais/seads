@@ -5,7 +5,7 @@ gen_scenario_params.py — emit src/kernel/scenario_params.h from config/scenari
 For each scenario, emits the scripted-timeline inputs as exact hex-float / u32 literals so the
 C++ scenario runner (seads_scenario) drives BIT-IDENTICAL inputs to tools/ref_kernel.py:
   * start state angles are pre-converted to radians via the same deg2rad as the reference,
-  * scheduled bank targets are pre-converted to radians, climb targets stay m/s,
+  * scheduled bank targets are pre-converted to radians, g_cmd (load factor) is dimensionless,
   * envelopes are referenced as &envtab::<NAME> from the generated envelope_tables.h.
 CI checks sync with --check.
 
@@ -45,7 +45,7 @@ def build():
         "#pragma once",
         '#include "envelope_tables.h"',
         "namespace seads { namespace scen {",
-        "struct Phase  { unsigned start_tick; double target_phi; double target_climb; };",
+        "struct Phase  { unsigned start_tick; double target_phi; double target_g; double throttle; };",
         "struct AcSpec { double lat, lon, psi, phi, alt, tas;",
         "                const Envelope* env; const Phase* sched; unsigned n_phase; };",
         "struct Scenario { const char* id; unsigned ticks; const AcSpec* ac; unsigned n_ac; };",
@@ -62,7 +62,7 @@ def build():
             rows = []
             for ph in ac["schedule"]:
                 rows.append(f"  {{{int(ph['start_tick'])}u, {hx(deg2rad(ph['bank_deg']))}, "
-                            f"{hx(ph['climb_mps'])}}}")
+                            f"{hx(ph['g_cmd'])}, {hx(ph.get('throttle', 0.0))}}}")
             L.append(",\n".join(rows))
             L.append("};")
         # aircraft array

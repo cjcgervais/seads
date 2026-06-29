@@ -5,9 +5,9 @@ namespace seads {
 namespace netsnap {
 
 EntityState from_kernel(int64_t id, double lat_rad, double lon_rad, double psi_rad,
-                        double alt_m, double phi_rad, double tas_mps) {
+                        double alt_m, double phi_rad, double tas_mps, double gamma_rad) {
     return EntityState{id, lat_rad * RAD2DEG, lon_rad * RAD2DEG, psi_rad * RAD2DEG, alt_m,
-                       phi_rad * RAD2DEG, tas_mps};
+                       phi_rad * RAD2DEG, tas_mps, gamma_rad * RAD2DEG};
 }
 
 // Wire framing: header (protocol, server_tick, n), then the GEO section n*(id, GeoPoint),
@@ -27,6 +27,8 @@ void encode_snapshot(const Snapshot& s, std::vector<uint8_t>& out) {
             geo001::encode_i64(e.id, out);
             geo001::encode_i64(geo001::quantize(e.phi_deg, PHI_SCALE), out);
             geo001::encode_i64(geo001::quantize(e.tas_mps, SPEED_SCALE), out);
+            if (s.protocol >= 3)        // KIN-002: gamma (flight-path angle)
+                geo001::encode_i64(geo001::quantize(e.gamma_deg, GAMMA_SCALE), out);
         }
     }
 }
@@ -59,6 +61,12 @@ bool decode_snapshot(const uint8_t* data, size_t len, size_t& pos, Snapshot& out
             if (!geo001::decode_i64(data, len, pos, tas_q)) return false;
             out.entities[static_cast<size_t>(i)].phi_deg = geo001::dequantize(phi_q, PHI_SCALE);
             out.entities[static_cast<size_t>(i)].tas_mps = geo001::dequantize(tas_q, SPEED_SCALE);
+            if (out.protocol >= 3) {    // KIN-002: gamma (flight-path angle)
+                int64_t gamma_q = 0;
+                if (!geo001::decode_i64(data, len, pos, gamma_q)) return false;
+                out.entities[static_cast<size_t>(i)].gamma_deg =
+                    geo001::dequantize(gamma_q, GAMMA_SCALE);
+            }
         }
     }
     return true;

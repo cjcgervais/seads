@@ -20,11 +20,13 @@ class Kernel {
 public:
     explicit Kernel(const Rails& r) : rails_(r) {}
 
-    // returns index of the new aircraft
-    std::size_t add(double lat, double lon, double psi, double phi, double alt, double tas);
+    // returns index of the new aircraft. gamma (flight-path angle, rad) defaults to 0 (level).
+    std::size_t add(double lat, double lon, double psi, double phi, double alt, double tas,
+                    double gamma = 0.0);
 
-    void step();                  // straight golden: climb input = 0, phi unchanged
-    // envelope-driven step: cmd[i] = per-aircraft (target_phi, target_climb); env[i] = its envelope.
+    void step();                  // straight golden: pure kinematic tail, phi/gamma unchanged
+    // envelope-driven step (B2): cmd[i] = per-aircraft (target_phi, target_g, throttle); env[i] =
+    // its envelope. Full 3-DOF point mass: gamma is a real state, altitude is earned.
     void step(const std::vector<Command>& cmd, const std::vector<const Envelope*>& env);
     void run(std::uint32_t ticks);
 
@@ -38,6 +40,7 @@ public:
     double phi(std::size_t i) const { return phi_[i]; }
     double alt(std::size_t i) const { return alt_[i]; }
     double tas(std::size_t i) const { return tas_[i]; }
+    double gamma(std::size_t i) const { return gamma_[i]; }
 
 private:
     // Kinematic tail for aircraft i (coordinated-turn + great-circle + ceiling-clamped vertical).
@@ -45,7 +48,7 @@ private:
     void advance_(std::size_t i, double req);
 
     Rails rails_;
-    std::vector<double> lat_, lon_, psi_, phi_, alt_, tas_;
+    std::vector<double> lat_, lon_, psi_, phi_, alt_, tas_, gamma_;
 };
 
 }  // namespace seads

@@ -30,31 +30,33 @@ namespace {
 constexpr double PI_      = 0x1.921fb54442d18p+1;  // matches det_math / netsnap
 constexpr double DEG2RAD  = PI_ / 180.0;
 
-// A non-sealed maneuver schedule. Degrees in, converted to kernel radians at add time.
-struct Phase { unsigned start_tick; double target_phi_deg; double target_climb_mps; };
+// A non-sealed maneuver schedule. Degrees in, converted to kernel radians at add time. B2: the
+// vertical input is now a commanded load factor g (target_g); a level turn at bank b uses
+// g~1/cos(b), g above that climbs, below descends. throttle [0,1] sustains energy.
+struct Phase { unsigned start_tick; double target_phi_deg; double target_g; double throttle; };
 struct Ac    { int64_t id; double lat_deg, lon_deg, psi_deg, phi_deg, alt_m, tas_mps;
                const Envelope* env; std::vector<Phase> sched; };
 struct Flight { std::string id; unsigned ticks; std::vector<Ac> ac; };
 
 // Built-in 3-ship demo (NOT a golden — recorder is downstream of the seal). A KI-61, a Spitfire
 // and a Bf 109 break in different directions over the tiny R=15 km globe so remote-interpolation
-// is actually visible: banked turns at different rates, two of them climbing through the band.
+// is actually visible: banked turns at different rates, two of them pulling g to climb.
 Flight make_demo() {
     Flight f;
     f.id = "DEMO-3SHIP";
     f.ticks = 6000;  // 60 s at 100 Hz
     f.ac.push_back(Ac{0,  0.0,   0.0,  45.0, 0.0, 2000.0, 170.0, &envtab::KI61, {
-        {0,   0.0, 0.0},
-        {150, 55.0, 6.0},     // hard left bank + climb
-        {3000, -40.0, 0.0}}});
+        {0,   0.0,  1.0,  0.85},
+        {150, 55.0, 1.85, 0.85},   // hard left bank, pull to turn + climb
+        {3000, -40.0, 1.0, 0.85}}});
     f.ac.push_back(Ac{1, 8.0,   6.0,  90.0, 0.0, 3500.0, 200.0, &envtab::SPITFIRE_MK5, {
-        {0,   0.0, 0.0},
-        {300, -50.0, -4.0},   // right bank, gentle descent
-        {2500, 50.0, 5.0}}});
+        {0,   0.0,  1.05, 0.85},
+        {300, -50.0, 1.45, 0.85},  // right bank, sustained-ish turn
+        {2500, 50.0, 1.65, 0.85}}});
     f.ac.push_back(Ac{2, -6.0, -4.0, 200.0, 0.0, 1500.0, 150.0, &envtab::BF109F4, {
-        {0,   0.0, 4.0},
-        {800, 45.0, 8.0},     // climbing turn
-        {4000, 0.0, 0.0}}});
+        {0,   0.0,  1.15, 0.9},     // gentle climb
+        {800, 45.0, 1.55, 0.9},     // climbing turn
+        {4000, 0.0, 1.0,  0.9}}});
     return f;
 }
 
@@ -73,7 +75,7 @@ Flight from_scenario(const scen::Scenario& S) {
         ac.env = s.env;
         for (unsigned j = 0; j < s.n_phase; ++j)
             ac.sched.push_back(Phase{s.sched[j].start_tick, s.sched[j].target_phi,
-                                     s.sched[j].target_climb});  // already radians
+                                     s.sched[j].target_g, s.sched[j].throttle});  // phi already radians
         f.ac.push_back(ac);
     }
     return f;
@@ -101,7 +103,8 @@ void command_at(const Flight& f, unsigned t, bool deg, std::vector<Command>& cmd
         }
         double phi = sched[idx].target_phi_deg;
         cmd[a].target_phi = deg ? phi * DEG2RAD : phi;     // sealed scheds store radians
-        cmd[a].target_climb = sched[idx].target_climb_mps;
+        cmd[a].target_g = sched[idx].target_g;
+        cmd[a].throttle = sched[idx].throttle;
     }
 }
 
@@ -114,7 +117,7 @@ netsnap::Snapshot capture(const Kernel& k, const Flight& f, uint32_t tick,
     snap.server_tick = static_cast<int64_t>(tick);
     for (std::size_t a = 0; a < f.ac.size(); ++a) {
         snap.entities.push_back(netsnap::from_kernel(
-            f.ac[a].id, k.lat(a), k.lon(a), k.psi(a), k.alt(a), k.phi(a), k.tas(a)));
+            f.ac[a].id, k.lat(a), k.lon(a), k.psi(a), k.alt(a), k.phi(a), k.tas(a), k.gamma(a)));
     }
     wire.clear();
     netsnap::encode_snapshot(snap, wire);
@@ -143,9 +146,10 @@ void write_js(const std::string& path, const client::RecordingMeta& meta, const 
             const auto& en = fr.entities[e];
             std::fprintf(fp,
                 "{\"id\":%lld,\"lat\":%.7f,\"lon\":%.7f,\"brg\":%.6f,\"alt\":%.3f,"
-                "\"phi\":%.6f,\"tas\":%.3f}%s",
+                "\"phi\":%.6f,\"tas\":%.3f,\"gamma\":%.6f}%s",
                 static_cast<long long>(en.id), en.lat_deg, en.lon_deg, en.bearing_deg,
-                en.alt_m, en.phi_deg, en.tas_mps, (e + 1 < fr.entities.size()) ? "," : "");
+                en.alt_m, en.phi_deg, en.tas_mps, en.gamma_deg,
+                (e + 1 < fr.entities.size()) ? "," : "");
         }
         std::fprintf(fp, "]}%s\n", (fi + 1 < frames.size()) ? "," : "");
     }

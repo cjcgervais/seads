@@ -3,40 +3,63 @@
 #pragma once
 #include "envelope_tables.h"
 namespace seads { namespace scen {
-struct Phase  { unsigned start_tick; double target_phi; double target_climb; };
+struct Phase  { unsigned start_tick; double target_phi; double target_g; double throttle; };
 struct AcSpec { double lat, lon, psi, phi, alt, tas;
                 const Envelope* env; const Phase* sched; unsigned n_phase; };
 struct Scenario { const char* id; unsigned ticks; const AcSpec* ac; unsigned n_ac; };
+constexpr Phase GOLDEN_SK_ACCEL_001_AC0_SCHED[] = {
+  {0u, 0x0.0p+0, 0x1.0000000000000p+0, 0x0.0p+0},
+  {500u, 0x0.0p+0, 0x1.0000000000000p+0, 0x1.0000000000000p+0},
+  {3000u, 0x0.0p+0, 0x1.0000000000000p+0, 0x0.0p+0},
+  {5000u, 0x0.0p+0, 0x1.0000000000000p+0, 0x0.0p+0}
+};
+constexpr AcSpec GOLDEN_SK_ACCEL_001_AC[] = {
+  { 0x0.0p+0, 0x0.0p+0, 0x1.921fb54442d18p+0, 0x0.0p+0, 0x1.f400000000000p+10, 0x1.e000000000000p+6, &envtab::P51, GOLDEN_SK_ACCEL_001_AC0_SCHED, 4u }
+};
+constexpr Scenario GOLDEN_SK_ACCEL_001 = { "GOLDEN-SK-Accel-001", 5000u, GOLDEN_SK_ACCEL_001_AC, 1u };
 constexpr Phase GOLDEN_SK_CLIMB_001_AC0_SCHED[] = {
-  {0u, 0x0.0p+0, 0x0.0p+0},
-  {100u, 0x0.0p+0, 0x1.8000000000000p+3},
-  {3000u, 0x0.0p+0, 0x1.8000000000000p+3}
+  {0u, 0x0.0p+0, 0x1.0000000000000p+0, 0x1.ccccccccccccdp-1},
+  {100u, 0x0.0p+0, 0x1.4cccccccccccdp+0, 0x1.ccccccccccccdp-1},
+  {700u, 0x0.0p+0, 0x1.0000000000000p+0, 0x1.ccccccccccccdp-1},
+  {3000u, 0x0.0p+0, 0x1.0000000000000p+0, 0x1.ccccccccccccdp-1}
 };
 constexpr AcSpec GOLDEN_SK_CLIMB_001_AC[] = {
-  { 0x0.0p+0, 0x0.0p+0, 0x1.921fb54442d18p+0, 0x0.0p+0, 0x1.e780000000000p+12, 0x1.4000000000000p+6, &envtab::BF109F4, GOLDEN_SK_CLIMB_001_AC0_SCHED, 3u }
+  { 0x0.0p+0, 0x0.0p+0, 0x1.921fb54442d18p+0, 0x0.0p+0, 0x1.e780000000000p+12, 0x1.4000000000000p+6, &envtab::BF109F4, GOLDEN_SK_CLIMB_001_AC0_SCHED, 4u }
 };
 constexpr Scenario GOLDEN_SK_CLIMB_001 = { "GOLDEN-SK-Climb-001", 3000u, GOLDEN_SK_CLIMB_001_AC, 1u };
+constexpr Phase GOLDEN_SK_PITCH_001_AC0_SCHED[] = {
+  {0u, 0x0.0p+0, 0x1.0000000000000p+0, 0x1.999999999999ap-1},
+  {300u, 0x0.0p+0, 0x1.ccccccccccccdp+0, 0x1.999999999999ap-1},
+  {1000u, 0x0.0p+0, 0x1.3333333333333p-2, 0x1.999999999999ap-1},
+  {1900u, 0x0.0p+0, 0x1.0000000000000p+0, 0x1.999999999999ap-1},
+  {3000u, 0x0.0p+0, 0x1.0000000000000p+0, 0x1.999999999999ap-1}
+};
+constexpr AcSpec GOLDEN_SK_PITCH_001_AC[] = {
+  { 0x0.0p+0, 0x0.0p+0, 0x1.921fb54442d18p-1, 0x0.0p+0, 0x1.7700000000000p+11, 0x1.9000000000000p+7, &envtab::P51, GOLDEN_SK_PITCH_001_AC0_SCHED, 5u }
+};
+constexpr Scenario GOLDEN_SK_PITCH_001 = { "GOLDEN-SK-Pitch-001", 3000u, GOLDEN_SK_PITCH_001_AC, 1u };
 constexpr Phase GOLDEN_SK_TURN_001_AC0_SCHED[] = {
-  {0u, 0x0.0p+0, 0x0.0p+0},
-  {200u, 0x1.921fb54442d18p-1, 0x0.0p+0},
-  {6000u, 0x1.921fb54442d18p-1, 0x0.0p+0}
+  {0u, 0x0.0p+0, 0x1.0000000000000p+0, 0x1.b333333333333p-1},
+  {200u, 0x1.921fb54442d18p-1, 0x1.6a09e667f3bcdp+0, 0x1.b333333333333p-1},
+  {6000u, 0x1.921fb54442d18p-1, 0x1.6a09e667f3bcdp+0, 0x1.b333333333333p-1}
 };
 constexpr AcSpec GOLDEN_SK_TURN_001_AC[] = {
   { 0x0.0p+0, 0x0.0p+0, 0x1.921fb54442d18p-1, 0x0.0p+0, 0x1.f400000000000p+9, 0x1.1800000000000p+7, &envtab::KI61, GOLDEN_SK_TURN_001_AC0_SCHED, 3u }
 };
 constexpr Scenario GOLDEN_SK_TURN_001 = { "GOLDEN-SK-Turn-001", 6000u, GOLDEN_SK_TURN_001_AC, 1u };
 constexpr Phase GOLDEN_SK_TURNCLIMB_001_AC0_SCHED[] = {
-  {0u, 0x0.0p+0, 0x0.0p+0},
-  {150u, 0x1.921fb54442d18p-1, 0x0.0p+0},
-  {800u, 0x1.921fb54442d18p-1, 0x1.0000000000000p+3},
-  {4000u, 0x1.921fb54442d18p-1, 0x1.0000000000000p+3}
+  {0u, 0x0.0p+0, 0x1.0000000000000p+0, 0x1.ccccccccccccdp-1},
+  {150u, 0x1.921fb54442d18p-1, 0x1.6a09e667f3bcdp+0, 0x1.ccccccccccccdp-1},
+  {800u, 0x1.921fb54442d18p-1, 0x1.b333333333333p+0, 0x1.ccccccccccccdp-1},
+  {1600u, 0x1.921fb54442d18p-1, 0x1.6a09e667f3bcdp+0, 0x1.ccccccccccccdp-1},
+  {4000u, 0x1.921fb54442d18p-1, 0x1.6a09e667f3bcdp+0, 0x1.ccccccccccccdp-1}
 };
 constexpr AcSpec GOLDEN_SK_TURNCLIMB_001_AC[] = {
-  { 0x0.0p+0, 0x0.0p+0, 0x0.0p+0, 0x0.0p+0, 0x1.7700000000000p+11, 0x1.e000000000000p+6, &envtab::SPITFIRE_MK5, GOLDEN_SK_TURNCLIMB_001_AC0_SCHED, 4u }
+  { 0x0.0p+0, 0x0.0p+0, 0x0.0p+0, 0x0.0p+0, 0x1.7700000000000p+11, 0x1.e000000000000p+6, &envtab::SPITFIRE_MK5, GOLDEN_SK_TURNCLIMB_001_AC0_SCHED, 5u }
 };
 constexpr Scenario GOLDEN_SK_TURNCLIMB_001 = { "GOLDEN-SK-TurnClimb-001", 4000u, GOLDEN_SK_TURNCLIMB_001_AC, 1u };
 constexpr const Scenario* ALL[] = {
-    &GOLDEN_SK_CLIMB_001, &GOLDEN_SK_TURN_001, &GOLDEN_SK_TURNCLIMB_001
+    &GOLDEN_SK_ACCEL_001, &GOLDEN_SK_CLIMB_001, &GOLDEN_SK_PITCH_001, &GOLDEN_SK_TURN_001, &GOLDEN_SK_TURNCLIMB_001
 };
-constexpr unsigned N_ALL = 3u;
+constexpr unsigned N_ALL = 5u;
 }} // namespace seads::scen

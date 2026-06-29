@@ -14,7 +14,8 @@ Canonical snapshot format (little-endian), so C++ and Python produce identical b
   offset 16 : f64  R_m
   offset 24 : u32  n_aircraft
   offset 28 : u32  pad (0)
-  offset 32 : per aircraft, 6 x f64 = [lat, lon, psi, phi, alt, tas]  (radians / meters / m s^-1)
+  offset 32 : per aircraft, 7 x f64 = [lat, lon, psi, phi, alt, tas, gamma]
+              (radians / meters / m s^-1 / radians)  -- gamma (flight-path angle) added in B2 (v1.6r0)
 
 world_hash = SHA-256 of the snapshot bytes.
 
@@ -31,6 +32,22 @@ import detmath_ref as dm
 import envelopes as envmod
 
 ROOT = Path(__file__).resolve().parent.parent
+
+# --- B1 longitudinal-energy model constants (ATM-Sphere v1.5r0) -------------------------
+# Exact hex-float literals so Python and C++ (kernel.cpp) share identical bit patterns.
+# RHO0: constant sea-level ISA air density (the "still air / constant atmosphere" rail; ISA
+# density-vs-altitude is deferred to B5). V_MIN: hard speed floor keeping psi_dot = g0*tan(phi)/V
+# and the drag solve well-defined (a real stall model is B3). See ADR-Step8-FlightModel-B1.
+RHO0 = float.fromhex('0x1.399999999999ap+0')   # 1.225 kg/m^3
+V_MIN = float.fromhex('0x1.e000000000000p+4')   # 30.0 m/s
+
+# --- B2 lift-&-pitch constants (ATM-Sphere v1.6r0) --------------------------------------
+# Global placeholder structural clamp on the commanded load factor n. Per-airframe C_Lmax /
+# accelerated stall / structural-g (and the corner speed that falls out) are deferred to B3;
+# here n is only bounded to keep the aero/attitude solve well-defined. Exact hex-floats so
+# Python and C++ (kernel.cpp) parse identical bits. See ADR-Step8-FlightModel-B2.
+N_MIN = float.fromhex('-0x1.8000000000000p+1')  # -3.0  (push-over / negative g)
+N_MAX = float.fromhex('0x1.2000000000000p+3')   # +9.0  (hard pull)
 
 
 def clamp(v, lo, hi):
@@ -72,10 +89,13 @@ def ceiling_climb_rate(requested_mps, alt, atm_top, soft):
 
 
 class Aircraft:
-    __slots__ = ("lat", "lon", "psi", "phi", "alt", "tas")
+    # B2 (v1.6r0): gamma (flight-path angle, rad) is a real stored state. Defaults to 0.0 so the
+    # no-arg straight golden and any 6-tuple caller still build a level-flying aircraft.
+    __slots__ = ("lat", "lon", "psi", "phi", "alt", "tas", "gamma")
 
-    def __init__(self, lat, lon, psi, phi, alt, tas):
+    def __init__(self, lat, lon, psi, phi, alt, tas, gamma=0.0):
         self.lat, self.lon, self.psi, self.phi, self.alt, self.tas = lat, lon, psi, phi, alt, tas
+        self.gamma = gamma
 
 
 class Kernel:
@@ -111,13 +131,26 @@ class Kernel:
             self._advance(ac, req)
 
     def step_scenario(self, commands, envelopes):
-        """Envelope-driven step. commands[i] = (target_phi_rad, target_climb_mps);
-        envelopes[i] = dict of radian LUTs from envelopes.load_envelope. Op order is the
-        sealed byte spec and MUST match Kernel::step(cmd,env) in kernel.cpp exactly."""
-        dt = self.dt
+        """Envelope-driven step. commands[i] = (target_phi_rad, target_g[, throttle]);
+        throttle defaults to 0.0 if absent. envelopes[i] = dict from envelopes.load_envelope.
+        Op order is the sealed byte spec and MUST match Kernel::step(cmd,env) in kernel.cpp exactly.
+
+        B2 (v1.6r0): full 3-DOF point-mass step. Pitch is now REAL: flight-path angle gamma is a
+        stored state, driven by the commanded load factor n (g-command) through the lift vector.
+        Altitude is EARNED (alt_dot = V*sin gamma); pulling g raises induced drag and bleeds speed
+        (energy-vs-turn in the pitch plane). It strictly generalizes the B1 kinematics:
+          - wings level (phi=0), n=1, gamma=0 -> level flight;
+          - level coordinated turn n=1/cos(phi), gamma=0 -> psi_dot = g0*tan(phi)/V (the old law).
+        Rates use the UPDATED speed Vnew (mirrors B1's advance_); the velocity-vector trig uses the
+        OLD gamma, position uses the NEW gamma. cos(gamma)->0 (vertical) is a documented singularity
+        in psi_dot; scenarios/viewer stay well inside +/-90 deg (real loop/vertical handling is post-B3).
+        See ADR-Step8-FlightModel-B2."""
+        dt, g0 = self.dt, self.g0
+        R, atm_top, soft = self.R, self.atm_top, self.soft
         for i, ac in enumerate(self.aircraft):
             V = ac.tas
             e = envelopes[i]
+            # --- bank dynamics (unchanged from B1): slew toward clamped target at roll_rate(V) ---
             phimax = dm.lut_eval(e["phi_max"][0], e["phi_max"][1], V)
             rollrate = dm.lut_eval(e["roll_rate"][0], e["roll_rate"][1], V)
             cmdphi = clamp(commands[i][0], -phimax, phimax)
@@ -126,10 +159,45 @@ class Kernel:
             delta = clamp(delta, -step_max, step_max)
             ac.phi = ac.phi + delta
             ac.phi = clamp(ac.phi, -phimax, phimax)
-            climbmax = dm.lut_eval(e["climb_max"][0], e["climb_max"][1], V)
-            climbmin = dm.lut_eval(e["climb_min"][0], e["climb_min"][1], V)
-            req = clamp(commands[i][1], climbmin, climbmax)
-            self._advance(ac, req)
+            # --- commanded load factor (global placeholder clamp; per-airframe C_Lmax = B3) ---
+            n = clamp(commands[i][1], N_MIN, N_MAX)
+            # --- trig of NEW phi and OLD gamma (single eval, fixed order) ---
+            cphi = dm.det_cos(ac.phi)
+            sphi = dm.det_sin(ac.phi)
+            cg = dm.det_cos(ac.gamma)
+            sg = dm.det_sin(ac.gamma)
+            # --- drag/thrust with current V and load factor n (B1 algebra; +,-,*,/ and det_* only) ---
+            q = 0.5 * RHO0 * V * V                        # dynamic pressure
+            qS = q * e["wing_area_m2"]
+            L = n * e["mass_kg"] * g0                     # lift = n * weight
+            CL = L / qS
+            Dp = qS * e["cd0"]                            # parasitic drag
+            Di = e["induced_k"] * CL * CL * qS            # induced drag (rises with n -> g bleeds speed)
+            D = Dp + Di
+            thr = clamp(commands[i][2] if len(commands[i]) > 2 else 0.0, 0.0, 1.0)
+            T = thr * e["thrust_static_n"] * (1.0 - V / e["v_max_mps"])
+            if T < 0.0:
+                T = 0.0
+            # --- speed: gravity now acts along the flight path (uses OLD gamma) ---
+            Vdot = (T - D) / e["mass_kg"] - g0 * sg
+            Vnew = V + Vdot * dt
+            if Vnew < V_MIN:
+                Vnew = V_MIN
+            ac.tas = Vnew
+            # --- flight-path angle integrates (uses Vnew, OLD gamma), then track heading turns ---
+            gdot = (g0 / Vnew) * (n * cphi - cg)
+            ac.gamma = ac.gamma + gdot * dt
+            psidot = (g0 / Vnew) * (n * sphi / cg)
+            ac.psi = dm.wrap_2pi(ac.psi + psidot * dt)
+            # --- horizontal great-circle advance: ground speed = Vnew*cos(NEW gamma) ---
+            cgN = dm.det_cos(ac.gamma)
+            s = Vnew * cgN * dt
+            ac.lat, ac.lon = great_circle_step(ac.lat, ac.lon, ac.psi, s, R)
+            # --- altitude EARNED: vertical rate Vnew*sin(NEW gamma), ceiling soft-band predamp + clamp ---
+            sgN = dm.det_sin(ac.gamma)
+            w = Vnew * sgN
+            w_eff = ceiling_climb_rate(w, ac.alt, atm_top, soft)
+            ac.alt = clamp(ac.alt + w_eff * dt, 0.0, atm_top)
 
     def run(self, ticks):
         for _ in range(ticks):
@@ -140,7 +208,7 @@ class Kernel:
         buf += struct.pack("<HHIddII", 1, 0, tick_count & 0xFFFFFFFF,
                            self.dt, self.R, len(self.aircraft), 0)
         for ac in self.aircraft:
-            buf += struct.pack("<6d", ac.lat, ac.lon, ac.psi, ac.phi, ac.alt, ac.tas)
+            buf += struct.pack("<7d", ac.lat, ac.lon, ac.psi, ac.phi, ac.alt, ac.tas, ac.gamma)
         return bytes(buf)
 
 
@@ -194,7 +262,8 @@ def run_scenario(k, ticks, schedules, envelopes):
                 else:
                     break
             ph = sched[idx]
-            cmds.append((deg2rad(ph["bank_deg"]), float(ph["climb_mps"])))
+            thr = float(ph.get("throttle", 0.0))
+            cmds.append((deg2rad(ph["bank_deg"]), float(ph["g_cmd"]), thr))
         k.step_scenario(cmds, envelopes)
 
 

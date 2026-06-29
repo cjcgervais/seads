@@ -23,7 +23,8 @@ int main() {
         for (int e = 0; e < v.n_entities; ++e) {
             const auto& se = v.entities[e];
             snap.entities.push_back(netsnap::EntityState{
-                se.id, se.lat_deg, se.lon_deg, se.bearing_deg, se.alt_m, se.phi_deg, se.tas_mps});
+                se.id, se.lat_deg, se.lon_deg, se.bearing_deg, se.alt_m, se.phi_deg, se.tas_mps,
+                se.gamma_deg});
         }
 
         std::vector<uint8_t> wire;
@@ -58,7 +59,9 @@ int main() {
                 geo001::quantize(b.phi_deg, netsnap::PHI_SCALE)
                     != geo001::quantize(a.phi_deg, netsnap::PHI_SCALE) ||
                 geo001::quantize(b.tas_mps, netsnap::SPEED_SCALE)
-                    != geo001::quantize(a.tas_mps, netsnap::SPEED_SCALE)) {
+                    != geo001::quantize(a.tas_mps, netsnap::SPEED_SCALE) ||
+                geo001::quantize(b.gamma_deg, netsnap::GAMMA_SCALE)
+                    != geo001::quantize(a.gamma_deg, netsnap::GAMMA_SCALE)) {
                 same = false;
             }
         }
