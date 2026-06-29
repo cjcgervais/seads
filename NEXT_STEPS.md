@@ -78,10 +78,14 @@ Currently the bit-exact C++ test uses a fixed 64-vector table. Add a randomized 
 (seeded) comparing C++ vs the reference over each function's full SEADS domain, and grow
 `tools/gen_detmath_vectors.py` ranges. Keep tolerances exact (bit-equal) for C++↔reference.
 
-### 3. Complete the 8-aircraft tuning envelopes (data-only seals)
-Only `data/tuning/envelopes/ki61.json` exists. Add the other 7 (P-47D, Bf 109 F-4, A6M2, Yak-3,
-La-7, Spitfire Mk V, P-51). Each: ADR (`/seal` or data-only flow) + `tuning_probe.py` PASS +
-optional `hash_sign_json.py`. Golden world_hash stays unchanged (data-only).
+### 3. Complete the 8-aircraft tuning envelopes (data-only)  ✅ DONE (2026-06-28)
+All 8 roster envelopes now exist under `data/tuning/envelopes/` (p47d, bf109f4, a6m2, yak3, la7,
+spitfire_mk5, p51 + existing ki61). Data-only — golden unchanged (`529c6a05…9218fe16`), seal v1.2r0.
+Ledger: `docs/adr/ADR-roster-envelopes-v1.2r0.md`, `docs/cards/FORGE_AUDIT_CARD-roster-envelopes-v1.2r0.md`,
+receipt `docs/receipts/receipt-ATM-Sphere_v1.2r0-0a7a258.yml` (overall PASS). CI green (run 28341209641);
+`tuning_probe.py` validates all 8; `make_receipt.py` tuning gate now globs all envelopes (was ki61-only).
+- Values are an initial balance pass (relative airframe strengths; retuning later stays data-only).
+- Optional follow-up: `hash_sign_json.py` to sign each envelope (not yet applied).
 
 ### 4. Wire the kernel to use envelopes + climb/bank inputs
 Today the kernel ignores tuning (golden flies straight, φ=0, no climb). Feed `phi`, `tas`, and
