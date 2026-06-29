@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<!--
+  SEADS web globe viewer (Step 5) — DOWNSTREAM-ONLY presentation.
+  Plays back a recorded ATM-Sphere flight (trajectory.js, produced by seads_record) on a 3D globe
+  with the SAME layer-4a interpolation the C++ client uses: linear lat/alt, shortest-arc lon &
+  bearing, ~100 ms render delay. It reads decoded GEO-001/KIN-001 wire frames only — it never
+  touches the kernel or a world_hash. No build step: open this file in a browser.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>SEADS — ATM-Sphere globe viewer</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: #05070d; overflow: hidden;
+    font: 13px/1.45 ui-monospace, "Cascadia Code", Menlo, Consolas, monospace; color: #cdd6e4; }
+  #app { position: fixed; inset: 0; }
+  #hud { position: fixed; top: 12px; left: 12px; padding: 12px 14px; max-width: 460px;
+    background: rgba(8,12,22,0.72); border: 1px solid #1d2c44; border-radius: 8px;
+    backdrop-filter: blur(6px); pointer-events: none; }
+  #hud h1 { margin: 0 0 4px; font-size: 14px; letter-spacing: .03em; color: #eaf2ff; }
+  #hud .sub { color: #7d8aa3; margin-bottom: 8px; }
+  #craft { display: grid; gap: 3px; }
+  #craft .row { white-space: pre; }
+  .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px;
+    vertical-align: middle; }
+  #controls { position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%);
+    display: flex; align-items: center; gap: 12px; padding: 10px 16px;
+    background: rgba(8,12,22,0.82); border: 1px solid #1d2c44; border-radius: 999px; }
+  #controls button { background: #16233b; color: #dce6f7; border: 1px solid #2b3e60;
+    border-radius: 6px; padding: 5px 12px; cursor: pointer; font: inherit; }
+  #controls button:hover { background: #1d3052; }
+  #controls input[type=range] { width: 320px; accent-color: #4f9dff; }
+  #controls .clock { color: #9fb3d4; min-width: 96px; text-align: right; }
+  #controls label { color: #7d8aa3; }
+  #err { position: fixed; inset: 0; display: none; place-items: center; text-align: center;
+    padding: 40px; color: #ff9a9a; }
+  #err code { color: #ffd28a; }
+</style>
+</head>
+<body>
+  <div id="app"></div>
+  <div id="hud">
+    <h1>SEADS — ATM-Sphere</h1>
+    <div class="sub" id="meta">loading…</div>
+    <div id="craft"></div>
+  </div>
+  <div id="controls">
+    <button id="play">⏸ pause</button>
+    <span class="clock" id="clock">0.00s</span>
+    <input id="scrub" type="range" min="0" max="1000" value="0" />
+    <label>speed</label>
+    <select id="speed">
+      <option value="0.25">0.25×</option>
+      <option value="0.5">0.5×</option>
+      <option value="1" selected>1×</option>
+      <option value="2">2×</option>
+      <option value="4">4×</option>
+    </select>
+  </div>
+  <div id="err"></div>
+
+  <!-- Recorded flight (window.SEADS_TRAJECTORY). Regenerate with: seads_record --demo --js src/client/web/trajectory.js -->
+  <script src="trajectory.js"></script>
+  <script type="importmap">
+  { "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  } }
+  </script>
+  <script type="module" src="viewer.js"></script>
+</body>
+</html>

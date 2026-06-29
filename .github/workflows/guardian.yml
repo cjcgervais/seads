@@ -111,6 +111,7 @@ jobs:
             echo "ltest=build/Release/seads_lockstep_test.exe" >> "$GITHUB_OUTPUT"
             echo "itest=build/Release/seads_interp_test.exe" >> "$GITHUB_OUTPUT"
             echo "ptest=build/Release/seads_predict_test.exe" >> "$GITHUB_OUTPUT"
+            echo "cltest=build/Release/seads_client_test.exe" >> "$GITHUB_OUTPUT"
           else
             echo "golden=build/seads_golden" >> "$GITHUB_OUTPUT"
             echo "scenario=build/seads_scenario" >> "$GITHUB_OUTPUT"
@@ -120,6 +121,7 @@ jobs:
             echo "ltest=build/seads_lockstep_test" >> "$GITHUB_OUTPUT"
             echo "itest=build/seads_interp_test" >> "$GITHUB_OUTPUT"
             echo "ptest=build/seads_predict_test" >> "$GITHUB_OUTPUT"
+            echo "cltest=build/seads_client_test" >> "$GITHUB_OUTPUT"
           fi
 
       - name: det_math bit-exact test
@@ -145,6 +147,10 @@ jobs:
       - name: Client-side prediction parity test
         shell: bash
         run: "${{ steps.bin.outputs.ptest }}"
+
+      - name: Client presentation test (globe + .seadsrec + playback)
+        shell: bash
+        run: "${{ steps.bin.outputs.cltest }}"
 
       - name: Run all goldens + hash + validate
         shell: bash

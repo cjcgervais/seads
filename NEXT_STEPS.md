@@ -9,20 +9,26 @@
 > (`seads-canon`, `seads-harness`).
 >
 > ## ► START HERE (next task)
-> **Step 6 (netcode) is COMPLETE through layer 4b — the multiplayer-flight MVP loop is done**
-> (predict own aircraft + interpolate remotes + `world_hash` desync tripwire + snapshot
-> correction/late-join). The two open tracks now are: **(A) Step 5 — custom C++ renderer**
-> (read-only, no seal; the natural consumer of the 4a interpolated remotes + 4b predicted own
-> state — recommended next for something to *look at*), and **(B)** non-roadmap: replace the
-> constant-TAS approximation with an energy/drag model (new seal, moves goldens). See **§5/§6**.
-> Layer 4b shipped under seal **v1.4r0** (KIN-001 wire reseal: phi/tas on the wire, snapshot
-> protocol 2; GEO-001 codec + all 4 goldens unchanged).
+> **Steps 1–6 are DONE and Step 5 (renderer) now has a working first cut.** The deterministic
+> core, the full netcode stack (layers 1–4b), AND a downstream renderer all exist. The renderer
+> ships a kernel-driven **trajectory recorder** (`seads_record` → `.seadsrec` GEO-001/KIN-001 wire
+> stream + `trajectory.js`), a pure unit-tested **client lib** (`globe`/`playback`, consuming the
+> 4a interpolation), a **verified web globe viewer** (`src/client/web/`, screenshot-proven), and
+> an optional **raylib viewer** (`-DSEADS_CLIENT=ON`, off in CI). All read-only, outside the
+> `world_hash`, **no seal** (rides v1.4r0). See **§5**.
+>
+> The open tracks now are: **(A) Step 5 polish** — wire a *live* local-input loop into the viewer
+> (the recorder/playback path is replay-only today), aircraft-model meshes + a chase/cockpit
+> camera, and feed `seads_predict` (4b) so the OWN ship is predicted live rather than replayed; and
+> **(B)** non-roadmap: replace the constant-TAS approximation with an energy/drag model (new seal,
+> moves goldens). After that, Step 7 (guns/projectiles — new seal, post-MVP). See **§5/§6/§7**.
 
 ## Where things stand (DONE)
 
 Deterministic core + governance harness up; bit-for-bit promise **proven in CI**; aircraft now
-maneuver within their tuning envelopes. Roadmap steps **1, 2, 3, 4 are DONE**; **Step 6 (netcode)
-is COMPLETE through layer 4b** — layer 1 (GEO-001 wire codec), layer 2 (20 Hz snapshot
+maneuver within their tuning envelopes. Roadmap steps **1, 2, 3, 4 are DONE**; **Step 5 (renderer)
+has a working first cut** (recorder + pure client lib + web globe viewer + optional raylib viewer —
+all downstream-only, ctest 7/7, no seal; §5); **Step 6 (netcode) is COMPLETE through layer 4b** — layer 1 (GEO-001 wire codec), layer 2 (20 Hz snapshot
 serialization), layer 3 (loopback lockstep desync tripwire), layer 4a (remote interpolation
 buffer), and **layer 4b (client-side prediction)** are all **DONE** (details in §6 below). Layer
 4b carried a **Tier-1 reseal** (v1.3r0 → **v1.4r0**) to put `phi`/`tas` on the wire via the new
@@ -72,8 +78,13 @@ remote states + 4b predicted own state.
   ```
   (g++, clang++, cmake, ninja all live in `$bin`/`$ninja`.)
 - Git on D:\ needed `git config --global --add safe.directory D:/SEADS_2026` (already done).
+  **Also set `git config --global --add safe.directory '*'`** — the D: filesystem doesn't record
+  ownership, so git flags every nested repo as "dubious ownership". Without the wildcard, the
+  renderer's `-DSEADS_CLIENT=ON` raylib **FetchContent** clone fails at the tag checkout (the clone
+  lands but `git checkout 5.5` is refused). Already applied.
 - PowerShell gotcha: do **not** redirect native-exe streams with `*>`/`2>&1` (wraps stderr as
-  errors and aborts). Pipe stdout normally; use `| Out-Null` to silence.
+  errors and aborts). Pipe stdout normally; use `| Out-Null` to silence. (For build logs, the Bash
+  tool with `> log 2>&1` works fine — that's how the raylib build was captured.)
 
 ## Verify everything still works (2 min)
 
@@ -177,22 +188,31 @@ ADR-Step4-Scenarios-v1.3r0, Forge card, SEAL_CARD v1.3r0, receipt -8b85a32.
 - TAS held constant (no energy/drag model) — a documented step-4 approximation to revisit in a later seal.
 - New goldens use scripted step-function schedules; richer maneuver scripting can extend the schema.
 
-### 5. Custom C++ renderer (post-core, decision 1A)  ← next pickup (option A: visual)
-Thin raylib/SDL+bgfx client reading kernel state read-only, with render-interpolation between
-100 Hz ticks. Renderer must never feed the sim. New `src/client/`. Needs a graphics lib added.
-**Hard rule:** the renderer is downstream-only — it reads a snapshot/`KernelState` and never writes
-back into sim state, never advances a tick, never seeds RNG the kernel sees. It lives **outside** the
-determinism gate, so it does **not** go through `det_math` and does **not** affect any `world_hash`
-(no seal). Suggested first moves for the next agent:
-- Add the graphics dep behind an **optional** CMake switch (e.g. `option(SEADS_CLIENT "build the
-  renderer" OFF)`) so `guardian.yml` and the headless gates never pull a GUI lib — keep CI kernel-only.
-  raylib is the least-friction choice (single dep, trivial CMake `FetchContent`).
-- Expose a read-only accessor on `Kernel` (positions/bearings/φ for each aircraft) — do **not** widen
-  the canonical snapshot used for hashing; add a separate view struct if needed.
-- Render-interpolate between ticks using a wall-clock alpha **in the client only** (wall-clock is
-  banned *inside* the kernel; the client is allowed it). Map sphere (lat,lon,h) → a camera/globe view.
-- Drive it from a golden replay first (feed `seads_scenario` output) before any live input loop.
-- Ledger: ADR + Forge card + receipt; no rail/golden touched, so no seal. Determinism gate unaffected.
+### 5. Custom renderer (post-core, decision 1A)  ✅ FIRST CUT DONE (2026-06-28, seal v1.4r0 — no seal)
+Downstream-only renderer subsystem under **`src/client/`** (full map: `src/client/README.md`).
+Built this session, all read-only / outside the `world_hash` (no rail/golden/kernel touched), gates
+green, **lean ledger** (commit + receipt `…v1.4r0-*.yml`, no ADR per owner's call):
+- **Recorder** `seads_record` (`record_main.cpp`) — drives the **real sealed kernel** and captures
+  the flight as the exact 20 Hz **GEO-001/KIN-001** wire stream (protocol 2), written as a
+  `.seadsrec` container (`seadsrec.{h,cpp}`) for the native viewer **and** a `trajectory.js` for the
+  web viewer, both from the *same decoded* frames. Built-in 3-ship `--demo` (KI-61/Spitfire/Bf109,
+  banking+climbing — bank auto-clamped to envelope `phi_max`) plus sealed-scenario replay (`--id`).
+  Proves the layer 1/2/4a path end to end.
+- **Pure client lib** `seads_client` — `globe.h` (sphere→cartesian, orbit camera, perspective
+  project, hemisphere cull; libm OK, `lint_determinism` excludes `src/client`) + `playback.{h,cpp}`
+  (decoded recording → `interp::SnapshotBuffer`, sampled ~100 ms in the past = the 4a delay).
+- **Headless gate** `seads_client_test` — **ctest 7/7** under GCC+Clang (was 6/6; added
+  `client_presentation`): globe invariants + `.seadsrec` round-trip + playback == layer-4a interp.
+  Built in CI (no GPU); `SEADS_CLIENT` stays OFF so guardian never pulls a GUI lib.
+- **Web globe viewer** `src/client/web/` — zero-build Three.js globe (CDN), JS interpolation
+  mirroring `interp_ref` (linear lat/alt, shortest-arc lon/bearing, hold at edges), HUD +
+  playback controls + orbit camera + the 8 km ceiling shell. **Screenshot-verified** rendering the
+  3-ship demo. (`dt` clamp guards tab-background rAF leaps.)
+- **Optional native viewer** `seads_viewer` (`viewer_main.cpp`, `-DSEADS_CLIENT=ON`) — raylib 3D
+  globe, wall-clock render-interpolation, trails, HUD, orbit camera, `--selfcheck N` headless mode.
+- **Remaining polish (track A):** live local-input loop (replay-only today) feeding `seads_predict`
+  (4b) so the OWN ship is predicted live; aircraft-model meshes; chase/cockpit camera; vendor
+  Three.js for fully-offline web. None touch a rail/golden.
 
 ### 6. Netcode state-sync (multiplayer flight MVP)  ← IN PROGRESS (option B: recommended)
 Server-authoritative state synchronization: kernel both ends, predict own aircraft, interpolate

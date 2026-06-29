@@ -71,6 +71,19 @@ add_library(seads_predict STATIC src/net/predict.cpp)
 target_include_directories(seads_predict PUBLIC src/net)
 target_link_libraries(seads_predict PUBLIC seads_kernel seads_replay seads_det_flags)
 
+# --- client presentation lib (Step 5 renderer): recording container + playback ---
+# DOWNSTREAM-ONLY. Decodes the GEO-001/KIN-001 wire (via seads_net) and interpolates remotes
+# (layer 4a) for display. It NEVER feeds the sim: it links seads_net but NOT the kernel/det_math,
+# lives OUTSIDE the world_hash, and is free to use libm trig (globe projection) — the determinism
+# lint scopes to kernel/det_math/replay only. No seal (rides v1.4r0).
+add_library(seads_client STATIC src/client/seadsrec.cpp src/client/playback.cpp)
+target_include_directories(seads_client PUBLIC src/client)
+target_link_libraries(seads_client PUBLIC seads_net seads_det_flags)
+
+# --- trajectory recorder (drives the real kernel -> .seadsrec wire stream + trajectory.js) ---
+add_executable(seads_record src/client/record_main.cpp)
+target_link_libraries(seads_record PRIVATE seads_client seads_net seads_kernel seads_replay seads_det_math seads_det_flags)
+
 # --- golden runner ---
 add_executable(seads_golden src/kernel/golden_main.cpp)
 target_link_libraries(seads_golden PRIVATE seads_kernel seads_replay seads_det_math seads_det_flags)
@@ -103,6 +116,26 @@ target_link_libraries(seads_interp_test PRIVATE seads_net seads_det_flags)
 add_executable(seads_predict_test src/net/predict_test_main.cpp)
 target_link_libraries(seads_predict_test PRIVATE seads_predict seads_kernel seads_replay seads_det_math seads_det_flags)
 
+# --- client presentation test (globe projection + .seadsrec container + playback interp) ---
+add_executable(seads_client_test src/client/client_test_main.cpp)
+target_link_libraries(seads_client_test PRIVATE seads_client seads_net seads_det_flags)
+
+# --- OPTIONAL raylib viewer (Step 5). OFF by default so CI / headless gates never pull a GUI
+# lib; the determinism matrix stays kernel-only. Turn on with -DSEADS_CLIENT=ON locally. The
+# viewer is read-only over a .seadsrec recording — it can never affect a world_hash (no seal). ---
+option(SEADS_CLIENT "Build the raylib globe viewer (pulls a graphics dep; not for CI)" OFF)
+if(SEADS_CLIENT)
+  include(FetchContent)
+  set(FETCHCONTENT_QUIET OFF)
+  FetchContent_Declare(raylib
+    GIT_REPOSITORY https://github.com/raysan5/raylib.git
+    GIT_TAG 5.5)
+  set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+  FetchContent_MakeAvailable(raylib)
+  add_executable(seads_viewer src/client/viewer_main.cpp)
+  target_link_libraries(seads_viewer PRIVATE seads_client seads_net raylib)
+endif()
+
 enable_testing()
 add_test(NAME detmath_bitexact COMMAND seads_detmath_test)
 add_test(NAME geo001_byteexact COMMAND seads_geo001_test)
@@ -110,4 +143,5 @@ add_test(NAME snapshot_byteexact COMMAND seads_snapshot_test)
 add_test(NAME lockstep_equal COMMAND seads_lockstep_test)
 add_test(NAME interp_bitexact COMMAND seads_interp_test)
 add_test(NAME predict_equal COMMAND seads_predict_test)
+add_test(NAME client_presentation COMMAND seads_client_test)
 # Golden hash compare is run in CI (guardian.yml) across the toolchain matrix.
