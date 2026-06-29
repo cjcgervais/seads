@@ -1,9 +1,12 @@
 # SEADS 2026 — Next Steps (handoff)
 
-> Resume doc for a fresh session. State as of seal **ATM-Sphere v1.4r0**, git `main` after the
-> **client-side-prediction commit** (Step 6 layers 1–4b done; commit + push and confirm **CI
-> green**). Read `CLAUDE.md` first (the constitution). Background facts also live in Claude
-> memory (`seads-canon`, `seads-harness`).
+> Resume doc for a fresh session. State as of seal **ATM-Sphere v1.4r0**, git `main` at the
+> **client-side-prediction commit `7ff21ab`** (Step 6 layers 1–4b done) — pushed to `origin/main`,
+> guardian CI **GREEN** (run [28349459869](https://github.com/cjcgervais/seads/actions/runs/28349459869):
+> MSVC + GCC/Clang × x64/AArch64 reproduce all 4 goldens + the geo001/snapshot/lockstep/interp/predict
+> parity vectors bit-for-bit). Clean slate — **start on Step 5 (renderer), §5 below**. Read `CLAUDE.md`
+> first (the constitution — governance is now lean, §2). Background facts also live in Claude memory
+> (`seads-canon`, `seads-harness`).
 >
 > ## ► START HERE (next task)
 > **Step 6 (netcode) is COMPLETE through layer 4b — the multiplayer-flight MVP loop is done**
