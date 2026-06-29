@@ -17,9 +17,10 @@
 > pushed to `origin/main` (2026-06-29)** in a single Track-B commit that lands BOTH B1 (v1.5r0) and B2
 > (v1.6r0) — the prior session shipped B1 to the tree but never committed it, and its kernel/golden state
 > is superseded in-file by B2, so a clean B1-then-B2 split wasn't reconstructable; the ADRs + SEAL_CARD
-> history + per-seal receipts preserve the B1/B2 distinction. guardian CI runs on the push (MSVC + GCC +
-> Clang × x64/AArch64 reproduce all 6 goldens incl. Pitch). **Watch the run** and confirm green before
-> declaring v1.6r0 fully landed. Branch protection / required-check setup is still the deferred owner task.
+> history + per-seal receipts preserve the B1/B2 distinction. **guardian CI GREEN on `12a1830`**
+> (run [28392491160](https://github.com/cjcgervais/seads/actions/runs/28392491160)) — MSVC + GCC + Clang
+> × x64/AArch64 reproduce all 6 goldens incl. Pitch bit-for-bit + all ctest parity legs. **v1.6r0 is fully
+> landed.** Branch protection / required-check setup is still the deferred owner task.
 >
 > ---
 >
