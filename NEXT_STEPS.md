@@ -16,9 +16,11 @@
 > - Sphere `db777327…d13ac394` · Turn `3faca110…9fc8e57f` · Climb `9d0eb912…4a0c3026` (all unchanged)
 > - TurnClimb `cd705c4a…4bda5c9c` · Accel `9fb59805…de8c3aaf` · Pitch `c0332e9e…6fd379ea` (all unchanged)
 > - **Stall `1a57b6d1…a0526fc6` (NEW — 2-ship: ki61 accelerated stall + p47d structural-g zoom)**
-> Ledger: ADR-Step8-FlightModel-B3-v1.7r0, SEAL_CARD v1.7r0, receipt `…v1.7r0-*.yml`, guardian.yml updated
-> (+Stall in all 3 golden lists). **GIT: NOT yet committed/pushed — commit the B3 change set, then watch
-> guardian CI reproduce all 7 goldens × MSVC/GCC/Clang × x64/AArch64.** Branch protection / required-check
+> Ledger: ADR-Step8-FlightModel-B3-v1.7r0, SEAL_CARD v1.7r0, receipt `…v1.7r0-d9cb8a9.yml`, guardian.yml
+> updated (+Stall in all 3 golden lists). **GIT: committed + pushed to `origin/main` at `7f8295c`
+> (2026-06-29). guardian CI GREEN** (run [28395147466](https://github.com/cjcgervais/seads/actions/runs/28395147466))
+> — MSVC + GCC + Clang × x64/AArch64 reproduce all 7 goldens incl. Stall bit-for-bit + the cross-toolchain
+> aggregation gate + all ctest parity legs. **v1.7r0 is fully landed.** Branch protection / required-check
 > setup is still the deferred owner task.
 >
 > _(Prior: v1.6r0 B2 lift & pitch — γ stored state, KIN-002 wire reseal, all goldens regenerated + Pitch;
