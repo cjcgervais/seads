@@ -125,11 +125,13 @@ jobs:
       - name: All world_hashes identical and equal to seal
         run: |
           set -e
-          SEAL=$(tr -d ' \n' < tests/golden/GOLDEN-SK-Sphere-001/expected.world_hash)
+          # Strip ALL whitespace (incl. CR) — the seal file and Windows-written hash.txt
+          # can carry CRLF; `tr -d ' \n'` would leave a stray \r and mis-compare.
+          SEAL=$(tr -d '[:space:]' < tests/golden/GOLDEN-SK-Sphere-001/expected.world_hash)
           echo "sealed: $SEAL"
           fail=0
           for f in hashes/*/hash.txt; do
-            H=$(tr -d ' \n' < "$f")
+            H=$(tr -d '[:space:]' < "$f")
             echo "$(dirname "$f"): $H"
             if [ "$H" != "$SEAL" ]; then echo "  MISMATCH"; fail=1; fi
           done
