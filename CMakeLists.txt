@@ -11,14 +11,21 @@ endif()
 
 include(${CMAKE_SOURCE_DIR}/cmake/DeterminismFlags.cmake)
 
-# Self-contained deterministic binaries (no runtime libstdc++/libgcc DLL dependency).
-# winpthread is appended last so static libstdc++'s pthread refs resolve under both the
-# GCC and Clang (mingw) drivers.
-if(NOT MSVC)
+# Runtime linkage. NOTE: static linking is a *distribution* convenience, not a
+# determinism requirement — the bit-for-bit promise comes from det_math + the strict
+# FP flags in DeterminismFlags.cmake, never from how the C++ runtime is linked. So the
+# MinGW-static hack below is scoped to MinGW only; Linux/macOS link threads portably.
+if(MINGW)
+  # Local Windows (winlibs MinGW): self-contained .exe with no runtime libstdc++/libgcc DLL.
+  # winpthread is appended last so static libstdc++'s pthread refs resolve under both the
+  # GCC and Clang (mingw) drivers (winpthread does not exist on Linux/macOS).
   add_link_options(-static -static-libgcc -static-libstdc++ -pthread)
-  # Belt-and-suspenders: ensure winpthread is available at the end of the link line so
-  # static libstdc++'s pthread_* references resolve under the Clang (mingw) driver too.
   set(CMAKE_CXX_STANDARD_LIBRARIES "${CMAKE_CXX_STANDARD_LIBRARIES} -Wl,--start-group -lstdc++ -lwinpthread -Wl,--end-group")
+elseif(NOT MSVC)
+  # Linux / macOS: -static is unsupported on macOS and discouraged on glibc; just link
+  # pthread (static libstdc++ may reference pthread_*). Threads::Threads is the portable way.
+  find_package(Threads REQUIRED)
+  link_libraries(Threads::Threads)
 endif()
 
 # --- deterministic math (the only sanctioned FP primitives) ---
