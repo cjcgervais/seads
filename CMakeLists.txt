@@ -47,7 +47,7 @@ target_link_libraries(seads_replay PUBLIC seads_det_flags)
 # Deliberately does NOT link det_math: the wire layer uses no transcendentals, and it
 # must never be on the path that feeds the deterministic sim. It links the strict FP
 # flags only so float->fixed quantization rounds identically cross-toolchain.
-add_library(seads_net STATIC src/net/geo001.cpp)
+add_library(seads_net STATIC src/net/geo001.cpp src/net/snapshot.cpp)
 target_include_directories(seads_net PUBLIC src/net)
 target_link_libraries(seads_net PUBLIC seads_det_flags)
 
@@ -67,7 +67,12 @@ target_link_libraries(seads_detmath_test PRIVATE seads_det_math seads_det_flags)
 add_executable(seads_geo001_test src/net/geo001_test_main.cpp)
 target_link_libraries(seads_geo001_test PRIVATE seads_net seads_det_flags)
 
+# --- GEO-001 snapshot framing parity test (byte-exact C++ vs Python reference) ---
+add_executable(seads_snapshot_test src/net/snapshot_test_main.cpp)
+target_link_libraries(seads_snapshot_test PRIVATE seads_net seads_det_flags)
+
 enable_testing()
 add_test(NAME detmath_bitexact COMMAND seads_detmath_test)
 add_test(NAME geo001_byteexact COMMAND seads_geo001_test)
+add_test(NAME snapshot_byteexact COMMAND seads_snapshot_test)
 # Golden hash compare is run in CI (guardian.yml) across the toolchain matrix.

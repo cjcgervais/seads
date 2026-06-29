@@ -8,9 +8,11 @@
 
 Deterministic core + governance harness up; bit-for-bit promise **proven in CI**; aircraft now
 maneuver within their tuning envelopes. Roadmap steps **1, 2, 3, 4 are DONE**; **Step 6 (netcode)
-is now IN PROGRESS** — layer 1 (the GEO-001 wire codec) is **DONE** (details in §6 below). The
-recommended next pickup is **Step 6 layer 2: snapshot serialization** of `KernelState` over GEO-001
-(then loopback lockstep). Step 5 (renderer) remains the alternative visual track.
+is now IN PROGRESS** — layer 1 (GEO-001 wire codec) and layer 2 (20 Hz snapshot serialization)
+are both **DONE** (details in §6 below). The recommended next pickup is **Step 6 layer 3: the
+loopback lockstep harness** (two in-process kernels, same inputs, identical `world_hash` every
+tick = desync tripwire), then prediction + remote interpolation. Step 5 (renderer) remains the
+alternative visual track.
 
 - **Remote:** `origin` = `https://github.com/cjcgervais/seads` (public). `guardian.yml` is **green on
   `main`** — MSVC + GCC + Clang × x64 + AArch64 reproduce **all 4 sealed goldens** bit-for-bit, with a
@@ -172,10 +174,20 @@ Suggested first moves for the next agent (build bottom-up, each layer gated befo
   `…v1.3r0-f2d7e94.yml`. **No seal** (implements the GEO-001 rail to spec; any *deviation* would reseal).
   *Note for next agent:* `seads_net` deliberately does NOT link det_math (no transcendentals; keep it
   off the sim-feeding path). Decoded wire values are lossy by quantization — never feed back as canonical.
-- **Snapshot serialization** of `KernelState` over GEO-001 at the 20 Hz snapshot cadence (physics stays
-  100 Hz). Keep the canonical little-endian hashing snapshot as the source of truth; the wire snapshot
-  is a separate, quantized transport.
-- **Loopback harness**: two in-process kernels stepped in lockstep from the same inputs must keep
+- **Snapshot serialization** of `KernelState` over GEO-001 at the 20 Hz snapshot cadence.
+  ✅ DONE (2026-06-28, seal v1.3r0 — no seal needed). `src/net/snapshot.{h,cpp}` (in `seads_net`)
+  frames a world snapshot over the geo001 codec: header `(protocol, server_tick, n)` then
+  `n × (id, GeoPoint)`, self-delimiting. `from_kernel` maps kernel **radians → wire degrees**
+  (psi heading → GEO-001 bearing) via hex-float `RAD2DEG`. The canonical LE-f64 `Kernel::snapshot()`
+  stays the world_hash source of truth; this wire snapshot is a separate **quantized** transport.
+  Parity gate mirrors layer 1: `gen_snapshot_vectors.py` → `src/net/snapshot_vectors.h`;
+  `seads_snapshot_test` byte-exact (4 snapshots, 5 conv) under GCC+Clang (ctest 3/3). 5 new
+  Hypothesis tests (`tests/property/test_snapshot.py`; 27 → 32). Gates wired (guardian.yml,
+  make_receipt `snapshot_codec`). Ledger: ADR-Step6-Snapshot-Serialization-v1.3r0, Forge card,
+  receipt `…v1.3r0-13726a4.yml`. **Field-scope deferral (documented, not silent):** `phi`/`tas`
+  are NOT on the wire — GEO-001 has no scale for them, so adding them is a reseal. Layer 2 supports
+  remote **interpolation**; full prediction (bank/energy) awaits a later layer.
+- **Loopback harness** ← NEXT PICKUP. Two in-process kernels stepped in lockstep from the same inputs must keep
   identical `world_hash` every tick (desync tripwire). Then add prediction (own aircraft) +
   remote interpolation (~100 ms buffer) + correction from authoritative snapshots.
 - The kernel itself should not change; if it must, that's a seal event — keep net code strictly

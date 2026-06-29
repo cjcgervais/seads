@@ -53,6 +53,10 @@ def main():
     geo_ref_ok, _ = run([PY, str(TOOLS / "geo001_ref.py")])
     geo_vec_ok, _ = run([PY, str(TOOLS / "gen_geo001_vectors.py"), "--check"])
     gates["geo001_codec"] = geo_ref_ok and geo_vec_ok
+    # GEO-001 snapshot framing (netcode layer 2): reference self-test + parity header in sync.
+    snap_ref_ok, _ = run([PY, str(TOOLS / "snapshot_ref.py")])
+    snap_vec_ok, _ = run([PY, str(TOOLS / "gen_snapshot_vectors.py"), "--check"])
+    gates["snapshot_codec"] = snap_ref_ok and snap_vec_ok
 
     # regenerate golden candidate and validate against the seal
     cand = Path(tempfile.gettempdir()) / "seads_golden_candidate.bin"
