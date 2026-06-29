@@ -49,6 +49,10 @@ def main():
     gates["tuning_probe"], _ = run([PY, str(TOOLS / "tuning_probe.py"), *envelopes])
     gates["atm_top_probe"], _ = run([PY, str(TOOLS / "atm_top_probe.py"),
                                      "--ceil", "8000", "--soft", "100"])
+    # GEO-001 wire codec: reference self-test + generated parity header in sync.
+    geo_ref_ok, _ = run([PY, str(TOOLS / "geo001_ref.py")])
+    geo_vec_ok, _ = run([PY, str(TOOLS / "gen_geo001_vectors.py"), "--check"])
+    gates["geo001_codec"] = geo_ref_ok and geo_vec_ok
 
     # regenerate golden candidate and validate against the seal
     cand = Path(tempfile.gettempdir()) / "seads_golden_candidate.bin"

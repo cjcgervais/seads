@@ -43,6 +43,14 @@ add_library(seads_replay STATIC src/replay/sha256.cpp)
 target_include_directories(seads_replay PUBLIC src/replay)
 target_link_libraries(seads_replay PUBLIC seads_det_flags)
 
+# --- net / GEO-001 wire codec (transport; outside the kernel + world_hash) ---
+# Deliberately does NOT link det_math: the wire layer uses no transcendentals, and it
+# must never be on the path that feeds the deterministic sim. It links the strict FP
+# flags only so float->fixed quantization rounds identically cross-toolchain.
+add_library(seads_net STATIC src/net/geo001.cpp)
+target_include_directories(seads_net PUBLIC src/net)
+target_link_libraries(seads_net PUBLIC seads_det_flags)
+
 # --- golden runner ---
 add_executable(seads_golden src/kernel/golden_main.cpp)
 target_link_libraries(seads_golden PRIVATE seads_kernel seads_replay seads_det_math seads_det_flags)
@@ -55,6 +63,11 @@ target_link_libraries(seads_scenario PRIVATE seads_kernel seads_replay seads_det
 add_executable(seads_detmath_test src/det_math/detmath_test_main.cpp)
 target_link_libraries(seads_detmath_test PRIVATE seads_det_math seads_det_flags)
 
+# --- GEO-001 wire codec parity test (byte-exact C++ vs Python reference) ---
+add_executable(seads_geo001_test src/net/geo001_test_main.cpp)
+target_link_libraries(seads_geo001_test PRIVATE seads_net seads_det_flags)
+
 enable_testing()
 add_test(NAME detmath_bitexact COMMAND seads_detmath_test)
+add_test(NAME geo001_byteexact COMMAND seads_geo001_test)
 # Golden hash compare is run in CI (guardian.yml) across the toolchain matrix.

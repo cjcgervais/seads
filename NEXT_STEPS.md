@@ -7,9 +7,10 @@
 ## Where things stand (DONE)
 
 Deterministic core + governance harness up; bit-for-bit promise **proven in CI**; aircraft now
-maneuver within their tuning envelopes. Roadmap steps **1, 2, 3, 4 are DONE** (details in the
-numbered sections below). The recommended next pickup is now **Step 5 (renderer)** or **Step 6
-(netcode)**.
+maneuver within their tuning envelopes. Roadmap steps **1, 2, 3, 4 are DONE**; **Step 6 (netcode)
+is now IN PROGRESS** — layer 1 (the GEO-001 wire codec) is **DONE** (details in §6 below). The
+recommended next pickup is **Step 6 layer 2: snapshot serialization** of `KernelState` over GEO-001
+(then loopback lockstep). Step 5 (renderer) remains the alternative visual track.
 
 - **Remote:** `origin` = `https://github.com/cjcgervais/seads` (public). `guardian.yml` is **green on
   `main`** — MSVC + GCC + Clang × x64 + AArch64 reproduce **all 4 sealed goldens** bit-for-bit, with a
@@ -153,18 +154,24 @@ determinism gate, so it does **not** go through `det_math` and does **not** affe
 - Drive it from a golden replay first (feed `seads_scenario` output) before any live input loop.
 - Ledger: ADR + Forge card + receipt; no rail/golden touched, so no seal. Determinism gate unaffected.
 
-### 6. Netcode state-sync (multiplayer flight MVP)  ← next pickup (option B: recommended)
+### 6. Netcode state-sync (multiplayer flight MVP)  ← IN PROGRESS (option B: recommended)
 Server-authoritative state synchronization: kernel both ends, predict own aircraft, interpolate
 remotes ~100 ms, `world_hash` as desync tripwire, snapshots for correction/late-join. Build out
 `src/net/` GEO-001 codec first (lat/lon×1e7, bearing×1e6, h×1e3, ZigZag+LEB128) + loopback tests.
 Suggested first moves for the next agent (build bottom-up, each layer gated before the next):
-- **GEO-001 codec first, in isolation.** New `src/net/geo001.{h,cpp}`: ZigZag+LEB128 encode/decode for
-  the quantized fields (lat/lon×1e7 as i64, bearing×1e6, h×1e3). Mirror it in a Python reference
-  (`tools/geo001_ref.py`) the same way det_math is mirrored, and add a **round-trip + cross-impl
-  parity** gate (encode in C++, decode in Python and vice-versa; byte-identical wire). This is the
-  natural, self-contained next deliverable and is **no-seal** (wire format is already a sealed rail —
-  GEO-001 — so *implementing* it to spec rather than changing it does not reseal; but any deviation
-  from the GEO-001 rail *would* need a seal, so match the rail exactly).
+- **GEO-001 codec first, in isolation.**  ✅ DONE (2026-06-28, seal v1.3r0 — no seal needed).
+  `src/net/geo001.{h,cpp}` (`seads_net` lib) mirrors `tools/geo001_ref.py` bit-for-bit: ZigZag +
+  LEB128 over fixed-point i64, quantize/dequantize (round half away from zero), and a GeoPoint record
+  in fixed field order (lat, lon, bearing, alt). Cross-impl parity gate mirrors det_math exactly:
+  `gen_geo001_vectors.py` → `src/net/geo001_vectors.h` (integer-driven, byte-reproducible);
+  `seads_geo001_test` asserts byte-identical wire on encode + exact round-trip on decode (307 i64,
+  68 point, 15 quant). 7 new Hypothesis tests (`tests/property/test_geo001.py`; 20 → 27). Gates wired:
+  guardian.yml (gen `--check` + reference self-test + `seads_geo001_test` per leg), make_receipt.py
+  (`geo001_codec` gate). PASS under GCC + Clang locally (ctest 2/2); golden unchanged
+  (`529c6a05…9218fe16`). Ledger: ADR-Step6-GEO001-Codec-v1.3r0, Forge card Step6, receipt
+  `…v1.3r0-f2d7e94.yml`. **No seal** (implements the GEO-001 rail to spec; any *deviation* would reseal).
+  *Note for next agent:* `seads_net` deliberately does NOT link det_math (no transcendentals; keep it
+  off the sim-feeding path). Decoded wire values are lossy by quantization — never feed back as canonical.
 - **Snapshot serialization** of `KernelState` over GEO-001 at the 20 Hz snapshot cadence (physics stays
   100 Hz). Keep the canonical little-endian hashing snapshot as the source of truth; the wire snapshot
   is a separate, quantized transport.
