@@ -60,11 +60,16 @@ def test_idle_wings_level_decelerates(env):
 @settings(max_examples=len(ROSTER), deadline=None)
 def test_throttle_reaches_equilibrium(env):
     # Full throttle, 1 g wings level: TAS approaches a fixed point — the per-tick change shrinks.
-    tr = _tas(_fly(env, 0.0, 1.0, 1.0, ticks=8000, tas0=120.0))
+    # B4 (v1.8r0): the retuned thrust curve is much flatter (v_max ~700, a near-constant-thrust
+    # asymptote chosen so historical top speeds and historical climb coexist), so the speed-
+    # restoring gradient near equilibrium is weaker and convergence is slower in wall-clock terms —
+    # the fastest airframes (P-47/P-51) need ~120 s to settle under 1 mm/s vs ~80 s pre-B4. Extend
+    # the horizon to 140 s (the property — a converging fixed point — is unchanged).
+    tr = _tas(_fly(env, 0.0, 1.0, 1.0, ticks=14000, tas0=120.0))
     early = abs(tr[100] - tr[99])
     late = abs(tr[-1] - tr[-2])
     assert late <= early + 1e-12                        # converging, not diverging
-    assert late < 1e-3                                  # effectively settled after 80 s
+    assert late < 1e-3                                  # effectively settled after 140 s
 
 
 @given(env=st.sampled_from(ROSTER), thr=st.floats(min_value=0.3, max_value=1.0))

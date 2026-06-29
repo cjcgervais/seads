@@ -1,27 +1,31 @@
 # SEADS 2026 — Next Steps (handoff)
 
-> ## ►► CURRENT STATE (2026-06-29): seal **ATM-Sphere v1.7r0** — flight model **B3 (limits & stall) DONE ✅**
-> The load factor `n` is now bounded **per-airframe** by BOTH the **structural g limits**
-> (`n_max_struct`/`n_min_struct`) AND the **C_Lmax aerodynamic ceiling** `n_aero=cl_max·qS/(m·g₀)` —
-> `n=clamp(n_cmd, max(n_min_struct,−n_aero), min(n_max_struct,n_aero))`. **Accelerated stall**, the
-> **corner speed** `V*=stall·√n_max_struct`, and the 1 g stall speed are all emergent; the B2 global
-> placeholder `[−3,9]` is retired. **No new state, no wire change, no new det_math** (n is derived; KIN-002
-> / protocol 3 unchanged). New envelope scalars `cl_max,n_max_struct,n_min_struct` on all 8 airframes
-> (coherent with each `stall_tas_mps`; a balance pass — **holistic retune is B4**). B3 is a **conservative
-> extension**: the limits never bind in any prior scenario, so **the 6 v1.6r0 goldens are BYTE-IDENTICAL**
-> (verified C++≡Python, GCC+Clang) and only **GOLDEN-SK-Stall-001** is new. **12/12** receipt gates PASS,
-> **ctest 7/7** both compilers, **72** property tests (+8 `test_stall.py`). **NEXT: §8.4 Phase B4
-> (per-airframe aero retune — mostly DATA-only, rides the seal unless a shared kernel default moves).**
-> Goldens (v1.7r0):
-> - Sphere `db777327…d13ac394` · Turn `3faca110…9fc8e57f` · Climb `9d0eb912…4a0c3026` (all unchanged)
-> - TurnClimb `cd705c4a…4bda5c9c` · Accel `9fb59805…de8c3aaf` · Pitch `c0332e9e…6fd379ea` (all unchanged)
-> - **Stall `1a57b6d1…a0526fc6` (NEW — 2-ship: ki61 accelerated stall + p47d structural-g zoom)**
-> Ledger: ADR-Step8-FlightModel-B3-v1.7r0, SEAL_CARD v1.7r0, receipt `…v1.7r0-d9cb8a9.yml`, guardian.yml
-> updated (+Stall in all 3 golden lists). **GIT: committed + pushed to `origin/main` at `7f8295c`
-> (2026-06-29). guardian CI GREEN** (run [28395147466](https://github.com/cjcgervais/seads/actions/runs/28395147466))
-> — MSVC + GCC + Clang × x64/AArch64 reproduce all 7 goldens incl. Stall bit-for-bit + the cross-toolchain
-> aggregation gate + all ctest parity legs. **v1.7r0 is fully landed.** Branch protection / required-check
-> setup is still the deferred owner task.
+> ## ►► CURRENT STATE (2026-06-29): seal **ATM-Sphere v1.8r0** — flight model **B4 (aero retune) DONE ✅**
+> The 8 envelopes carried the un-calibrated v1.2r0 aero, so emergent **level top speeds ran ~30 % low**
+> (109–142 m/s). B4 lifts them to **historical** values (**148–195 m/s ≈ 533–702 km/h**: P-51 702 >
+> P-47 688 > La-7 662 > Yak-3 655 > Bf109 634 > Spit 601 > Ki-61 590 > A6M2 533) by moving **only
+> `thrust_static_n`/`v_max_mps` per airframe** (solved by `tools/b4_retune.py`). Every turn/stall-defining
+> param is **fixed** (`mass`,`wing_area`,`cl_max`,`induced_k`,`n_max/min_struct`,`stall`, all LUTs), so the
+> **iconic turn ordering is preserved exactly** (A6M2 29.7°/s & Spitfire 26.8°/s best sustained; P-47 worst;
+> instantaneous-turn column byte-identical) and the **B3 C_Lmax↔stall coherence is untouched**. `v_max_mps`
+> is now the flat-curve thrust-zero **asymptote (~700, NOT a physical Vne** — real top speed is emergent and
+> well below it); `v_ne_mps` is **validation-only** (the kernel never loads it). **No new det_math, no
+> state/wire change** (KIN-002 / protocol 3 unchanged) — but the retune touches every scenario airframe so it
+> **moves the 6 scenario goldens → reseal** (CLAUDE.md §2: golden moved ⇒ bump seal). **Sphere is
+> byte-identical** (no-arg kinematic anchor, no envelope). **12/12** receipt gates PASS, **7/7 goldens
+> C++≡Python bit-for-bit under GCC+Clang**, **ctest 7/7** both compilers, **72** property tests
+> (`test_energy` settle horizon 80→140 s — the flatter thrust curve settles slower; property unchanged).
+> New tooling: **`tools/perf_probe.py`** (emergent-performance analyzer — the objective B4 target table) +
+> **`tools/b4_retune.py`** (the reproducible solver). **NEXT: §8 → B3 was the last sealed flight-model phase
+> in the roadmap; remaining roadmap = renderer polish (no seal) → guns/projectiles (new seal). Optional B5
+> (ISA atmosphere, rail+seal) stays deferred.**
+> Goldens (v1.8r0):
+> - **Sphere `db777327…d13ac394` (UNCHANGED)** · Turn `a1dc8116…c0e13254` · Climb `de78ba92…2801eea0`
+> - TurnClimb `a502600c…ccdfe020` · Accel `476cfb3f…ad84325f` · Pitch `3efaff43…569d35e4` · Stall `8b2f4a85…5d937389`
+> Ledger: ADR-Step8-FlightModel-B4-v1.8r0, SEAL_CARD v1.8r0, receipt `…v1.8r0-*.yml`, rails version 170→180,
+> guardian.yml **needs no edit** (reads hashes from `expected.world_hash`, already lists all 7 IDs).
+> **GIT: committed locally (push pending — see below).** Cross-arch (MSVC + AArch64) reproduction is proven
+> by guardian CI on push. Branch protection / required-check setup is still the deferred owner task.
 >
 > _(Prior: v1.6r0 B2 lift & pitch — γ stored state, KIN-002 wire reseal, all goldens regenerated + Pitch;
 > committed + pushed, guardian green on `12a1830` run 28392491160.)_
@@ -511,12 +515,26 @@ sustained turn where `n·V` is maximized). This is what makes airframes *feel* d
 energy fighting emergent. Deliverables: stall/corner property tests per airframe, goldens
 regenerated, ADR + `/seal`.
 
-### 8.4 Phase B4 — Per-airframe tuning pass (mostly data; seal only if a default rail moves)
+### 8.4 Phase B4 — Per-airframe tuning pass  ✅ DONE (2026-06-29, seal v1.8r0)
+**Shipped.** Re-tuned all **8** envelopes so the roster reads true. Emergent level top speeds were
+~30 % low (109–142 m/s); B4 lifts them to **historical** (148–195 m/s ≈ 533–702 km/h) by moving
+**only `thrust_static_n`/`v_max_mps`** per airframe (`tools/b4_retune.py` solves a (top-speed,
+best-climb) fit); all turn/stall params held fixed ⇒ **iconic turn ordering preserved exactly**
+(A6M2/Spitfire best sustained, P-47 worst; instantaneous turn byte-identical) and B3 C_Lmax↔stall
+coherence untouched. `v_max_mps` is now the flat-curve thrust-zero asymptote (~700, not Vne); `v_ne`
+validation-only. **No new det_math/state/wire** — but it moves the **6 scenario goldens → reseal**
+(Sphere unchanged). New `tools/perf_probe.py` (emergent-perf analyzer). 12/12 gates, 7/7 goldens
+C++≡Python GCC+Clang, ctest 7/7, 72 property tests (`test_energy` settle horizon 80→140 s). Ledger:
+ADR-Step8-FlightModel-B4-v1.8r0, SEAL_CARD v1.8r0, receipt. The ORIGINAL B4 plan (kept for reference):
 Re-tune all **8** envelopes to the new aero parameters so the roster's relative strengths read true
 (Spitfire turns, P-47 dives/zooms, A6M2 low-speed turn, etc.). Mostly **data-only** (rides the
 current seal) like §3 was — *unless* you change a shared kernel default. Add the energy/aero columns
 to each `data/tuning/envelopes/*.json`, re-run `tuning_probe.py` (extend it with energy checks),
 optionally `hash_sign_json.py` to sign them.
+> **Note (B4 reality vs the plan):** post-B1/B2/B3 the kernel *integrates* envelope aero, and 5 of
+> the 8 airframes are baked into goldens, so a holistic retune **did** move goldens (a reseal) — the
+> "rides the seal" hope was written pre-B1. The energy *columns* already existed (added in B1); B4 was
+> a value retune, done as the cheapest-possible reseal (only 2 scalars/airframe moved).
 
 ### 8.5 Phase B5 — (optional, defer) ISA atmosphere vs altitude  (rail + seal)
 Only if you want altitude to change performance (thinner air up high). Forces `det_exp`/`det_pow`

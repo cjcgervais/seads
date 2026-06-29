@@ -1,19 +1,19 @@
 {
   "header": {
     "id": "TUNE-Spitfire-Mk-V",
-    "version": 120,
-    "seal": "ATM-Sphere v1.2r0",
-    "adr": "docs/adr/ADR-roster-envelopes-v1.2r0.md"
+    "version": 180,
+    "seal": "ATM-Sphere v1.8r0",
+    "adr": "docs/adr/ADR-Step8-FlightModel-B4-v1.8r0.md"
   },
   "aircraft": "Spitfire Mk V",
   "tuning": {
-    "v_ne_mps": 190.0,
+    "v_ne_mps": 204.0,
     "stall_tas_mps": 40.0,
     "phi_max_deg_vs_tas": [[40, 63], [80, 59], [120, 53], [160, 47], [190, 44]],
     "climb_rate_max_mps_vs_tas": [[40, 18], [80, 15], [120, 12], [160, 10], [190, 9]],
     "climb_rate_min_mps_vs_tas": [[40, -21], [80, -24], [120, -27], [160, -30], [190, -32]],
     "roll_rate_degps_vs_tas": [[40, 72], [80, 80], [120, 82], [160, 78], [190, 72]],
-    "mass_kg": 2900.0, "wing_area_m2": 22.5, "cd0": 0.021, "induced_k": 0.054, "thrust_static_n": 14000.0, "v_max_mps": 200.0,
+    "mass_kg": 2900.0, "wing_area_m2": 22.5, "cd0": 0.021, "induced_k": 0.054, "thrust_static_n": 10750.0, "v_max_mps": 700.0,
     "cl_max": 1.29, "n_max_struct": 8, "n_min_struct": -3.5
   }
 }
