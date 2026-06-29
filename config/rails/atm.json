@@ -1,8 +1,8 @@
 {
   "header": {
     "id": "SEADS-RAILS",
-    "version": 160,
-    "seal": "ATM-Sphere v1.6r0",
+    "version": 170,
+    "seal": "ATM-Sphere v1.7r0",
     "note": "Data-driven immutable rails. Any change here REQUIRES a new seal (ADR + Forge audit card + Chronicle receipt). See CLAUDE.md > Change-Control Law."
   },
   "rails": {
@@ -23,7 +23,7 @@
       "turn_law": "3-DOF point mass (B2, v1.6r0): psi_dot = (g0/V)*(n*sin(phi)/cos(gamma)); gamma_dot = (g0/V)*(n*cos(phi)-cos(gamma)); reduces to psi_dot = g0*tan(phi)/V for the level coordinated turn (gamma=0, n=1/cos(phi)). The no-arg straight golden keeps the pure great-circle kinematic tail.",
       "step": "closed_form_great_circle",
       "cartesian_fallback": false,
-      "flight_model": "B2 lift-&-pitch: tas integrated from thrust-drag (B1); flight-path angle gamma is a stored state driven by commanded load factor n; altitude earned (alt_dot=V*sin gamma). Constant density rho0=1.225; n clamped to placeholder [-3,9] (per-airframe C_Lmax/stall = B3)."
+      "flight_model": "B3 limits & stall: tas integrated from thrust-drag (B1); flight-path angle gamma is a stored state driven by commanded load factor n (B2); altitude earned (alt_dot=V*sin gamma). Constant density rho0=1.225. B3 (v1.7r0): n is bounded per-airframe by the structural g limits (n_min_struct/n_max_struct) AND the C_Lmax aerodynamic ceiling n_aero=cl_max*qS/(m*g0); below the corner speed n_aero binds and the turn collapses (accelerated stall). Retires the B2 global [-3,9] placeholder. No new det_math; post-stall lift held at C_Lmax (no departure / ISA density = later phases)."
     },
     "determinism": {
       "math_lib": "det_math",

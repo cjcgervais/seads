@@ -29,9 +29,14 @@ ENV_DIR = ROOT / "data" / "tuning" / "envelopes"
 # Canonical field order for the generated table / kernel struct.
 LUT_FIELDS = ("phi_max", "roll_rate", "climb_max", "climb_min")
 
-# B1 longitudinal-energy scalar aero params, in the exact order they appear on the C++ Envelope
-# struct (flight_types.h) and are emitted by gen_envelope_tables.py. JSON key -> struct field.
-AERO_FIELDS = ("mass_kg", "wing_area_m2", "cd0", "induced_k", "thrust_static_n", "v_max_mps")
+# Scalar aero params, in the exact order they appear on the C++ Envelope struct (flight_types.h)
+# and are emitted by gen_envelope_tables.py / gen_{lockstep,predict}_vectors.py. JSON key ->
+# struct field. The first six are B1 longitudinal energy (seal v1.5r0); the last three are the B3
+# limits & stall block (seal v1.7r0): cl_max (max usable lift coefficient -> accelerated-stall
+# ceiling on the load factor), n_max_struct / n_min_struct (per-airframe structural g limits that
+# retire the B2 global placeholder clamp [-3, 9]). See ADR-Step8-FlightModel-B3.
+AERO_FIELDS = ("mass_kg", "wing_area_m2", "cd0", "induced_k", "thrust_static_n", "v_max_mps",
+               "cl_max", "n_max_struct", "n_min_struct")
 
 
 def deg2rad(d):

@@ -1,0 +1,33 @@
+{
+  "header": {
+    "id": "GOLDEN-SK-Stall-001",
+    "version": 170,
+    "seal": "ATM-Sphere v1.7r0",
+    "description": "Two-ship V-n limit / stall scenario that pins the B3 load-factor limiter (seal v1.7r0). AC0 (Ki-61) enters a hard banked turn at g=2.0 with low throttle: as induced drag bleeds speed the C_Lmax aerodynamic ceiling n_aero=cl_max*qS/(m*g0) falls through the commanded 2.0 (the corner speed), so the achievable load factor collapses (2.0 -> ~0.56) and the turn rate dies = accelerated stall; it mushes near V_MIN then unloads to wings-level full throttle and recovers. AC1 (P-47D) does wings-level g-limit zooms: a g=10 command is capped at the structural n_max_struct (8.5), trading speed for altitude, with push-overs between pulls. Together they exercise BOTH clamp branches (n_aero above vs below n_max_struct) and BOTH binds (aerodynamic on AC0, structural on AC1). Both stay well inside +/-90 deg flight-path angle (max ~50 deg / ~67 deg) so the cos(gamma) singularity is never approached. NEW golden for B3."
+  },
+  "ticks": 3000,
+  "aircraft": [
+    {
+      "envelope": "ki61",
+      "start": { "lat_deg": 0.0, "lon_deg": 0.0, "psi_deg": 45.0, "phi_deg": 50.0, "alt_m": 4000.0, "tas_mps": 140.0 },
+      "schedule": [
+        { "start_tick": 0,    "bank_deg": 50.0, "g_cmd": 2.0, "throttle": 0.2 },
+        { "start_tick": 2400, "bank_deg": 0.0,  "g_cmd": 1.0, "throttle": 1.0 },
+        { "start_tick": 3000, "bank_deg": 0.0,  "g_cmd": 1.0, "throttle": 1.0 }
+      ]
+    },
+    {
+      "envelope": "p47d",
+      "start": { "lat_deg": 0.0, "lon_deg": 30.0, "psi_deg": 30.0, "phi_deg": 0.0, "alt_m": 4500.0, "tas_mps": 210.0 },
+      "schedule": [
+        { "start_tick": 0,    "bank_deg": 0.0, "g_cmd": 10.0, "throttle": 0.7 },
+        { "start_tick": 120,  "bank_deg": 0.0, "g_cmd": -0.5, "throttle": 0.7 },
+        { "start_tick": 380,  "bank_deg": 0.0, "g_cmd": 10.0, "throttle": 0.7 },
+        { "start_tick": 500,  "bank_deg": 0.0, "g_cmd": -0.5, "throttle": 0.7 },
+        { "start_tick": 760,  "bank_deg": 0.0, "g_cmd": 10.0, "throttle": 0.7 },
+        { "start_tick": 880,  "bank_deg": 0.0, "g_cmd": 0.0,  "throttle": 0.9 },
+        { "start_tick": 3000, "bank_deg": 0.0, "g_cmd": 0.0,  "throttle": 0.9 }
+      ]
+    }
+  ]
+}

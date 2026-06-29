@@ -1,26 +1,28 @@
 # SEADS 2026 — Next Steps (handoff)
 
-> ## ►► CURRENT STATE (2026-06-29): seal **ATM-Sphere v1.6r0** — flight model **B2 (lift & pitch) DONE ✅**
-> The flight model now has **real pitch**: flight-path angle **γ is a stored kernel state** driven by a
-> commanded load factor (`Command.target_g`), altitude is *earned* (`alṫ=V·sinγ`), and pulling g bleeds
-> speed (induced drag). Full **3-DOF point mass**; generalizes B1's level turn. Per-aircraft state is now
-> the **7-tuple** `(lat,lon,psi,phi,alt,tas,gamma)`. **Wire reseal KIN-001→KIN-002** (γ×1e6 on the wire,
-> snapshot **protocol 3**). **All goldens regenerated** + new **GOLDEN-SK-Pitch-001**. No new det_math.
-> Proven locally **C++≡Python bit-for-bit under GCC + Clang** (all 6 goldens), **ctest 7/7** both,
-> **12/12** receipt gates PASS, **64** property tests. Viewer band-aids retired (W/S = real g, marker
-> tilts by real γ). **NEXT: §8.3 Phase B3 (limits & stall: C_Lmax / accelerated stall / structural-g /
-> corner speed → seal v1.7r0).** New goldens (B2):
-> - Sphere `db777327…d13ac394` (anchor; trajectory identical, hash moved only because γ=0 was appended)
-> - Turn `3faca110…9fc8e57f` · Climb `9d0eb912…4a0c3026` · TurnClimb `cd705c4a…4bda5c9c`
-> - Accel `9fb59805…de8c3aaf` · **Pitch `c0332e9e…6fd379ea` (new)**
-> Ledger: ADR-Step8-FlightModel-B2-v1.6r0, SEAL_CARD v1.6r0, receipt `…v1.6r0-*.yml`. **GIT: committed +
-> pushed to `origin/main` (2026-06-29)** in a single Track-B commit that lands BOTH B1 (v1.5r0) and B2
-> (v1.6r0) — the prior session shipped B1 to the tree but never committed it, and its kernel/golden state
-> is superseded in-file by B2, so a clean B1-then-B2 split wasn't reconstructable; the ADRs + SEAL_CARD
-> history + per-seal receipts preserve the B1/B2 distinction. **guardian CI GREEN on `12a1830`**
-> (run [28392491160](https://github.com/cjcgervais/seads/actions/runs/28392491160)) — MSVC + GCC + Clang
-> × x64/AArch64 reproduce all 6 goldens incl. Pitch bit-for-bit + all ctest parity legs. **v1.6r0 is fully
-> landed.** Branch protection / required-check setup is still the deferred owner task.
+> ## ►► CURRENT STATE (2026-06-29): seal **ATM-Sphere v1.7r0** — flight model **B3 (limits & stall) DONE ✅**
+> The load factor `n` is now bounded **per-airframe** by BOTH the **structural g limits**
+> (`n_max_struct`/`n_min_struct`) AND the **C_Lmax aerodynamic ceiling** `n_aero=cl_max·qS/(m·g₀)` —
+> `n=clamp(n_cmd, max(n_min_struct,−n_aero), min(n_max_struct,n_aero))`. **Accelerated stall**, the
+> **corner speed** `V*=stall·√n_max_struct`, and the 1 g stall speed are all emergent; the B2 global
+> placeholder `[−3,9]` is retired. **No new state, no wire change, no new det_math** (n is derived; KIN-002
+> / protocol 3 unchanged). New envelope scalars `cl_max,n_max_struct,n_min_struct` on all 8 airframes
+> (coherent with each `stall_tas_mps`; a balance pass — **holistic retune is B4**). B3 is a **conservative
+> extension**: the limits never bind in any prior scenario, so **the 6 v1.6r0 goldens are BYTE-IDENTICAL**
+> (verified C++≡Python, GCC+Clang) and only **GOLDEN-SK-Stall-001** is new. **12/12** receipt gates PASS,
+> **ctest 7/7** both compilers, **72** property tests (+8 `test_stall.py`). **NEXT: §8.4 Phase B4
+> (per-airframe aero retune — mostly DATA-only, rides the seal unless a shared kernel default moves).**
+> Goldens (v1.7r0):
+> - Sphere `db777327…d13ac394` · Turn `3faca110…9fc8e57f` · Climb `9d0eb912…4a0c3026` (all unchanged)
+> - TurnClimb `cd705c4a…4bda5c9c` · Accel `9fb59805…de8c3aaf` · Pitch `c0332e9e…6fd379ea` (all unchanged)
+> - **Stall `1a57b6d1…a0526fc6` (NEW — 2-ship: ki61 accelerated stall + p47d structural-g zoom)**
+> Ledger: ADR-Step8-FlightModel-B3-v1.7r0, SEAL_CARD v1.7r0, receipt `…v1.7r0-*.yml`, guardian.yml updated
+> (+Stall in all 3 golden lists). **GIT: NOT yet committed/pushed — commit the B3 change set, then watch
+> guardian CI reproduce all 7 goldens × MSVC/GCC/Clang × x64/AArch64.** Branch protection / required-check
+> setup is still the deferred owner task.
+>
+> _(Prior: v1.6r0 B2 lift & pitch — γ stored state, KIN-002 wire reseal, all goldens regenerated + Pitch;
+> committed + pushed, guardian green on `12a1830` run 28392491160.)_
 >
 > ---
 >
@@ -66,7 +68,7 @@
 > DOWNSTREAM by re-seeding the predictor (the kernel has no such axis). All presentation-only;
 > golden `529c6a05…` unchanged, 12/12 gates + ctest 7/7 green.
 >
-> ### ⇒ Flight model Track B: **B1 DONE ✅ (v1.5r0) · B2 DONE ✅ (2026-06-29, seal v1.6r0)**. NEXT: **§8.3 Phase B3 (limits & stall)**.
+> ### ⇒ Flight model Track B: **B1 DONE ✅ (v1.5r0) · B2 DONE ✅ (v1.6r0) · B3 DONE ✅ (2026-06-29, seal v1.7r0)**. NEXT: **§8.4 Phase B4 (per-airframe aero retune — mostly data)**.
 > **B1 (longitudinal energy) is shipped and sealed.** TAS is now a real integrated state: thrust −
 > drag (parasitic + induced from the bank load factor) − climb cost. `Command` carries **throttle
 > [0,1]**; per-airframe aero params (mass, S, cd0, k, T₀, V_max) live on the envelope. Energy lives
@@ -489,7 +491,18 @@ protocol bump) so remotes/late-join reconstruct attitude — this is a **wire re
 was. Deliverables: kernel + ref mirror, goldens regenerated + **GOLDEN-SK-Loop/Pitch-001**, property
 tests (sustained-vs-instantaneous turn, energy bleed in a pull), ADR + `/seal`.
 
-### 8.3 Phase B3 — Limits & stall: C_Lmax, accelerated stall, structural g  (SEAL)
+### 8.3 Phase B3 — Limits & stall: C_Lmax, accelerated stall, structural g  ✅ DONE (2026-06-29, seal v1.7r0)
+**Shipped.** Achievable load factor `n` bounded per-airframe by BOTH the structural g limits
+(`n_max_struct`/`n_min_struct`) AND the C_Lmax aerodynamic ceiling `n_aero=cl_max*qS/(m*g0)`:
+`n=clamp(n_cmd, max(n_min_struct,-n_aero), min(n_max_struct,n_aero))`. Accelerated stall (turn
+collapses below the corner speed `V*=stall*sqrt(n_max_struct)`) + the 1 g stall speed are emergent;
+B2's global `[-3,9]` placeholder retired; post-stall lift held at C_Lmax (no departure — deferred).
+**No new state/wire/det_math** (n derived). New envelope scalars `cl_max,n_max_struct,n_min_struct`
+(x8, coherent with `stall_tas_mps`; balance pass -> retune in B4). **Conservative extension: the 6
+prior goldens are byte-identical** (limits never bind; verified C++=Python GCC+Clang); only NEW
+**GOLDEN-SK-Stall-001** (`1a57b6d1...a0526fc6`, ki61 accelerated stall + p47d structural-g zoom).
+12/12 gates, ctest 7/7, 72 property tests (+8 `test_stall.py`), `tuning_probe` extended. Ledger:
+ADR-Step8-FlightModel-B3-v1.7r0, SEAL_CARD v1.7r0. The ORIGINAL B3 plan (kept for reference):
 Clamp `C_L` to `C_Lmax(M?)`; exceeding → stall (lift breaks, `gammȧ`/turn collapse, optional
 departure). Add a **structural g limit** and a **corner speed** that falls out naturally (max
 sustained turn where `n·V` is maximized). This is what makes airframes *feel* different and makes

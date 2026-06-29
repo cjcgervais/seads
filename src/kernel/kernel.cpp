@@ -17,12 +17,12 @@ static inline double clampd(double v, double lo, double hi) {
 static constexpr double RHO0  = 0x1.399999999999ap+0;   // 1.225 kg/m^3
 static constexpr double V_MIN = 0x1.e000000000000p+4;   // 30.0 m/s
 
-// B2 lift-&-pitch (ATM-Sphere v1.6r0): global placeholder structural clamp on the commanded
-// load factor n. Per-airframe C_Lmax / accelerated stall / structural-g is deferred to B3; here
-// n is only bounded to keep the aero/attitude solve well-defined. Shared bit-for-bit with
-// tools/ref_kernel.py (N_MIN/N_MAX). See ADR-Step8-FlightModel-B2.
-static constexpr double N_MIN = -0x1.8000000000000p+1;  // -3.0
-static constexpr double N_MAX =  0x1.2000000000000p+3;  // +9.0
+// B3 limits & stall (ATM-Sphere v1.7r0): the B2 global placeholder clamp (N_MIN=-3, N_MAX=+9) is
+// RETIRED. The achievable load factor n is now bounded per-airframe by BOTH a structural limit
+// (Envelope::n_min_struct/n_max_struct) AND the C_Lmax aerodynamic ceiling
+// n_aero = cl_max*qS/(m*g0) (the most lift the wing can make at the current dynamic pressure;
+// below the corner speed this is binding and the turn collapses = accelerated stall). No new
+// det_math (+,-,*,/ only). Mirrors tools/ref_kernel.py step_scenario. See ADR-Step8-FlightModel-B3.
 
 // Closed-form intrinsic-S2 great-circle step. det_math only. Mirrors ref_kernel.py.
 static void great_circle_step(double lat, double lon, double bearing, double s, double R,
@@ -92,6 +92,9 @@ void Kernel::step() {                       // straight golden: req=0, phi uncha
 }
 
 void Kernel::step(const std::vector<Command>& cmd, const std::vector<const Envelope*>& env) {
+    // B3 (v1.7r0): the commanded load factor n is bounded per-airframe by the structural g limits
+    // AND the C_Lmax aerodynamic ceiling (n_aero); below the corner speed the turn collapses as
+    // speed bleeds (accelerated stall). Retires the B2 global [-3,9] clamp. No new det_math.
     // B2 (v1.6r0): full 3-DOF point-mass step. Pitch is real — flight-path angle gamma is a stored
     // state, driven by the commanded load factor n (g-command) through the lift vector; altitude is
     // earned (alt = V*sin gamma). Op order MUST match tools/ref_kernel.step_scenario bit-for-bit.
@@ -112,16 +115,25 @@ void Kernel::step(const std::vector<Command>& cmd, const std::vector<const Envel
         delta = clampd(delta, -step_max, step_max);
         phi_[i] = phi_[i] + delta;
         phi_[i] = clampd(phi_[i], -phimax, phimax);
-        // --- commanded load factor (global placeholder clamp; per-airframe C_Lmax = B3) ---
-        double n = clampd(cmd[i].target_g, N_MIN, N_MAX);
+        // --- dynamic pressure (depends only on V; needed for the aero stall ceiling) ---
+        double q = 0.5 * RHO0 * V * V;                  // dynamic pressure
+        double qS = q * e.wing_area_m2;
+        // --- commanded load factor n, bounded by structural g AND C_Lmax (B3, v1.7r0) ---
+        // n_aero = most |n| the wing can lift at this q; below the corner speed it is the binding
+        // limit and the turn collapses (accelerated stall). Retires the B2 [-3,9] placeholder.
+        double n_aero = e.cl_max * qS / (e.mass_kg * g0);
+        double n_hi = e.n_max_struct;
+        if (n_aero < n_hi) n_hi = n_aero;
+        double n_lo = e.n_min_struct;
+        double neg_aero = -n_aero;
+        if (neg_aero > n_lo) n_lo = neg_aero;
+        double n = clampd(cmd[i].target_g, n_lo, n_hi);
         // --- trig of NEW phi and OLD gamma (single eval, fixed order) ---
         double cphi = det_cos(phi_[i]);
         double sphi = det_sin(phi_[i]);
         double cg = det_cos(gamma_[i]);
         double sg = det_sin(gamma_[i]);
-        // --- drag/thrust with current V and load factor n (B1 algebra) ---
-        double q = 0.5 * RHO0 * V * V;                  // dynamic pressure
-        double qS = q * e.wing_area_m2;
+        // --- drag/thrust with current V and load factor n (B1 algebra; reuses q, qS above) ---
         double L = n * e.mass_kg * g0;                  // lift = n * weight
         double CL = L / qS;
         double Dp = qS * e.cd0;                         // parasitic drag

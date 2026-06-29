@@ -13,6 +13,7 @@
     "climb_rate_max_mps_vs_tas": [[44, 16], [90, 14], [140, 12], [180, 10], [210, 9]],
     "climb_rate_min_mps_vs_tas": [[44, -24], [90, -28], [140, -31], [180, -34], [210, -36]],
     "roll_rate_degps_vs_tas": [[44, 78], [90, 88], [140, 95], [180, 98], [210, 100]],
-    "mass_kg": 4100.0, "wing_area_m2": 21.8, "cd0": 0.02, "induced_k": 0.052, "thrust_static_n": 17000.0, "v_max_mps": 215.0
+    "mass_kg": 4100.0, "wing_area_m2": 21.8, "cd0": 0.02, "induced_k": 0.052, "thrust_static_n": 17000.0, "v_max_mps": 215.0,
+    "cl_max": 1.555, "n_max_struct": 8, "n_min_struct": -4
   }
 }

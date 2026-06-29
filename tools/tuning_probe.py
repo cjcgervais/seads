@@ -19,6 +19,7 @@ from pathlib import Path
 
 RADIUS_M = 15000.0
 G0 = 9.80665
+RHO0 = 1.225
 DT = 0.01
 STEPS_60S = int(60.0 / DT)
 
@@ -120,6 +121,42 @@ def validate_envelope(doc):
             errs.append("stall/v_ne invalid ordering (require 0 < stall < v_ne)")
     except Exception:
         errs.append("stall/v_ne non-numeric")
+    errs += validate_b3_limits(e)
+    return errs
+
+
+def validate_b3_limits(e):
+    """B3 (v1.7r0) V-n limit params: cl_max + structural g limits. Checks bounds, ordering, and
+    that the model is internally consistent — the C_Lmax-implied 1 g stall speed matches the
+    declared stall_tas_mps, and the corner speed stall*sqrt(n_max_struct) stays below v_ne (so the
+    aircraft can actually reach full structural g before overspeeding)."""
+    errs = []
+    for k in ("cl_max", "n_max_struct", "n_min_struct"):
+        if k not in e:
+            errs.append(f"missing {k}")
+    if errs:
+        return errs
+    try:
+        cl_max = float(e["cl_max"]); nmx = float(e["n_max_struct"]); nmn = float(e["n_min_struct"])
+        mass = float(e["mass_kg"]); S = float(e["wing_area_m2"])
+        stall = float(e["stall_tas_mps"]); vne = float(e["v_ne_mps"])
+    except Exception:
+        return ["B3 limit params non-numeric"]
+    if not (0.8 <= cl_max <= 2.0):
+        errs.append(f"cl_max out of bounds: {cl_max} (expect 0.8..2.0)")
+    if not (4.0 <= nmx <= 12.0):
+        errs.append(f"n_max_struct out of bounds: {nmx} (expect 4..12 g)")
+    if not (-6.0 <= nmn < 0.0):
+        errs.append(f"n_min_struct out of bounds: {nmn} (expect -6..0 g)")
+    # internal consistency: cl_max-implied 1 g stall speed == declared stall_tas_mps
+    v_stall_1g = math.sqrt(2.0 * mass * G0 / (RHO0 * S * cl_max))
+    if abs(v_stall_1g - stall) > 0.5:
+        errs.append(f"cl_max implies 1g stall {v_stall_1g:.2f} m/s, declared stall_tas_mps={stall} "
+                    f"(incoherent; |diff| {abs(v_stall_1g - stall):.2f} > 0.5)")
+    # corner speed must be reachable below v_ne
+    corner = stall * math.sqrt(nmx)
+    if corner >= vne:
+        errs.append(f"corner speed {corner:.1f} >= v_ne {vne} (cannot pull full structural g)")
     return errs
 
 

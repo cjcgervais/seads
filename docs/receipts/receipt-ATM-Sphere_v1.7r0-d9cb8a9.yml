@@ -1,0 +1,33 @@
+seal: ATM-Sphere v1.7r0
+realm: ATM-only
+geometry:
+  radius_m: 15000
+  flattening: 0
+tick_dt_s: 0.01
+gravity_mps2: 9.80665
+ceiling:
+  atm_top_m: 8000
+  soft_band_m: 100
+wire_hash: GEO-001+KIN-002
+change_summary: "B3 limits & stall (seal v1.7r0): per-airframe C_Lmax aero ceiling + structural g limits retire the B2 global [-3,9] clamp; accelerated stall + corner speed emergent. 5 prior goldens byte-identical (limits do not bind); new GOLDEN-SK-Stall-001."
+rail_change: false
+gates:
+  spec_monotone_check: PASS
+  det_math_oracle: PASS
+  tuning_probe: PASS
+  atm_top_probe: PASS
+  geo001_codec: PASS
+  snapshot_codec: PASS
+  lockstep: PASS
+  interp: PASS
+  predict: PASS
+  validate_snapshot: PASS
+  validate_scenarios: PASS
+  property_tests: PASS
+golden_id: GOLDEN-SK-Sphere-001
+golden_sha256: "db777327dc5460c8825e97997a81e64277a3407c70918e788c2fd605d13ac394"
+commit_sha: "d9cb8a9c632090ba4b926e5f96e92d6cfac19006"
+toolchain_matrix: [python-ref, MSVC2022, Clang18, GCC13, x64, AArch64]
+date: "2026-06-29"
+overall: PASS
+signoff: "Forge"

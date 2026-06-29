@@ -41,13 +41,18 @@ ROOT = Path(__file__).resolve().parent.parent
 RHO0 = float.fromhex('0x1.399999999999ap+0')   # 1.225 kg/m^3
 V_MIN = float.fromhex('0x1.e000000000000p+4')   # 30.0 m/s
 
-# --- B2 lift-&-pitch constants (ATM-Sphere v1.6r0) --------------------------------------
-# Global placeholder structural clamp on the commanded load factor n. Per-airframe C_Lmax /
-# accelerated stall / structural-g (and the corner speed that falls out) are deferred to B3;
-# here n is only bounded to keep the aero/attitude solve well-defined. Exact hex-floats so
-# Python and C++ (kernel.cpp) parse identical bits. See ADR-Step8-FlightModel-B2.
-N_MIN = float.fromhex('-0x1.8000000000000p+1')  # -3.0  (push-over / negative g)
-N_MAX = float.fromhex('0x1.2000000000000p+3')   # +9.0  (hard pull)
+# --- B3 limits & stall (ATM-Sphere v1.7r0) ----------------------------------------------
+# The B2 global placeholder clamp on the load factor (N_MIN=-3, N_MAX=+9) is RETIRED. The
+# achievable load factor n is now bounded per-airframe by BOTH a structural limit and an
+# aerodynamic ceiling (accelerated stall):
+#   * structural: n in [n_min_struct, n_max_struct]  (envelope scalars, the V-n "g limit")
+#   * aerodynamic: |n| <= n_aero = cl_max * qS / (m*g0)  (the most lift the wing can make at the
+#     current dynamic pressure; below the corner speed this is the binding limit -> the turn rate
+#     collapses as speed bleeds = the accelerated stall / energy death-spiral, emergent).
+# The corner speed V* = stall_tas * sqrt(n_max_struct) (where n_aero meets n_max_struct) falls
+# out for free. No new det_math: n_aero is +,-,*,/ only. The post-stall lift is HELD at C_Lmax
+# (AoA-limited cap, not a discontinuous lift drop / departure — that is optional, deferred).
+# See ADR-Step8-FlightModel-B3.
 
 
 def clamp(v, lo, hi):
@@ -135,6 +140,11 @@ class Kernel:
         throttle defaults to 0.0 if absent. envelopes[i] = dict from envelopes.load_envelope.
         Op order is the sealed byte spec and MUST match Kernel::step(cmd,env) in kernel.cpp exactly.
 
+        B3 (v1.7r0): the commanded load factor n is now bounded per-airframe by the structural g
+        limits AND the C_Lmax aerodynamic ceiling (n_aero = cl_max*qS/(m*g0)); below the corner
+        speed n_aero is the binding limit and the turn rate collapses as speed bleeds (accelerated
+        stall). Retires the B2 global [-3, 9] placeholder. No new det_math. See ADR-Step8-B3.
+
         B2 (v1.6r0): full 3-DOF point-mass step. Pitch is now REAL: flight-path angle gamma is a
         stored state, driven by the commanded load factor n (g-command) through the lift vector.
         Altitude is EARNED (alt_dot = V*sin gamma); pulling g raises induced drag and bleeds speed
@@ -159,16 +169,27 @@ class Kernel:
             delta = clamp(delta, -step_max, step_max)
             ac.phi = ac.phi + delta
             ac.phi = clamp(ac.phi, -phimax, phimax)
-            # --- commanded load factor (global placeholder clamp; per-airframe C_Lmax = B3) ---
-            n = clamp(commands[i][1], N_MIN, N_MAX)
+            # --- dynamic pressure (depends only on V; needed for the aero stall ceiling) ---
+            q = 0.5 * RHO0 * V * V                        # dynamic pressure
+            qS = q * e["wing_area_m2"]
+            # --- commanded load factor n, bounded by structural g AND C_Lmax (B3, v1.7r0) ---
+            # n_aero = most |n| the wing can lift at this q; below the corner speed it is the
+            # binding limit and the turn collapses (accelerated stall). Retires the B2 [-3,9].
+            n_aero = e["cl_max"] * qS / (e["mass_kg"] * g0)
+            n_hi = e["n_max_struct"]
+            if n_aero < n_hi:
+                n_hi = n_aero
+            n_lo = e["n_min_struct"]
+            neg_aero = -n_aero
+            if neg_aero > n_lo:
+                n_lo = neg_aero
+            n = clamp(commands[i][1], n_lo, n_hi)
             # --- trig of NEW phi and OLD gamma (single eval, fixed order) ---
             cphi = dm.det_cos(ac.phi)
             sphi = dm.det_sin(ac.phi)
             cg = dm.det_cos(ac.gamma)
             sg = dm.det_sin(ac.gamma)
-            # --- drag/thrust with current V and load factor n (B1 algebra; +,-,*,/ and det_* only) ---
-            q = 0.5 * RHO0 * V * V                        # dynamic pressure
-            qS = q * e["wing_area_m2"]
+            # --- drag/thrust with current V and load factor n (B1 algebra; reuses q, qS above) ---
             L = n * e["mass_kg"] * g0                     # lift = n * weight
             CL = L / qS
             Dp = qS * e["cd0"]                            # parasitic drag
