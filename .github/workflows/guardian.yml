@@ -23,6 +23,8 @@ jobs:
           python tools/gen_coeffs.py --check
           python tools/gen_golden_params.py --check
           python tools/gen_detmath_vectors.py --check
+          python tools/gen_envelope_tables.py --check
+          python tools/gen_scenario_params.py --check
       - name: Rails + roster
         run: python tools/spec_monotone_check.py config/rails/atm.json
       - name: det_math oracle (vs MPFR)
@@ -39,6 +41,13 @@ jobs:
           python tools/validate_snapshot.py \
             --golden tests/golden/GOLDEN-SK-Sphere-001/expected.world_hash \
             --candidate /tmp/ref.bin
+      - name: Reference scenario goldens match seal
+        run: |
+          for ID in GOLDEN-SK-Turn-001 GOLDEN-SK-Climb-001 GOLDEN-SK-TurnClimb-001; do
+            python tools/ref_kernel.py --scenario "config/scenarios/$ID.json" --out "/tmp/$ID.bin"
+            python tools/validate_snapshot.py \
+              --golden "tests/golden/$ID/expected.world_hash" --candidate "/tmp/$ID.bin"
+          done
 
   build-matrix:
     name: ${{ matrix.name }}
@@ -80,9 +89,11 @@ jobs:
         run: |
           if [ "${{ matrix.gen }}" = "msvc" ]; then
             echo "golden=build/Release/seads_golden.exe" >> "$GITHUB_OUTPUT"
+            echo "scenario=build/Release/seads_scenario.exe" >> "$GITHUB_OUTPUT"
             echo "dtest=build/Release/seads_detmath_test.exe" >> "$GITHUB_OUTPUT"
           else
             echo "golden=build/seads_golden" >> "$GITHUB_OUTPUT"
+            echo "scenario=build/seads_scenario" >> "$GITHUB_OUTPUT"
             echo "dtest=build/seads_detmath_test" >> "$GITHUB_OUTPUT"
           fi
 
@@ -90,29 +101,34 @@ jobs:
         shell: bash
         run: "${{ steps.bin.outputs.dtest }}"
 
-      - name: Run golden + hash
+      - name: Run all goldens + hash + validate
         shell: bash
         run: |
-          "${{ steps.bin.outputs.golden }}" --out run.bin
-          python - <<'PY'
-          import hashlib
+          set -e
+          mkdir -p hashes
+          run_one() {  # $1 = golden id, $2.. = command to produce run.bin
+            local ID="$1"; shift
+            "$@" --out run.bin
+            python - "$ID" <<'PY'
+          import sys, hashlib
+          ID = sys.argv[1]
           h = hashlib.sha256(open("run.bin","rb").read()).hexdigest()
-          open("hash.txt","w").write(h+"\n")
-          print("world_hash", h)
+          open("hashes/%s.txt" % ID, "w").write(h + "\n")
+          print(ID, h)
           PY
+            python tools/validate_snapshot.py \
+              --golden "tests/golden/$ID/expected.world_hash" --candidate run.bin
+          }
+          run_one GOLDEN-SK-Sphere-001    "${{ steps.bin.outputs.golden }}"
+          run_one GOLDEN-SK-Turn-001      "${{ steps.bin.outputs.scenario }}" --id GOLDEN-SK-Turn-001
+          run_one GOLDEN-SK-Climb-001     "${{ steps.bin.outputs.scenario }}" --id GOLDEN-SK-Climb-001
+          run_one GOLDEN-SK-TurnClimb-001 "${{ steps.bin.outputs.scenario }}" --id GOLDEN-SK-TurnClimb-001
 
-      - name: Validate against sealed golden
-        shell: bash
-        run: |
-          python tools/validate_snapshot.py \
-            --golden tests/golden/GOLDEN-SK-Sphere-001/expected.world_hash \
-            --candidate run.bin
-
-      - name: Upload hash artifact
+      - name: Upload hash artifacts
         uses: actions/upload-artifact@v4
         with:
           name: hash-${{ matrix.name }}
-          path: hash.txt
+          path: hashes/
 
   verify-determinism:
     name: Cross-toolchain hash aggregation
@@ -122,20 +138,26 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with: { path: hashes }
-      - name: All world_hashes identical and equal to seal
+      - name: All world_hashes identical and equal to each seal
         run: |
           set -e
-          # Strip ALL whitespace (incl. CR) — the seal file and Windows-written hash.txt
-          # can carry CRLF; `tr -d ' \n'` would leave a stray \r and mis-compare.
-          SEAL=$(tr -d '[:space:]' < tests/golden/GOLDEN-SK-Sphere-001/expected.world_hash)
-          echo "sealed: $SEAL"
+          # Per golden: every toolchain's hash must equal that golden's seal.
+          # Strip ALL whitespace (incl. CR) — seal files / Windows-written hashes can carry CRLF.
           fail=0
-          for f in hashes/*/hash.txt; do
-            H=$(tr -d '[:space:]' < "$f")
-            echo "$(dirname "$f"): $H"
-            if [ "$H" != "$SEAL" ]; then echo "  MISMATCH"; fail=1; fi
+          for ID in GOLDEN-SK-Sphere-001 GOLDEN-SK-Turn-001 GOLDEN-SK-Climb-001 GOLDEN-SK-TurnClimb-001; do
+            SEAL=$(tr -d '[:space:]' < "tests/golden/$ID/expected.world_hash")
+            echo "=== $ID sealed: $SEAL ==="
+            count=0
+            for f in hashes/*/"$ID.txt"; do
+              [ -e "$f" ] || continue
+              H=$(tr -d '[:space:]' < "$f")
+              echo "  $(dirname "$f"): $H"
+              if [ "$H" != "$SEAL" ]; then echo "    MISMATCH"; fail=1; fi
+              count=$((count + 1))
+            done
+            if [ "$count" -eq 0 ]; then echo "  NO HASHES FOUND for $ID"; fail=1; fi
           done
           if [ "$fail" -ne 0 ]; then
             echo "DETERMINISM GATE FAILED"; exit 1
           fi
-          echo "DETERMINISM GATE PASSED — all toolchains agree with the seal."
+          echo "DETERMINISM GATE PASSED — all toolchains agree with every golden seal."

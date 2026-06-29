@@ -4,6 +4,7 @@
 #include <vector>
 #include <cstdint>
 #include <string>
+#include "flight_types.h"
 
 namespace seads {
 
@@ -22,7 +23,9 @@ public:
     // returns index of the new aircraft
     std::size_t add(double lat, double lon, double psi, double phi, double alt, double tas);
 
-    void step();                  // climb input = 0 (golden); extend later
+    void step();                  // straight golden: climb input = 0, phi unchanged
+    // envelope-driven step: cmd[i] = per-aircraft (target_phi, target_climb); env[i] = its envelope.
+    void step(const std::vector<Command>& cmd, const std::vector<const Envelope*>& env);
     void run(std::uint32_t ticks);
 
     // canonical little-endian snapshot (identical bytes to ref_kernel.py)
@@ -35,6 +38,10 @@ public:
     double alt(std::size_t i) const { return alt_[i]; }
 
 private:
+    // Kinematic tail for aircraft i (coordinated-turn + great-circle + ceiling-clamped vertical).
+    // phi_[i] must already be final for this tick. Verbatim ops shared by both step() overloads.
+    void advance_(std::size_t i, double req);
+
     Rails rails_;
     std::vector<double> lat_, lon_, psi_, phi_, alt_, tas_;
 };

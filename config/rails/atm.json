@@ -1,8 +1,8 @@
 {
   "header": {
     "id": "SEADS-RAILS",
-    "version": 120,
-    "seal": "ATM-Sphere v1.2r0",
+    "version": 130,
+    "seal": "ATM-Sphere v1.3r0",
     "note": "Data-driven immutable rails. Any change here REQUIRES a new seal (ADR + Forge audit card + Chronicle receipt). See CLAUDE.md > Change-Control Law."
   },
   "rails": {

@@ -42,26 +42,60 @@ static double ceiling_climb_rate(double req, double alt, double atm_top, double 
     return req;
 }
 
+// Clamped piecewise-linear interpolation over a 5-point LUT. det_math: only + - * / and exact
+// IEEE comparisons (no FMA). Op order MUST match detmath_ref.lut_eval bit-for-bit.
+static inline double lut_eval(const double* xs, const double* ys, double x) {
+    if (x <= xs[0]) return ys[0];
+    if (x >= xs[4]) return ys[4];
+    int i = 0;
+    while (x >= xs[i + 1]) ++i;
+    double t = (x - xs[i]) / (xs[i + 1] - xs[i]);
+    return ys[i] + (ys[i + 1] - ys[i]) * t;
+}
+
 std::size_t Kernel::add(double lat, double lon, double psi, double phi, double alt, double tas) {
     lat_.push_back(lat); lon_.push_back(lon); psi_.push_back(psi);
     phi_.push_back(phi); alt_.push_back(alt); tas_.push_back(tas);
     return lat_.size() - 1;
 }
 
-void Kernel::step() {
+void Kernel::advance_(std::size_t i, double req) {
     const double dt = rails_.dt, R = rails_.R, g0 = rails_.g0;
+    double V = tas_[i];
+    double psi_dot = g0 * det_tan(phi_[i]) / V;
+    psi_[i] = wrap_2pi(psi_[i] + psi_dot * dt);
+    double s = V * dt;
+    double nlat, nlon;
+    great_circle_step(lat_[i], lon_[i], psi_[i], s, R, &nlat, &nlon);
+    lat_[i] = nlat;
+    lon_[i] = nlon;
+    double rate = ceiling_climb_rate(req, alt_[i], rails_.atm_top, rails_.soft);
+    alt_[i] = clampd(alt_[i] + rate * dt, 0.0, rails_.atm_top);
+}
+
+void Kernel::step() {                       // straight golden: req=0, phi unchanged -> byte-identical
+    for (std::size_t i = 0; i < lat_.size(); ++i) advance_(i, 0.0);
+}
+
+void Kernel::step(const std::vector<Command>& cmd, const std::vector<const Envelope*>& env) {
+    const double dt = rails_.dt;
     for (std::size_t i = 0; i < lat_.size(); ++i) {
         double V = tas_[i];
-        double psi_dot = g0 * det_tan(phi_[i]) / V;
-        psi_[i] = wrap_2pi(psi_[i] + psi_dot * dt);
-        double s = V * dt;
-        double nlat, nlon;
-        great_circle_step(lat_[i], lon_[i], psi_[i], s, R, &nlat, &nlon);
-        lat_[i] = nlat;
-        lon_[i] = nlon;
-        double req = 0.0;  // golden has no climb input
-        double rate = ceiling_climb_rate(req, alt_[i], rails_.atm_top, rails_.soft);
-        alt_[i] = clampd(alt_[i] + rate * dt, 0.0, rails_.atm_top);
+        const Envelope& e = *env[i];
+        // bank dynamics: slew toward commanded bank at roll_rate(V), clamped to +/- phi_max(V)
+        double phimax = lut_eval(e.phi_max.x, e.phi_max.y, V);
+        double rollrate = lut_eval(e.roll_rate.x, e.roll_rate.y, V);
+        double cmdphi = clampd(cmd[i].target_phi, -phimax, phimax);
+        double step_max = rollrate * dt;
+        double delta = cmdphi - phi_[i];
+        delta = clampd(delta, -step_max, step_max);
+        phi_[i] = phi_[i] + delta;
+        phi_[i] = clampd(phi_[i], -phimax, phimax);
+        // climb command clamped to envelope band; ceiling predamp applied inside advance_
+        double climbmax = lut_eval(e.climb_max.x, e.climb_max.y, V);
+        double climbmin = lut_eval(e.climb_min.x, e.climb_min.y, V);
+        double req = clampd(cmd[i].target_climb, climbmin, climbmax);
+        advance_(i, req);
     }
 }
 

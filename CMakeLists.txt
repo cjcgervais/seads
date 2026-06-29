@@ -47,6 +47,10 @@ target_link_libraries(seads_replay PUBLIC seads_det_flags)
 add_executable(seads_golden src/kernel/golden_main.cpp)
 target_link_libraries(seads_golden PRIVATE seads_kernel seads_replay seads_det_math seads_det_flags)
 
+# --- scenario runner (scripted-timeline goldens: Turn / Climb / TurnClimb) ---
+add_executable(seads_scenario src/kernel/scenario_main.cpp)
+target_link_libraries(seads_scenario PRIVATE seads_kernel seads_replay seads_det_math seads_det_flags)
+
 # --- det_math bit-exactness test ---
 add_executable(seads_detmath_test src/det_math/detmath_test_main.cpp)
 target_link_libraries(seads_detmath_test PRIVATE seads_det_math seads_det_flags)

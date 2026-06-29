@@ -28,6 +28,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import detmath_ref as dm
+import envelopes as envmod
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -87,20 +88,48 @@ class Kernel:
         self.soft = float(r["atm_soft_band_m"])
         self.aircraft = []
 
-    def step(self, climb_inputs=None):
+    def _advance(self, ac, req):
+        """Kinematic tail for one aircraft: coordinated-turn + great-circle + ceiling-clamped
+        vertical. `ac.phi` is already final for this tick. This is the VERBATIM body of the
+        original step() inner loop; both the straight golden (req=0, phi=0) and the scenario
+        path go through it, so the sealed golden stays byte-identical. C++ mirror: Kernel::advance_."""
         dt, R, g0 = self.dt, self.R, self.g0
+        V = ac.tas
+        # coordinated-turn law
+        psi_dot = g0 * dm.det_tan(ac.phi) / V
+        ac.psi = dm.wrap_2pi(ac.psi + psi_dot * dt)
+        # great-circle horizontal advance
+        s = V * dt
+        ac.lat, ac.lon = great_circle_step(ac.lat, ac.lon, ac.psi, s, R)
+        # vertical (ceiling-clamped)
+        rate = ceiling_climb_rate(req, ac.alt, self.atm_top, self.soft)
+        ac.alt = clamp(ac.alt + rate * dt, 0.0, self.atm_top)
+
+    def step(self, climb_inputs=None):
+        for i, ac in enumerate(self.aircraft):
+            req = 0.0 if climb_inputs is None else climb_inputs[i]
+            self._advance(ac, req)
+
+    def step_scenario(self, commands, envelopes):
+        """Envelope-driven step. commands[i] = (target_phi_rad, target_climb_mps);
+        envelopes[i] = dict of radian LUTs from envelopes.load_envelope. Op order is the
+        sealed byte spec and MUST match Kernel::step(cmd,env) in kernel.cpp exactly."""
+        dt = self.dt
         for i, ac in enumerate(self.aircraft):
             V = ac.tas
-            # coordinated-turn law
-            psi_dot = g0 * dm.det_tan(ac.phi) / V
-            ac.psi = dm.wrap_2pi(ac.psi + psi_dot * dt)
-            # great-circle horizontal advance
-            s = V * dt
-            ac.lat, ac.lon = great_circle_step(ac.lat, ac.lon, ac.psi, s, R)
-            # vertical (ceiling-clamped)
-            req = 0.0 if climb_inputs is None else climb_inputs[i]
-            rate = ceiling_climb_rate(req, ac.alt, self.atm_top, self.soft)
-            ac.alt = clamp(ac.alt + rate * dt, 0.0, self.atm_top)
+            e = envelopes[i]
+            phimax = dm.lut_eval(e["phi_max"][0], e["phi_max"][1], V)
+            rollrate = dm.lut_eval(e["roll_rate"][0], e["roll_rate"][1], V)
+            cmdphi = clamp(commands[i][0], -phimax, phimax)
+            step_max = rollrate * dt
+            delta = cmdphi - ac.phi
+            delta = clamp(delta, -step_max, step_max)
+            ac.phi = ac.phi + delta
+            ac.phi = clamp(ac.phi, -phimax, phimax)
+            climbmax = dm.lut_eval(e["climb_max"][0], e["climb_max"][1], V)
+            climbmin = dm.lut_eval(e["climb_min"][0], e["climb_min"][1], V)
+            req = clamp(commands[i][1], climbmin, climbmax)
+            self._advance(ac, req)
 
     def run(self, ticks):
         for _ in range(ticks):
@@ -133,17 +162,60 @@ def build_golden(rails):
     return k, int(g["ticks"]), g["id"]
 
 
+def build_scenario(rails, scenario):
+    """Build a Kernel + per-aircraft (schedule, envelope) from a scenario JSON doc.
+    Returns (kernel, ticks, gid, schedules, envelopes)."""
+    k = Kernel(rails)
+    schedules = []
+    envelopes = []
+    for ac in scenario["aircraft"]:
+        s = ac["start"]
+        k.aircraft.append(Aircraft(
+            lat=deg2rad(s["lat_deg"]), lon=deg2rad(s["lon_deg"]),
+            psi=deg2rad(s["psi_deg"]), phi=deg2rad(s["phi_deg"]),
+            alt=float(s["alt_m"]), tas=float(s["tas_mps"]),
+        ))
+        schedules.append(ac["schedule"])
+        envelopes.append(envmod.load_envelope(ac["envelope"]))
+    ticks = int(scenario["ticks"])
+    gid = scenario["header"]["id"]
+    return k, ticks, gid, schedules, envelopes
+
+
+def run_scenario(k, ticks, schedules, envelopes):
+    """Drive the scripted-timeline. Phase select is integer-only (largest start_tick <= t)."""
+    for t in range(ticks):
+        cmds = []
+        for sched in schedules:
+            idx = 0
+            for j, ph in enumerate(sched):
+                if int(ph["start_tick"]) <= t:
+                    idx = j
+                else:
+                    break
+            ph = sched[idx]
+            cmds.append((deg2rad(ph["bank_deg"]), float(ph["climb_mps"])))
+        k.step_scenario(cmds, envelopes)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--rails", default=str(ROOT / "config" / "rails" / "atm.json"))
+    ap.add_argument("--scenario", default=None,
+                    help="run a config/scenarios/<id>.json scenario instead of the straight golden")
     ap.add_argument("--out", default=None)
     ap.add_argument("--seal", action="store_true",
                     help="write sealed golden snapshot + expected.world_hash")
     args = ap.parse_args()
 
     rails = json.loads(Path(args.rails).read_text(encoding="utf-8"))
-    k, ticks, gid = build_golden(rails)
-    k.run(ticks)
+    if args.scenario:
+        scenario = json.loads(Path(args.scenario).read_text(encoding="utf-8"))
+        k, ticks, gid, schedules, envelopes = build_scenario(rails, scenario)
+        run_scenario(k, ticks, schedules, envelopes)
+    else:
+        k, ticks, gid = build_golden(rails)
+        k.run(ticks)
     snap = k.snapshot(ticks)
     world_hash = hashlib.sha256(snap).hexdigest()
 

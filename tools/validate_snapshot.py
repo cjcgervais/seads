@@ -63,14 +63,13 @@ def main():
             hdr = f.read(32)
         if len(hdr) >= 24:
             mode = struct.unpack_from("<H", hdr, 0)[0]
-            tick_count = struct.unpack_from("<I", hdr, 4)[0]
             dt_s = struct.unpack_from("<d", hdr, 8)[0]
             R_m = struct.unpack_from("<d", hdr, 16)[0]
             warn = []
             if mode != 1: warn.append("Mode!=1(ATM)")
             if abs(dt_s - 0.01) > 1e-12: warn.append("dt!=0.01")
             if abs(R_m - 15000.0) > 1e-9: warn.append("R!=15000")
-            if tick_count != 10000: warn.append("ticks!=10000")
+            # tick_count is scenario-specific (and covered by the hash); not a rail invariant.
             if warn:
                 print("  WARN header: " + ", ".join(warn))
     except Exception:

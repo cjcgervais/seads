@@ -1,0 +1,20 @@
+{
+  "header": {
+    "id": "GOLDEN-SK-Turn-001",
+    "version": 130,
+    "seal": "ATM-Sphere v1.3r0",
+    "description": "Ki-61 rolls into a sustained 45-deg banked coordinated turn and holds. Exercises roll-rate slew toward phi_max(TAS) and the coordinated-turn great-circle on a curved path. TAS 140 m/s sits in the ki61 LUT domain where phi_max=45 deg."
+  },
+  "ticks": 6000,
+  "aircraft": [
+    {
+      "envelope": "ki61",
+      "start": { "lat_deg": 0.0, "lon_deg": 0.0, "psi_deg": 45.0, "phi_deg": 0.0, "alt_m": 1000.0, "tas_mps": 140.0 },
+      "schedule": [
+        { "start_tick": 0,    "bank_deg": 0.0,  "climb_mps": 0.0 },
+        { "start_tick": 200,  "bank_deg": 45.0, "climb_mps": 0.0 },
+        { "start_tick": 6000, "bank_deg": 45.0, "climb_mps": 0.0 }
+      ]
+    }
+  ]
+}

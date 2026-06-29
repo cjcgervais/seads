@@ -226,6 +226,27 @@ def wrap_2pi(a):
     return r
 
 
+# ---- piecewise-linear LUT interpolation (envelope tables) -----------------------------
+def lut_eval(xs, ys, x):
+    """Clamped piecewise-linear interpolation. xs strictly increasing.
+
+    Uses only +,-,*,/ and exact IEEE comparisons (no FMA), so it is bit-identical to the
+    C++ `lut_eval` in src/kernel/kernel.cpp. Op order is fixed and MUST NOT change:
+    t = (x - xs[i]) / (xs[i+1] - xs[i]) ; ys[i] + (ys[i+1] - ys[i]) * t.
+    Out-of-range x clamps to the end node verbatim.
+    """
+    last = len(xs) - 1
+    if x <= xs[0]:
+        return ys[0]
+    if x >= xs[last]:
+        return ys[last]
+    i = 0
+    while x >= xs[i + 1]:
+        i += 1
+    t = (x - xs[i]) / (xs[i + 1] - xs[i])
+    return ys[i] + (ys[i + 1] - ys[i]) * t
+
+
 if __name__ == "__main__":
     import math
     # quick smoke: compare against libm at a few points (NOT the formal oracle)

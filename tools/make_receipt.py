@@ -59,6 +59,22 @@ def main():
     else:
         gates["validate_snapshot"] = False
 
+    # scenario goldens (step 4): regenerate each via the reference and validate its seal
+    scen_dir = ROOT / "config" / "scenarios"
+    scen_ok = True
+    for sp in sorted(scen_dir.glob("*.json")):
+        sid = json.loads(sp.read_text(encoding="utf-8"))["header"]["id"]
+        seh = ROOT / "tests" / "golden" / sid / "expected.world_hash"
+        sc = Path(tempfile.gettempdir()) / f"seads_{sid}.bin"
+        g_ok, _ = run([PY, str(TOOLS / "ref_kernel.py"), "--scenario", str(sp), "--out", str(sc)])
+        v_ok = False
+        if g_ok and seh.exists():
+            v_ok, _ = run([PY, str(TOOLS / "validate_snapshot.py"),
+                           "--golden", str(seh), "--candidate", str(sc)])
+        scen_ok = scen_ok and v_ok
+    if list(scen_dir.glob("*.json")):
+        gates["validate_scenarios"] = scen_ok
+
     gates["property_tests"], _ = run([PY, "-m", "pytest", "-q", str(ROOT / "tests/property")])
 
     all_pass = all(gates.values())

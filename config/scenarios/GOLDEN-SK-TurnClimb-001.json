@@ -1,0 +1,21 @@
+{
+  "header": {
+    "id": "GOLDEN-SK-TurnClimb-001",
+    "version": 130,
+    "seal": "ATM-Sphere v1.3r0",
+    "description": "Spitfire Mk V flies a banked climbing spiral via a multi-phase schedule: roll in to 45 deg, then add an 8 m/s climb. Exercises bank and climb commands simultaneously. TAS 120 m/s sits in the spitfire_mk5 LUT domain (phi_max=53 deg, climb_max=12 m/s); start alt 3000 m stays clear of the ceiling."
+  },
+  "ticks": 4000,
+  "aircraft": [
+    {
+      "envelope": "spitfire_mk5",
+      "start": { "lat_deg": 0.0, "lon_deg": 0.0, "psi_deg": 0.0, "phi_deg": 0.0, "alt_m": 3000.0, "tas_mps": 120.0 },
+      "schedule": [
+        { "start_tick": 0,    "bank_deg": 0.0,  "climb_mps": 0.0 },
+        { "start_tick": 150,  "bank_deg": 45.0, "climb_mps": 0.0 },
+        { "start_tick": 800,  "bank_deg": 45.0, "climb_mps": 8.0 },
+        { "start_tick": 4000, "bank_deg": 45.0, "climb_mps": 8.0 }
+      ]
+    }
+  ]
+}

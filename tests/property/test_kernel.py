@@ -3,9 +3,11 @@
 Invariant checks (energy/symmetry/monotonicity style) beat trajectory matching under
 chaotic sensitivity. All tolerances are FP-aware.
 """
+import hashlib
 import json
 from pathlib import Path
 
+import pytest
 from hypothesis import given, strategies as st, settings
 
 import detmath_ref as dm
@@ -14,6 +16,8 @@ import ref_kernel as rk
 ROOT = Path(__file__).resolve().parents[2]
 RAILS = json.loads((ROOT / "config/rails/atm.json").read_text(encoding="utf-8"))
 R = 15000.0
+
+SCENARIO_IDS = ["GOLDEN-SK-Turn-001", "GOLDEN-SK-Climb-001", "GOLDEN-SK-TurnClimb-001"]
 
 
 def sph_dist(lat1, lon1, lat2, lon2):
@@ -78,3 +82,41 @@ def test_straight_flight_keeps_heading(brg):
     psi0 = k.aircraft[0].psi
     k.run(50)
     assert abs(dm.wrap_2pi(k.aircraft[0].psi) - dm.wrap_2pi(psi0)) < 1e-12
+
+
+# ---- envelope-driven scenarios (step 4 / seal v1.3r0) ---------------------------------
+def _load_scenario(sid):
+    return json.loads((ROOT / "config/scenarios" / f"{sid}.json").read_text(encoding="utf-8"))
+
+
+@pytest.mark.parametrize("sid", SCENARIO_IDS)
+def test_scenario_reproduces_sealed_hash(sid):
+    # the reference run must reproduce the committed seal (guards Python-side regressions
+    # before the cross-toolchain C++ matrix; the C++ kernel is bit-matched against this).
+    k, ticks, gid, schedules, envelopes = rk.build_scenario(RAILS, _load_scenario(sid))
+    rk.run_scenario(k, ticks, schedules, envelopes)
+    h = hashlib.sha256(k.snapshot(ticks)).hexdigest()
+    expected = (ROOT / "tests/golden" / sid / "expected.world_hash").read_text(encoding="utf-8").strip()
+    assert h == expected
+
+
+@pytest.mark.parametrize("sid", SCENARIO_IDS)
+def test_scenario_bank_within_envelope(sid):
+    # |phi| never exceeds phi_max(TAS) for the commanded aircraft (clamp invariant).
+    scen = _load_scenario(sid)
+    k, ticks, gid, schedules, envelopes = rk.build_scenario(RAILS, scen)
+    rk.run_scenario(k, ticks, schedules, envelopes)
+    for ac, env in zip(k.aircraft, envelopes):
+        phimax = dm.lut_eval(env["phi_max"][0], env["phi_max"][1], ac.tas)
+        assert abs(ac.phi) <= phimax + 1e-12
+
+
+def test_zero_command_equals_straight_flight():
+    # commanding bank=0, climb=0 through the scenario step must equal the straight golden step.
+    env = rk.envmod.load_envelope("ki61")
+    a = rk.Kernel(RAILS); a.aircraft.append(rk.Aircraft(0.0, 0.0, 0.7, 0.0, 1000.0, 140.0))
+    b = rk.Kernel(RAILS); b.aircraft.append(rk.Aircraft(0.0, 0.0, 0.7, 0.0, 1000.0, 140.0))
+    for _ in range(200):
+        a.step_scenario([(0.0, 0.0)], [env])
+        b.step()
+    assert a.snapshot(200) == b.snapshot(200)
