@@ -255,8 +255,15 @@ Suggested first moves for the next agent (build bottom-up, each layer gated befo
 
 ### 7. (Post-MVP) Guns/projectiles — new seal, deferred per doctrine.
 
-## Governance reminder
-Any change to a **rail** (R, Δt, roster, ceiling, geometry, gravity, determinism bans, wire) or to
-the golden world_hash REQUIRES a new seal: run `/seal` (or `/reseal` for value-only), write the
-ADR + Forge audit card, and have Chronicler run `tools/make_receipt.py`. Never re-baseline the
-golden silently.
+## Governance reminder (tiered — see CLAUDE.md §2)
+Governance is scaled to risk now (solo, agent-built project). **Two tiers:**
+- **Tier 1 (full ritual):** a change to a **rail** (R, Δt, roster, ceiling, geometry, gravity,
+  determinism bans, wire), to `det_math`/the kernel/the canonical snapshot layout, or anything that
+  **moves a golden world_hash** → new seal (`/seal`, or `/reseal` for a value-only rail change) +
+  ADR + Forge card + receipt. Never re-baseline a golden silently.
+- **Tier 2 (lightweight, the common case):** net layers, tooling, tests, renderer, docs, data-only
+  tuning that **can't move a golden** → gates green + a clear commit message + the auto-generated
+  receipt. ADR optional (write one only for a genuinely architectural decision). Layers 1–3 of
+  Step 6 were Tier-2-shaped; the heavy ADR/card on layer 3 was more than that tier requires.
+- **The backstop:** `make_receipt.py`'s `validate_snapshot`/`validate_scenarios` gates fail loudly
+  if a "Tier 2" change actually moved a hash — forcing it up to Tier 1. Trust the gates.
