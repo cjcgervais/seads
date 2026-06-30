@@ -18,6 +18,12 @@
 > byte-identical GCC+Clang. Ledger: ADR-Step7-Guns-WireTransport-v1.12r0, SEAL_CARD v1.12r0, receipt
 > `…v1.12r0-c6dd73e.yml`, rails version 210→220 (+ `wire.weapon`). **NEXT: a real cross-process server/transport
 > loop, hp/round interpolation or kill/impact event messages, or B5 ISA atmosphere — all optional.**
+> **GIT: committed + pushed to `origin/main` at `e23df32` (2026-06-30). guardian CI GREEN**
+> (run [28471743367](https://github.com/cjcgervais/seads/actions/runs/28471743367)) — Python gates +
+> MSVC x64 + GCC/Clang × x64 + **GCC/Clang arm64** reproduce all 9 goldens bit-for-bit + the new
+> `seads_weapon_test` leg + the cross-toolchain hash aggregation gate. **v1.12r0 (weapon wire transport)
+> is fully landed.** Adversarial Auditor APPROVE (Python↔C++ byte parity, rail scope = only `wire.weapon`
+> + version/seal, no banned symbols, no hash move).
 > _(The G1→G3 guns-arc summary below is retained as history — those phases are COMPLETE and unchanged.)_
 >
 > ## ►► PRIOR STATE: seal **ATM-Sphere v1.11r0** — **Step 7 guns / G3 (per-airframe weapon roster + fire-rate) DONE ✅ — GUNS ARC G1→G3 COMPLETE**
