@@ -32,7 +32,12 @@
 > Files: `kernel.{h,cpp}` (projectile SoA + `advance_projectiles_`/`spawn_projectile_` + snapshot block),
 > `flight_types.h` (`Command.fire`), `ref_kernel.py` (Projectile + mirror), `gen_scenario_params.py`
 > (Phase.fire) + `scenario_main.cpp`, `config/scenarios/GOLDEN-SK-Gunfire-001.json`, `tests/property/test_projectile.py`.
-> **GIT: _pending commit_ (see Auditor-pass + commit step). Was at `1b6d2a7` (v1.8r0 landed) before this.**
+> **GIT: committed + pushed to `origin/main` at `dbb3de7` (2026-06-30). guardian CI GREEN**
+> (run [28462840475](https://github.com/cjcgervais/seads/actions/runs/28462840475)) — Python gates +
+> MSVC x64 + GCC/Clang × x64 + **GCC/Clang arm64** reproduce all 8 goldens bit-for-bit + the
+> cross-toolchain hash aggregation gate. **v1.9r0 (Step 7 guns G1) is fully landed.** Adversarial
+> Auditor pass was clean (op-order parity, no new det_math, rails values untouched, prior goldens'
+> aircraft bytes byte-identical). Branch protection / required-check setup is still the deferred owner task.
 >
 > **Remaining roadmap after G1:** guns **G2** (hit/damage — seal) → **G3** (per-airframe armament — data reseal);
 > renderer polish (draw rounds; meshes; vendored Three.js; offline web — all **no-seal**); optional **B5**
