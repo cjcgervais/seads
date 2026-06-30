@@ -25,6 +25,16 @@ static constexpr double        MUZZLE_V       = 0x1.a900000000000p+9;    // 850.
 static constexpr double        PROJ_DRAG_K    = 0x1.a36e2eb1c432dp-13;   // 2.0e-4 quadratic drag decel coeff
 static constexpr std::uint32_t PROJ_TTL_TICKS = 250u;                    // 2.5 s lifetime, then despawn
 
+// G2 hit detection + per-aircraft hitpoints (Step 7 guns, ATM-Sphere v1.10r0). Shared hex-floats
+// with ref_kernel.py. Horizontal hit test is the spherical law of cosines vs COS_HIT_ANGLE (=
+// det_cos(HIT_RADIUS/R), precomputed once) — acos is monotone so no det_acos is needed; with the
+// |Δalt| gate it is a cylinder test using det_sin/det_cos only (NO new det_math). Global for G2
+// (per-airframe HP/armament are G3). See ADR-Step7-Guns-G2.
+static constexpr double START_HP         = 0x1.9000000000000p+6;   // 100.0 hitpoints (per-airframe in G3)
+static constexpr double DAMAGE_PER_ROUND = 0x1.9000000000000p+4;   // 25.0 hp/round (4 hits kill)
+static constexpr double HIT_ALT_GATE_M   = 0x1.e000000000000p+5;   // 60.0 m vertical hit gate
+static constexpr double COS_HIT_ANGLE    = 0x1.fffef3909d697p-1;   // cos(HIT_RADIUS/R); horizontal hit test
+
 // B3 limits & stall (ATM-Sphere v1.7r0): the B2 global placeholder clamp (N_MIN=-3, N_MAX=+9) is
 // RETIRED. The achievable load factor n is now bounded per-airframe by BOTH a structural limit
 // (Envelope::n_min_struct/n_max_struct) AND the C_Lmax aerodynamic ceiling
@@ -78,6 +88,7 @@ std::size_t Kernel::add(double lat, double lon, double psi, double phi, double a
                         double gamma) {
     lat_.push_back(lat); lon_.push_back(lon); psi_.push_back(psi);
     phi_.push_back(phi); alt_.push_back(alt); tas_.push_back(tas); gamma_.push_back(gamma);
+    hp_.push_back(START_HP);                     // G2 (v1.10r0): every aircraft spawns at full HP
     return lat_.size() - 1;
 }
 
@@ -95,9 +106,29 @@ void Kernel::advance_(std::size_t i, double req) {
     alt_[i] = clampd(alt_[i] + rate * dt, 0.0, rails_.atm_top);
 }
 
+// G2 (v1.10r0): index of the first ALIVE enemy aircraft the round p_idx hits this tick, else -1.
+// Horizontal great-circle within HIT_RADIUS via the law of cosines (cosc > COS_HIT_ANGLE; acos is
+// monotone so no det_acos) AND |Δalt| < HIT_ALT_GATE_M, excluding the firer. Array order. det_sin/
+// det_cos + (+,-,*,/) only. MUST match ref_kernel._projectile_hit bit-for-bit.
+std::ptrdiff_t Kernel::projectile_hit_(std::size_t i) const {
+    double psin = det_sin(p_lat_[i]);
+    double pcos = det_cos(p_lat_[i]);
+    for (std::size_t j = 0; j < lat_.size(); ++j) {
+        if (hp_[j] <= 0.0 || j == p_owner_[i]) continue;
+        double cosc = psin * det_sin(lat_[j]) + pcos * det_cos(lat_[j]) * det_cos(lon_[j] - p_lon_[i]);
+        if (cosc > COS_HIT_ANGLE) {
+            double dalt = p_alt_[i] - alt_[j];
+            if (dalt < 0.0) dalt = -dalt;
+            if (dalt < HIT_ALT_GATE_M) return static_cast<std::ptrdiff_t>(j);
+        }
+    }
+    return -1;
+}
+
 // G1 (v1.9r0): step every live round one tick (ballistic n=0/thrust=0 point mass), then despawn the
 // expired/grounded ones via in-place forward compaction (array order = deterministic, no pointer
-// dependence). Op order MUST match ref_kernel._advance_projectiles bit-for-bit.
+// dependence). G2 (v1.10r0): also resolve hits — a round that strikes an alive enemy deals damage
+// and despawns. Op order MUST match ref_kernel._advance_projectiles bit-for-bit.
 void Kernel::advance_projectiles_() {
     const double dt = rails_.dt, R = rails_.R, g0 = rails_.g0, atm_top = rails_.atm_top;
     std::size_t w = 0;                              // write cursor for the survivors (w <= i always)
@@ -122,10 +153,19 @@ void Kernel::advance_projectiles_() {
         if (nalt < 0.0) nalt = 0.0;
         if (nalt > atm_top) nalt = atm_top;
         std::uint32_t nttl = p_ttl_[i] - 1u;            // ttl >= 1 on entry (despawned at 0)
-        if (nttl > 0u && !hit_ground) {                 // survivor: write compacted into slot w
-            p_lat_[w] = nlat; p_lon_[w] = nlon; p_psi_[w] = p_psi_[i];
-            p_alt_[w] = nalt; p_tas_[w] = Vnew; p_gamma_[w] = ngamma;
-            p_ttl_[w] = nttl; p_owner_[w] = p_owner_[i];
+        // commit the moved round into slot i, then resolve a hit against the NEW position
+        p_lat_[i] = nlat; p_lon_[i] = nlon; p_alt_[i] = nalt;
+        p_tas_[i] = Vnew; p_gamma_[i] = ngamma; p_ttl_[i] = nttl;
+        std::ptrdiff_t hit_ac = projectile_hit_(i);     // G2: first alive enemy struck, else -1
+        if (hit_ac >= 0) {
+            double nhp = hp_[static_cast<std::size_t>(hit_ac)] - DAMAGE_PER_ROUND;
+            if (nhp < 0.0) nhp = 0.0;
+            hp_[static_cast<std::size_t>(hit_ac)] = nhp;
+        }
+        if (nttl > 0u && !hit_ground && hit_ac < 0) {   // survivor: write compacted into slot w
+            p_lat_[w] = p_lat_[i]; p_lon_[w] = p_lon_[i]; p_psi_[w] = p_psi_[i];
+            p_alt_[w] = p_alt_[i]; p_tas_[w] = p_tas_[i]; p_gamma_[w] = p_gamma_[i];
+            p_ttl_[w] = p_ttl_[i]; p_owner_[w] = p_owner_[i];
             ++w;
         }
     }
@@ -157,6 +197,7 @@ void Kernel::step(const std::vector<Command>& cmd, const std::vector<const Envel
     const double dt = rails_.dt, g0 = rails_.g0;
     const double R = rails_.R, atm_top = rails_.atm_top, soft = rails_.soft;
     for (std::size_t i = 0; i < lat_.size(); ++i) {
+        if (hp_[i] <= 0.0) continue;            // G2 (v1.10r0): a DEAD aircraft freezes (no integration)
         double V = tas_[i];
         const Envelope& e = *env[i];
         // --- bank dynamics (unchanged from B1): slew toward commanded bank at roll_rate(V) ---
@@ -218,11 +259,11 @@ void Kernel::step(const std::vector<Command>& cmd, const std::vector<const Envel
         double w_eff = ceiling_climb_rate(w, alt_[i], atm_top, soft);
         alt_[i] = clampd(alt_[i] + w_eff * dt, 0.0, atm_top);
     }
-    // G1 (v1.9r0) guns: advance live rounds, then spawn newly-fired ones from the post-step muzzle.
-    // Order (existing step+despawn, THEN appends) mirrors ref_kernel.step_scenario exactly.
+    // G1/G2 (v1.10r0) guns: advance live rounds (resolving hits), then spawn newly-fired ones from
+    // the post-step muzzle. Order (existing step+hit+despawn, THEN appends) mirrors ref_kernel exactly.
     advance_projectiles_();
     for (std::size_t i = 0; i < lat_.size(); ++i) {
-        if (cmd[i].fire) spawn_projectile_(i);
+        if (cmd[i].fire && hp_[i] > 0.0) spawn_projectile_(i);   // G2: a dead aircraft can't fire
     }
 }
 
@@ -245,7 +286,7 @@ static void put_f64(std::vector<std::uint8_t>& b, double d) {
 
 std::vector<std::uint8_t> Kernel::snapshot(std::uint32_t tick_count) const {
     std::vector<std::uint8_t> b;
-    b.reserve(32 + 56 * lat_.size());
+    b.reserve(32 + 64 * lat_.size() + 8 + 56 * p_lat_.size());   // hdr + 8f64/ac + projblock
     put_u16(b, 1);                 // mode = ATM
     put_u16(b, 0);                 // pad
     put_u32(b, tick_count);        // tick_count
@@ -256,6 +297,7 @@ std::vector<std::uint8_t> Kernel::snapshot(std::uint32_t tick_count) const {
     for (std::size_t i = 0; i < lat_.size(); ++i) {
         put_f64(b, lat_[i]); put_f64(b, lon_[i]); put_f64(b, psi_[i]);
         put_f64(b, phi_[i]); put_f64(b, alt_[i]); put_f64(b, tas_[i]); put_f64(b, gamma_[i]);
+        put_f64(b, hp_[i]);                          // G2 (v1.10r0): 8th per-aircraft f64
     }
     // G1 (v1.9r0): projectile block — u32 n_projectiles, u32 pad, then per round 6 x f64
     // [lat, lon, psi, alt, tas, gamma] + u32 ttl + u32 owner. Always present (n=0 for gun-less

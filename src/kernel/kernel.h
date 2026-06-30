@@ -41,6 +41,7 @@ public:
     double alt(std::size_t i) const { return alt_[i]; }
     double tas(std::size_t i) const { return tas_[i]; }
     double gamma(std::size_t i) const { return gamma_[i]; }
+    double hp(std::size_t i) const { return hp_[i]; }   // G2 (v1.10r0): hitpoints; hp<=0 == dead
 
     // G1 (v1.9r0) ballistic projectiles — read-only accessors (the renderer/tests inspect them; the
     // sim spawns them internally on a fire Command). SoA, deterministic array iteration order.
@@ -60,11 +61,14 @@ private:
     void advance_(std::size_t i, double req);
     // G1 (v1.9r0): step every live round one tick (ballistic n=0/thrust=0 point mass) then despawn
     // expired/grounded rounds; spawn one round from aircraft i's post-step muzzle. Mirror ref_kernel.
+    // G2 (v1.10r0): advance_projectiles_ also resolves hits (damage + despawn on hit).
     void advance_projectiles_();
     void spawn_projectile_(std::size_t owner);
+    // G2: index of the first ALIVE enemy aircraft the projectile p_idx hits this tick (-1 = miss).
+    std::ptrdiff_t projectile_hit_(std::size_t p_idx) const;
 
     Rails rails_;
-    std::vector<double> lat_, lon_, psi_, phi_, alt_, tas_, gamma_;
+    std::vector<double> lat_, lon_, psi_, phi_, alt_, tas_, gamma_, hp_;
     // projectile SoA: kinematic 6-tuple + integer ttl (tick countdown) + owner aircraft index
     std::vector<double> p_lat_, p_lon_, p_psi_, p_alt_, p_tas_, p_gamma_;
     std::vector<std::uint32_t> p_ttl_, p_owner_;

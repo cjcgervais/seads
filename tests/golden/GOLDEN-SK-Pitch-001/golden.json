@@ -1,8 +1,8 @@
 {
   "id": "GOLDEN-SK-Pitch-001",
-  "seal": "ATM-Sphere v1.8r0",
+  "seal": "ATM-Sphere v1.9r0",
   "ticks": 3000,
-  "world_hash": "dad0a1ed4e1a8f1fe15020219a557de7cf5c25f5bfb26d209d9c02db786b7da6",
+  "world_hash": "81b9a0e9d8e3627880b2835adce0dd4eeec0b319a0ed2f7b51b6980aa97cceff",
   "snapshot_format": "see ref_kernel.py docstring",
   "generated_by": "tools/ref_kernel.py (Python det_math reference)"
 }

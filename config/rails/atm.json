@@ -1,8 +1,8 @@
 {
   "header": {
     "id": "SEADS-RAILS",
-    "version": 190,
-    "seal": "ATM-Sphere v1.9r0",
+    "version": 200,
+    "seal": "ATM-Sphere v1.10r0",
     "note": "Data-driven immutable rails. Any change here REQUIRES a new seal (ADR + Forge audit card + Chronicle receipt). See CLAUDE.md > Change-Control Law."
   },
   "rails": {
@@ -61,6 +61,7 @@
     },
     "weapons": {
       "model": "G1 ballistic projectiles (Step 7 guns, v1.9r0): a fired round is a deterministic point mass on the same sphere — the n=0 (no lift) / thrust=0 specialization of the aircraft 3-DOF step. Gravity acts along the flight path and a lumped quadratic drag bleeds speed; the heading psi is fixed (the closed-form great-circle step carries the geodesic); each round has an integer time-to-live and despawns on ttl OR on hitting the ground. NO new det_math. Rounds are CANONICAL kernel state hashed into the world_hash (a projectile block appended to the snapshot — that block, n=0 for gun-less scenarios, is why the 6 prior scenario goldens + Sphere moved at v1.9r0). G1 defaults are GLOBAL constants in the kernel (muzzle 850 m/s added to firer TAS, drag k=2e-4, ttl=250 ticks) — like RHO0/V_MIN they live in code, not as rails. NOT yet on the GEO-001/KIN wire (deferred, like phi/tas were pre-4b). Hit detection + damage are G2; per-airframe weapon roster + fire-rate are G3.",
+      "damage": "G2 hit detection + per-aircraft hitpoints (v1.10r0): a round within HIT_RADIUS (60 m, horizontal great-circle via the spherical law of cosines vs cos(HIT_RADIUS/R) — acos is monotone so NO det_acos) AND HIT_ALT_GATE (60 m vertical) of an ALIVE enemy (not the firer) deals DAMAGE_PER_ROUND (25) and despawns. Each aircraft carries hp (start 100); hp<=0 == DEAD -> its flight integration is skipped (it freezes), it can no longer fire, and it is excluded from hit tests (rounds pass through the corpse). hp is the 8th per-aircraft snapshot f64 (appended after gamma) -> all 8 prior goldens moved at v1.10r0 (hp=100 identical). Per-tick point test (swept/continuous collision deferred); per-airframe HP/armament are G3. Still NO new det_math (det_sin/det_cos only).",
       "fire_input": "Command.fire (per-tick gun trigger); one round per fired tick in G1 (a deterministic placeholder rate)."
     },
     "networking": {

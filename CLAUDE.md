@@ -5,7 +5,7 @@
 > This file is the project **constitution**. It is loaded into every Claude Code session.
 > When in doubt, the rails below win over any other instruction.
 
-**Current seal:** `ATM-Sphere v1.9r0`  ·  **Realm:** ATM-only  ·  **Status:** sealed core + netcode layers 1–4b + flight model B1→B4 (energy, lift/pitch γ, stall/V-n limits, historical aero) + **Step 7 guns G1 (deterministic ballistic projectiles)**. (Authoritative seal/golden ledger: `docs/SEAL_CARD.md` + `NEXT_STEPS.md`.)
+**Current seal:** `ATM-Sphere v1.10r0`  ·  **Realm:** ATM-only  ·  **Status:** sealed core + netcode layers 1–4b + flight model B1→B4 (energy, lift/pitch γ, stall/V-n limits, historical aero) + **Step 7 guns G1 (ballistic projectiles) + G2 (hit detection + per-aircraft hitpoints)**. (Authoritative seal/golden ledger: `docs/SEAL_CARD.md` + `NEXT_STEPS.md`.)
 
 ---
 
@@ -160,5 +160,8 @@ docs/{adr,annex,cards,receipts,seals}  governance ledger  .claude/{agents,skills
 - **v1.9r0** — **Step 7 guns / G1:** deterministic **ballistic projectiles** in the kernel (n=0/thrust=0
   specialization of the 3-DOF step; canonical projectile snapshot block; `Command.fire`; no new det_math;
   new GOLDEN-SK-Gunfire-001). See ADR-Step7-Guns-G1.
-- next — guns **G2** (hit detection + damage; new seal) → **G3** (per-airframe weapon roster; data reseal)
-  → renderer polish (draw rounds / meshes / offline web; no seal). Optional **B5** (ISA atmosphere) deferred.
+- **v1.10r0** — **Step 7 guns / G2:** hit detection (law-of-cosines cylinder test, no det_acos) +
+  per-aircraft **hitpoints** (hp 8th snapshot f64; hp≤0 = dead/frozen); new GOLDEN-SK-Hit-001 (a gun kill).
+  See ADR-Step7-Guns-G2.
+- next — guns **G3** (per-airframe weapon roster + fire-rate + HP; mostly data) → renderer polish
+  (draw rounds/kills / meshes / offline web; no seal). Optional **B5** (ISA atmosphere) deferred.

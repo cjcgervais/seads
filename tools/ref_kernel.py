@@ -14,8 +14,9 @@ Canonical snapshot format (little-endian), so C++ and Python produce identical b
   offset 16 : f64  R_m
   offset 24 : u32  n_aircraft
   offset 28 : u32  pad (0)
-  offset 32 : per aircraft, 7 x f64 = [lat, lon, psi, phi, alt, tas, gamma]
-              (radians / meters / m s^-1 / radians)  -- gamma (flight-path angle) added in B2 (v1.6r0)
+  offset 32 : per aircraft, 8 x f64 = [lat, lon, psi, phi, alt, tas, gamma, hp]
+              (radians / meters / m s^-1 / radians / hitpoints)  -- gamma added in B2 (v1.6r0);
+              hp added in G2 (Step 7 guns, v1.10r0); hp<=0 == dead
   then      : u32 n_projectiles, u32 pad            -- G1 (Step 7 guns, v1.9r0)
   then      : per projectile, 6 x f64 [lat, lon, psi, alt, tas, gamma] + u32 ttl + u32 owner
               (the projectile block is ALWAYS present, n=0 for gun-less scenarios -> every prior
@@ -71,6 +72,21 @@ MUZZLE_V = float.fromhex('0x1.a900000000000p+9')    # 850.0 m/s muzzle velocity 
 PROJ_DRAG_K = float.fromhex('0x1.a36e2eb1c432dp-13')  # 2.0e-4: lumped quadratic drag decel coeff (Vdot -= k*V^2)
 PROJ_TTL_TICKS = 250                                 # 2.5 s lifetime, then the round despawns
 
+# --- G2 hit detection + per-aircraft hitpoints (Step 7 guns, ATM-Sphere v1.10r0) ---------
+# A round that passes within HIT_RADIUS_M (horizontal great-circle) AND HIT_ALT_GATE_M (vertical)
+# of an ALIVE enemy aircraft deals DAMAGE_PER_ROUND and despawns. hp reaches 0 -> the aircraft is
+# DEAD (its flight integration is skipped — it freezes — and it can no longer fire or be hit).
+# The horizontal test uses the spherical law of cosines: cos(central angle) = sinφ1·sinφ2 +
+# cosφ1·cosφ2·cos(Δλ), compared to the precomputed COS_HIT_ANGLE = cos(HIT_RADIUS/R) — acos is
+# monotone, so "distance < HIT_RADIUS" <=> "cosc > COS_HIT_ANGLE". So NO new det_math (det_sin/det_cos
+# + +,-,*,/). G1/G2 constants are GLOBAL (per-airframe HP / armament are G3). Exact hex-floats shared
+# Python<->C++. COS_HIT_ANGLE was computed once via det_cos(HIT_RADIUS/R). See ADR-Step7-Guns-G2.
+START_HP = float.fromhex('0x1.9000000000000p+6')     # 100.0 hitpoints (global; per-airframe in G3)
+DAMAGE_PER_ROUND = float.fromhex('0x1.9000000000000p+4')  # 25.0 hp/round (4 hits kill at START_HP)
+HIT_RADIUS_M = float.fromhex('0x1.e000000000000p+5')  # 60.0 m horizontal hit radius (validation/doc)
+HIT_ALT_GATE_M = float.fromhex('0x1.e000000000000p+5')  # 60.0 m vertical hit gate
+COS_HIT_ANGLE = float.fromhex('0x1.fffef3909d697p-1')  # cos(HIT_RADIUS_M/R) via det_cos; the binding test
+
 
 def clamp(v, lo, hi):
     if v < lo:
@@ -113,11 +129,14 @@ def ceiling_climb_rate(requested_mps, alt, atm_top, soft):
 class Aircraft:
     # B2 (v1.6r0): gamma (flight-path angle, rad) is a real stored state. Defaults to 0.0 so the
     # no-arg straight golden and any 6-tuple caller still build a level-flying aircraft.
-    __slots__ = ("lat", "lon", "psi", "phi", "alt", "tas", "gamma")
+    # G2 (v1.10r0): hp (hitpoints) is a stored state; hp<=0 == DEAD. Defaults to START_HP so every
+    # prior caller builds a healthy aircraft (and the no-damage paths leave it at full HP).
+    __slots__ = ("lat", "lon", "psi", "phi", "alt", "tas", "gamma", "hp")
 
-    def __init__(self, lat, lon, psi, phi, alt, tas, gamma=0.0):
+    def __init__(self, lat, lon, psi, phi, alt, tas, gamma=0.0, hp=START_HP):
         self.lat, self.lon, self.psi, self.phi, self.alt, self.tas = lat, lon, psi, phi, alt, tas
         self.gamma = gamma
+        self.hp = hp
 
 
 class Projectile:
@@ -164,6 +183,9 @@ class Kernel:
         Ballistic point mass = the aircraft 3-DOF step with n=0 (no lift) and thrust=0: gravity
         acts along the flight path, a lumped quadratic drag bleeds speed, the heading psi is fixed
         (no turn force; the great-circle step still carries the geodesic), altitude is V*sin(gamma).
+        G2 (v1.10r0): after moving a round, test it against every ALIVE aircraft (array order); on
+        the first qualifying hit (within HIT_RADIUS_M horizontally via the law-of-cosines test AND
+        HIT_ALT_GATE_M vertically, not the firer) deal DAMAGE_PER_ROUND and despawn the round.
         Op order is the sealed byte spec and MUST match Kernel::advance_projectiles_ in kernel.cpp.
         Iteration + compaction are in array order (deterministic; no pointer/address dependence)."""
         dt, R, g0, atm_top = self.dt, self.R, self.g0, self.atm_top
@@ -195,9 +217,36 @@ class Kernel:
                 new_alt = atm_top
             p.alt = new_alt
             p.ttl -= 1
-            if p.ttl > 0 and not hit_ground:
+            # --- G2 hit detection: round (NEW position) vs every alive enemy aircraft, array order ---
+            hit_ac = self._projectile_hit(p)
+            if hit_ac >= 0:
+                ac = self.aircraft[hit_ac]
+                ac.hp = ac.hp - DAMAGE_PER_ROUND
+                if ac.hp < 0.0:
+                    ac.hp = 0.0
+            if p.ttl > 0 and not hit_ground and hit_ac < 0:
                 survivors.append(p)
         self.projectiles = survivors
+
+    def _projectile_hit(self, p):
+        """Return the index of the first ALIVE aircraft the round `p` hits this tick (horizontal
+        great-circle within HIT_RADIUS_M via the law-of-cosines test cosc > COS_HIT_ANGLE AND
+        |Δalt| < HIT_ALT_GATE_M, excluding the firer), or -1 for a miss. Array order. det_sin/det_cos
+        only — no det_acos: acos is monotone so the distance test reduces to a cos comparison.
+        MUST match Kernel::projectile_hit_ in kernel.cpp bit-for-bit."""
+        psin = dm.det_sin(p.lat)
+        pcos = dm.det_cos(p.lat)
+        for j, ac in enumerate(self.aircraft):
+            if ac.hp <= 0.0 or j == p.owner:
+                continue
+            cosc = psin * dm.det_sin(ac.lat) + pcos * dm.det_cos(ac.lat) * dm.det_cos(ac.lon - p.lon)
+            if cosc > COS_HIT_ANGLE:
+                dalt = p.alt - ac.alt
+                if dalt < 0.0:
+                    dalt = -dalt
+                if dalt < HIT_ALT_GATE_M:
+                    return j
+        return -1
 
     def _spawn_projectile(self, ac, owner_idx):
         """Spawn a round from aircraft `ac` (its POST-step state this tick): muzzle along the
@@ -236,6 +285,8 @@ class Kernel:
         dt, g0 = self.dt, self.g0
         R, atm_top, soft = self.R, self.atm_top, self.soft
         for i, ac in enumerate(self.aircraft):
+            if ac.hp <= 0.0:                      # G2: a DEAD aircraft freezes (no flight integration)
+                continue
             V = ac.tas
             e = envelopes[i]
             # --- bank dynamics (unchanged from B1): slew toward clamped target at roll_rate(V) ---
@@ -303,7 +354,7 @@ class Kernel:
         # 3-tuple caller — lockstep_ref/predict_ref/test_energy — keeps working unchanged. ---
         self._advance_projectiles()
         for i, ac in enumerate(self.aircraft):
-            if len(commands[i]) > 3 and commands[i][3]:
+            if len(commands[i]) > 3 and commands[i][3] and ac.hp > 0.0:   # G2: dead aircraft can't fire
                 self._spawn_projectile(ac, i)
 
     def run(self, ticks):
@@ -315,7 +366,9 @@ class Kernel:
         buf += struct.pack("<HHIddII", 1, 0, tick_count & 0xFFFFFFFF,
                            self.dt, self.R, len(self.aircraft), 0)
         for ac in self.aircraft:
-            buf += struct.pack("<7d", ac.lat, ac.lon, ac.psi, ac.phi, ac.alt, ac.tas, ac.gamma)
+            # G2 (v1.10r0): hp is the 8th per-aircraft f64 (after gamma). Appending it grows every
+            # snapshot -> all prior goldens move again (trajectory/hp-100 identical), as gamma did in B2.
+            buf += struct.pack("<8d", ac.lat, ac.lon, ac.psi, ac.phi, ac.alt, ac.tas, ac.gamma, ac.hp)
         # G1 (v1.9r0): projectile block appended after the aircraft block. n_projectiles (u32) + pad,
         # then per round 6 x f64 [lat, lon, psi, alt, tas, gamma] + ttl (u32) + owner (u32). The block
         # is always present (n=0 for gun-less scenarios), so EVERY prior golden's bytes grow -> all

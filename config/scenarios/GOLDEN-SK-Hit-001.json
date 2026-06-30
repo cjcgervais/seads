@@ -1,0 +1,28 @@
+{
+  "header": {
+    "id": "GOLDEN-SK-Hit-001",
+    "version": 200,
+    "seal": "ATM-Sphere v1.10r0",
+    "description": "Two-ship gun-kill scenario pinning G2 hit detection + per-aircraft hitpoints (Step 7 guns, seal v1.10r0). AC0 (P-47D) sits in a co-altitude tail chase ~393 m behind AC1 (A6M2), same heading (due east along the equator), and fires a 20-round burst over ticks 0-19. The faster rounds (muzzle 1050 m/s vs the target's 150 m/s) overtake AC1; each round that passes within 60 m horizontally (spherical law-of-cosines test cosc>COS_HIT_ANGLE) AND 60 m vertically of the ALIVE target deals 25 hp and despawns. After 4 hits AC1's hp reaches 0 => DEAD: its flight integration is skipped (it freezes at the kill position) and it can no longer be hit, so the remaining rounds of the burst pass through the corpse and coast on. At tick 200 AC0 is alive (hp 100, flew on east) and AC1 is dead (hp 0, frozen), with several spent rounds still airborne. Exercises: hit geometry, damage accumulation, the kill/freeze, self-hit immunity (AC0 never hits itself), and dead-target pass-through. Both stay co-altitude so the vertical gate is satisfied. NEW golden for G2.",
+    "introduced": "first golden with a gun kill; the 8 prior goldens move at v1.10r0 only because hp (full=100) is appended to every aircraft in the snapshot."
+  },
+  "ticks": 200,
+  "aircraft": [
+    {
+      "envelope": "p47d",
+      "start": { "lat_deg": 0.0, "lon_deg": 0.0, "psi_deg": 90.0, "phi_deg": 0.0, "alt_m": 4000.0, "tas_mps": 200.0 },
+      "schedule": [
+        { "start_tick": 0,  "bank_deg": 0.0, "g_cmd": 1.0, "throttle": 0.85, "fire": true  },
+        { "start_tick": 20, "bank_deg": 0.0, "g_cmd": 1.0, "throttle": 0.85, "fire": false },
+        { "start_tick": 200,"bank_deg": 0.0, "g_cmd": 1.0, "throttle": 0.85, "fire": false }
+      ]
+    },
+    {
+      "envelope": "a6m2",
+      "start": { "lat_deg": 0.0, "lon_deg": 1.5, "psi_deg": 90.0, "phi_deg": 0.0, "alt_m": 4000.0, "tas_mps": 150.0 },
+      "schedule": [
+        { "start_tick": 0, "bank_deg": 0.0, "g_cmd": 1.0, "throttle": 0.7, "fire": false }
+      ]
+    }
+  ]
+}

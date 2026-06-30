@@ -1,8 +1,8 @@
 {
   "id": "GOLDEN-SK-Climb-001",
-  "seal": "ATM-Sphere v1.8r0",
+  "seal": "ATM-Sphere v1.9r0",
   "ticks": 3000,
-  "world_hash": "35d75d427219d37d78059cdc41b818f7ade22776fc73b91319f17b3473ba1c3a",
+  "world_hash": "011c35ff3caf2d7529d5837f679952ad223b38f0982db62df16208eb753bbc9b",
   "snapshot_format": "see ref_kernel.py docstring",
   "generated_by": "tools/ref_kernel.py (Python det_math reference)"
 }
