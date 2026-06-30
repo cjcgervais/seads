@@ -60,6 +60,7 @@ int main(int argc, char** argv) {
             cmd[a].target_phi = ac.sched[idx].target_phi;
             cmd[a].target_g = ac.sched[idx].target_g;
             cmd[a].throttle = ac.sched[idx].throttle;
+            cmd[a].fire = (ac.sched[idx].fire != 0u);   // G1 (v1.9r0) gun trigger
         }
         k.step(cmd, env);
     }
@@ -70,6 +71,7 @@ int main(int argc, char** argv) {
     std::printf("scenario=%s ticks=%u\n", S->id, S->ticks);
     std::printf("final lat=%.17g lon=%.17g psi=%.17g alt=%.17g\n",
                 k.lat(0), k.lon(0), k.psi(0), k.alt(0));
+    std::printf("projectiles=%zu\n", k.proj_count());     // G1 (v1.9r0): live rounds in the snapshot
     std::printf("world_hash=%s\n", wh.c_str());
 
     if (out_path) {

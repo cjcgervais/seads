@@ -23,8 +23,10 @@ struct Envelope { Lut5 phi_max, roll_rate, climb_max, climb_min;
                          cl_max, n_max_struct, n_min_struct; };
 
 // Per-tick command: target bank (rad), commanded load factor n (target_g, dimensionless; B2 —
-// replaces the B1 climb rate), and throttle [0,1] (B1). n=1 wings level holds level flight;
-// n=1/cos(phi) holds a level coordinated turn; n>1/cos(phi) pitches up (climb is earned).
-struct Command { double target_phi; double target_g; double throttle = 0.0; };
+// replaces the B1 climb rate), throttle [0,1] (B1), and the gun trigger fire (G1, v1.9r0). n=1
+// wings level holds level flight; n=1/cos(phi) holds a level coordinated turn; n>1/cos(phi)
+// pitches up (climb is earned). fire=true spawns one ballistic round this tick from the firer's
+// post-step muzzle state (see Kernel::spawn_projectile_).
+struct Command { double target_phi; double target_g; double throttle = 0.0; bool fire = false; };
 
 }  // namespace seads

@@ -1,8 +1,8 @@
 {
   "header": {
     "id": "SEADS-RAILS",
-    "version": 180,
-    "seal": "ATM-Sphere v1.8r0",
+    "version": 190,
+    "seal": "ATM-Sphere v1.9r0",
     "note": "Data-driven immutable rails. Any change here REQUIRES a new seal (ADR + Forge audit card + Chronicle receipt). See CLAUDE.md > Change-Control Law."
   },
   "rails": {
@@ -58,6 +58,10 @@
         "speed_scale": 1000,
         "gamma_scale": 1000000
       }
+    },
+    "weapons": {
+      "model": "G1 ballistic projectiles (Step 7 guns, v1.9r0): a fired round is a deterministic point mass on the same sphere — the n=0 (no lift) / thrust=0 specialization of the aircraft 3-DOF step. Gravity acts along the flight path and a lumped quadratic drag bleeds speed; the heading psi is fixed (the closed-form great-circle step carries the geodesic); each round has an integer time-to-live and despawns on ttl OR on hitting the ground. NO new det_math. Rounds are CANONICAL kernel state hashed into the world_hash (a projectile block appended to the snapshot — that block, n=0 for gun-less scenarios, is why the 6 prior scenario goldens + Sphere moved at v1.9r0). G1 defaults are GLOBAL constants in the kernel (muzzle 850 m/s added to firer TAS, drag k=2e-4, ttl=250 ticks) — like RHO0/V_MIN they live in code, not as rails. NOT yet on the GEO-001/KIN wire (deferred, like phi/tas were pre-4b). Hit detection + damage are G2; per-airframe weapon roster + fire-rate are G3.",
+      "fire_input": "Command.fire (per-tick gun trigger); one round per fired tick in G1 (a deterministic placeholder rate)."
     },
     "networking": {
       "physics_hz": 100,

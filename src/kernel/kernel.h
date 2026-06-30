@@ -42,13 +42,32 @@ public:
     double tas(std::size_t i) const { return tas_[i]; }
     double gamma(std::size_t i) const { return gamma_[i]; }
 
+    // G1 (v1.9r0) ballistic projectiles — read-only accessors (the renderer/tests inspect them; the
+    // sim spawns them internally on a fire Command). SoA, deterministic array iteration order.
+    std::size_t proj_count() const { return p_lat_.size(); }
+    double proj_lat(std::size_t i) const { return p_lat_[i]; }
+    double proj_lon(std::size_t i) const { return p_lon_[i]; }
+    double proj_psi(std::size_t i) const { return p_psi_[i]; }
+    double proj_alt(std::size_t i) const { return p_alt_[i]; }
+    double proj_tas(std::size_t i) const { return p_tas_[i]; }
+    double proj_gamma(std::size_t i) const { return p_gamma_[i]; }
+    std::uint32_t proj_ttl(std::size_t i) const { return p_ttl_[i]; }
+    std::uint32_t proj_owner(std::size_t i) const { return p_owner_[i]; }
+
 private:
     // Kinematic tail for aircraft i (coordinated-turn + great-circle + ceiling-clamped vertical).
     // phi_[i] must already be final for this tick. Verbatim ops shared by both step() overloads.
     void advance_(std::size_t i, double req);
+    // G1 (v1.9r0): step every live round one tick (ballistic n=0/thrust=0 point mass) then despawn
+    // expired/grounded rounds; spawn one round from aircraft i's post-step muzzle. Mirror ref_kernel.
+    void advance_projectiles_();
+    void spawn_projectile_(std::size_t owner);
 
     Rails rails_;
     std::vector<double> lat_, lon_, psi_, phi_, alt_, tas_, gamma_;
+    // projectile SoA: kinematic 6-tuple + integer ttl (tick countdown) + owner aircraft index
+    std::vector<double> p_lat_, p_lon_, p_psi_, p_alt_, p_tas_, p_gamma_;
+    std::vector<std::uint32_t> p_ttl_, p_owner_;
 };
 
 }  // namespace seads

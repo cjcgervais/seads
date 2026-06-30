@@ -2,7 +2,7 @@
   "id": "GOLDEN-SK-Stall-001",
   "seal": "ATM-Sphere v1.8r0",
   "ticks": 3000,
-  "world_hash": "8b2f4a85381c1718e19221df6a15e6cb0fc2dff7b41db0ba6857864e5d937389",
+  "world_hash": "3137992cfad5f2158aa71fff98f5a5c72f85e7b2447187830e48f978c27eff2f",
   "snapshot_format": "see ref_kernel.py docstring",
   "generated_by": "tools/ref_kernel.py (Python det_math reference)"
 }

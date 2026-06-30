@@ -5,7 +5,7 @@
 > This file is the project **constitution**. It is loaded into every Claude Code session.
 > When in doubt, the rails below win over any other instruction.
 
-**Current seal:** `ATM-Sphere v1.6r0`  ·  **Realm:** ATM-only  ·  **Status:** sealed core + netcode layers 1–4b + flight model B1 (longitudinal energy) + B2 (lift & pitch — flight-path angle γ)
+**Current seal:** `ATM-Sphere v1.9r0`  ·  **Realm:** ATM-only  ·  **Status:** sealed core + netcode layers 1–4b + flight model B1→B4 (energy, lift/pitch γ, stall/V-n limits, historical aero) + **Step 7 guns G1 (deterministic ballistic projectiles)**. (Authoritative seal/golden ledger: `docs/SEAL_CARD.md` + `NEXT_STEPS.md`.)
 
 ---
 
@@ -155,5 +155,10 @@ docs/{adr,annex,cards,receipts,seals}  governance ledger  .claude/{agents,skills
 - **v1.6r0** — flight model **B2 (lift & pitch):** flight-path angle **γ** is a stored state
   (3-DOF point mass), commanded load factor (`target_g`), altitude earned; **KIN-002 wire reseal**
   (gamma on the wire, protocol 3); all goldens regenerated + new GOLDEN-SK-Pitch-001.
-- next — flight model **B3** (stall / C_Lmax / structural-g / corner speed; seal v1.7r0) → **B4**
-  per-airframe aero retune (data) → custom C++ renderer polish (no seal) → guns/projectiles (new seal).
+- **v1.7r0** — flight model **B3** (stall / C_Lmax / structural-g / corner speed). **v1.8r0** — **B4**
+  per-airframe aero retune (historical top speeds). Sealed flight-model arc B1→B4 COMPLETE.
+- **v1.9r0** — **Step 7 guns / G1:** deterministic **ballistic projectiles** in the kernel (n=0/thrust=0
+  specialization of the 3-DOF step; canonical projectile snapshot block; `Command.fire`; no new det_math;
+  new GOLDEN-SK-Gunfire-001). See ADR-Step7-Guns-G1.
+- next — guns **G2** (hit detection + damage; new seal) → **G3** (per-airframe weapon roster; data reseal)
+  → renderer polish (draw rounds / meshes / offline web; no seal). Optional **B5** (ISA atmosphere) deferred.

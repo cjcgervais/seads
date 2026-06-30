@@ -1,0 +1,34 @@
+{
+  "header": {
+    "id": "GOLDEN-SK-Gunfire-001",
+    "version": 190,
+    "seal": "ATM-Sphere v1.9r0",
+    "description": "Two-ship gunfire scenario pinning G1 ballistic projectiles (Step 7 guns, seal v1.9r0). AC0 (P-47D) settles into a banked climbing right turn (25 deg bank, 1.3 g) and fires a 20-round burst over ticks 100-119: each round leaves the muzzle at the firer's POST-step state (lat,lon,psi,alt,gamma) with speed = TAS + 850 m/s, so the rounds fan with the turning heading and inherit the climb's positive flight-path angle. AC1 (A6M2) pushes to a shallow dive (0.5 g) then fires a 15-round burst over ticks 150-164 with a slightly negative gamma. Each round is the n=0/thrust=0 specialization of the aircraft 3-DOF step: gravity bends gamma down, a lumped quadratic drag (k=2e-4) bleeds speed, the heading is fixed and the great-circle step carries the geodesic. ttl=250 ticks keeps all 35 rounds airborne at tick 300 (every round captured in the world_hash), and all stay well above ground (start alt >= 3000 m) and far inside +/-90 deg flight-path angle (no cos(gamma) singularity). NEW golden for G1. NOTE: 1 round/tick is a deterministic placeholder rate; real per-weapon fire-rate + roster are G3.",
+    "introduced": "first golden to exercise the projectile snapshot block; the 6 prior goldens move at v1.9r0 only because the block (n=0 for them) is appended to every snapshot."
+  },
+  "ticks": 300,
+  "aircraft": [
+    {
+      "envelope": "p47d",
+      "start": { "lat_deg": 0.0, "lon_deg": 0.0, "psi_deg": 90.0, "phi_deg": 0.0, "alt_m": 3000.0, "tas_mps": 180.0 },
+      "schedule": [
+        { "start_tick": 0,   "bank_deg": 0.0,  "g_cmd": 1.0, "throttle": 0.9, "fire": false },
+        { "start_tick": 40,  "bank_deg": 25.0, "g_cmd": 1.3, "throttle": 0.9, "fire": false },
+        { "start_tick": 100, "bank_deg": 25.0, "g_cmd": 1.3, "throttle": 0.9, "fire": true  },
+        { "start_tick": 120, "bank_deg": 25.0, "g_cmd": 1.3, "throttle": 0.9, "fire": false },
+        { "start_tick": 300, "bank_deg": 0.0,  "g_cmd": 1.0, "throttle": 0.9, "fire": false }
+      ]
+    },
+    {
+      "envelope": "a6m2",
+      "start": { "lat_deg": 0.0, "lon_deg": 5.0, "psi_deg": 270.0, "phi_deg": 0.0, "alt_m": 4500.0, "tas_mps": 150.0 },
+      "schedule": [
+        { "start_tick": 0,   "bank_deg": 0.0, "g_cmd": 1.0,  "throttle": 0.7,  "fire": false },
+        { "start_tick": 60,  "bank_deg": 0.0, "g_cmd": 0.5,  "throttle": 0.7,  "fire": false },
+        { "start_tick": 150, "bank_deg": 0.0, "g_cmd": 0.95, "throttle": 0.85, "fire": true  },
+        { "start_tick": 165, "bank_deg": 0.0, "g_cmd": 0.95, "throttle": 0.85, "fire": false },
+        { "start_tick": 300, "bank_deg": 0.0, "g_cmd": 1.0,  "throttle": 0.85, "fire": false }
+      ]
+    }
+  ]
+}

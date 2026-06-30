@@ -1,0 +1,33 @@
+seal: ATM-Sphere v1.9r0
+realm: ATM-only
+geometry:
+  radius_m: 15000
+  flattening: 0
+tick_dt_s: 0.01
+gravity_mps2: 9.80665
+ceiling:
+  atm_top_m: 8000
+  soft_band_m: 100
+wire_hash: GEO-001+KIN-002
+change_summary: "Automated Chronicle receipt."
+rail_change: false
+gates:
+  spec_monotone_check: PASS
+  det_math_oracle: PASS
+  tuning_probe: PASS
+  atm_top_probe: PASS
+  geo001_codec: PASS
+  snapshot_codec: PASS
+  lockstep: PASS
+  interp: PASS
+  predict: PASS
+  validate_snapshot: PASS
+  validate_scenarios: PASS
+  property_tests: PASS
+golden_id: GOLDEN-SK-Sphere-001
+golden_sha256: "c7d3a2902f7161c85a00ac2fdb3b5c82b4cf8e97ff0b808a4635dbdef80f8838"
+commit_sha: "1b6d2a7df2567d9d3485052dd76c0ff1e1e935f7"
+toolchain_matrix: [python-ref, MSVC2022, Clang18, GCC13, x64, AArch64]
+date: "2026-06-30"
+overall: PASS
+signoff: "Forge"

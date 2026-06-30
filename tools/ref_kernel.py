@@ -16,6 +16,10 @@ Canonical snapshot format (little-endian), so C++ and Python produce identical b
   offset 28 : u32  pad (0)
   offset 32 : per aircraft, 7 x f64 = [lat, lon, psi, phi, alt, tas, gamma]
               (radians / meters / m s^-1 / radians)  -- gamma (flight-path angle) added in B2 (v1.6r0)
+  then      : u32 n_projectiles, u32 pad            -- G1 (Step 7 guns, v1.9r0)
+  then      : per projectile, 6 x f64 [lat, lon, psi, alt, tas, gamma] + u32 ttl + u32 owner
+              (the projectile block is ALWAYS present, n=0 for gun-less scenarios -> every prior
+               golden's bytes grew, so all hashes moved at the v1.9r0 seal, as B2's gamma did)
 
 world_hash = SHA-256 of the snapshot bytes.
 
@@ -53,6 +57,19 @@ V_MIN = float.fromhex('0x1.e000000000000p+4')   # 30.0 m/s
 # out for free. No new det_math: n_aero is +,-,*,/ only. The post-stall lift is HELD at C_Lmax
 # (AoA-limited cap, not a discontinuous lift drop / departure — that is optional, deferred).
 # See ADR-Step8-FlightModel-B3.
+
+# --- G1 ballistic projectiles (Step 7 guns, ATM-Sphere v1.9r0) ---------------------------
+# A fired round is a deterministic point mass on the SAME sphere, stepped by the SAME closed-form
+# great-circle integrator as an aircraft — it is exactly the 3-DOF point-mass step specialized to
+# n=0 (no lift, ballistic) and thrust=0 (no engine): only gravity along the flight path and a
+# lumped quadratic drag act. So there is NO new det_math (the projectile uses det_sin/det_cos +
+# great_circle_step + (+,-,*,/) already proven vs the MPFR oracle). The round carries an integer
+# time-to-live (ticks) and an owner index (which aircraft fired it; carried for G2 hit attribution).
+# Constants are GLOBAL for G1 (a generic gun); per-airframe weapon rosters are G3. Exact hex-float
+# literals so Python and C++ (kernel.cpp) share identical bit patterns. See ADR-Step7-Guns-G1.
+MUZZLE_V = float.fromhex('0x1.a900000000000p+9')    # 850.0 m/s muzzle velocity (added to firer TAS)
+PROJ_DRAG_K = float.fromhex('0x1.a36e2eb1c432dp-13')  # 2.0e-4: lumped quadratic drag decel coeff (Vdot -= k*V^2)
+PROJ_TTL_TICKS = 250                                 # 2.5 s lifetime, then the round despawns
 
 
 def clamp(v, lo, hi):
@@ -103,6 +120,17 @@ class Aircraft:
         self.gamma = gamma
 
 
+class Projectile:
+    # G1 (v1.9r0): a ballistic round on the sphere. No phi (no bank) and no thrust/lift — its motion
+    # is the n=0/thrust=0 specialization of the aircraft 3-DOF step. ttl is an integer tick countdown;
+    # owner is the firing aircraft index (carried for G2 hit attribution, not yet consumed).
+    __slots__ = ("lat", "lon", "psi", "alt", "tas", "gamma", "ttl", "owner")
+
+    def __init__(self, lat, lon, psi, alt, tas, gamma, ttl, owner):
+        self.lat, self.lon, self.psi, self.alt, self.tas, self.gamma = lat, lon, psi, alt, tas, gamma
+        self.ttl, self.owner = ttl, owner
+
+
 class Kernel:
     def __init__(self, rails):
         r = rails["rails"]
@@ -112,6 +140,7 @@ class Kernel:
         self.atm_top = float(r["atm_top_m"])
         self.soft = float(r["atm_soft_band_m"])
         self.aircraft = []
+        self.projectiles = []
 
     def _advance(self, ac, req):
         """Kinematic tail for one aircraft: coordinated-turn + great-circle + ceiling-clamped
@@ -129,6 +158,55 @@ class Kernel:
         # vertical (ceiling-clamped)
         rate = ceiling_climb_rate(req, ac.alt, self.atm_top, self.soft)
         ac.alt = clamp(ac.alt + rate * dt, 0.0, self.atm_top)
+
+    def _advance_projectiles(self):
+        """G1 (v1.9r0): step every live round one tick, then despawn the expired/grounded ones.
+        Ballistic point mass = the aircraft 3-DOF step with n=0 (no lift) and thrust=0: gravity
+        acts along the flight path, a lumped quadratic drag bleeds speed, the heading psi is fixed
+        (no turn force; the great-circle step still carries the geodesic), altitude is V*sin(gamma).
+        Op order is the sealed byte spec and MUST match Kernel::advance_projectiles_ in kernel.cpp.
+        Iteration + compaction are in array order (deterministic; no pointer/address dependence)."""
+        dt, R, g0, atm_top = self.dt, self.R, self.g0, self.atm_top
+        survivors = []
+        for p in self.projectiles:
+            V = p.tas
+            sg = dm.det_sin(p.gamma)
+            cg = dm.det_cos(p.gamma)
+            # speed: lumped quadratic drag + gravity along the path (uses OLD gamma)
+            Vdot = -PROJ_DRAG_K * V * V - g0 * sg
+            Vnew = V + Vdot * dt
+            if Vnew < V_MIN:
+                Vnew = V_MIN
+            p.tas = Vnew
+            # flight-path angle bends under gravity (n=0 -> gdot = -(g0/Vnew)*cos(gamma))
+            gdot = (g0 / Vnew) * (-cg)
+            p.gamma = p.gamma + gdot * dt
+            # psi unchanged (ballistic: no turn force)
+            cgN = dm.det_cos(p.gamma)
+            s = Vnew * cgN * dt
+            p.lat, p.lon = great_circle_step(p.lat, p.lon, p.psi, s, R)
+            sgN = dm.det_sin(p.gamma)
+            w = Vnew * sgN
+            new_alt = p.alt + w * dt
+            hit_ground = new_alt <= 0.0
+            if new_alt < 0.0:
+                new_alt = 0.0
+            if new_alt > atm_top:
+                new_alt = atm_top
+            p.alt = new_alt
+            p.ttl -= 1
+            if p.ttl > 0 and not hit_ground:
+                survivors.append(p)
+        self.projectiles = survivors
+
+    def _spawn_projectile(self, ac, owner_idx):
+        """Spawn a round from aircraft `ac` (its POST-step state this tick): muzzle along the
+        velocity vector (psi, gamma), speed = firer TAS + MUZZLE_V. The round does NOT advance on
+        its spawn tick (it is appended after _advance_projectiles), so it appears at the muzzle."""
+        self.projectiles.append(Projectile(
+            lat=ac.lat, lon=ac.lon, psi=ac.psi, alt=ac.alt,
+            tas=ac.tas + MUZZLE_V, gamma=ac.gamma,
+            ttl=PROJ_TTL_TICKS, owner=owner_idx))
 
     def step(self, climb_inputs=None):
         for i, ac in enumerate(self.aircraft):
@@ -219,6 +297,14 @@ class Kernel:
             w = Vnew * sgN
             w_eff = ceiling_climb_rate(w, ac.alt, atm_top, soft)
             ac.alt = clamp(ac.alt + w_eff * dt, 0.0, atm_top)
+        # --- G1 (v1.9r0) guns: advance live rounds, then spawn newly-fired ones (post-step muzzle).
+        # Order: existing projectiles step+despawn FIRST, then appends -> a fresh round waits at the
+        # muzzle this tick. commands[i][3] (fire bool) is OPTIONAL (defaults False) so every prior
+        # 3-tuple caller — lockstep_ref/predict_ref/test_energy — keeps working unchanged. ---
+        self._advance_projectiles()
+        for i, ac in enumerate(self.aircraft):
+            if len(commands[i]) > 3 and commands[i][3]:
+                self._spawn_projectile(ac, i)
 
     def run(self, ticks):
         for _ in range(ticks):
@@ -230,6 +316,14 @@ class Kernel:
                            self.dt, self.R, len(self.aircraft), 0)
         for ac in self.aircraft:
             buf += struct.pack("<7d", ac.lat, ac.lon, ac.psi, ac.phi, ac.alt, ac.tas, ac.gamma)
+        # G1 (v1.9r0): projectile block appended after the aircraft block. n_projectiles (u32) + pad,
+        # then per round 6 x f64 [lat, lon, psi, alt, tas, gamma] + ttl (u32) + owner (u32). The block
+        # is always present (n=0 for gun-less scenarios), so EVERY prior golden's bytes grow -> all
+        # hashes move (a seal, like B2 appending gamma). See ref_kernel docstring / ADR-Step7-Guns-G1.
+        buf += struct.pack("<II", len(self.projectiles) & 0xFFFFFFFF, 0)
+        for p in self.projectiles:
+            buf += struct.pack("<6dII", p.lat, p.lon, p.psi, p.alt, p.tas, p.gamma,
+                               p.ttl & 0xFFFFFFFF, p.owner & 0xFFFFFFFF)
         return bytes(buf)
 
 
@@ -284,7 +378,8 @@ def run_scenario(k, ticks, schedules, envelopes):
                     break
             ph = sched[idx]
             thr = float(ph.get("throttle", 0.0))
-            cmds.append((deg2rad(ph["bank_deg"]), float(ph["g_cmd"]), thr))
+            fire = bool(ph.get("fire", False))   # G1 (v1.9r0): per-phase trigger; default off
+            cmds.append((deg2rad(ph["bank_deg"]), float(ph["g_cmd"]), thr, fire))
         k.step_scenario(cmds, envelopes)
 
 

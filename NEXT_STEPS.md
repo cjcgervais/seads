@@ -1,40 +1,42 @@
 # SEADS 2026 — Next Steps (handoff)
 
-> ## ►► CURRENT STATE (2026-06-29): seal **ATM-Sphere v1.8r0** — flight model **B4 (aero retune) DONE ✅**
-> The 8 envelopes carried the un-calibrated v1.2r0 aero, so emergent **level top speeds ran ~30 % low**
-> (109–142 m/s). B4 lifts them to **historical** values (**148–195 m/s ≈ 533–702 km/h**: P-51 702 >
-> P-47 688 > La-7 662 > Yak-3 655 > Bf109 634 > Spit 601 > Ki-61 590 > A6M2 533) by moving **only
-> `thrust_static_n`/`v_max_mps` per airframe** (solved by `tools/b4_retune.py`). Every turn/stall-defining
-> param is **fixed** (`mass`,`wing_area`,`cl_max`,`induced_k`,`n_max/min_struct`,`stall`, all LUTs), so the
-> **iconic turn ordering is preserved exactly** (A6M2 29.7°/s & Spitfire 26.8°/s best sustained; P-47 worst;
-> instantaneous-turn column byte-identical) and the **B3 C_Lmax↔stall coherence is untouched**. `v_max_mps`
-> is now the flat-curve thrust-zero **asymptote (~700, NOT a physical Vne** — real top speed is emergent and
-> well below it); `v_ne_mps` is **validation-only** (the kernel never loads it). **No new det_math, no
-> state/wire change** (KIN-002 / protocol 3 unchanged) — but the retune touches every scenario airframe so it
-> **moves the 6 scenario goldens → reseal** (CLAUDE.md §2: golden moved ⇒ bump seal). **Sphere is
-> byte-identical** (no-arg kinematic anchor, no envelope). **12/12** receipt gates PASS, **7/7 goldens
-> C++≡Python bit-for-bit under GCC+Clang**, **ctest 7/7** both compilers, **72** property tests
-> (`test_energy` settle horizon 80→140 s — the flatter thrust curve settles slower; property unchanged).
-> New tooling: **`tools/perf_probe.py`** (emergent-performance analyzer — the objective B4 target table) +
-> **`tools/b4_retune.py`** (the reproducible solver). **NEXT: §8 → B3 was the last sealed flight-model phase
-> in the roadmap; remaining roadmap = renderer polish (no seal) → guns/projectiles (new seal). Optional B5
-> (ISA atmosphere, rail+seal) stays deferred.**
-> Goldens (v1.8r0):
-> - **Sphere `db777327…d13ac394` (UNCHANGED)** · Turn `a1dc8116…c0e13254` · Climb `de78ba92…2801eea0`
-> - TurnClimb `a502600c…ccdfe020` · Accel `476cfb3f…ad84325f` · Pitch `3efaff43…569d35e4` · Stall `8b2f4a85…5d937389`
-> Ledger: ADR-Step8-FlightModel-B4-v1.8r0, SEAL_CARD v1.8r0, receipt `…v1.8r0-a716400.yml`, rails version 170→180,
-> guardian.yml **needs no edit** (reads hashes from `expected.world_hash`, already lists all 7 IDs).
-> **GIT: committed + pushed to `origin/main` at `75b2104` (2026-06-29). guardian CI GREEN**
-> (run [28397404805](https://github.com/cjcgervais/seads/actions/runs/28397404805)) — Python gates +
-> MSVC x64 + GCC/Clang × x64 + **GCC/Clang arm64** reproduce all 7 goldens bit-for-bit + the
-> cross-toolchain hash aggregation gate. **v1.8r0 is fully landed.** Branch protection / required-check
-> setup is still the deferred owner task.
+> ## ►► CURRENT STATE (2026-06-30): seal **ATM-Sphere v1.9r0** — **Step 7 guns / G1 (ballistic projectiles) DONE ✅**
+> The flight-model arc B1→B4 is complete and sealed; the owner chose **guns** as the next milestone, with
+> projectiles as **deterministic ballistics in the kernel** (not hit-scan). **G1 ships the ballistic
+> substrate.** A fired round is a **point mass on the same sphere = the n=0 (no lift) / thrust=0
+> specialization of the aircraft 3-DOF step**: gravity bends its flight-path angle down, a lumped
+> quadratic drag (`Vdot −= k·V²`, k=2e-4) bleeds speed, the heading is fixed (the closed-form great-circle
+> step carries the geodesic), and each round has an integer **time-to-live** (250 ticks) and despawns on
+> ttl OR ground contact. So it reuses `det_sin`/`det_cos`/`great_circle_step` and adds **ZERO new det_math**
+> (no MPFR-oracle work, no FMA/AArch64 risk — the single biggest reason to model rounds this way). `Command`
+> gains a **`bool fire`** trigger (one round/fired-tick in G1, a placeholder rate); a round inherits the
+> firer's **post-step** muzzle state + `tas+850` and an `owner` index, and does NOT advance on its spawn
+> tick. Rounds are **canonical kernel state**: the snapshot gains a trailing **projectile block** (`u32 n`,
+> `u32 pad`, then per round `6×f64 [lat,lon,psi,alt,tas,gamma] + u32 ttl + u32 owner`), **always present
+> (n=0 for gun-less scenarios)**. G1 constants are **global, in code** (like RHO0/V_MIN), not rails.
+> **No wire change** (KIN-002 / protocol 3 unchanged — round wire transport is DEFERRED, like phi/tas were
+> pre-4b). **Because the block is appended to EVERY snapshot, all 7 prior goldens move — INCLUDING Sphere
+> this time** (the no-arg path's snapshot grew too; trajectory byte-identical) — plus new
+> **GOLDEN-SK-Gunfire-001** (p47d banked-climb 20-round burst + a6m2 dive 15-round burst → **35 rounds
+> airborne & hashed** at tick 300). **12/12** receipt gates PASS, **8/8 goldens C++≡Python bit-for-bit
+> under GCC+Clang**, **ctest 7/7** both compilers, **81** property tests (+9 `test_projectile.py`). New
+> envelope referenced by a scenario (a6m2) ⇒ `envelope_tables.h` now emits 6 of 8. **NEXT: G2 — hit
+> detection (round vs aircraft on the sphere) + damage model (new seal ~v1.10r0); then G3 — per-airframe
+> weapon roster + fire-rate (data reseal).** `owner` is already carried so G2 needs no projectile-format reseal.
+> Goldens (v1.9r0 — all moved; the projectile block, n=0 for the 7 non-gun goldens, is appended to every snapshot):
+> - **Sphere `c7d3a290…d80f8838` (moved: n=0 block appended; traj identical)** · Turn `ccbc2497…b4de8044` · Climb `35d75d42…73ba1c3a`
+> - TurnClimb `3e870e50…6e396195` · Accel `1e9a425a…bff87f6` · Pitch `dad0a1ed…786b7da6` · Stall `3137992c…c27eff2f`
+> - **Gunfire (NEW) `594be08a…bbe9a8b3`** — 35 ballistic rounds airborne at tick 300
+> Ledger: ADR-Step7-Guns-G1-Projectiles-v1.9r0, SEAL_CARD v1.9r0, receipt `…v1.9r0-*.yml`, rails version 180→190
+> (+ a descriptive `weapons` block), guardian.yml **edited** (Gunfire added to all 3 golden ID lists).
+> Files: `kernel.{h,cpp}` (projectile SoA + `advance_projectiles_`/`spawn_projectile_` + snapshot block),
+> `flight_types.h` (`Command.fire`), `ref_kernel.py` (Projectile + mirror), `gen_scenario_params.py`
+> (Phase.fire) + `scenario_main.cpp`, `config/scenarios/GOLDEN-SK-Gunfire-001.json`, `tests/property/test_projectile.py`.
+> **GIT: _pending commit_ (see Auditor-pass + commit step). Was at `1b6d2a7` (v1.8r0 landed) before this.**
 >
-> **The entire sealed flight-model arc B1→B4 is now COMPLETE.** Remaining roadmap (see §5 / §7):
-> renderer polish (meshes, vendored Three.js, offline web — all **no-seal**) and **guns/projectiles
-> (Step 7 — a major NEW seal)** with real scope forks (deterministic projectile sim, weapon roster,
-> hit/damage model) that warrant an owner scope decision before starting. Optional **B5** (ISA
-> atmosphere; rail + seal) stays deferred.
+> **Remaining roadmap after G1:** guns **G2** (hit/damage — seal) → **G3** (per-airframe armament — data reseal);
+> renderer polish (draw rounds; meshes; vendored Three.js; offline web — all **no-seal**); optional **B5**
+> (ISA atmosphere; rail + seal) still deferred. The sealed flight-model arc **B1→B4 is COMPLETE**.
 >
 > _(Prior: v1.6r0 B2 lift & pitch — γ stored state, KIN-002 wire reseal, all goldens regenerated + Pitch;
 > committed + pushed, guardian green on `12a1830` run 28392491160.)_

@@ -17,6 +17,14 @@ static inline double clampd(double v, double lo, double hi) {
 static constexpr double RHO0  = 0x1.399999999999ap+0;   // 1.225 kg/m^3
 static constexpr double V_MIN = 0x1.e000000000000p+4;   // 30.0 m/s
 
+// G1 ballistic-projectile constants (Step 7 guns, ATM-Sphere v1.9r0). Exact hex-float literals
+// shared bit-for-bit with tools/ref_kernel.py. A round is the n=0/thrust=0 specialization of the
+// aircraft 3-DOF step (gravity along the path + lumped quadratic drag), so NO new det_math. Global
+// for G1 (a generic gun); per-airframe weapon rosters are G3. See ADR-Step7-Guns-G1.
+static constexpr double        MUZZLE_V       = 0x1.a900000000000p+9;    // 850.0 m/s (added to firer TAS)
+static constexpr double        PROJ_DRAG_K    = 0x1.a36e2eb1c432dp-13;   // 2.0e-4 quadratic drag decel coeff
+static constexpr std::uint32_t PROJ_TTL_TICKS = 250u;                    // 2.5 s lifetime, then despawn
+
 // B3 limits & stall (ATM-Sphere v1.7r0): the B2 global placeholder clamp (N_MIN=-3, N_MAX=+9) is
 // RETIRED. The achievable load factor n is now bounded per-airframe by BOTH a structural limit
 // (Envelope::n_min_struct/n_max_struct) AND the C_Lmax aerodynamic ceiling
@@ -85,6 +93,51 @@ void Kernel::advance_(std::size_t i, double req) {
     lon_[i] = nlon;
     double rate = ceiling_climb_rate(req, alt_[i], rails_.atm_top, rails_.soft);
     alt_[i] = clampd(alt_[i] + rate * dt, 0.0, rails_.atm_top);
+}
+
+// G1 (v1.9r0): step every live round one tick (ballistic n=0/thrust=0 point mass), then despawn the
+// expired/grounded ones via in-place forward compaction (array order = deterministic, no pointer
+// dependence). Op order MUST match ref_kernel._advance_projectiles bit-for-bit.
+void Kernel::advance_projectiles_() {
+    const double dt = rails_.dt, R = rails_.R, g0 = rails_.g0, atm_top = rails_.atm_top;
+    std::size_t w = 0;                              // write cursor for the survivors (w <= i always)
+    for (std::size_t i = 0; i < p_lat_.size(); ++i) {
+        double V = p_tas_[i];
+        double sg = det_sin(p_gamma_[i]);
+        double cg = det_cos(p_gamma_[i]);
+        double Vdot = -PROJ_DRAG_K * V * V - g0 * sg;   // lumped quadratic drag + gravity along path
+        double Vnew = V + Vdot * dt;
+        if (Vnew < V_MIN) Vnew = V_MIN;
+        double gdot = (g0 / Vnew) * (-cg);              // n=0 -> gamma bends down under gravity
+        double ngamma = p_gamma_[i] + gdot * dt;
+        // psi unchanged (ballistic: no turn force)
+        double cgN = det_cos(ngamma);
+        double s = Vnew * cgN * dt;
+        double nlat, nlon;
+        great_circle_step(p_lat_[i], p_lon_[i], p_psi_[i], s, R, &nlat, &nlon);
+        double sgN = det_sin(ngamma);
+        double wv = Vnew * sgN;
+        double nalt = p_alt_[i] + wv * dt;
+        bool hit_ground = nalt <= 0.0;
+        if (nalt < 0.0) nalt = 0.0;
+        if (nalt > atm_top) nalt = atm_top;
+        std::uint32_t nttl = p_ttl_[i] - 1u;            // ttl >= 1 on entry (despawned at 0)
+        if (nttl > 0u && !hit_ground) {                 // survivor: write compacted into slot w
+            p_lat_[w] = nlat; p_lon_[w] = nlon; p_psi_[w] = p_psi_[i];
+            p_alt_[w] = nalt; p_tas_[w] = Vnew; p_gamma_[w] = ngamma;
+            p_ttl_[w] = nttl; p_owner_[w] = p_owner_[i];
+            ++w;
+        }
+    }
+    p_lat_.resize(w); p_lon_.resize(w); p_psi_.resize(w); p_alt_.resize(w);
+    p_tas_.resize(w); p_gamma_.resize(w); p_ttl_.resize(w); p_owner_.resize(w);
+}
+
+void Kernel::spawn_projectile_(std::size_t owner) {
+    p_lat_.push_back(lat_[owner]);   p_lon_.push_back(lon_[owner]);   p_psi_.push_back(psi_[owner]);
+    p_alt_.push_back(alt_[owner]);   p_tas_.push_back(tas_[owner] + MUZZLE_V);
+    p_gamma_.push_back(gamma_[owner]);
+    p_ttl_.push_back(PROJ_TTL_TICKS); p_owner_.push_back(static_cast<std::uint32_t>(owner));
 }
 
 void Kernel::step() {                       // straight golden: req=0, phi unchanged -> byte-identical
@@ -165,6 +218,12 @@ void Kernel::step(const std::vector<Command>& cmd, const std::vector<const Envel
         double w_eff = ceiling_climb_rate(w, alt_[i], atm_top, soft);
         alt_[i] = clampd(alt_[i] + w_eff * dt, 0.0, atm_top);
     }
+    // G1 (v1.9r0) guns: advance live rounds, then spawn newly-fired ones from the post-step muzzle.
+    // Order (existing step+despawn, THEN appends) mirrors ref_kernel.step_scenario exactly.
+    advance_projectiles_();
+    for (std::size_t i = 0; i < lat_.size(); ++i) {
+        if (cmd[i].fire) spawn_projectile_(i);
+    }
 }
 
 void Kernel::run(std::uint32_t ticks) {
@@ -197,6 +256,16 @@ std::vector<std::uint8_t> Kernel::snapshot(std::uint32_t tick_count) const {
     for (std::size_t i = 0; i < lat_.size(); ++i) {
         put_f64(b, lat_[i]); put_f64(b, lon_[i]); put_f64(b, psi_[i]);
         put_f64(b, phi_[i]); put_f64(b, alt_[i]); put_f64(b, tas_[i]); put_f64(b, gamma_[i]);
+    }
+    // G1 (v1.9r0): projectile block — u32 n_projectiles, u32 pad, then per round 6 x f64
+    // [lat, lon, psi, alt, tas, gamma] + u32 ttl + u32 owner. Always present (n=0 for gun-less
+    // scenarios), so every prior golden's bytes grew. Mirrors ref_kernel.snapshot byte-for-byte.
+    put_u32(b, static_cast<std::uint32_t>(p_lat_.size()));
+    put_u32(b, 0);
+    for (std::size_t i = 0; i < p_lat_.size(); ++i) {
+        put_f64(b, p_lat_[i]); put_f64(b, p_lon_[i]); put_f64(b, p_psi_[i]);
+        put_f64(b, p_alt_[i]); put_f64(b, p_tas_[i]); put_f64(b, p_gamma_[i]);
+        put_u32(b, p_ttl_[i]); put_u32(b, p_owner_[i]);
     }
     return b;
 }

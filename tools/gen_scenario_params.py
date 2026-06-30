@@ -45,7 +45,8 @@ def build():
         "#pragma once",
         '#include "envelope_tables.h"',
         "namespace seads { namespace scen {",
-        "struct Phase  { unsigned start_tick; double target_phi; double target_g; double throttle; };",
+        "struct Phase  { unsigned start_tick; double target_phi; double target_g; double throttle;",
+        "                unsigned fire; };  // fire: G1 (v1.9r0) gun trigger (0/1)",
         "struct AcSpec { double lat, lon, psi, phi, alt, tas;",
         "                const Envelope* env; const Phase* sched; unsigned n_phase; };",
         "struct Scenario { const char* id; unsigned ticks; const AcSpec* ac; unsigned n_ac; };",
@@ -62,7 +63,8 @@ def build():
             rows = []
             for ph in ac["schedule"]:
                 rows.append(f"  {{{int(ph['start_tick'])}u, {hx(deg2rad(ph['bank_deg']))}, "
-                            f"{hx(ph['g_cmd'])}, {hx(ph.get('throttle', 0.0))}}}")
+                            f"{hx(ph['g_cmd'])}, {hx(ph.get('throttle', 0.0))}, "
+                            f"{1 if ph.get('fire', False) else 0}u}}")
             L.append(",\n".join(rows))
             L.append("};")
         # aircraft array
