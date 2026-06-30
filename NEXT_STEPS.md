@@ -67,6 +67,19 @@
 > lean, §2). Background facts also live in Claude memory (`seads-canon`, `seads-harness`).
 >
 > ## ► START HERE (next task)
+> **⚠ COLD-START READ THE BANNER AT THE TOP FIRST — it is the authoritative current state (seal
+> ATM-Sphere v1.11r0; flight model B1→B4 + guns G1→G3 COMPLETE; the web renderer now draws
+> rounds/kills/HP). Everything in this `START HERE` block and §1–§8 below is HISTORY** (how each layer
+> shipped), kept for context. **The actual next task now that flight + guns are done is a free pick:**
+> (a) **renderer polish (no-seal)** — aircraft meshes vs marker spheres, draw rounds/HP in the native
+> raylib `--fly` viewer too, vendor Three.js for fully-offline web (see the renderer note in the banner
+> + §5); or (b) an **optional new seal** — weapon WIRE transport (a netcode layer so multiplayer
+> replicates rounds/hp/fire_cd, deferred like phi/tas were pre-4b), ammo/convergence/component-damage,
+> or **B5** (ISA atmosphere; §8.5). Read `CLAUDE.md` first (the constitution; governance is lean, §2),
+> then the §4 gates to confirm green. Memory: `seads-canon`, `seads-harness`, `seads-flight-model-roadmap`,
+> `seads-guns-roadmap`. Git is clean on `main` at `a0dcfa9`, guardian CI green (run 28468897006).
+>
+> _(Everything below is the original v1.4r0-era handoff, retained as history.)_
 > **Steps 1–6 are DONE and Step 5 (renderer) now has a working first cut.** The deterministic
 > core, the full netcode stack (layers 1–4b), AND a downstream renderer all exist. The renderer
 > ships a kernel-driven **trajectory recorder** (`seads_record` → `.seadsrec` GEO-001/KIN-001 wire
@@ -198,22 +211,25 @@ python tools/atm_top_probe.py --ceil 8000 --soft 100
 python tools/geo001_ref.py                  # GEO-001 codec reference self-test
 python tools/snapshot_ref.py                # GEO-001 snapshot reference self-test
 python tools/lockstep_ref.py                # loopback lockstep reference self-test (+ negative control)
+python tools/predict_ref.py                 # client-side prediction reference self-test
 for g in gen_coeffs gen_golden_params gen_detmath_vectors gen_envelope_tables gen_scenario_params \
-         gen_geo001_vectors gen_snapshot_vectors gen_lockstep_vectors; do \
-  python tools/$g.py --check; done          # all 8 generated headers in sync
-python -m pytest tests/property -q          # 64 pass (scenario/energy/pitch + geo001 + snapshot + lockstep + interp + predict)
+         gen_geo001_vectors gen_snapshot_vectors gen_lockstep_vectors gen_interp_vectors gen_predict_vectors; do \
+  python tools/$g.py --check; done          # all 10 generated headers in sync
+python -m pytest tests/property -q          # 94 pass (scenario/energy/pitch/stall + projectile/hit/weapon + net layers)
 python tools/make_receipt.py                # runs all 12 gates -> overall: PASS (writes docs/receipts/...yml)
 ```
 ```powershell
-# C++ side (PATH set as above). Builds seads_golden (Sphere) + seads_scenario (Turn/Climb/TurnClimb).
+# C++ side (PATH set as above). Builds seads_golden (Sphere) + seads_scenario (8 scenario goldens).
 cmake -S . -B build-gcc   -G Ninja -DCMAKE_CXX_COMPILER=g++     -DCMAKE_BUILD_TYPE=Release; cmake --build build-gcc
 cmake -S . -B build-clang -G Ninja -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_BUILD_TYPE=Release; cmake --build build-clang
 .\build-gcc\seads_golden.exe   --out run_gcc.bin
 python tools\validate_snapshot.py --golden tests\golden\GOLDEN-SK-Sphere-001\expected.world_hash --candidate run_gcc.bin
-foreach ($id in "GOLDEN-SK-Turn-001","GOLDEN-SK-Climb-001","GOLDEN-SK-TurnClimb-001","GOLDEN-SK-Accel-001","GOLDEN-SK-Pitch-001") {
+foreach ($id in "GOLDEN-SK-Turn-001","GOLDEN-SK-Climb-001","GOLDEN-SK-TurnClimb-001","GOLDEN-SK-Accel-001","GOLDEN-SK-Pitch-001","GOLDEN-SK-Stall-001","GOLDEN-SK-Gunfire-001","GOLDEN-SK-Hit-001") {
   .\build-gcc\seads_scenario.exe --id $id --out run_scen.bin
   python tools\validate_snapshot.py --golden "tests\golden\$id\expected.world_hash" --candidate run_scen.bin }
 # (repeat the two scenario/validate blocks with build-clang to confirm cross-compiler parity)
+# SEE THE SIM: .\build-gcc\seads_record.exe --gundemo --js src\client\web\trajectory.js --snap-every 2
+#              then: cd src\client\web; python -m http.server 8753  -> open http://localhost:8753/index.html
 # Net codec + client parity tests (also built by the same cmake): fastest full check is ctest.
 ctest --test-dir build-gcc --output-on-failure    # 7/7: detmath, geo001, snapshot, lockstep, interp, predict, client
 ctest --test-dir build-clang --output-on-failure   # 7/7 under Clang too
