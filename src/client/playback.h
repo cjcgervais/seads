@@ -20,7 +20,10 @@ struct RenderEntity {
     int64_t id = 0;
     Vec3 pos;             // world-space position (metres), globe frame
     double lat_deg = 0, lon_deg = 0, alt_m = 0;
-    double bearing_deg = 0, phi_deg = 0, tas_mps = 0;
+    // bearing is the smoothly interpolated heading; phi/tas/gamma (bank / speed / flight-path angle)
+    // ride the KIN section, which the layer-4a interp does NOT carry, so they are snapped from the
+    // nearest received frame (like hp/rounds in sample_weapons) — see Playback::sample.
+    double bearing_deg = 0, phi_deg = 0, tas_mps = 0, gamma_deg = 0;
 };
 
 // One per-aircraft hitpoint reading and one live ballistic round, both lifted from the WEAPON-001
@@ -65,6 +68,10 @@ public:
     WeaponView sample_weapons(double render_tick) const;
 
 private:
+    // Newest received frame with server_tick <= render_tick (else the first). The non-interpolated
+    // sample seam shared by sample_weapons (hp/rounds) and sample's attitude fill (phi/tas/gamma).
+    const netsnap::Snapshot* nearest_frame(double render_tick) const;
+
     interp::SnapshotBuffer buffer_;
     double radius_m_ = 15000.0;
     int tick_hz_ = 100;

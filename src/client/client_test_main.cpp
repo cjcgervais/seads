@@ -75,10 +75,10 @@ static void test_recording_and_playback() {
     netsnap::Snapshot s0, s1;
     s0.protocol = netsnap::SNAPSHOT_PROTOCOL;
     s0.server_tick = 0;
-    s0.entities.push_back(netsnap::EntityState{7, 0.0, 0.0, 45.0, 2000.0, 10.0, 170.0});
+    s0.entities.push_back(netsnap::EntityState{7, 0.0, 0.0, 45.0, 2000.0, 10.0, 170.0, 3.0});
     s1.protocol = netsnap::SNAPSHOT_PROTOCOL;
     s1.server_tick = 10;
-    s1.entities.push_back(netsnap::EntityState{7, 1.0, 2.0, 60.0, 2100.0, -5.0, 175.0});
+    s1.entities.push_back(netsnap::EntityState{7, 1.0, 2.0, 60.0, 2100.0, -5.0, 175.0, -4.0});
 
     std::vector<uint8_t> w0, w1;
     netsnap::encode_snapshot(s0, w0);
@@ -130,6 +130,13 @@ static void test_recording_and_playback() {
     check(close(r[0].pos.x, exppos.x, 1e-6) && close(r[0].pos.y, exppos.y, 1e-6) &&
               close(r[0].pos.z, exppos.z, 1e-6),
           "playback world position matches globe projection");
+    // Attitude (bank/speed/gamma) is NON-geographic: the layer-4a interp drops it, so sample()
+    // snaps phi/tas/gamma from the nearest received frame — here frame@0 (render_tick 5 < 10) — so
+    // the viewer can draw a banking/pitching marker. (Position + heading still interpolate.)
+    check(close(r[0].phi_deg, d0.entities[0].phi_deg, 1e-9) &&
+              close(r[0].tas_mps, d0.entities[0].tas_mps, 1e-9) &&
+              close(r[0].gamma_deg, d0.entities[0].gamma_deg, 1e-9),
+          "playback sample snaps phi/tas/gamma from nearest frame");
 
     // Edges clamp/hold (interp semantics): before first / after last tick hold endpoints.
     std::vector<RenderEntity> before = pb.sample(-100.0);

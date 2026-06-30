@@ -18,9 +18,26 @@ bool Playback::load(const Recording& rec) {
     return true;
 }
 
+const netsnap::Snapshot* Playback::nearest_frame(double render_tick) const {
+    const std::vector<netsnap::Snapshot>& frames = buffer_.frames();
+    if (frames.empty()) return nullptr;
+    // Frames are ascending server_tick; walk to the latest at/before render_tick. If render_tick
+    // precedes the whole buffer, hold the first frame (matches interp edge semantics).
+    const netsnap::Snapshot* fr = &frames.front();
+    for (const auto& f : frames) {
+        if (static_cast<double>(f.server_tick) <= render_tick) fr = &f; else break;
+    }
+    return fr;
+}
+
 std::vector<RenderEntity> Playback::sample(double render_tick) const {
     std::vector<RenderEntity> out;
     std::vector<netsnap::EntityState> states = buffer_.sample(render_tick);
+    // Position + heading interpolate smoothly (layer 4a); bank/speed/gamma are NON-geographic and
+    // are NOT carried by the interp, so snap them from the nearest received frame by id. Attitude
+    // updates at the snapshot cadence (20 Hz) while position stays smooth — imperceptible for a
+    // roll/pitch, and consistent with how hp/rounds are sampled.
+    const netsnap::Snapshot* nf = nearest_frame(render_tick);  // not 'near' — MSVC legacy macro
     out.reserve(states.size());
     for (const auto& s : states) {
         RenderEntity e;
@@ -29,8 +46,16 @@ std::vector<RenderEntity> Playback::sample(double render_tick) const {
         e.lon_deg = s.lon_deg;
         e.alt_m = s.alt_m;
         e.bearing_deg = s.bearing_deg;
-        e.phi_deg = s.phi_deg;
-        e.tas_mps = s.tas_mps;
+        if (nf) {
+            for (const auto& w : nf->entities) {
+                if (w.id == s.id) {
+                    e.phi_deg = w.phi_deg;
+                    e.tas_mps = w.tas_mps;
+                    e.gamma_deg = w.gamma_deg;
+                    break;
+                }
+            }
+        }
         e.pos = geo_deg_to_cartesian(s.lat_deg, s.lon_deg, s.alt_m, radius_m_);
         out.push_back(e);
     }
@@ -39,14 +64,8 @@ std::vector<RenderEntity> Playback::sample(double render_tick) const {
 
 WeaponView Playback::sample_weapons(double render_tick) const {
     WeaponView wv;
-    const std::vector<netsnap::Snapshot>& frames = buffer_.frames();
-    if (frames.empty()) return wv;
-    // The latest received frame at/before render_tick (frames are ascending server_tick); if the
-    // render time precedes the whole buffer, hold the first frame (matches interp edge semantics).
-    const netsnap::Snapshot* fr = &frames.front();
-    for (const auto& f : frames) {
-        if (static_cast<double>(f.server_tick) <= render_tick) fr = &f; else break;
-    }
+    const netsnap::Snapshot* fr = nearest_frame(render_tick);
+    if (!fr) return wv;
     wv.hp.reserve(fr->entities.size());
     for (const auto& e : fr->entities) wv.hp.push_back(RenderHp{e.id, e.hp});
     wv.rounds.reserve(fr->projectiles.size());

@@ -116,6 +116,11 @@ double hp_for(const std::vector<RenderHp>& v, int64_t id, double dflt) {
     return dflt;
 }
 
+// Draw a banking/pitching aircraft marker (definition below, shared by replay + fly). Forward-
+// declared so run_gui can draw remotes with the same attitude-aware shape the fly own-ship uses.
+void draw_aircraft(Vector3 od, double lat, double lon, double psi, double phi, double pitch, Color c,
+                   float scale);
+
 // Headless data-path proof: advance render_tick across the recording, print sampled positions.
 int run_selfcheck(const Playback& pb, int n) {
     double t0 = static_cast<double>(pb.first_tick());
@@ -239,13 +244,11 @@ int run_gui(Playback& pb, double speed) {
             for (size_t k = 1; k < trails[i].size(); ++k)
                 DrawLine3D(trails[i][k - 1], trails[i][k], Fade(c, 0.6f));
             Vector3 d = to_display(ents[i].pos, pb.radius_m());
-            DrawSphere(d, 0.12f, c);
-            // Up (radial) stick so altitude/orientation reads in 3D.
-            Vector3 up = to_display(geo_deg_to_cartesian(ents[i].lat_deg, ents[i].lon_deg,
-                                                         ents[i].alt_m + pb.radius_m() * 0.06,
-                                                         pb.radius_m()),
-                                    pb.radius_m());
-            DrawLine3D(d, up, Fade(c, 0.8f));
+            // Attitude-aware marker (same shape as fly): wings roll with bank (phi), nose tilts with
+            // the flight-path angle (gamma). phi/gamma ride the KIN wire, snapped per Playback::sample.
+            draw_aircraft(d, ents[i].lat_deg * DEG2RAD_V, ents[i].lon_deg * DEG2RAD_V,
+                          ents[i].bearing_deg * DEG2RAD_V, ents[i].phi_deg * DEG2RAD_V,
+                          ents[i].gamma_deg * DEG2RAD_V, c, 1.2f);
         }
         // WEAPON-001 tracer rounds: a yellow point cloud at each live round (from the decoded wire).
         for (const auto& r : wv.rounds)
@@ -595,8 +598,11 @@ int run_fly(Playback& pb, double speed) {
             for (size_t k = 1; k < rem_trails[i].size(); ++k)
                 DrawLine3D(rem_trails[i][k - 1], rem_trails[i][k], Fade(c, 0.5f));
             Vector3 d = to_display(rem[i].pos, pb.radius_m());
+            // Remotes now tilt with their true flight-path angle (gamma rides the KIN wire) instead
+            // of the old flat pitch=0 — a climbing/diving bandit reads correctly on the globe.
             draw_aircraft(d, rem[i].lat_deg * DEG2RAD_V, rem[i].lon_deg * DEG2RAD_V,
-                          rem[i].bearing_deg * DEG2RAD_V, rem[i].phi_deg * DEG2RAD_V, 0.0, c, 1.0f);
+                          rem[i].bearing_deg * DEG2RAD_V, rem[i].phi_deg * DEG2RAD_V,
+                          rem[i].gamma_deg * DEG2RAD_V, c, 1.0f);
         }
         // Own ship: hot, larger, with a longer trail. The marker rolls with bank, tilts with pitch.
         for (size_t k = 1; k < own_trail.size(); ++k)
