@@ -29,8 +29,13 @@
 > (Envelope +4), `kernel.{h,cpp}` (fire_cd_ + p_damage_ SoA; per-env spawn; carried-damage hit; fire-rate cooldown;
 > snapshot), `ref_kernel.py` (Aircraft.fire_cd + Projectile.damage + mirror), `scenario_main.cpp` (per-airframe hp),
 > `tests/property/{test_weapon.py(new),test_hit.py,test_projectile.py}`.
-> **GIT: _pending commit_ (see Auditor + commit step). v1.10r0 (G2) fully landed at `c900241`+`674c62f`, guardian
-> green run 28464526804.** Branch protection / required-check setup is still the deferred owner task.
+> **GIT: committed + pushed to `origin/main` at `5741203` (2026-06-30). guardian CI GREEN**
+> (run [28467504772](https://github.com/cjcgervais/seads/actions/runs/28467504772)) — Python gates +
+> MSVC x64 + GCC/Clang × x64 + **GCC/Clang arm64** reproduce all 9 goldens bit-for-bit + the
+> cross-toolchain hash aggregation gate. **v1.11r0 (Step 7 guns G3) is fully landed — GUNS ARC G1→G3 COMPLETE.**
+> Adversarial Auditor clean (AERO_FIELDS↔struct order, fire-rate op-order parity, Sphere fire_cd-strip proof).
+> v1.10r0 (G2) landed at `c900241`+`674c62f` (green 28464526804); v1.9r0 (G1) at `dbb3de7`+`e4aeb25` (green 28462840475).
+> Branch protection / required-check setup is still the deferred owner task.
 >
 > **Remaining roadmap (guns arc DONE):** the kernel now models a full deterministic dogfight-gunnery loop
 > (ballistics + hit/damage + per-airframe roster/fire-rate). **Next = renderer polish (draw rounds/kills/HP;
