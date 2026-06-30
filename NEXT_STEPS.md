@@ -1,45 +1,41 @@
 # SEADS 2026 — Next Steps (handoff)
 
-> ## ►► CURRENT STATE (2026-06-30): seal **ATM-Sphere v1.10r0** — **Step 7 guns / G2 (hit detection + hitpoints) DONE ✅**
-> The guns arc continues (owner chose ballistic-in-kernel, staged G1→G3). **G1 (v1.9r0) shipped the
-> ballistic substrate; G2 closes the combat loop — rounds now HIT and KILL.** Each aircraft carries
-> **hp** (start 100); a round that passes within **HIT_RADIUS 60 m** of an **alive** enemy (horizontal
-> great-circle via the **spherical law of cosines** compared to `cos(HIT_RADIUS/R)` — acos is monotone
-> so **no det_acos**) AND **HIT_ALT_GATE 60 m** vertically (and not the firer) deals **25 hp** and
-> despawns. **hp≤0 == DEAD** ⇒ the aircraft's flight integration is skipped (it **freezes**), it can no
-> longer fire, and it's excluded from hit tests (rounds pass through the corpse). Still **ZERO new
-> det_math** (det_sin/det_cos + ÷×−). The hit test is folded into `advance_projectiles_` (move round →
-> `projectile_hit_` vs the new position → damage + despawn on hit), all in array order = deterministic.
-> **Snapshot:** the aircraft block grew to **8×f64** (`…,gamma,hp`); the **projectile block is unchanged**
-> (`owner` was already carried in G1 for exactly this attribution → no projectile-format reseal). Appending
-> hp moves **all 8 prior goldens** (hp=100 identical, trajectories byte-identical) + new **GOLDEN-SK-Hit-001**
-> (p47d tail-chase **gun kill** of an a6m2: 4 hits → 0 HP at tick 42, the corpse freezes, 16 spent rounds
-> still airborne at tick 200). **12/12** receipt gates PASS, **9/9 goldens C++≡Python bit-for-bit under
-> GCC+Clang (18/18)**, **ctest 7/7** both, **88** property tests (+7 `test_hit.py`). **No wire change**
-> (KIN-002/protocol 3 unchanged; hp + round wire transport DEFERRED). **NEXT: G3 — per-airframe weapon
-> roster + fire-rate + HP** (move the G1/G2 globals — muzzle/drag/ttl/HP/damage — into the envelope;
-> mostly data, a reseal if it moves goldens). Then renderer polish (draw rounds/kills; no seal).
-> Goldens (v1.10r0 — all moved; hp=100 appended to every aircraft in the 8 non-kill goldens):
-> - **Sphere `66866564…f0d7f169` (moved: hp appended; traj identical)** · Turn `fc718bae…345b4b15` · Climb `011c35ff…753bbc9b`
-> - TurnClimb `29c9894c…2bc9dc4f` · Accel `0d0cd895…605684a7` · Pitch `81b9a0e9…a97cceff` · Stall `39e6fe7a…9e6ff127`
-> - Gunfire `848dcc28…337d5ec5` (35 rounds airborne) · **Hit (NEW) `446bcd1f…01cce7fd`** — a P-47D gun kill
-> Ledger: ADR-Step7-Guns-G2-HitDamage-v1.10r0, SEAL_CARD v1.10r0, receipt `…v1.10r0-*.yml`, rails version 190→200
-> (+ a `weapons.damage` note), guardian.yml **edited** (Hit added to all 3 golden ID lists).
-> Files: `kernel.{h,cpp}` (hp_ SoA + accessor; START_HP/DAMAGE/COS_HIT_ANGLE/HIT_ALT_GATE; `projectile_hit_`;
-> hit folded into `advance_projectiles_`; dead-skip in `step(cmd,env)`; hp in snapshot), `ref_kernel.py`
-> (Aircraft.hp + `_projectile_hit` mirror), `config/scenarios/GOLDEN-SK-Hit-001.json`, `tests/property/test_hit.py`.
-> **GIT: committed + pushed to `origin/main` at `c900241` (2026-06-30). guardian CI GREEN**
-> (run [28464526804](https://github.com/cjcgervais/seads/actions/runs/28464526804)) — Python gates +
-> MSVC x64 + GCC/Clang × x64 + **GCC/Clang arm64** reproduce all 9 goldens bit-for-bit + the
-> cross-toolchain hash aggregation gate. **v1.10r0 (Step 7 guns G2) is fully landed.** Adversarial
-> Auditor pass clean (op-order parity, no det_acos, hp-append-only proof vs the v1.9r0 bins, real kill).
-> **v1.9r0 (G1) was fully landed** (committed `dbb3de7` + confirm `e4aeb25`, guardian green run 28462840475).
-> Branch protection / required-check setup is still the deferred owner task.
+> ## ►► CURRENT STATE (2026-06-30): seal **ATM-Sphere v1.11r0** — **Step 7 guns / G3 (per-airframe weapon roster + fire-rate) DONE ✅ — GUNS ARC G1→G3 COMPLETE**
+> The whole weapons system is now in the kernel: **G1 (v1.9r0)** ballistic projectiles → **G2 (v1.10r0)**
+> hit detection + hitpoints (gun kills) → **G3 (v1.11r0)** per-airframe roster + fire-rate. **G3 moves the
+> G1/G2 global gun constants into each envelope** so the 8 airframes fight with WWII character. New envelope
+> scalars: **hp_start** (toughness), **muzzle_v_mps**, **damage_per_round** (CARRIED by the round so lethality
+> is fixed at fire time), **rof_interval_ticks** (fire-rate). Firing is gated by a per-aircraft **fire_cd**
+> cooldown (decrement-then-fire ⇒ shots exactly rof_interval ticks apart). So .50-cal platforms (P-47D hp150/
+> rof3, P-51 hp110/rof4) = durable + high volume; 20-mm cannons hit harder per round (A6M2 dmg40 but hp70/
+> rof9 = glass cannon; La-7 dmg30; Bf109 dmg25). Drag/ttl + the no-arg START_HP stay global. **STILL ZERO new
+> det_math** across G1→G3 (det_sin/det_cos + ÷×−), **no wire change** (KIN-002/protocol 3; weapon wire transport
+> DEFERRED). **Snapshot now:** aircraft **9×f64** (`…,gamma,hp,fire_cd`); projectile **7×f64** (`…,gamma,damage`)
+> + u32 ttl + u32 owner. Appending fire_cd + damage (and the scenario airframes' per-airframe HP/weapon values)
+> moves **all 9 goldens** (Sphere fire_cd=0, traj+hp identical; Gunfire/Hit also change *behaviorally* — fire-rate
+> gating cuts the round count, a6m2's 70 HP changes the kill). **No new golden** (Gunfire/Hit now exercise the
+> roster) ⇒ **guardian.yml unchanged**. **12/12** receipt gates PASS, **9/9 goldens C++≡Python bit-for-bit GCC+Clang
+> (18/18)**, **ctest 7/7** both, **94** property tests (+6: `test_weapon.py` roster sanity/character + fire-rate &
+> per-airframe lethality in `test_hit.py`; projectile/hit updated for per-env muzzle/damage). **NEXT: renderer polish
+> (draw rounds + kills + HP; meshes; offline web — all NO SEAL).** Future seals (optional): weapon wire transport
+> (a netcode layer for MP), ammo/convergence/component-damage, **B5** ISA atmosphere.
+> Goldens (v1.11r0 — all moved; fire_cd appended to every aircraft + damage to every round; scenario airframes carry per-airframe HP/armament):
+> - **Sphere `f28ac561…a0d4a475` (moved: fire_cd appended; traj+hp identical)** · Turn `0029f24c…563c55` · Climb `ba2cae43…5a52a27a`
+> - TurnClimb `2ea8cc26…fe733e03` · Accel `d7601bec…5c55be75` · Pitch `c7d2dd53…2d57adbd` · Stall `9e53be3f…6b3b7e8c`
+> - Gunfire `bdfa8f95…3b7b8c9e` (G3-armed, fire-rate gated) · Hit `1a460976…4ec901ee` (p47d .50cal downs a 70-HP a6m2)
+> Ledger: ADR-Step7-Guns-G3-Roster-v1.11r0, SEAL_CARD v1.11r0, receipt `…v1.11r0-*.yml`, rails version 200→210
+> (+ a `weapons.roster` note), guardian.yml **unchanged** (same 9 golden IDs). 8 envelope JSONs gained the weapon block.
+> Files: `envelopes.py` (AERO_FIELDS +4), 8 `data/tuning/envelopes/*.json` (weapon block), `flight_types.h`
+> (Envelope +4), `kernel.{h,cpp}` (fire_cd_ + p_damage_ SoA; per-env spawn; carried-damage hit; fire-rate cooldown;
+> snapshot), `ref_kernel.py` (Aircraft.fire_cd + Projectile.damage + mirror), `scenario_main.cpp` (per-airframe hp),
+> `tests/property/{test_weapon.py(new),test_hit.py,test_projectile.py}`.
+> **GIT: _pending commit_ (see Auditor + commit step). v1.10r0 (G2) fully landed at `c900241`+`674c62f`, guardian
+> green run 28464526804.** Branch protection / required-check setup is still the deferred owner task.
 >
-> **Remaining roadmap after G2:** guns **G3** (per-airframe weapon roster + fire-rate + HP — mostly data,
-> reseal if goldens move); renderer polish (draw rounds + kills; meshes; vendored Three.js; offline web —
-> all **no-seal**); optional **B5** (ISA atmosphere; rail + seal) still deferred. The sealed flight-model
-> arc **B1→B4 is COMPLETE**; guns **G1→G2 done**, **G3** is the last guns phase.
+> **Remaining roadmap (guns arc DONE):** the kernel now models a full deterministic dogfight-gunnery loop
+> (ballistics + hit/damage + per-airframe roster/fire-rate). **Next = renderer polish (draw rounds/kills/HP;
+> meshes; vendored Three.js; offline web — all NO SEAL).** Optional future seals: weapon wire transport (netcode
+> MP), ammo/convergence/component-damage, **B5** (ISA atmosphere). Flight-model arc **B1→B4 COMPLETE**; guns **G1→G3 COMPLETE**.
 >
 > _(Prior: v1.6r0 B2 lift & pitch — γ stored state, KIN-002 wire reseal, all goldens regenerated + Pitch;
 > committed + pushed, guardian green on `12a1830` run 28392491160.)_

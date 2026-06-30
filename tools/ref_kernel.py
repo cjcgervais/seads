@@ -14,13 +14,13 @@ Canonical snapshot format (little-endian), so C++ and Python produce identical b
   offset 16 : f64  R_m
   offset 24 : u32  n_aircraft
   offset 28 : u32  pad (0)
-  offset 32 : per aircraft, 8 x f64 = [lat, lon, psi, phi, alt, tas, gamma, hp]
-              (radians / meters / m s^-1 / radians / hitpoints)  -- gamma added in B2 (v1.6r0);
-              hp added in G2 (Step 7 guns, v1.10r0); hp<=0 == dead
+  offset 32 : per aircraft, 9 x f64 = [lat, lon, psi, phi, alt, tas, gamma, hp, fire_cd]
+              (radians / meters / m s^-1 / radians / hitpoints / cooldown ticks)  -- gamma added in
+              B2 (v1.6r0); hp added in G2 (v1.10r0, hp<=0 == dead); fire_cd added in G3 (v1.11r0)
   then      : u32 n_projectiles, u32 pad            -- G1 (Step 7 guns, v1.9r0)
-  then      : per projectile, 6 x f64 [lat, lon, psi, alt, tas, gamma] + u32 ttl + u32 owner
-              (the projectile block is ALWAYS present, n=0 for gun-less scenarios -> every prior
-               golden's bytes grew, so all hashes moved at the v1.9r0 seal, as B2's gamma did)
+  then      : per projectile, 7 x f64 [lat, lon, psi, alt, tas, gamma, damage] + u32 ttl + u32 owner
+              (damage added in G3 v1.11r0; the projectile block is ALWAYS present, n=0 for gun-less
+               scenarios -> every prior golden's bytes grew, so all hashes moved, as B2's gamma did)
 
 world_hash = SHA-256 of the snapshot bytes.
 
@@ -66,9 +66,9 @@ V_MIN = float.fromhex('0x1.e000000000000p+4')   # 30.0 m/s
 # lumped quadratic drag act. So there is NO new det_math (the projectile uses det_sin/det_cos +
 # great_circle_step + (+,-,*,/) already proven vs the MPFR oracle). The round carries an integer
 # time-to-live (ticks) and an owner index (which aircraft fired it; carried for G2 hit attribution).
-# Constants are GLOBAL for G1 (a generic gun); per-airframe weapon rosters are G3. Exact hex-float
-# literals so Python and C++ (kernel.cpp) share identical bit patterns. See ADR-Step7-Guns-G1.
-MUZZLE_V = float.fromhex('0x1.a900000000000p+9')    # 850.0 m/s muzzle velocity (added to firer TAS)
+# G3 (v1.11r0): muzzle velocity and damage-per-round are now PER-AIRFRAME (envelope scalars
+# muzzle_v_mps / damage_per_round); drag and ttl stay GLOBAL (a bullet is a bullet). Exact hex-float
+# literals so Python and C++ (kernel.cpp) share identical bit patterns. See ADR-Step7-Guns-G1/G3.
 PROJ_DRAG_K = float.fromhex('0x1.a36e2eb1c432dp-13')  # 2.0e-4: lumped quadratic drag decel coeff (Vdot -= k*V^2)
 PROJ_TTL_TICKS = 250                                 # 2.5 s lifetime, then the round despawns
 
@@ -81,8 +81,11 @@ PROJ_TTL_TICKS = 250                                 # 2.5 s lifetime, then the 
 # monotone, so "distance < HIT_RADIUS" <=> "cosc > COS_HIT_ANGLE". So NO new det_math (det_sin/det_cos
 # + +,-,*,/). G1/G2 constants are GLOBAL (per-airframe HP / armament are G3). Exact hex-floats shared
 # Python<->C++. COS_HIT_ANGLE was computed once via det_cos(HIT_RADIUS/R). See ADR-Step7-Guns-G2.
-START_HP = float.fromhex('0x1.9000000000000p+6')     # 100.0 hitpoints (global; per-airframe in G3)
-DAMAGE_PER_ROUND = float.fromhex('0x1.9000000000000p+4')  # 25.0 hp/round (4 hits kill at START_HP)
+# G3 (v1.11r0): hp_start and damage_per_round are now PER-AIRFRAME (envelope). START_HP remains the
+# GLOBAL default for the no-arg path (the Sphere golden has no envelope). HIT_RADIUS/ALT_GATE stay
+# global (they reflect target size, not the weapon). The round CARRIES its damage (set at spawn from
+# the firer's gun) so its lethality is fixed at fire time and the advance/hit stay self-contained.
+START_HP = float.fromhex('0x1.9000000000000p+6')     # 100.0 default hitpoints (no-arg/Sphere; per-airframe via env)
 HIT_RADIUS_M = float.fromhex('0x1.e000000000000p+5')  # 60.0 m horizontal hit radius (validation/doc)
 HIT_ALT_GATE_M = float.fromhex('0x1.e000000000000p+5')  # 60.0 m vertical hit gate
 COS_HIT_ANGLE = float.fromhex('0x1.fffef3909d697p-1')  # cos(HIT_RADIUS_M/R) via det_cos; the binding test
@@ -131,23 +134,27 @@ class Aircraft:
     # no-arg straight golden and any 6-tuple caller still build a level-flying aircraft.
     # G2 (v1.10r0): hp (hitpoints) is a stored state; hp<=0 == DEAD. Defaults to START_HP so every
     # prior caller builds a healthy aircraft (and the no-damage paths leave it at full HP).
-    __slots__ = ("lat", "lon", "psi", "phi", "alt", "tas", "gamma", "hp")
+    # G3 (v1.11r0): fire_cd (fire-rate cooldown, ticks) is a stored state; firing is gated by it
+    # (decrement-then-fire). Defaults to 0.0 (ready to fire).
+    __slots__ = ("lat", "lon", "psi", "phi", "alt", "tas", "gamma", "hp", "fire_cd")
 
-    def __init__(self, lat, lon, psi, phi, alt, tas, gamma=0.0, hp=START_HP):
+    def __init__(self, lat, lon, psi, phi, alt, tas, gamma=0.0, hp=START_HP, fire_cd=0.0):
         self.lat, self.lon, self.psi, self.phi, self.alt, self.tas = lat, lon, psi, phi, alt, tas
         self.gamma = gamma
         self.hp = hp
+        self.fire_cd = fire_cd
 
 
 class Projectile:
     # G1 (v1.9r0): a ballistic round on the sphere. No phi (no bank) and no thrust/lift — its motion
     # is the n=0/thrust=0 specialization of the aircraft 3-DOF step. ttl is an integer tick countdown;
-    # owner is the firing aircraft index (carried for G2 hit attribution, not yet consumed).
-    __slots__ = ("lat", "lon", "psi", "alt", "tas", "gamma", "ttl", "owner")
+    # owner is the firing aircraft index (G2 hit attribution). G3 (v1.11r0): damage is carried (set at
+    # spawn from the firer's gun) so lethality is fixed at fire time and the hit stays self-contained.
+    __slots__ = ("lat", "lon", "psi", "alt", "tas", "gamma", "damage", "ttl", "owner")
 
-    def __init__(self, lat, lon, psi, alt, tas, gamma, ttl, owner):
+    def __init__(self, lat, lon, psi, alt, tas, gamma, damage, ttl, owner):
         self.lat, self.lon, self.psi, self.alt, self.tas, self.gamma = lat, lon, psi, alt, tas, gamma
-        self.ttl, self.owner = ttl, owner
+        self.damage, self.ttl, self.owner = damage, ttl, owner
 
 
 class Kernel:
@@ -221,7 +228,7 @@ class Kernel:
             hit_ac = self._projectile_hit(p)
             if hit_ac >= 0:
                 ac = self.aircraft[hit_ac]
-                ac.hp = ac.hp - DAMAGE_PER_ROUND
+                ac.hp = ac.hp - p.damage              # G3: per-round damage carried from the firer's gun
                 if ac.hp < 0.0:
                     ac.hp = 0.0
             if p.ttl > 0 and not hit_ground and hit_ac < 0:
@@ -248,14 +255,15 @@ class Kernel:
                     return j
         return -1
 
-    def _spawn_projectile(self, ac, owner_idx):
+    def _spawn_projectile(self, ac, owner_idx, env):
         """Spawn a round from aircraft `ac` (its POST-step state this tick): muzzle along the
-        velocity vector (psi, gamma), speed = firer TAS + MUZZLE_V. The round does NOT advance on
-        its spawn tick (it is appended after _advance_projectiles), so it appears at the muzzle."""
+        velocity vector (psi, gamma), speed = firer TAS + the firer's per-airframe muzzle velocity,
+        carrying the firer's per-round damage (G3). The round does NOT advance on its spawn tick
+        (it is appended after _advance_projectiles), so it appears at the muzzle."""
         self.projectiles.append(Projectile(
             lat=ac.lat, lon=ac.lon, psi=ac.psi, alt=ac.alt,
-            tas=ac.tas + MUZZLE_V, gamma=ac.gamma,
-            ttl=PROJ_TTL_TICKS, owner=owner_idx))
+            tas=ac.tas + env["muzzle_v_mps"], gamma=ac.gamma,
+            damage=env["damage_per_round"], ttl=PROJ_TTL_TICKS, owner=owner_idx))
 
     def step(self, climb_inputs=None):
         for i, ac in enumerate(self.aircraft):
@@ -354,8 +362,14 @@ class Kernel:
         # 3-tuple caller — lockstep_ref/predict_ref/test_energy — keeps working unchanged. ---
         self._advance_projectiles()
         for i, ac in enumerate(self.aircraft):
-            if len(commands[i]) > 3 and commands[i][3] and ac.hp > 0.0:   # G2: dead aircraft can't fire
-                self._spawn_projectile(ac, i)
+            # G3 fire-rate: per-aircraft cooldown, decrement-then-fire (shots exactly rof_interval
+            # ticks apart while held). A dead aircraft (hp<=0) never fires.
+            if ac.fire_cd > 0.0:
+                ac.fire_cd = ac.fire_cd - 1.0
+            want_fire = len(commands[i]) > 3 and commands[i][3]
+            if want_fire and ac.hp > 0.0 and ac.fire_cd == 0.0:
+                self._spawn_projectile(ac, i, envelopes[i])
+                ac.fire_cd = envelopes[i]["rof_interval_ticks"]
 
     def run(self, ticks):
         for _ in range(ticks):
@@ -366,16 +380,18 @@ class Kernel:
         buf += struct.pack("<HHIddII", 1, 0, tick_count & 0xFFFFFFFF,
                            self.dt, self.R, len(self.aircraft), 0)
         for ac in self.aircraft:
-            # G2 (v1.10r0): hp is the 8th per-aircraft f64 (after gamma). Appending it grows every
-            # snapshot -> all prior goldens move again (trajectory/hp-100 identical), as gamma did in B2.
-            buf += struct.pack("<8d", ac.lat, ac.lon, ac.psi, ac.phi, ac.alt, ac.tas, ac.gamma, ac.hp)
+            # G2 (v1.10r0): hp is the 8th per-aircraft f64 (after gamma). G3 (v1.11r0): fire_cd (the
+            # fire-rate cooldown) is the 9th. Appending each grows every snapshot -> all prior goldens
+            # move (trajectory/hp/fire_cd identical for the unchanged scenarios), as gamma did in B2.
+            buf += struct.pack("<9d", ac.lat, ac.lon, ac.psi, ac.phi, ac.alt, ac.tas, ac.gamma,
+                               ac.hp, ac.fire_cd)
         # G1 (v1.9r0): projectile block appended after the aircraft block. n_projectiles (u32) + pad,
-        # then per round 6 x f64 [lat, lon, psi, alt, tas, gamma] + ttl (u32) + owner (u32). The block
-        # is always present (n=0 for gun-less scenarios), so EVERY prior golden's bytes grow -> all
-        # hashes move (a seal, like B2 appending gamma). See ref_kernel docstring / ADR-Step7-Guns-G1.
+        # then per round 7 x f64 [lat, lon, psi, alt, tas, gamma, damage] + ttl (u32) + owner (u32);
+        # damage was added in G3 (v1.11r0). The block is always present (n=0 for gun-less scenarios),
+        # so EVERY prior golden's bytes grow -> all hashes move. See docstring / ADR-Step7-Guns-G1/G3.
         buf += struct.pack("<II", len(self.projectiles) & 0xFFFFFFFF, 0)
         for p in self.projectiles:
-            buf += struct.pack("<6dII", p.lat, p.lon, p.psi, p.alt, p.tas, p.gamma,
+            buf += struct.pack("<7dII", p.lat, p.lon, p.psi, p.alt, p.tas, p.gamma, p.damage,
                                p.ttl & 0xFFFFFFFF, p.owner & 0xFFFFFFFF)
         return bytes(buf)
 
@@ -406,13 +422,16 @@ def build_scenario(rails, scenario):
     envelopes = []
     for ac in scenario["aircraft"]:
         s = ac["start"]
-        k.aircraft.append(Aircraft(
+        env = envmod.load_envelope(ac["envelope"])
+        a = Aircraft(
             lat=deg2rad(s["lat_deg"]), lon=deg2rad(s["lon_deg"]),
             psi=deg2rad(s["psi_deg"]), phi=deg2rad(s["phi_deg"]),
             alt=float(s["alt_m"]), tas=float(s["tas_mps"]),
-        ))
+        )
+        a.hp = env["hp_start"]                 # G3 (v1.11r0): per-airframe starting hitpoints
+        k.aircraft.append(a)
         schedules.append(ac["schedule"])
-        envelopes.append(envmod.load_envelope(ac["envelope"]))
+        envelopes.append(env)
     ticks = int(scenario["ticks"])
     gid = scenario["header"]["id"]
     return k, ticks, gid, schedules, envelopes

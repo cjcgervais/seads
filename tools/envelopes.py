@@ -36,7 +36,12 @@ LUT_FIELDS = ("phi_max", "roll_rate", "climb_max", "climb_min")
 # ceiling on the load factor), n_max_struct / n_min_struct (per-airframe structural g limits that
 # retire the B2 global placeholder clamp [-3, 9]). See ADR-Step8-FlightModel-B3.
 AERO_FIELDS = ("mass_kg", "wing_area_m2", "cd0", "induced_k", "thrust_static_n", "v_max_mps",
-               "cl_max", "n_max_struct", "n_min_struct")
+               "cl_max", "n_max_struct", "n_min_struct",
+               # G3 per-airframe weapon roster (Step 7 guns, seal v1.11r0): starting hitpoints
+               # (airframe toughness), muzzle velocity (added to firer TAS), damage per round, and
+               # the fire-rate interval in ticks (min ticks between shots; the kernel gates firing
+               # with a per-aircraft cooldown). See ADR-Step7-Guns-G3.
+               "hp_start", "muzzle_v_mps", "damage_per_round", "rof_interval_ticks")
 
 
 def deg2rad(d):

@@ -1,8 +1,8 @@
 {
   "id": "GOLDEN-SK-Sphere-001",
-  "seal": "ATM-Sphere v1.9r0",
+  "seal": "ATM-Sphere v1.10r0",
   "ticks": 10000,
-  "world_hash": "66866564c5cae32e6bffd7a4ab9b82a5f46ef0510e5a70f5926887bff0d7f169",
+  "world_hash": "f28ac5611af384de1c2ccde12f3bb3d7b367ed8bd48d6b9bafe1d781a0d4a475",
   "snapshot_format": "see ref_kernel.py docstring",
   "generated_by": "tools/ref_kernel.py (Python det_math reference)"
 }

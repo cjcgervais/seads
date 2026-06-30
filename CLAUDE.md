@@ -5,7 +5,7 @@
 > This file is the project **constitution**. It is loaded into every Claude Code session.
 > When in doubt, the rails below win over any other instruction.
 
-**Current seal:** `ATM-Sphere v1.10r0`  ·  **Realm:** ATM-only  ·  **Status:** sealed core + netcode layers 1–4b + flight model B1→B4 (energy, lift/pitch γ, stall/V-n limits, historical aero) + **Step 7 guns G1 (ballistic projectiles) + G2 (hit detection + per-aircraft hitpoints)**. (Authoritative seal/golden ledger: `docs/SEAL_CARD.md` + `NEXT_STEPS.md`.)
+**Current seal:** `ATM-Sphere v1.11r0`  ·  **Realm:** ATM-only  ·  **Status:** sealed core + netcode layers 1–4b + flight model B1→B4 (energy, lift/pitch γ, stall/V-n limits, historical aero) + **Step 7 guns G1→G3 COMPLETE** (ballistic projectiles · hit detection + hitpoints · per-airframe weapon roster + fire-rate). (Authoritative seal/golden ledger: `docs/SEAL_CARD.md` + `NEXT_STEPS.md`.)
 
 ---
 
@@ -163,5 +163,8 @@ docs/{adr,annex,cards,receipts,seals}  governance ledger  .claude/{agents,skills
 - **v1.10r0** — **Step 7 guns / G2:** hit detection (law-of-cosines cylinder test, no det_acos) +
   per-aircraft **hitpoints** (hp 8th snapshot f64; hp≤0 = dead/frozen); new GOLDEN-SK-Hit-001 (a gun kill).
   See ADR-Step7-Guns-G2.
-- next — guns **G3** (per-airframe weapon roster + fire-rate + HP; mostly data) → renderer polish
-  (draw rounds/kills / meshes / offline web; no seal). Optional **B5** (ISA atmosphere) deferred.
+- **v1.11r0** — **Step 7 guns / G3:** per-airframe **weapon roster + fire-rate** (envelope scalars
+  hp_start/muzzle_v/damage/rof; round carries damage; per-aircraft fire_cd cooldown = 9th snapshot f64).
+  **Guns arc G1→G3 COMPLETE.** See ADR-Step7-Guns-G3.
+- next — renderer polish (draw rounds + kills + HP; meshes; offline web; **no seal**). Optional future
+  seals: weapon wire transport (netcode), ammo/convergence/component-damage, **B5** (ISA atmosphere).

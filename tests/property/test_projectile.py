@@ -29,7 +29,7 @@ def _spawn_and_coast(gamma_deg, tas0, ticks, alt0=4000.0, psi_deg=90.0, lat_deg=
     k = rk.Kernel(RAILS)
     k.projectiles.append(rk.Projectile(
         lat=rk.deg2rad(lat_deg), lon=0.0, psi=rk.deg2rad(psi_deg), alt=alt0,
-        tas=tas0, gamma=rk.deg2rad(gamma_deg), ttl=rk.PROJ_TTL_TICKS, owner=0))
+        tas=tas0, gamma=rk.deg2rad(gamma_deg), damage=10.0, ttl=rk.PROJ_TTL_TICKS, owner=0))
     p = k.projectiles[0]
     trace = [(p.lat, p.lon, p.alt, p.tas, p.gamma, p.ttl)]
     for _ in range(ticks):
@@ -118,9 +118,10 @@ def test_projectile_is_deterministic():
 
 
 def test_fire_command_spawns_at_post_step_muzzle():
-    # Driving step_scenario with fire=True spawns exactly one round, at the firer's POST-step state
-    # (it does not advance on its spawn tick), with speed = firer TAS + MUZZLE_V and the firer's
-    # owner index. This pins the end-to-end spawn path (Command.fire -> _spawn_projectile).
+    # Driving step_scenario with fire=True spawns exactly one round (fire_cd starts ready), at the
+    # firer's POST-step state (it does not advance on its spawn tick), with speed = firer TAS + the
+    # firer's per-airframe muzzle velocity, carrying the firer's per-round damage and owner index.
+    # This pins the end-to-end G1/G3 spawn path (Command.fire -> _spawn_projectile).
     k = rk.Kernel(RAILS)
     ac = rk.Aircraft(0.0, 0.0, rk.deg2rad(30.0), 0.0, 4000.0, 200.0, rk.deg2rad(3.0))
     k.aircraft.append(ac)
@@ -132,7 +133,8 @@ def test_fire_command_spawns_at_post_step_muzzle():
     assert p.ttl == rk.PROJ_TTL_TICKS
     # muzzle == the firer's post-step kinematics (the aircraft moved this tick; the round did not)
     assert (p.lat, p.lon, p.psi, p.alt, p.gamma) == (ac.lat, ac.lon, ac.psi, ac.alt, ac.gamma)
-    assert p.tas == ac.tas + rk.MUZZLE_V
+    assert p.tas == ac.tas + env["muzzle_v_mps"]        # per-airframe muzzle (G3)
+    assert p.damage == env["damage_per_round"]          # carried per-round damage (G3)
 
 
 def test_no_fire_command_spawns_nothing():

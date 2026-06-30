@@ -1,19 +1,114 @@
 {
   "header": {
     "id": "TUNE-Yak-3",
-    "version": 180,
-    "seal": "ATM-Sphere v1.8r0",
-    "adr": "docs/adr/ADR-Step8-FlightModel-B4-v1.8r0.md"
+    "version": 210,
+    "seal": "ATM-Sphere v1.11r0",
+    "adr": "docs/adr/ADR-Step7-Guns-G3-Roster-v1.11r0.md"
   },
   "aircraft": "Yak-3",
   "tuning": {
     "v_ne_mps": 222.0,
     "stall_tas_mps": 40.0,
-    "phi_max_deg_vs_tas": [[40, 62], [80, 58], [120, 52], [160, 47], [185, 44]],
-    "climb_rate_max_mps_vs_tas": [[40, 18], [80, 16], [120, 13], [160, 10], [185, 9]],
-    "climb_rate_min_mps_vs_tas": [[40, -20], [80, -23], [120, -26], [160, -29], [185, -31]],
-    "roll_rate_degps_vs_tas": [[40, 85], [80, 95], [120, 100], [160, 98], [185, 92]],
-    "mass_kg": 2650.0, "wing_area_m2": 14.9, "cd0": 0.022, "induced_k": 0.062, "thrust_static_n": 9240.0, "v_max_mps": 685.0,
-    "cl_max": 1.78, "n_max_struct": 8, "n_min_struct": -3.5
+    "phi_max_deg_vs_tas": [
+      [
+        40,
+        62
+      ],
+      [
+        80,
+        58
+      ],
+      [
+        120,
+        52
+      ],
+      [
+        160,
+        47
+      ],
+      [
+        185,
+        44
+      ]
+    ],
+    "climb_rate_max_mps_vs_tas": [
+      [
+        40,
+        18
+      ],
+      [
+        80,
+        16
+      ],
+      [
+        120,
+        13
+      ],
+      [
+        160,
+        10
+      ],
+      [
+        185,
+        9
+      ]
+    ],
+    "climb_rate_min_mps_vs_tas": [
+      [
+        40,
+        -20
+      ],
+      [
+        80,
+        -23
+      ],
+      [
+        120,
+        -26
+      ],
+      [
+        160,
+        -29
+      ],
+      [
+        185,
+        -31
+      ]
+    ],
+    "roll_rate_degps_vs_tas": [
+      [
+        40,
+        85
+      ],
+      [
+        80,
+        95
+      ],
+      [
+        120,
+        100
+      ],
+      [
+        160,
+        98
+      ],
+      [
+        185,
+        92
+      ]
+    ],
+    "mass_kg": 2650.0,
+    "wing_area_m2": 14.9,
+    "cd0": 0.022,
+    "induced_k": 0.062,
+    "thrust_static_n": 9240.0,
+    "v_max_mps": 685.0,
+    "cl_max": 1.78,
+    "n_max_struct": 8,
+    "n_min_struct": -3.5,
+    "hp_start": 85,
+    "muzzle_v_mps": 800,
+    "damage_per_round": 28,
+    "rof_interval_ticks": 7
   }
 }

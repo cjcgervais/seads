@@ -1,19 +1,114 @@
 {
   "header": {
     "id": "TUNE-Ki-61",
-    "version": 180,
-    "seal": "ATM-Sphere v1.8r0",
-    "adr": "docs/adr/ADR-Step8-FlightModel-B4-v1.8r0.md"
+    "version": 210,
+    "seal": "ATM-Sphere v1.11r0",
+    "adr": "docs/adr/ADR-Step7-Guns-G3-Roster-v1.11r0.md"
   },
   "aircraft": "Ki-61 Hien",
   "tuning": {
     "v_ne_mps": 200.0,
     "stall_tas_mps": 40.0,
-    "phi_max_deg_vs_tas": [[40, 60], [60, 55], [100, 50], [140, 45], [170, 40]],
-    "climb_rate_max_mps_vs_tas": [[40, 15], [80, 12], [120, 10], [160, 8], [170, 7]],
-    "climb_rate_min_mps_vs_tas": [[40, -20], [80, -18], [120, -15], [160, -12], [170, -10]],
-    "roll_rate_degps_vs_tas": [[40, 80], [80, 90], [120, 100], [160, 95], [170, 90]],
-    "mass_kg": 3100.0, "wing_area_m2": 20.0, "cd0": 0.024, "induced_k": 0.058, "thrust_static_n": 10540.0, "v_max_mps": 700.0,
-    "cl_max": 1.551, "n_max_struct": 7.5, "n_min_struct": -3.5
+    "phi_max_deg_vs_tas": [
+      [
+        40,
+        60
+      ],
+      [
+        60,
+        55
+      ],
+      [
+        100,
+        50
+      ],
+      [
+        140,
+        45
+      ],
+      [
+        170,
+        40
+      ]
+    ],
+    "climb_rate_max_mps_vs_tas": [
+      [
+        40,
+        15
+      ],
+      [
+        80,
+        12
+      ],
+      [
+        120,
+        10
+      ],
+      [
+        160,
+        8
+      ],
+      [
+        170,
+        7
+      ]
+    ],
+    "climb_rate_min_mps_vs_tas": [
+      [
+        40,
+        -20
+      ],
+      [
+        80,
+        -18
+      ],
+      [
+        120,
+        -15
+      ],
+      [
+        160,
+        -12
+      ],
+      [
+        170,
+        -10
+      ]
+    ],
+    "roll_rate_degps_vs_tas": [
+      [
+        40,
+        80
+      ],
+      [
+        80,
+        90
+      ],
+      [
+        120,
+        100
+      ],
+      [
+        160,
+        95
+      ],
+      [
+        170,
+        90
+      ]
+    ],
+    "mass_kg": 3100.0,
+    "wing_area_m2": 20.0,
+    "cd0": 0.024,
+    "induced_k": 0.058,
+    "thrust_static_n": 10540.0,
+    "v_max_mps": 700.0,
+    "cl_max": 1.551,
+    "n_max_struct": 7.5,
+    "n_min_struct": -3.5,
+    "hp_start": 95,
+    "muzzle_v_mps": 800,
+    "damage_per_round": 14,
+    "rof_interval_ticks": 6
   }
 }

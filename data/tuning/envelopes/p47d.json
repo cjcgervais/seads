@@ -1,19 +1,114 @@
 {
   "header": {
     "id": "TUNE-P-47D",
-    "version": 180,
-    "seal": "ATM-Sphere v1.8r0",
-    "adr": "docs/adr/ADR-Step8-FlightModel-B4-v1.8r0.md"
+    "version": 210,
+    "seal": "ATM-Sphere v1.11r0",
+    "adr": "docs/adr/ADR-Step7-Guns-G3-Roster-v1.11r0.md"
   },
   "aircraft": "P-47D Thunderbolt",
   "tuning": {
     "v_ne_mps": 233.0,
     "stall_tas_mps": 46.0,
-    "phi_max_deg_vs_tas": [[46, 52], [90, 50], [140, 46], [180, 42], [205, 40]],
-    "climb_rate_max_mps_vs_tas": [[46, 14], [90, 13], [140, 11], [180, 9], [205, 8]],
-    "climb_rate_min_mps_vs_tas": [[46, -22], [90, -26], [140, -30], [180, -34], [205, -36]],
-    "roll_rate_degps_vs_tas": [[46, 75], [90, 85], [140, 95], [180, 100], [205, 105]],
-    "mass_kg": 6000.0, "wing_area_m2": 27.9, "cd0": 0.022, "induced_k": 0.06, "thrust_static_n": 19320.0, "v_max_mps": 700.0,
-    "cl_max": 1.627, "n_max_struct": 8.5, "n_min_struct": -4
+    "phi_max_deg_vs_tas": [
+      [
+        46,
+        52
+      ],
+      [
+        90,
+        50
+      ],
+      [
+        140,
+        46
+      ],
+      [
+        180,
+        42
+      ],
+      [
+        205,
+        40
+      ]
+    ],
+    "climb_rate_max_mps_vs_tas": [
+      [
+        46,
+        14
+      ],
+      [
+        90,
+        13
+      ],
+      [
+        140,
+        11
+      ],
+      [
+        180,
+        9
+      ],
+      [
+        205,
+        8
+      ]
+    ],
+    "climb_rate_min_mps_vs_tas": [
+      [
+        46,
+        -22
+      ],
+      [
+        90,
+        -26
+      ],
+      [
+        140,
+        -30
+      ],
+      [
+        180,
+        -34
+      ],
+      [
+        205,
+        -36
+      ]
+    ],
+    "roll_rate_degps_vs_tas": [
+      [
+        46,
+        75
+      ],
+      [
+        90,
+        85
+      ],
+      [
+        140,
+        95
+      ],
+      [
+        180,
+        100
+      ],
+      [
+        205,
+        105
+      ]
+    ],
+    "mass_kg": 6000.0,
+    "wing_area_m2": 27.9,
+    "cd0": 0.022,
+    "induced_k": 0.06,
+    "thrust_static_n": 19320.0,
+    "v_max_mps": 700.0,
+    "cl_max": 1.627,
+    "n_max_struct": 8.5,
+    "n_min_struct": -4,
+    "hp_start": 150,
+    "muzzle_v_mps": 850,
+    "damage_per_round": 12,
+    "rof_interval_ticks": 3
   }
 }

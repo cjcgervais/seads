@@ -21,17 +21,18 @@ static constexpr double V_MIN = 0x1.e000000000000p+4;   // 30.0 m/s
 // shared bit-for-bit with tools/ref_kernel.py. A round is the n=0/thrust=0 specialization of the
 // aircraft 3-DOF step (gravity along the path + lumped quadratic drag), so NO new det_math. Global
 // for G1 (a generic gun); per-airframe weapon rosters are G3. See ADR-Step7-Guns-G1.
-static constexpr double        MUZZLE_V       = 0x1.a900000000000p+9;    // 850.0 m/s (added to firer TAS)
+// G3 (v1.11r0): muzzle velocity and damage-per-round are PER-AIRFRAME (Envelope::muzzle_v_mps /
+// damage_per_round); drag and ttl stay GLOBAL (a bullet is a bullet). Shared hex-floats with
+// tools/ref_kernel.py.
 static constexpr double        PROJ_DRAG_K    = 0x1.a36e2eb1c432dp-13;   // 2.0e-4 quadratic drag decel coeff
 static constexpr std::uint32_t PROJ_TTL_TICKS = 250u;                    // 2.5 s lifetime, then despawn
 
 // G2 hit detection + per-aircraft hitpoints (Step 7 guns, ATM-Sphere v1.10r0). Shared hex-floats
 // with ref_kernel.py. Horizontal hit test is the spherical law of cosines vs COS_HIT_ANGLE (=
 // det_cos(HIT_RADIUS/R), precomputed once) — acos is monotone so no det_acos is needed; with the
-// |Δalt| gate it is a cylinder test using det_sin/det_cos only (NO new det_math). Global for G2
-// (per-airframe HP/armament are G3). See ADR-Step7-Guns-G2.
-static constexpr double START_HP         = 0x1.9000000000000p+6;   // 100.0 hitpoints (per-airframe in G3)
-static constexpr double DAMAGE_PER_ROUND = 0x1.9000000000000p+4;   // 25.0 hp/round (4 hits kill)
+// |Δalt| gate it is a cylinder test using det_sin/det_cos only (NO new det_math). G3 (v1.11r0):
+// hp_start / damage are per-airframe; START_HP remains the GLOBAL default for the no-arg/Sphere path.
+static constexpr double START_HP         = 0x1.9000000000000p+6;   // 100.0 default hitpoints (no-arg/Sphere)
 static constexpr double HIT_ALT_GATE_M   = 0x1.e000000000000p+5;   // 60.0 m vertical hit gate
 static constexpr double COS_HIT_ANGLE    = 0x1.fffef3909d697p-1;   // cos(HIT_RADIUS/R); horizontal hit test
 
@@ -85,10 +86,11 @@ static inline double lut_eval(const double* xs, const double* ys, double x) {
 }
 
 std::size_t Kernel::add(double lat, double lon, double psi, double phi, double alt, double tas,
-                        double gamma) {
+                        double gamma, double hp) {
     lat_.push_back(lat); lon_.push_back(lon); psi_.push_back(psi);
     phi_.push_back(phi); alt_.push_back(alt); tas_.push_back(tas); gamma_.push_back(gamma);
-    hp_.push_back(START_HP);                     // G2 (v1.10r0): every aircraft spawns at full HP
+    hp_.push_back(hp);                           // G2 hitpoints (G3: per-airframe hp_start passed in)
+    fire_cd_.push_back(0.0);                     // G3 (v1.11r0): fire-rate cooldown starts ready
     return lat_.size() - 1;
 }
 
@@ -158,25 +160,26 @@ void Kernel::advance_projectiles_() {
         p_tas_[i] = Vnew; p_gamma_[i] = ngamma; p_ttl_[i] = nttl;
         std::ptrdiff_t hit_ac = projectile_hit_(i);     // G2: first alive enemy struck, else -1
         if (hit_ac >= 0) {
-            double nhp = hp_[static_cast<std::size_t>(hit_ac)] - DAMAGE_PER_ROUND;
+            double nhp = hp_[static_cast<std::size_t>(hit_ac)] - p_damage_[i];  // G3: carried damage
             if (nhp < 0.0) nhp = 0.0;
             hp_[static_cast<std::size_t>(hit_ac)] = nhp;
         }
         if (nttl > 0u && !hit_ground && hit_ac < 0) {   // survivor: write compacted into slot w
             p_lat_[w] = p_lat_[i]; p_lon_[w] = p_lon_[i]; p_psi_[w] = p_psi_[i];
             p_alt_[w] = p_alt_[i]; p_tas_[w] = p_tas_[i]; p_gamma_[w] = p_gamma_[i];
-            p_ttl_[w] = p_ttl_[i]; p_owner_[w] = p_owner_[i];
+            p_damage_[w] = p_damage_[i]; p_ttl_[w] = p_ttl_[i]; p_owner_[w] = p_owner_[i];
             ++w;
         }
     }
     p_lat_.resize(w); p_lon_.resize(w); p_psi_.resize(w); p_alt_.resize(w);
-    p_tas_.resize(w); p_gamma_.resize(w); p_ttl_.resize(w); p_owner_.resize(w);
+    p_tas_.resize(w); p_gamma_.resize(w); p_damage_.resize(w); p_ttl_.resize(w); p_owner_.resize(w);
 }
 
-void Kernel::spawn_projectile_(std::size_t owner) {
+void Kernel::spawn_projectile_(std::size_t owner, const Envelope& e) {
     p_lat_.push_back(lat_[owner]);   p_lon_.push_back(lon_[owner]);   p_psi_.push_back(psi_[owner]);
-    p_alt_.push_back(alt_[owner]);   p_tas_.push_back(tas_[owner] + MUZZLE_V);
+    p_alt_.push_back(alt_[owner]);   p_tas_.push_back(tas_[owner] + e.muzzle_v_mps);  // G3: per-airframe muzzle
     p_gamma_.push_back(gamma_[owner]);
+    p_damage_.push_back(e.damage_per_round);          // G3: carried per-round damage from the firer's gun
     p_ttl_.push_back(PROJ_TTL_TICKS); p_owner_.push_back(static_cast<std::uint32_t>(owner));
 }
 
@@ -259,11 +262,16 @@ void Kernel::step(const std::vector<Command>& cmd, const std::vector<const Envel
         double w_eff = ceiling_climb_rate(w, alt_[i], atm_top, soft);
         alt_[i] = clampd(alt_[i] + w_eff * dt, 0.0, atm_top);
     }
-    // G1/G2 (v1.10r0) guns: advance live rounds (resolving hits), then spawn newly-fired ones from
-    // the post-step muzzle. Order (existing step+hit+despawn, THEN appends) mirrors ref_kernel exactly.
+    // G1/G2/G3 guns: advance live rounds (resolving hits), then spawn newly-fired ones from the
+    // post-step muzzle, gated by the per-airframe fire-rate. Order (step+hit+despawn, THEN appends)
+    // and the decrement-then-fire cooldown mirror ref_kernel.step_scenario exactly.
     advance_projectiles_();
     for (std::size_t i = 0; i < lat_.size(); ++i) {
-        if (cmd[i].fire && hp_[i] > 0.0) spawn_projectile_(i);   // G2: a dead aircraft can't fire
+        if (fire_cd_[i] > 0.0) fire_cd_[i] = fire_cd_[i] - 1.0;
+        if (cmd[i].fire && hp_[i] > 0.0 && fire_cd_[i] == 0.0) {   // ready, alive, trigger held
+            spawn_projectile_(i, *env[i]);
+            fire_cd_[i] = env[i]->rof_interval_ticks;             // G3: reset to the per-airframe interval
+        }
     }
 }
 
@@ -286,7 +294,7 @@ static void put_f64(std::vector<std::uint8_t>& b, double d) {
 
 std::vector<std::uint8_t> Kernel::snapshot(std::uint32_t tick_count) const {
     std::vector<std::uint8_t> b;
-    b.reserve(32 + 64 * lat_.size() + 8 + 56 * p_lat_.size());   // hdr + 8f64/ac + projblock
+    b.reserve(32 + 72 * lat_.size() + 8 + 64 * p_lat_.size());   // hdr + 9f64/ac + projblock(7f64+2u32)
     put_u16(b, 1);                 // mode = ATM
     put_u16(b, 0);                 // pad
     put_u32(b, tick_count);        // tick_count
@@ -298,15 +306,16 @@ std::vector<std::uint8_t> Kernel::snapshot(std::uint32_t tick_count) const {
         put_f64(b, lat_[i]); put_f64(b, lon_[i]); put_f64(b, psi_[i]);
         put_f64(b, phi_[i]); put_f64(b, alt_[i]); put_f64(b, tas_[i]); put_f64(b, gamma_[i]);
         put_f64(b, hp_[i]);                          // G2 (v1.10r0): 8th per-aircraft f64
+        put_f64(b, fire_cd_[i]);                     // G3 (v1.11r0): 9th per-aircraft f64 (fire cooldown)
     }
-    // G1 (v1.9r0): projectile block — u32 n_projectiles, u32 pad, then per round 6 x f64
-    // [lat, lon, psi, alt, tas, gamma] + u32 ttl + u32 owner. Always present (n=0 for gun-less
-    // scenarios), so every prior golden's bytes grew. Mirrors ref_kernel.snapshot byte-for-byte.
+    // G1 (v1.9r0): projectile block — u32 n_projectiles, u32 pad, then per round 7 x f64
+    // [lat, lon, psi, alt, tas, gamma, damage] + u32 ttl + u32 owner (damage added in G3 v1.11r0).
+    // Always present (n=0 for gun-less scenarios). Mirrors ref_kernel.snapshot byte-for-byte.
     put_u32(b, static_cast<std::uint32_t>(p_lat_.size()));
     put_u32(b, 0);
     for (std::size_t i = 0; i < p_lat_.size(); ++i) {
         put_f64(b, p_lat_[i]); put_f64(b, p_lon_[i]); put_f64(b, p_psi_[i]);
-        put_f64(b, p_alt_[i]); put_f64(b, p_tas_[i]); put_f64(b, p_gamma_[i]);
+        put_f64(b, p_alt_[i]); put_f64(b, p_tas_[i]); put_f64(b, p_gamma_[i]); put_f64(b, p_damage_[i]);
         put_u32(b, p_ttl_[i]); put_u32(b, p_owner_[i]);
     }
     return b;

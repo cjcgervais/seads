@@ -42,8 +42,9 @@ int main(int argc, char** argv) {
     Kernel k(rails);
     for (unsigned a = 0; a < S->n_ac; ++a) {
         const scen::AcSpec& ac = S->ac[a];
-        // AcSpec angles are already radians (pre-converted at generation time).
-        k.add(ac.lat, ac.lon, ac.psi, ac.phi, ac.alt, ac.tas);
+        // AcSpec angles are already radians (pre-converted at generation time). G3 (v1.11r0): seed
+        // the aircraft with its per-airframe starting hitpoints (gamma defaults to 0).
+        k.add(ac.lat, ac.lon, ac.psi, ac.phi, ac.alt, ac.tas, 0.0, ac.env->hp_start);
     }
 
     std::vector<Command> cmd(S->n_ac);
