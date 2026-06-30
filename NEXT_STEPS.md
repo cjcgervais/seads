@@ -1,6 +1,26 @@
 # SEADS 2026 — Next Steps (handoff)
 
-> ## ►► CURRENT STATE (2026-06-30): seal **ATM-Sphere v1.11r0** — **Step 7 guns / G3 (per-airframe weapon roster + fire-rate) DONE ✅ — GUNS ARC G1→G3 COMPLETE**
+> ## ►► CURRENT STATE (2026-06-30): seal **ATM-Sphere v1.12r0** — **Step 7 guns / weapon WIRE transport (WEAPON-001) DONE ✅**
+> **Latest (v1.12r0): the gunnery state now rides the 20 Hz snapshot wire.** Multiplayer/replay can finally
+> REPLICATE the dogfight from the wire (HP bars, tracer rounds, kills) instead of reading it out-of-band from
+> the local kernel. A third self-delimiting snapshot section **WEAPON-001** (snapshot **protocol 3 → 4**) carries
+> per-aircraft **hp×1e3 + fire_cd×1e3**, then a projectile count and — per live round — a GeoPoint (bearing =
+> heading) + **damage×1e3** + **ttl/owner** (integer counters carried **EXACTLY**, not quantized). New rail block
+> `wire.weapon`. Built mirror-first like the KIN reseals: `snapshot_ref.py`↔`snapshot.{h,cpp}` extended, new
+> `gen_weapon_vectors.py`→`weapon_vectors.h`→`seads_weapon_test` byte-exact gate (13th receipt gate
+> `weapon_codec`), `test_weapon_wire.py` (+6 ⇒ **100** property tests). **TRANSPORT-ONLY: no kernel/det_math
+> touched — hp/fire_cd/damage already live in the canonical state, so ALL 9 GOLDENS ARE BYTE-IDENTICAL** (no new
+> golden; guardian.yml gains only the weapon test leg). **Wire reseal only**, exactly like v1.4r0 (KIN-001).
+> **Downstream rider bundled (no-seal):** `seads_record` now sources the renderer's HP + tracer rounds + kills
+> from the **DECODED** WEAPON-001 wire (the kernel side-channel `VizFrame`/`capture_viz` is deleted — net −code);
+> `--gundemo`'s trajectory.js is now `protocol:4` and shows the A6M2 HP 70→0 + rounds tagged `owner:0` straight
+> off the bytes. **13/13** receipt gates PASS, **ctest 8/8** GCC+Clang (new `weapon_byteexact`), 9/9 goldens
+> byte-identical GCC+Clang. Ledger: ADR-Step7-Guns-WireTransport-v1.12r0, SEAL_CARD v1.12r0, receipt
+> `…v1.12r0-c6dd73e.yml`, rails version 210→220 (+ `wire.weapon`). **NEXT: a real cross-process server/transport
+> loop, hp/round interpolation or kill/impact event messages, or B5 ISA atmosphere — all optional.**
+> _(The G1→G3 guns-arc summary below is retained as history — those phases are COMPLETE and unchanged.)_
+>
+> ## ►► PRIOR STATE: seal **ATM-Sphere v1.11r0** — **Step 7 guns / G3 (per-airframe weapon roster + fire-rate) DONE ✅ — GUNS ARC G1→G3 COMPLETE**
 > The whole weapons system is now in the kernel: **G1 (v1.9r0)** ballistic projectiles → **G2 (v1.10r0)**
 > hit detection + hitpoints (gun kills) → **G3 (v1.11r0)** per-airframe roster + fire-rate. **G3 moves the
 > G1/G2 global gun constants into each envelope** so the 8 airframes fight with WWII character. New envelope
@@ -41,14 +61,14 @@
 > (ballistics + hit/damage + per-airframe roster/fire-rate). Optional future seals: weapon wire transport (netcode
 > MP), ammo/convergence/component-damage, **B5** (ISA atmosphere). Flight-model arc **B1→B4 COMPLETE**; guns **G1→G3 COMPLETE**.
 >
-> **Renderer now DRAWS the guns (no-seal, 2026-06-30).** `seads_record` got a `--gundemo` (a P-47D guns down an
-> A6M2 while a Spitfire maneuvers) and now reads projectile + HP state DIRECTLY from the kernel (the weapon wire
-> transport is deferred, but trajectory.js is a presentation file) into per-frame `hp[]` + `p[]` arrays. The web
-> viewer (`src/client/web/viewer.js`) draws **tracer rounds** (a yellow point cloud), **HP bars**, **kills** (dead
-> aircraft grey out + freeze, HUD shows ☠ KILLED), and **auto-frames** the action on load. Verified in Chrome
+> **Renderer DRAWS the guns — now FROM THE WIRE (no-seal, updated v1.12r0).** `seads_record --gundemo` (a P-47D
+> guns down an A6M2 while a Spitfire maneuvers) now sources projectile + HP state from the **DECODED WEAPON-001
+> wire** (per the v1.12r0 reseal above) — the kernel side-channel is gone — into per-frame `hp[]` + `p[]` arrays.
+> The web viewer (`src/client/web/viewer.js`) draws **tracer rounds** (a yellow point cloud), **HP bars**, **kills**
+> (dead aircraft grey out + freeze, HUD shows ☠ KILLED), and **auto-frames** the action on load. Verified in Chrome
 > (screenshot: P-47 tracer stream + greyed dead A6M2 + KILLED HUD). To view: `seads_record --gundemo --js
 > src/client/web/trajectory.js --snap-every 2`, then serve `src/client/web/` (`python -m http.server`) and open
-> index.html. Downstream-only, rides v1.11r0. **Still-pending renderer polish:** aircraft meshes (vs marker spheres),
+> index.html. Downstream-only, rides v1.12r0. **Still-pending renderer polish:** aircraft meshes (vs marker spheres),
 > draw rounds/HP in the native raylib `--fly` viewer too, vendor Three.js for fully-offline web.
 >
 > _(Prior: v1.6r0 B2 lift & pitch — γ stored state, KIN-002 wire reseal, all goldens regenerated + Pitch;

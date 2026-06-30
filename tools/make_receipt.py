@@ -63,6 +63,10 @@ def main():
     snap_ref_ok, _ = run([PY, str(TOOLS / "snapshot_ref.py")])
     snap_vec_ok, _ = run([PY, str(TOOLS / "gen_snapshot_vectors.py"), "--check"])
     gates["snapshot_codec"] = snap_ref_ok and snap_vec_ok
+    # WEAPON-001 gunnery section (seal v1.12r0): hp/fire_cd + projectiles on the snapshot wire.
+    # Ref correctness rides snapshot_ref's self-test (above); here we gate the parity header.
+    weap_vec_ok, _ = run([PY, str(TOOLS / "gen_weapon_vectors.py"), "--check"])
+    gates["weapon_codec"] = snap_ref_ok and weap_vec_ok
     # Loopback lockstep (netcode layer 3): reference self-test + parity header in sync.
     lock_ref_ok, _ = run([PY, str(TOOLS / "lockstep_ref.py")])
     lock_vec_ok, _ = run([PY, str(TOOLS / "gen_lockstep_vectors.py"), "--check"])

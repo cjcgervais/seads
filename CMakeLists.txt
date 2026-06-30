@@ -104,6 +104,10 @@ target_link_libraries(seads_geo001_test PRIVATE seads_net seads_det_flags)
 add_executable(seads_snapshot_test src/net/snapshot_test_main.cpp)
 target_link_libraries(seads_snapshot_test PRIVATE seads_net seads_det_flags)
 
+# --- WEAPON-001 snapshot-section parity test (gunnery state: hp/fire_cd + projectiles, v1.12r0) ---
+add_executable(seads_weapon_test src/net/weapon_test_main.cpp)
+target_link_libraries(seads_weapon_test PRIVATE seads_net seads_det_flags)
+
 # --- loopback lockstep parity test (two kernels, same inputs, identical per-tick hash) ---
 add_executable(seads_lockstep_test src/net/lockstep_test_main.cpp)
 target_link_libraries(seads_lockstep_test PRIVATE seads_lockstep seads_kernel seads_replay seads_det_math seads_det_flags)
@@ -144,6 +148,7 @@ enable_testing()
 add_test(NAME detmath_bitexact COMMAND seads_detmath_test)
 add_test(NAME geo001_byteexact COMMAND seads_geo001_test)
 add_test(NAME snapshot_byteexact COMMAND seads_snapshot_test)
+add_test(NAME weapon_byteexact COMMAND seads_weapon_test)
 add_test(NAME lockstep_equal COMMAND seads_lockstep_test)
 add_test(NAME interp_bitexact COMMAND seads_interp_test)
 add_test(NAME predict_equal COMMAND seads_predict_test)

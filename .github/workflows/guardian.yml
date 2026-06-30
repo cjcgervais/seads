@@ -27,6 +27,7 @@ jobs:
           python tools/gen_scenario_params.py --check
           python tools/gen_geo001_vectors.py --check
           python tools/gen_snapshot_vectors.py --check
+          python tools/gen_weapon_vectors.py --check
           python tools/gen_lockstep_vectors.py --check
           python tools/gen_interp_vectors.py --check
           python tools/gen_predict_vectors.py --check
@@ -108,6 +109,7 @@ jobs:
             echo "dtest=build/Release/seads_detmath_test.exe" >> "$GITHUB_OUTPUT"
             echo "gtest=build/Release/seads_geo001_test.exe" >> "$GITHUB_OUTPUT"
             echo "stest=build/Release/seads_snapshot_test.exe" >> "$GITHUB_OUTPUT"
+            echo "wtest=build/Release/seads_weapon_test.exe" >> "$GITHUB_OUTPUT"
             echo "ltest=build/Release/seads_lockstep_test.exe" >> "$GITHUB_OUTPUT"
             echo "itest=build/Release/seads_interp_test.exe" >> "$GITHUB_OUTPUT"
             echo "ptest=build/Release/seads_predict_test.exe" >> "$GITHUB_OUTPUT"
@@ -118,6 +120,7 @@ jobs:
             echo "dtest=build/seads_detmath_test" >> "$GITHUB_OUTPUT"
             echo "gtest=build/seads_geo001_test" >> "$GITHUB_OUTPUT"
             echo "stest=build/seads_snapshot_test" >> "$GITHUB_OUTPUT"
+            echo "wtest=build/seads_weapon_test" >> "$GITHUB_OUTPUT"
             echo "ltest=build/seads_lockstep_test" >> "$GITHUB_OUTPUT"
             echo "itest=build/seads_interp_test" >> "$GITHUB_OUTPUT"
             echo "ptest=build/seads_predict_test" >> "$GITHUB_OUTPUT"
@@ -135,6 +138,10 @@ jobs:
       - name: GEO-001 snapshot byte-exact test
         shell: bash
         run: "${{ steps.bin.outputs.stest }}"
+
+      - name: WEAPON-001 gunnery-section byte-exact test
+        shell: bash
+        run: "${{ steps.bin.outputs.wtest }}"
 
       - name: Loopback lockstep parity test
         shell: bash

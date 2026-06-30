@@ -1,8 +1,8 @@
 {
   "header": {
     "id": "SEADS-RAILS",
-    "version": 210,
-    "seal": "ATM-Sphere v1.11r0",
+    "version": 220,
+    "seal": "ATM-Sphere v1.12r0",
     "note": "Data-driven immutable rails. Any change here REQUIRES a new seal (ADR + Forge audit card + Chronicle receipt). See CLAUDE.md > Change-Control Law."
   },
   "rails": {
@@ -57,6 +57,13 @@
         "phi_scale": 1000000,
         "speed_scale": 1000,
         "gamma_scale": 1000000
+      },
+      "weapon": {
+        "format": "WEAPON-001",
+        "note": "Auxiliary NON-geographic block for multiplayer GUNNERY replication (seal v1.12r0, snapshot protocol 3 -> 4). A third self-delimiting snapshot section, present iff protocol >= 4, carrying the Step 7 weapon state so a remote/late-join client can DRAW the dogfight (tracer rounds, HP bars, kills) instead of reading it out-of-band from the local kernel: (a) per-aircraft hp + fire_cd (the 8th/9th canonical f64), then (b) a projectile count and, per live ballistic round, a GeoPoint (bearing == round heading psi), its carried damage, and its integer ttl + owner. Same ZigZag+LEB128 encoding as GEO-001; hp/fire_cd/damage are quantized (1e3), while ttl/owner are integer counters carried EXACTLY (not quantized). Transmitted as a SEPARATE section so GEO-001 stays geography-only and KIN-002 framing is byte-identical. Lossy by quantization for the f64 fields -> never fed back as canonical (the world_hash source of truth is Kernel::snapshot(); this wire is downstream presentation/transport only, see CLAUDE.md determinism rules). No kernel/golden change: hp/fire_cd/damage already live in the canonical state, so all 9 goldens are byte-identical across this reseal.",
+        "hp_scale": 1000,
+        "firecd_scale": 1000,
+        "damage_scale": 1000
       }
     },
     "weapons": {

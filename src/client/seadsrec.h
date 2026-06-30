@@ -1,18 +1,19 @@
 // SEADS flight recording container (.seadsrec) — netcode-faithful trajectory feed for the
 // renderer (Step 5). DOWNSTREAM-ONLY: this is the presentation/transport boundary, strictly
-// outside the kernel and the world_hash. It rides seal v1.4r0 (no rail/golden/kernel touched).
+// outside the kernel and the world_hash. It rides seal v1.12r0 (no rail/golden/kernel touched).
 //
 // A recording is exactly the byte stream a 20 Hz server would put on the wire: a small file
 // header (radius + cadences, so a viewer can scale the globe) followed by N length-prefixed
-// GEO-001/KIN-001 snapshot frames (netsnap::encode_snapshot — protocol 2, the sealed codec
-// reused verbatim). A client decodes each frame and feeds it to interp::SnapshotBuffer exactly
-// as it would a live snapshot — so the recorder proves the whole layer 1/2/4a path end to end.
+// GEO-001/KIN-002/WEAPON-001 snapshot frames (netsnap::encode_snapshot — protocol 4, the sealed
+// codec reused verbatim). A client decodes each frame and feeds it to interp::SnapshotBuffer
+// exactly as it would a live snapshot — so the recorder proves the whole layer 1/2/4a path AND
+// the weapon wire (hp + rounds) end to end.
 //
 // Container layout (all integers little-endian; this is a non-canonical PRESENTATION format, so
 // its byte order is a local convenience and is NOT the hashed/sealed snapshot):
 //   magic[8]      = "SEADSREC"
 //   u32 version   = SEADSREC_VERSION
-//   u32 protocol  = snapshot protocol (2)
+//   u32 protocol  = snapshot protocol (4)
 //   u32 tick_hz   = physics rate (100)
 //   u32 snap_hz   = snapshot cadence the recording was captured at (e.g. 20)
 //   f64 radius_m  = sphere radius (globe scale for the viewer)

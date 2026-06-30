@@ -5,14 +5,23 @@ namespace seads {
 namespace netsnap {
 
 EntityState from_kernel(int64_t id, double lat_rad, double lon_rad, double psi_rad,
-                        double alt_m, double phi_rad, double tas_mps, double gamma_rad) {
+                        double alt_m, double phi_rad, double tas_mps, double gamma_rad,
+                        double hp, double fire_cd) {
     return EntityState{id, lat_rad * RAD2DEG, lon_rad * RAD2DEG, psi_rad * RAD2DEG, alt_m,
-                       phi_rad * RAD2DEG, tas_mps, gamma_rad * RAD2DEG};
+                       phi_rad * RAD2DEG, tas_mps, gamma_rad * RAD2DEG, hp, fire_cd};
+}
+
+ProjectileState proj_from_kernel(int64_t id, double lat_rad, double lon_rad, double psi_rad,
+                                 double alt_m, double damage, int64_t ttl, int64_t owner) {
+    return ProjectileState{id, lat_rad * RAD2DEG, lon_rad * RAD2DEG, psi_rad * RAD2DEG, alt_m,
+                           damage, ttl, owner};
 }
 
 // Wire framing: header (protocol, server_tick, n), then the GEO section n*(id, GeoPoint),
-// then — iff protocol >= 2 — the KIN section n*(id, phi_q, tas_q). Both self-delimiting; the
-// GEO-001 codec is reused verbatim so its byte layout / parity vectors are untouched.
+// then — iff protocol >= 2 — the KIN section n*(id, phi_q, tas_q[, gamma_q]), then — iff
+// protocol >= 4 — the WEAPON section: n*(id, hp_q, fire_cd_q), a projectile count m, and
+// m*(pid, GeoPoint, damage_q, ttl, owner). All self-delimiting; the GEO-001 codec is reused
+// verbatim so its byte layout / parity vectors are untouched.
 void encode_snapshot(const Snapshot& s, std::vector<uint8_t>& out) {
     geo001::encode_i64(s.protocol, out);
     geo001::encode_i64(s.server_tick, out);
@@ -29,6 +38,22 @@ void encode_snapshot(const Snapshot& s, std::vector<uint8_t>& out) {
             geo001::encode_i64(geo001::quantize(e.tas_mps, SPEED_SCALE), out);
             if (s.protocol >= 3)        // KIN-002: gamma (flight-path angle)
                 geo001::encode_i64(geo001::quantize(e.gamma_deg, GAMMA_SCALE), out);
+        }
+    }
+    if (s.protocol >= 4) {             // WEAPON section (WEAPON-001, gunnery state)
+        for (const auto& e : s.entities) {  // per-aircraft hp + fire-rate cooldown
+            geo001::encode_i64(e.id, out);
+            geo001::encode_i64(geo001::quantize(e.hp, HP_SCALE), out);
+            geo001::encode_i64(geo001::quantize(e.fire_cd, FIRECD_SCALE), out);
+        }
+        geo001::encode_i64(static_cast<int64_t>(s.projectiles.size()), out);  // live rounds
+        for (const auto& p : s.projectiles) {
+            geo001::encode_i64(p.id, out);
+            geo001::encode_point(geo001::GeoPoint{p.lat_deg, p.lon_deg, p.bearing_deg, p.alt_m},
+                                 out);
+            geo001::encode_i64(geo001::quantize(p.damage, DAMAGE_SCALE), out);
+            geo001::encode_i64(p.ttl, out);     // exact integer counter (kernel u32)
+            geo001::encode_i64(p.owner, out);   // exact integer index  (kernel u32)
         }
     }
 }
@@ -67,6 +92,39 @@ bool decode_snapshot(const uint8_t* data, size_t len, size_t& pos, Snapshot& out
                 out.entities[static_cast<size_t>(i)].gamma_deg =
                     geo001::dequantize(gamma_q, GAMMA_SCALE);
             }
+        }
+    }
+    out.projectiles.clear();
+    if (out.protocol >= 4) {           // WEAPON section (WEAPON-001)
+        for (int64_t i = 0; i < n; ++i) {  // per-aircraft hp + fire_cd
+            int64_t wid = 0, hp_q = 0, firecd_q = 0;
+            if (!geo001::decode_i64(data, len, pos, wid)) return false;
+            if (wid != out.entities[static_cast<size_t>(i)].id) return false;
+            if (!geo001::decode_i64(data, len, pos, hp_q)) return false;
+            if (!geo001::decode_i64(data, len, pos, firecd_q)) return false;
+            out.entities[static_cast<size_t>(i)].hp = geo001::dequantize(hp_q, HP_SCALE);
+            out.entities[static_cast<size_t>(i)].fire_cd =
+                geo001::dequantize(firecd_q, FIRECD_SCALE);
+        }
+        int64_t m = 0;
+        if (!geo001::decode_i64(data, len, pos, m)) return false;
+        if (m < 0) return false;
+        out.projectiles.reserve(static_cast<size_t>(m));
+        for (int64_t i = 0; i < m; ++i) {
+            ProjectileState p{};
+            geo001::GeoPoint pt{};
+            int64_t dmg_q = 0;
+            if (!geo001::decode_i64(data, len, pos, p.id)) return false;
+            if (!geo001::decode_point(data, len, pos, pt)) return false;
+            if (!geo001::decode_i64(data, len, pos, dmg_q)) return false;
+            if (!geo001::decode_i64(data, len, pos, p.ttl)) return false;
+            if (!geo001::decode_i64(data, len, pos, p.owner)) return false;
+            p.lat_deg = pt.lat;
+            p.lon_deg = pt.lon;
+            p.bearing_deg = pt.bearing;
+            p.alt_m = pt.alt;
+            p.damage = geo001::dequantize(dmg_q, DAMAGE_SCALE);
+            out.projectiles.push_back(p);
         }
     }
     return true;
