@@ -28,7 +28,11 @@
 > Files: `kernel.{h,cpp}` (hp_ SoA + accessor; START_HP/DAMAGE/COS_HIT_ANGLE/HIT_ALT_GATE; `projectile_hit_`;
 > hit folded into `advance_projectiles_`; dead-skip in `step(cmd,env)`; hp in snapshot), `ref_kernel.py`
 > (Aircraft.hp + `_projectile_hit` mirror), `config/scenarios/GOLDEN-SK-Hit-001.json`, `tests/property/test_hit.py`.
-> **GIT: committed + pushed to `origin/main` at `<pending>` (2026-06-30); guardian CI _pending_** (see commit step).
+> **GIT: committed + pushed to `origin/main` at `c900241` (2026-06-30). guardian CI GREEN**
+> (run [28464526804](https://github.com/cjcgervais/seads/actions/runs/28464526804)) — Python gates +
+> MSVC x64 + GCC/Clang × x64 + **GCC/Clang arm64** reproduce all 9 goldens bit-for-bit + the
+> cross-toolchain hash aggregation gate. **v1.10r0 (Step 7 guns G2) is fully landed.** Adversarial
+> Auditor pass clean (op-order parity, no det_acos, hp-append-only proof vs the v1.9r0 bins, real kill).
 > **v1.9r0 (G1) was fully landed** (committed `dbb3de7` + confirm `e4aeb25`, guardian green run 28462840475).
 > Branch protection / required-check setup is still the deferred owner task.
 >
