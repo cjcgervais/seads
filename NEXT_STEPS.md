@@ -38,9 +38,18 @@
 > Branch protection / required-check setup is still the deferred owner task.
 >
 > **Remaining roadmap (guns arc DONE):** the kernel now models a full deterministic dogfight-gunnery loop
-> (ballistics + hit/damage + per-airframe roster/fire-rate). **Next = renderer polish (draw rounds/kills/HP;
-> meshes; vendored Three.js; offline web — all NO SEAL).** Optional future seals: weapon wire transport (netcode
+> (ballistics + hit/damage + per-airframe roster/fire-rate). Optional future seals: weapon wire transport (netcode
 > MP), ammo/convergence/component-damage, **B5** (ISA atmosphere). Flight-model arc **B1→B4 COMPLETE**; guns **G1→G3 COMPLETE**.
+>
+> **Renderer now DRAWS the guns (no-seal, 2026-06-30).** `seads_record` got a `--gundemo` (a P-47D guns down an
+> A6M2 while a Spitfire maneuvers) and now reads projectile + HP state DIRECTLY from the kernel (the weapon wire
+> transport is deferred, but trajectory.js is a presentation file) into per-frame `hp[]` + `p[]` arrays. The web
+> viewer (`src/client/web/viewer.js`) draws **tracer rounds** (a yellow point cloud), **HP bars**, **kills** (dead
+> aircraft grey out + freeze, HUD shows ☠ KILLED), and **auto-frames** the action on load. Verified in Chrome
+> (screenshot: P-47 tracer stream + greyed dead A6M2 + KILLED HUD). To view: `seads_record --gundemo --js
+> src/client/web/trajectory.js --snap-every 2`, then serve `src/client/web/` (`python -m http.server`) and open
+> index.html. Downstream-only, rides v1.11r0. **Still-pending renderer polish:** aircraft meshes (vs marker spheres),
+> draw rounds/HP in the native raylib `--fly` viewer too, vendor Three.js for fully-offline web.
 >
 > _(Prior: v1.6r0 B2 lift & pitch — γ stored state, KIN-002 wire reseal, all goldens regenerated + Pitch;
 > committed + pushed, guardian green on `12a1830` run 28392491160.)_

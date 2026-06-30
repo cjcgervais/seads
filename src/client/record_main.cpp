@@ -12,6 +12,7 @@
 // Usage:
 //   seads_record --demo                       [--out flight.seadsrec] [--js trajectory.js] [--snap-every 5]
 //   seads_record --id GOLDEN-SK-TurnClimb-001  [--out ...] [--js ...] [--snap-every 5]
+#include <array>
 #include <cstdio>
 #include <cstring>
 #include <string>
@@ -33,7 +34,9 @@ constexpr double DEG2RAD  = PI_ / 180.0;
 // A non-sealed maneuver schedule. Degrees in, converted to kernel radians at add time. B2: the
 // vertical input is now a commanded load factor g (target_g); a level turn at bank b uses
 // g~1/cos(b), g above that climbs, below descends. throttle [0,1] sustains energy.
-struct Phase { unsigned start_tick; double target_phi_deg; double target_g; double throttle; };
+// G3 (v1.11r0): `fire` (0/1) drives the gun trigger so the gun demo can shoot. Missing initializers
+// value-init to 0, so the non-firing demos below need no change.
+struct Phase { unsigned start_tick; double target_phi_deg; double target_g; double throttle; double fire; };
 struct Ac    { int64_t id; double lat_deg, lon_deg, psi_deg, phi_deg, alt_m, tas_mps;
                const Envelope* env; std::vector<Phase> sched; };
 struct Flight { std::string id; unsigned ticks; std::vector<Ac> ac; };
@@ -60,6 +63,29 @@ Flight make_demo() {
     return f;
 }
 
+// Built-in gun demo (NOT a golden) — a P-47D guns down an A6M2 in a co-altitude tail chase while a
+// Spitfire does aerobatics nearby. Shows G1→G3 live: tracer rounds, hitpoints, and a kill. The
+// chase geometry mirrors GOLDEN-SK-Hit-001 (reliable kill); the attacker fires from t=120.
+Flight make_gundemo() {
+    Flight f;
+    f.id = "DEMO-GUNKILL";
+    f.ticks = 900;  // 9 s at 100 Hz
+    // AC0 P-47D attacker — closes from astern, fires a continuous stream; gentle shared left turn
+    // keeps it on the target. After the kill its tracers stream on past the frozen corpse.
+    f.ac.push_back(Ac{0, 0.0, 0.0, 90.0, 0.0, 4000.0, 230.0, &envtab::P47D, {
+        {0,    8.0, 1.02, 0.95, 0.0},
+        {120,  8.0, 1.02, 0.95, 1.0}}});  // FIRING from t=120 to the end
+    // AC1 A6M2 target — same heading/altitude ~520 m ahead, mild turn; it takes the burst and dies.
+    f.ac.push_back(Ac{1, 0.0, 2.0, 90.0, 0.0, 4000.0, 170.0, &envtab::A6M2, {
+        {0,   8.0, 1.02, 0.7, 0.0}}});
+    // AC2 Spitfire — uninvolved, loops and banks elsewhere for scenery.
+    f.ac.push_back(Ac{2, 6.0, -5.0, 200.0, 0.0, 3000.0, 200.0, &envtab::SPITFIRE_MK5, {
+        {0,    0.0, 1.2, 0.9, 0.0},
+        {300, -55.0, 1.8, 0.9, 0.0},
+        {700,  50.0, 1.7, 0.9, 0.0}}});
+    return f;
+}
+
 // Adapt a sealed scenario (radians already baked in) into the recorder's Flight shape.
 Flight from_scenario(const scen::Scenario& S) {
     Flight f;
@@ -75,7 +101,8 @@ Flight from_scenario(const scen::Scenario& S) {
         ac.env = s.env;
         for (unsigned j = 0; j < s.n_phase; ++j)
             ac.sched.push_back(Phase{s.sched[j].start_tick, s.sched[j].target_phi,
-                                     s.sched[j].target_g, s.sched[j].throttle});  // phi already radians
+                                     s.sched[j].target_g, s.sched[j].throttle,
+                                     s.sched[j].fire ? 1.0 : 0.0});  // phi already radians; fire 0/1
         f.ac.push_back(ac);
     }
     return f;
@@ -85,11 +112,12 @@ Flight from_scenario(const scen::Scenario& S) {
 // are already radians (sealed scenario replay). Returns the per-aircraft envelope list.
 void seed(Kernel& k, const Flight& f, bool deg, std::vector<const Envelope*>& env) {
     for (const auto& a : f.ac) {
+        double hp = a.env->hp_start;          // G3 (v1.11r0): per-airframe starting hitpoints
         if (deg)
             k.add(a.lat_deg * DEG2RAD, a.lon_deg * DEG2RAD, a.psi_deg * DEG2RAD,
-                  a.phi_deg * DEG2RAD, a.alt_m, a.tas_mps);
+                  a.phi_deg * DEG2RAD, a.alt_m, a.tas_mps, 0.0, hp);
         else
-            k.add(a.lat_deg, a.lon_deg, a.psi_deg, a.phi_deg, a.alt_m, a.tas_mps);
+            k.add(a.lat_deg, a.lon_deg, a.psi_deg, a.phi_deg, a.alt_m, a.tas_mps, 0.0, hp);
         env.push_back(a.env);
     }
 }
@@ -105,6 +133,7 @@ void command_at(const Flight& f, unsigned t, bool deg, std::vector<Command>& cmd
         cmd[a].target_phi = deg ? phi * DEG2RAD : phi;     // sealed scheds store radians
         cmd[a].target_g = sched[idx].target_g;
         cmd[a].throttle = sched[idx].throttle;
+        cmd[a].fire = sched[idx].fire != 0.0;              // G3: gun trigger
     }
 }
 
@@ -127,8 +156,25 @@ netsnap::Snapshot capture(const Kernel& k, const Flight& f, uint32_t tick,
     return decoded;
 }
 
+// G1→G3 visualization extras, read DIRECTLY from the kernel (exact state, not the lossy wire — the
+// weapon wire transport is deferred, and trajectory.js is a presentation file, not the sim). Per
+// frame: each aircraft's hp, and every live round's position (degrees) + owner.
+struct VizFrame {
+    std::vector<double> hp;                          // per aircraft, kernel order
+    std::vector<std::array<double, 4>> proj;         // {lat_deg, lon_deg, alt_m, owner}
+};
+VizFrame capture_viz(const Kernel& k, std::size_t n_ac) {
+    VizFrame v;
+    const double RAD2DEG = 180.0 / PI_;
+    for (std::size_t a = 0; a < n_ac; ++a) v.hp.push_back(k.hp(a));
+    for (std::size_t i = 0; i < k.proj_count(); ++i)
+        v.proj.push_back({ k.proj_lat(i) * RAD2DEG, k.proj_lon(i) * RAD2DEG,
+                           k.proj_alt(i), static_cast<double>(k.proj_owner(i)) });
+    return v;
+}
+
 void write_js(const std::string& path, const client::RecordingMeta& meta, const std::string& id,
-              const std::vector<netsnap::Snapshot>& frames) {
+              const std::vector<netsnap::Snapshot>& frames, const std::vector<VizFrame>& viz) {
     std::FILE* fp = std::fopen(path.c_str(), "wb");
     if (!fp) { std::fprintf(stderr, "cannot open %s\n", path.c_str()); return; }
     std::fprintf(fp, "// AUTO-GENERATED by seads_record — decoded GEO-001/KIN-001 wire frames.\n");
@@ -151,6 +197,16 @@ void write_js(const std::string& path, const client::RecordingMeta& meta, const 
                 en.alt_m, en.phi_deg, en.tas_mps, en.gamma_deg,
                 (e + 1 < fr.entities.size()) ? "," : "");
         }
+        // G1→G3 extras: per-aircraft hp + live rounds [lat,lon,alt,owner] (read from the kernel).
+        std::fprintf(fp, "],\"hp\":[");
+        for (std::size_t a = 0; a < viz[fi].hp.size(); ++a)
+            std::fprintf(fp, "%.1f%s", viz[fi].hp[a], (a + 1 < viz[fi].hp.size()) ? "," : "");
+        std::fprintf(fp, "],\"p\":[");
+        for (std::size_t pi = 0; pi < viz[fi].proj.size(); ++pi) {
+            const auto& pr = viz[fi].proj[pi];
+            std::fprintf(fp, "[%.7f,%.7f,%.1f,%.0f]%s", pr[0], pr[1], pr[2], pr[3],
+                         (pi + 1 < viz[fi].proj.size()) ? "," : "");
+        }
         std::fprintf(fp, "]}%s\n", (fi + 1 < frames.size()) ? "," : "");
     }
     std::fprintf(fp, "  ]\n};\n");
@@ -163,10 +219,11 @@ int main(int argc, char** argv) {
     const char* id = nullptr;
     const char* out_path = nullptr;
     const char* js_path = nullptr;
-    bool demo = false;
+    bool demo = false, gundemo = false;
     unsigned snap_every = 5;  // 20 Hz at 100 Hz physics
     for (int i = 1; i < argc; ++i) {
         if (!std::strcmp(argv[i], "--demo")) demo = true;
+        else if (!std::strcmp(argv[i], "--gundemo")) { gundemo = true; demo = true; }
         else if (!std::strcmp(argv[i], "--id") && i + 1 < argc) id = argv[++i];
         else if (!std::strcmp(argv[i], "--out") && i + 1 < argc) out_path = argv[++i];
         else if (!std::strcmp(argv[i], "--js") && i + 1 < argc) js_path = argv[++i];
@@ -183,7 +240,8 @@ int main(int argc, char** argv) {
 
     Flight flight;
     bool deg = false;
-    if (demo) { flight = make_demo(); deg = true; }
+    if (gundemo) { flight = make_gundemo(); deg = true; }
+    else if (demo) { flight = make_demo(); deg = true; }
     else {
         const scen::Scenario* S = nullptr;
         for (unsigned k = 0; k < scen::N_ALL; ++k)
@@ -202,12 +260,14 @@ int main(int argc, char** argv) {
 
     std::vector<std::vector<uint8_t>> wire_frames;
     std::vector<netsnap::Snapshot> decoded_frames;
+    std::vector<VizFrame> viz_frames;
     std::vector<Command> cmd(flight.ac.size());
 
     auto grab = [&](uint32_t tick) {
         std::vector<uint8_t> wire;
         decoded_frames.push_back(capture(k, flight, tick, wire));
         wire_frames.push_back(std::move(wire));
+        viz_frames.push_back(capture_viz(k, flight.ac.size()));   // hp + live rounds from the kernel
     };
 
     grab(0);  // initial state (server_tick 0)
@@ -229,6 +289,10 @@ int main(int argc, char** argv) {
     std::printf("scenario=%s ticks=%u aircraft=%zu frames=%zu snap_every=%u (%u Hz)\n",
                 flight.id.c_str(), flight.ticks, flight.ac.size(), wire_frames.size(),
                 snap_every, meta.snap_hz);
+    // Combat summary (final kernel state): hp per aircraft + any kills.
+    for (std::size_t a = 0; a < flight.ac.size(); ++a)
+        std::printf("  aircraft %zu: hp %.0f%s\n", a, k.hp(a), k.hp(a) <= 0.0 ? "  *** KILLED ***" : "");
+    std::printf("  rounds airborne at end: %zu\n", k.proj_count());
 
     if (out_path) {
         std::vector<uint8_t> blob;
@@ -240,7 +304,7 @@ int main(int argc, char** argv) {
         std::printf("wrote %zu bytes -> %s\n", blob.size(), out_path);
     }
     if (js_path) {
-        write_js(js_path, meta, flight.id, decoded_frames);
+        write_js(js_path, meta, flight.id, decoded_frames, viz_frames);
         std::printf("wrote trajectory.js -> %s\n", js_path);
     }
     return 0;

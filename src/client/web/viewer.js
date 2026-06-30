@@ -96,6 +96,19 @@ const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 controls.minDistance = DISPLAY_R * 1.2;
 controls.maxDistance = DISPLAY_R * 6;
+// Auto-frame: aim the camera at the action (centroid of the opening frame, averaged as unit vectors
+// so longitude wrap is handled) so the dogfight is centred on load for ANY recording. Drag to orbit,
+// scroll to zoom.
+{
+  let vx = 0, vy = 0, vz = 0;
+  for (const e of frames[0].e) { const v = geoToVec(e.lat, e.lon, 0); vx += v.x; vy += v.y; vz += v.z; }
+  const dir = new THREE.Vector3(vx, vy, vz);
+  if (dir.lengthSq() > 1e-9) {
+    dir.normalize();
+    camera.position.copy(dir.multiplyScalar(DISPLAY_R * 2.15)).add(new THREE.Vector3(0, DISPLAY_R * 0.12, 0));
+    controls.update();
+  }
+}
 
 scene.add(new THREE.AmbientLight(0x6688bb, 0.7));
 const key = new THREE.DirectionalLight(0xffffff, 1.0); key.position.set(5, 8, 6); scene.add(key);
@@ -154,6 +167,19 @@ const craft = ids.map((id, i) => {
   return { id, color, marker, nose, trail, trailPos, trailLen: 0, MAXT };
 });
 
+// Tracer rounds (G1→G3): a point cloud refreshed each frame from the kernel-captured projectiles.
+const MAXP = 600;
+const tracerPos = new Float32Array(MAXP * 3);
+const tracerGeo = new THREE.BufferGeometry();
+tracerGeo.setAttribute('position', new THREE.BufferAttribute(tracerPos, 3));
+tracerGeo.setDrawRange(0, 0);
+const tracers = new THREE.Points(tracerGeo,
+  new THREE.PointsMaterial({ color: 0xffe14a, size: 0.16, sizeAttenuation: true,
+                             transparent: true, opacity: 0.95 }));
+scene.add(tracers);
+// Per-aircraft starting hp (max), for the HUD bar; hp is captured per frame.
+const maxHp = (frames[0].hp || frames[0].e.map(() => 100)).slice();
+
 // HUD rows.
 const craftEl = document.getElementById('craft');
 const rows = craft.map(c => {
@@ -190,28 +216,52 @@ function frame(now) {
   }
   const renderTick = firstTick + Math.max(0, played - delayTicks);
   const ents = sample(renderTick);
+  const fi = frameIndexFor(Math.max(firstTick, Math.min(lastTick, renderTick)));
+  const hpNow = frames[fi].hp || maxHp;
   clockEl.textContent = (played / tickHz).toFixed(2) + 's';
 
   ents.forEach((e, i) => {
     const c = craft[i];
+    const hp = hpNow[i] !== undefined ? hpNow[i] : maxHp[i];
+    const dead = hp <= 0;
     const p = geoToVec(e.lat, e.lon, e.alt);
     c.marker.position.copy(p);
+    // dead aircraft greys out and stops emitting; living ones keep their colour.
+    c.marker.material.color.setHex(dead ? 0x444444 : c.color);
+    c.marker.material.emissive.setHex(dead ? 0x000000 : c.color);
+    c.marker.material.emissiveIntensity = dead ? 0.0 : 0.5;
     const dir = headingDir(e.lat, e.lon, e.brg);
     const tip = p.clone().add(dir.multiplyScalar(0.7));
     c.nose.geometry.setFromPoints([p, tip]);
-    // append to trail
-    if (c.trailLen < c.MAXT) {
-      c.trailPos.set([p.x, p.y, p.z], c.trailLen * 3); c.trailLen++;
-    } else {
-      c.trailPos.copyWithin(0, 3); c.trailPos.set([p.x, p.y, p.z], (c.MAXT - 1) * 3);
+    // append to trail (freeze the trail once dead)
+    if (!dead) {
+      if (c.trailLen < c.MAXT) {
+        c.trailPos.set([p.x, p.y, p.z], c.trailLen * 3); c.trailLen++;
+      } else {
+        c.trailPos.copyWithin(0, 3); c.trailPos.set([p.x, p.y, p.z], (c.MAXT - 1) * 3);
+      }
+      c.trail.geometry.attributes.position.needsUpdate = true;
+      c.trail.geometry.setDrawRange(0, c.trailLen);
     }
-    c.trail.geometry.attributes.position.needsUpdate = true;
-    c.trail.geometry.setDrawRange(0, c.trailLen);
-    rows[i].textContent =
-      `#${e.id}  lat ${e.lat.toFixed(2).padStart(7)}  lon ${e.lon.toFixed(2).padStart(8)}  ` +
-      `alt ${e.alt.toFixed(0).padStart(5)}m  brg ${e.brg.toFixed(0).padStart(3)}  ` +
-      `bank ${e.phi.toFixed(0).padStart(4)}  tas ${e.tas.toFixed(0).padStart(3)}`;
+    const bar = (() => {                                   // tiny text hp bar
+      const w = 10, n = Math.max(0, Math.round((hp / maxHp[i]) * w));
+      return '█'.repeat(n) + '░'.repeat(w - n);
+    })();
+    rows[i].textContent = dead
+      ? `#${e.id}  ☠ KILLED   hp ${bar} 0/${maxHp[i].toFixed(0)}`
+      : `#${e.id}  alt ${e.alt.toFixed(0).padStart(5)}m  brg ${e.brg.toFixed(0).padStart(3)}  ` +
+        `tas ${e.tas.toFixed(0).padStart(3)}  hp ${bar} ${hp.toFixed(0)}/${maxHp[i].toFixed(0)}`;
   });
+
+  // tracer rounds for this frame (snap to the captured frame; identity isn't tracked across frames)
+  const pr = frames[fi].p || [];
+  const np = Math.min(pr.length, MAXP);
+  for (let i = 0; i < np; i++) {
+    const v = geoToVec(pr[i][0], pr[i][1], pr[i][2]);
+    tracerPos.set([v.x, v.y, v.z], i * 3);
+  }
+  tracerGeo.setDrawRange(0, np);
+  tracerGeo.attributes.position.needsUpdate = true;
 
   controls.update();
   renderer.render(scene, camera);
