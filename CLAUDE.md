@@ -5,7 +5,7 @@
 > This file is the project **constitution**. It is loaded into every Claude Code session.
 > When in doubt, the rails below win over any other instruction.
 
-**Current seal:** `ATM-Sphere v1.11r0`  ·  **Realm:** ATM-only  ·  **Status:** sealed core + netcode layers 1–4b + flight model B1→B4 (energy, lift/pitch γ, stall/V-n limits, historical aero) + **Step 7 guns G1→G3 COMPLETE** (ballistic projectiles · hit detection + hitpoints · per-airframe weapon roster + fire-rate). (Authoritative seal/golden ledger: `docs/SEAL_CARD.md` + `NEXT_STEPS.md`.)
+**Current seal:** `ATM-Sphere v1.12r0`  ·  **Realm:** ATM-only  ·  **Status:** sealed core + netcode layers 1–4b + flight model B1→B4 (energy, lift/pitch γ, stall/V-n limits, historical aero) + **Step 7 guns G1→G3 COMPLETE** (ballistic projectiles · hit detection + hitpoints · per-airframe weapon roster + fire-rate) + **weapon WIRE transport WEAPON-001** (gunnery state on the 20 Hz snapshot wire, protocol 4; transport-only, goldens unchanged). Both viewers draw rounds/HP/kills from the wire. (Authoritative seal/golden ledger: `docs/SEAL_CARD.md` + `NEXT_STEPS.md`.)
 
 ---
 
@@ -35,7 +35,7 @@ Human summary:
 | Ceiling | **ATM_TOP = 8,000 m**, **SOFT = 100 m** (predamp 7,900–8,000 → hard clamp) |
 | Kinematics | Intrinsic S²; closed-form great-circle step. **B2 (v1.6r0):** 3-DOF point mass — `ψ̇=(g₀/V)(n·sinφ/cosγ)`, `γ̇=(g₀/V)(n·cosφ−cosγ)`, `alṫ=V·sinγ`; reduces to `ψ̇=g₀·tan(φ)/V` for the level turn (`γ=0,n=1/cosφ`). No-arg straight golden keeps the pure kinematic tail. **No Cartesian fallback.** |
 | Determinism | `det_math` only. **Ban** `std::sin/cos/tan/atan2/asin/acos/sqrt/pow`, fast-math, FMA, x87. |
-| Wire/Hash | **GEO-001** — lat/lon×1e7, bearing×1e6, h×1e3; ZigZag+LEB128. **+KIN-002** aux block (phi×1e6, tas×1e3, **gamma×1e6**) for prediction; snapshot protocol 3 (v1.6r0) |
+| Wire/Hash | **GEO-001** — lat/lon×1e7, bearing×1e6, h×1e3; ZigZag+LEB128. **+KIN-002** aux block (phi×1e6, tas×1e3, **gamma×1e6**) for prediction. **+WEAPON-001** aux block (per-aircraft hp×1e3, fire_cd×1e3; per round: GeoPoint + damage×1e3 + ttl/owner exact i64) for MP gunnery replication; snapshot **protocol 4** (v1.12r0). The wire is lossy/downstream — `Kernel::snapshot()` stays the world_hash source of truth |
 | Roster | Sealed **8**: P-47D, Bf 109 F-4, Ki-61, A6M2, Yak-3, La-7, Spitfire Mk V, **P-51** |
 | State | Per-aircraft 7-tuple `(lat, lon, psi, phi, alt, tas, gamma)` — γ (flight-path angle) added in B2 (v1.6r0). |
 | Golden | **GOLDEN-SK-Sphere-001** — 10,000 ticks from (0°,0°), ψ=45°, TAS=250 m/s → world_hash matches cross-toolchain (6 sealed goldens total; see SEAL_CARD) |
@@ -166,5 +166,13 @@ docs/{adr,annex,cards,receipts,seals}  governance ledger  .claude/{agents,skills
 - **v1.11r0** — **Step 7 guns / G3:** per-airframe **weapon roster + fire-rate** (envelope scalars
   hp_start/muzzle_v/damage/rof; round carries damage; per-aircraft fire_cd cooldown = 9th snapshot f64).
   **Guns arc G1→G3 COMPLETE.** See ADR-Step7-Guns-G3.
-- next — renderer polish (draw rounds + kills + HP; meshes; offline web; **no seal**). Optional future
-  seals: weapon wire transport (netcode), ammo/convergence/component-damage, **B5** (ISA atmosphere).
+- **v1.12r0** — **Step 7 guns / weapon WIRE transport (WEAPON-001):** the gunnery state rides the 20 Hz
+  snapshot wire as a 3rd self-delimiting section (snapshot **protocol 3→4**): per-aircraft hp/fire_cd (×1e3),
+  then a projectile count and per round a GeoPoint + damage(×1e3) + ttl/owner (integer, exact). New rail
+  block `wire.weapon`. **TRANSPORT-ONLY — no kernel/det_math touched, all 9 goldens byte-identical** (it's a
+  seal only because the wire is a sealed rail, like the v1.4r0 KIN-001 reseal). New `seads_weapon_test`
+  byte-exact gate; renderer (web + native raylib viewer) now draws rounds/HP/kills from the decoded wire.
+  See ADR-Step7-Guns-WireTransport-v1.12r0.
+- next — free pick (none blocking): a networked server↔client loop that actually ships the WEAPON-001 frames
+  between endpoints (no-seal, gateable); more renderer polish (meshes; guns in the live `--fly` path; offline
+  web); or an optional new seal (ammo/convergence/component-damage, **B5** ISA atmosphere).

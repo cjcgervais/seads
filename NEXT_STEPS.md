@@ -18,12 +18,17 @@
 > byte-identical GCC+Clang. Ledger: ADR-Step7-Guns-WireTransport-v1.12r0, SEAL_CARD v1.12r0, receipt
 > `…v1.12r0-c6dd73e.yml`, rails version 210→220 (+ `wire.weapon`). **NEXT: a real cross-process server/transport
 > loop, hp/round interpolation or kill/impact event messages, or B5 ISA atmosphere — all optional.**
-> **GIT: committed + pushed to `origin/main` at `e23df32` (2026-06-30). guardian CI GREEN**
-> (run [28471743367](https://github.com/cjcgervais/seads/actions/runs/28471743367)) — Python gates +
+> **GIT: clean on `origin/main` at `a04fe97` (2026-06-30). guardian CI GREEN.** The v1.12r0 seal landed at
+> `e23df32` (CI [28471743367](https://github.com/cjcgervais/seads/actions/runs/28471743367)) — Python gates +
 > MSVC x64 + GCC/Clang × x64 + **GCC/Clang arm64** reproduce all 9 goldens bit-for-bit + the new
-> `seads_weapon_test` leg + the cross-toolchain hash aggregation gate. **v1.12r0 (weapon wire transport)
-> is fully landed.** Adversarial Auditor APPROVE (Python↔C++ byte parity, rail scope = only `wire.weapon`
-> + version/seal, no banned symbols, no hash move).
+> `seads_weapon_test` leg + the cross-toolchain hash aggregation gate; Adversarial Auditor APPROVE
+> (Python↔C++ byte parity, rail scope = only `wire.weapon` + version/seal, no banned symbols, no hash move).
+> **Then a no-seal renderer rider landed at `a04fe97`** (CI [28474978474](https://github.com/cjcgervais/seads/actions/runs/28474978474)
+> green): the **native raylib `seads_viewer` now draws the guns from the decoded WEAPON-001 wire** — tracer
+> rounds + HP bars + kills — via new `Playback::sample_weapons()`, CI-gated by a `seads_client_test`
+> weapon-playback case + the headless `seads_viewer <rec> --selfcheck N` (prints `hp=… KILLED` + `rounds=N`).
+> **CURRENT GATE STATE: 13/13 receipt gates PASS, 100 property tests, ctest 8/8 GCC+Clang, all 9 goldens
+> byte-identical.** **v1.12r0 (weapon wire transport) + the native-viewer-guns rider are both fully landed.**
 > _(The G1→G3 guns-arc summary below is retained as history — those phases are COMPLETE and unchanged.)_
 >
 > ## ►► PRIOR STATE: seal **ATM-Sphere v1.11r0** — **Step 7 guns / G3 (per-airframe weapon roster + fire-rate) DONE ✅ — GUNS ARC G1→G3 COMPLETE**
@@ -105,16 +110,25 @@
 >
 > ## ► START HERE (next task)
 > **⚠ COLD-START READ THE BANNER AT THE TOP FIRST — it is the authoritative current state (seal
-> ATM-Sphere v1.11r0; flight model B1→B4 + guns G1→G3 COMPLETE; the web renderer now draws
-> rounds/kills/HP). Everything in this `START HERE` block and §1–§8 below is HISTORY** (how each layer
-> shipped), kept for context. **The actual next task now that flight + guns are done is a free pick:**
-> (a) **renderer polish (no-seal)** — aircraft meshes vs marker spheres, draw rounds/HP in the native
-> raylib `--fly` viewer too, vendor Three.js for fully-offline web (see the renderer note in the banner
-> + §5); or (b) an **optional new seal** — weapon WIRE transport (a netcode layer so multiplayer
-> replicates rounds/hp/fire_cd, deferred like phi/tas were pre-4b), ammo/convergence/component-damage,
-> or **B5** (ISA atmosphere; §8.5). Read `CLAUDE.md` first (the constitution; governance is lean, §2),
-> then the §4 gates to confirm green. Memory: `seads-canon`, `seads-harness`, `seads-flight-model-roadmap`,
-> `seads-guns-roadmap`. Git is clean on `main` at `a0dcfa9`, guardian CI green (run 28468897006).
+> ATM-Sphere v1.12r0; flight model B1→B4 + guns G1→G3 COMPLETE; weapon WIRE transport WEAPON-001
+> COMPLETE; BOTH the web AND native viewers now draw rounds/kills/HP from the wire). Everything in this
+> `START HERE` block and §1–§8 below is HISTORY** (how each layer shipped), kept for context. **The actual
+> next task now that flight + guns + the weapon wire are all done is a free pick (none blocking):**
+> - (a) **Networked server↔client loop (no-seal, recommended next):** an in-process transport that actually
+>   SHIPS the WEAPON-001 snapshot frames server→client and reconstructs the full dogfight clientside (ties
+>   lockstep + snapshot + interp + predict + the new weapon wire together). Gateable like the other netcode
+>   layers (a `*_ref.py` ↔ `src/net/*` mirror + `gen_*_vectors` parity test + CI leg). This is the natural
+>   thing that finally USES the wire transport between two endpoints.
+> - (b) **More renderer polish (no-seal):** aircraft **meshes** (vs marker spheres, web + native); guns in the
+>   live `--fly` path (the own ship would need `Command.fire` wired into the keyboard input + predictor);
+>   vendor **Three.js** for a fully-offline web viewer (currently CDN).
+> - (c) **An optional new seal:** ammo counts / gun convergence / component (region) damage; or **B5** ISA
+>   atmosphere (§8.5 — the doc explicitly recommends deferring B5; biggest lift, forces det_exp/det_pow).
+>
+> Read `CLAUDE.md` first (the constitution; governance is lean, §2), then run the **"Verify everything still
+> works"** sweep below to confirm the green baseline (13 receipt gates, 100 property tests, ctest 8/8, 9
+> goldens) BEFORE and AFTER any change. Memory: `seads-canon`, `seads-harness`, `seads-flight-model-roadmap`,
+> `seads-guns-roadmap`. **Git is clean on `main` at `a04fe97`, guardian CI green (run 28474978474).**
 >
 > _(Everything below is the original v1.4r0-era handoff, retained as history.)_
 > **Steps 1–6 are DONE and Step 5 (renderer) now has a working first cut.** The deterministic
@@ -250,10 +264,11 @@ python tools/snapshot_ref.py                # GEO-001 snapshot reference self-te
 python tools/lockstep_ref.py                # loopback lockstep reference self-test (+ negative control)
 python tools/predict_ref.py                 # client-side prediction reference self-test
 for g in gen_coeffs gen_golden_params gen_detmath_vectors gen_envelope_tables gen_scenario_params \
-         gen_geo001_vectors gen_snapshot_vectors gen_lockstep_vectors gen_interp_vectors gen_predict_vectors; do \
-  python tools/$g.py --check; done          # all 10 generated headers in sync
-python -m pytest tests/property -q          # 94 pass (scenario/energy/pitch/stall + projectile/hit/weapon + net layers)
-python tools/make_receipt.py                # runs all 12 gates -> overall: PASS (writes docs/receipts/...yml)
+         gen_geo001_vectors gen_snapshot_vectors gen_weapon_vectors gen_lockstep_vectors \
+         gen_interp_vectors gen_predict_vectors; do \
+  python tools/$g.py --check; done          # all 11 generated headers in sync (weapon added v1.12r0)
+python -m pytest tests/property -q          # 100 pass (scenario/energy/pitch/stall + projectile/hit/weapon/weapon_wire + net layers)
+python tools/make_receipt.py                # runs all 13 gates -> overall: PASS (writes docs/receipts/...yml)
 ```
 ```powershell
 # C++ side (PATH set as above). Builds seads_golden (Sphere) + seads_scenario (8 scenario goldens).
@@ -265,11 +280,15 @@ foreach ($id in "GOLDEN-SK-Turn-001","GOLDEN-SK-Climb-001","GOLDEN-SK-TurnClimb-
   .\build-gcc\seads_scenario.exe --id $id --out run_scen.bin
   python tools\validate_snapshot.py --golden "tests\golden\$id\expected.world_hash" --candidate run_scen.bin }
 # (repeat the two scenario/validate blocks with build-clang to confirm cross-compiler parity)
-# SEE THE SIM: .\build-gcc\seads_record.exe --gundemo --js src\client\web\trajectory.js --snap-every 2
+# SEE THE SIM (web): .\build-gcc\seads_record.exe --gundemo --js src\client\web\trajectory.js --snap-every 2
 #              then: cd src\client\web; python -m http.server 8753  -> open http://localhost:8753/index.html
+# SEE THE SIM (native raylib viewer — draws guns from the WEAPON-001 wire; needs -DSEADS_CLIENT=ON, see below):
+#   .\build-gcc\seads_record.exe --gundemo --out gun.seadsrec --snap-every 2
+#   .\build-client\seads_viewer.exe gun.seadsrec              # GUI: tracers + HP bars + KILLED
+#   .\build-client\seads_viewer.exe gun.seadsrec --selfcheck 8   # headless: prints hp/KILLED + rounds=N (no GPU)
 # Net codec + client parity tests (also built by the same cmake): fastest full check is ctest.
-ctest --test-dir build-gcc --output-on-failure    # 7/7: detmath, geo001, snapshot, lockstep, interp, predict, client
-ctest --test-dir build-clang --output-on-failure   # 7/7 under Clang too
+ctest --test-dir build-gcc --output-on-failure    # 8/8: detmath, geo001, snapshot, weapon, lockstep, interp, predict, client
+ctest --test-dir build-clang --output-on-failure   # 8/8 under Clang too
 
 # OPTIONAL — the renderer (Step 5). Record a flight, then view it:
 .\build-gcc\seads_record.exe --demo --out flight.seadsrec --js src\client\web\trajectory.js
