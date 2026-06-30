@@ -18,7 +18,7 @@
 > byte-identical GCC+Clang. Ledger: ADR-Step7-Guns-WireTransport-v1.12r0, SEAL_CARD v1.12r0, receipt
 > `…v1.12r0-c6dd73e.yml`, rails version 210→220 (+ `wire.weapon`). **NEXT: a real cross-process server/transport
 > loop, hp/round interpolation or kill/impact event messages, or B5 ISA atmosphere — all optional.**
-> **GIT: clean on `origin/main` at `a04fe97` (2026-06-30). guardian CI GREEN.** The v1.12r0 seal landed at
+> **GIT: attitude-pass code at `7160fd3` + this handoff/receipt commit on `origin/main` (2026-06-30); pushed. guardian CI expected GREEN** (non-kernel rider; goldens unchanged). The v1.12r0 seal landed at
 > `e23df32` (CI [28471743367](https://github.com/cjcgervais/seads/actions/runs/28471743367)) — Python gates +
 > MSVC x64 + GCC/Clang × x64 + **GCC/Clang arm64** reproduce all 9 goldens bit-for-bit + the new
 > `seads_weapon_test` leg + the cross-toolchain hash aggregation gate; Adversarial Auditor APPROVE
@@ -27,8 +27,20 @@
 > green): the **native raylib `seads_viewer` now draws the guns from the decoded WEAPON-001 wire** — tracer
 > rounds + HP bars + kills — via new `Playback::sample_weapons()`, CI-gated by a `seads_client_test`
 > weapon-playback case + the headless `seads_viewer <rec> --selfcheck N` (prints `hp=… KILLED` + `rounds=N`).
+> **Then a 2nd no-seal renderer rider — the AIRCRAFT ATTITUDE PASS — landed at `7160fd3`:** both viewers now
+> draw aircraft with real attitude from the KIN wire. The **replay** path (`run_gui`) swaps the old
+> sphere+radial-stick for the attitude-aware `draw_aircraft` (wings roll with bank **phi**, nose tilts with the
+> flight-path angle **gamma**), and **fly-mode remotes** now tilt with their true **gamma** instead of a hardcoded
+> `pitch=0` (a climbing/diving bandit reads right on the globe). phi/tas/gamma are NON-geographic, so the layer-4a
+> interp (geography-only, behind the parity gate) drops them — `Playback::sample` now **snaps phi/tas/gamma from
+> the nearest received frame** via a shared `nearest_frame()` seam, exactly the pattern `sample_weapons` already
+> uses for hp/rounds (position+heading still interpolate; attitude reads at 20 Hz, imperceptible for a roll/pitch).
+> This also fixed a **latent display bug**: the replay HUD's `bank`/`tas` columns were silently always 0 (interp
+> dropped them). **No kernel/wire/det_math** touched ⇒ all 9 goldens byte-identical; a `seads_client_test`
+> attitude-snap assertion was added (green GCC+Clang). **The rendered _look_ is unverified beyond geometry/data —
+> a GPU run of `seads_viewer <rec>` / `--fly` is the only thing that confirms it visually.**
 > **CURRENT GATE STATE: 13/13 receipt gates PASS, 100 property tests, ctest 8/8 GCC+Clang, all 9 goldens
-> byte-identical.** **v1.12r0 (weapon wire transport) + the native-viewer-guns rider are both fully landed.**
+> byte-identical.** **v1.12r0 + the native-viewer-guns rider + the attitude-pass rider are all fully landed.**
 > _(The G1→G3 guns-arc summary below is retained as history — those phases are COMPLETE and unchanged.)_
 >
 > ## ►► PRIOR STATE: seal **ATM-Sphere v1.11r0** — **Step 7 guns / G3 (per-airframe weapon roster + fire-rate) DONE ✅ — GUNS ARC G1→G3 COMPLETE**
@@ -119,16 +131,19 @@
 >   lockstep + snapshot + interp + predict + the new weapon wire together). Gateable like the other netcode
 >   layers (a `*_ref.py` ↔ `src/net/*` mirror + `gen_*_vectors` parity test + CI leg). This is the natural
 >   thing that finally USES the wire transport between two endpoints.
-> - (b) **More renderer polish (no-seal):** aircraft **meshes** (vs marker spheres, web + native); guns in the
->   live `--fly` path (the own ship would need `Command.fire` wired into the keyboard input + predictor);
->   vendor **Three.js** for a fully-offline web viewer (currently CDN).
+> - (b) **More renderer polish (no-seal):** the **aircraft attitude pass is now DONE** (`7160fd3` — replay +
+>   remotes bank/pitch from the wire). Remaining: aircraft **meshes** (vs the marker stick-figure, web + native);
+>   **guns in the live `--fly` path** (the own ship would need `Command.fire` wired into the keyboard input +
+>   predictor — combat visuals currently exist only in replay `run_gui`); **tracer streaks + muzzle flash** (vs
+>   the flat point cloud); vendor **Three.js** for a fully-offline web viewer (currently CDN) + read the web
+>   ceiling shell from the `ATM_TOP` rail (hardcoded `+8000` in `viewer.js`).
 > - (c) **An optional new seal:** ammo counts / gun convergence / component (region) damage; or **B5** ISA
 >   atmosphere (§8.5 — the doc explicitly recommends deferring B5; biggest lift, forces det_exp/det_pow).
 >
 > Read `CLAUDE.md` first (the constitution; governance is lean, §2), then run the **"Verify everything still
 > works"** sweep below to confirm the green baseline (13 receipt gates, 100 property tests, ctest 8/8, 9
 > goldens) BEFORE and AFTER any change. Memory: `seads-canon`, `seads-harness`, `seads-flight-model-roadmap`,
-> `seads-guns-roadmap`. **Git is clean on `main` at `a04fe97`, guardian CI green (run 28474978474).**
+> `seads-guns-roadmap`. **Git: attitude-pass rider at `7160fd3` + this handoff/receipt commit on `main`, pushed; guardian CI expected green (non-kernel; goldens unchanged).**
 >
 > _(Everything below is the original v1.4r0-era handoff, retained as history.)_
 > **Steps 1–6 are DONE and Step 5 (renderer) now has a working first cut.** The deterministic
