@@ -74,8 +74,19 @@
 > (dead aircraft grey out + freeze, HUD shows ☠ KILLED), and **auto-frames** the action on load. Verified in Chrome
 > (screenshot: P-47 tracer stream + greyed dead A6M2 + KILLED HUD). To view: `seads_record --gundemo --js
 > src/client/web/trajectory.js --snap-every 2`, then serve `src/client/web/` (`python -m http.server`) and open
-> index.html. Downstream-only, rides v1.12r0. **Still-pending renderer polish:** aircraft meshes (vs marker spheres),
-> draw rounds/HP in the native raylib `--fly` viewer too, vendor Three.js for fully-offline web.
+> index.html. Downstream-only, rides v1.12r0.
+>
+> **Native raylib viewer now DRAWS the guns too (no-seal, 2026-06-30).** `seads_viewer <rec>.seadsrec`
+> (recording-replay path) now renders the gunnery straight from the **decoded WEAPON-001 wire**:
+> **tracer rounds** (a yellow point cloud), **per-aircraft HP bars** projected above each marker (green→
+> orange→red, plus a text bar + hp in the HUD), and **kills** (dead aircraft grey out, HP bar greys, a
+> `KILLED` label + `*** KILLED ***` HUD row). Sourced from new `Playback::sample_weapons()` (the nearest
+> decoded frame — hp is discrete, rounds transient, so NO interpolation), CI-gated by a new
+> `seads_client_test` weapon-playback case (ctest `client_presentation`, GCC+Clang) + the headless
+> `seads_viewer <rec> --selfcheck N` (prints per-sample `hp=… KILLED` + `rounds=N`, no GPU). To view:
+> `seads_record --gundemo --out gun.seadsrec --snap-every 2` then `seads_viewer gun.seadsrec` (GUI) or
+> `… --selfcheck 8` (headless). **Still-pending renderer polish:** aircraft meshes (vs marker spheres);
+> guns in the live `--fly` path (own ship would need `Command.fire`); vendor Three.js for fully-offline web.
 >
 > _(Prior: v1.6r0 B2 lift & pitch — γ stored state, KIN-002 wire reseal, all goldens regenerated + Pitch;
 > committed + pushed, guardian green on `12a1830` run 28392491160.)_

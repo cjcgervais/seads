@@ -37,5 +37,27 @@ std::vector<RenderEntity> Playback::sample(double render_tick) const {
     return out;
 }
 
+WeaponView Playback::sample_weapons(double render_tick) const {
+    WeaponView wv;
+    const std::vector<netsnap::Snapshot>& frames = buffer_.frames();
+    if (frames.empty()) return wv;
+    // The latest received frame at/before render_tick (frames are ascending server_tick); if the
+    // render time precedes the whole buffer, hold the first frame (matches interp edge semantics).
+    const netsnap::Snapshot* fr = &frames.front();
+    for (const auto& f : frames) {
+        if (static_cast<double>(f.server_tick) <= render_tick) fr = &f; else break;
+    }
+    wv.hp.reserve(fr->entities.size());
+    for (const auto& e : fr->entities) wv.hp.push_back(RenderHp{e.id, e.hp});
+    wv.rounds.reserve(fr->projectiles.size());
+    for (const auto& p : fr->projectiles) {
+        RenderRound r;
+        r.lat_deg = p.lat_deg; r.lon_deg = p.lon_deg; r.alt_m = p.alt_m; r.owner = p.owner;
+        r.pos = geo_deg_to_cartesian(p.lat_deg, p.lon_deg, p.alt_m, radius_m_);
+        wv.rounds.push_back(r);
+    }
+    return wv;
+}
+
 }  // namespace client
 }  // namespace seads

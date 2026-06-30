@@ -138,9 +138,58 @@ static void test_recording_and_playback() {
     check(close(after[0].lat_deg, d1.entities[0].lat_deg, 1e-12), "hold at/above last frame");
 }
 
+// Build a 2-frame recording carrying the WEAPON-001 gunnery state (hp + live rounds) and exercise
+// Playback::sample_weapons — the path the native raylib viewer draws HP bars / tracers / kills from.
+static void test_weapon_playback() {
+    netsnap::Snapshot s0, s1;
+    s0.protocol = netsnap::SNAPSHOT_PROTOCOL;       // protocol 4 carries the WEAPON section
+    s0.server_tick = 0;
+    s0.entities.push_back(netsnap::EntityState{7, 0, 0, 45, 2000, 0, 170, 0, 100.0, 0.0});  // full hp
+    s0.projectiles.push_back(netsnap::ProjectileState{0, 0.01, 0.02, 45, 2005, 12.0, 200, 7});
+    s1.protocol = netsnap::SNAPSHOT_PROTOCOL;
+    s1.server_tick = 10;
+    s1.entities.push_back(netsnap::EntityState{7, 0, 0, 45, 2000, 0, 170, 0, 0.0, 5.0});     // dead
+    s1.projectiles.push_back(netsnap::ProjectileState{0, 0.03, 0.04, 45, 2010, 12.0, 190, 7});
+    s1.projectiles.push_back(netsnap::ProjectileState{1, 0.05, 0.06, 45, 2010, 12.0, 195, 7});
+
+    std::vector<uint8_t> w0, w1;
+    netsnap::encode_snapshot(s0, w0);
+    netsnap::encode_snapshot(s1, w1);
+    RecordingMeta meta;
+    meta.radius_m = 15000.0;
+    meta.tick_hz = 100;
+    meta.snap_hz = 20;
+    std::vector<std::vector<uint8_t>> wires = {w0, w1};
+    std::vector<uint8_t> blob;
+    write_recording(meta, wires, blob);
+    Recording rec;
+    check(read_recording(blob.data(), blob.size(), rec), "weapon recording parses");
+    Playback pb;
+    check(pb.load(rec), "weapon playback loads");
+
+    // Discrete, NOT interpolated: sample_weapons holds the nearest received PAST frame.
+    WeaponView a = pb.sample_weapons(0.0);
+    check(a.hp.size() == 1 && a.hp[0].id == 7 && close(a.hp[0].hp, 100.0, 1e-9),
+          "weapon hp @ frame0 = full 100");
+    check(a.rounds.size() == 1 && a.rounds[0].owner == 7, "one round @ frame0, owner carried");
+    check(pb.sample_weapons(9.99).hp[0].hp > 50.0, "holds nearest PAST frame (no interpolation)");
+    WeaponView c = pb.sample_weapons(10.0);
+    check(c.hp.size() == 1 && c.hp[0].hp <= 0.0, "weapon hp @ frame1 = dead (hp<=0)");
+    check(c.rounds.size() == 2, "two rounds @ frame1");
+    netsnap::Snapshot d1;
+    std::size_t p = 0;
+    netsnap::decode_snapshot(w1.data(), w1.size(), p, d1);
+    Vec3 exp = geo_deg_to_cartesian(d1.projectiles[0].lat_deg, d1.projectiles[0].lon_deg,
+                                    d1.projectiles[0].alt_m, 15000.0);
+    check(close(c.rounds[0].pos.x, exp.x, 1e-6) && close(c.rounds[0].pos.y, exp.y, 1e-6) &&
+              close(c.rounds[0].pos.z, exp.z, 1e-6),
+          "round world position matches globe projection");
+}
+
 int main() {
     test_globe();
     test_recording_and_playback();
+    test_weapon_playback();
     if (g_fail) { std::printf("seads_client_test: FAILED\n"); return 1; }
     std::printf("seads_client_test: all checks passed\n");
     return 0;

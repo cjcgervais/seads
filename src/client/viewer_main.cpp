@@ -109,6 +109,13 @@ Vector3 to_display(const Vec3& p, double radius_m) {
                    -static_cast<float>(p.z) * s};
 }
 
+// Look up an aircraft's hp in a WeaponView by id; returns `dflt` if absent (e.g. a frame that
+// predates the weapon section, or an id not present in the nearest frame).
+double hp_for(const std::vector<RenderHp>& v, int64_t id, double dflt) {
+    for (const auto& h : v) if (h.id == id) return h.hp;
+    return dflt;
+}
+
 // Headless data-path proof: advance render_tick across the recording, print sampled positions.
 int run_selfcheck(const Playback& pb, int n) {
     double t0 = static_cast<double>(pb.first_tick());
@@ -119,30 +126,48 @@ int run_selfcheck(const Playback& pb, int n) {
         double a = (n > 1) ? static_cast<double>(i) / (n - 1) : 0.0;
         double rt = t0 + a * (t1 - t0);
         std::vector<RenderEntity> ents = pb.sample(rt);
+        WeaponView wv = pb.sample_weapons(rt);  // WEAPON-001 gunnery state (hp + live rounds)
         std::printf("  t=%.1f:", rt);
         for (const auto& e : ents) {
-            std::printf(" [#%lld lat=%.3f lon=%.3f alt=%.0f brg=%.1f]", static_cast<long long>(e.id),
-                        e.lat_deg, e.lon_deg, e.alt_m, e.bearing_deg);
+            std::printf(" [#%lld lat=%.3f lon=%.3f alt=%.0f brg=%.1f hp=%.0f%s]",
+                        static_cast<long long>(e.id), e.lat_deg, e.lon_deg, e.alt_m, e.bearing_deg,
+                        hp_for(wv.hp, e.id, -1.0),
+                        hp_for(wv.hp, e.id, 100.0) <= 0.0 ? " KILLED" : "");
         }
-        std::printf("\n");
+        std::printf("  rounds=%zu\n", wv.rounds.size());
     }
     return 0;
 }
 
-void draw_hud(const Playback& pb, double render_tick, const std::vector<RenderEntity>& ents) {
-    DrawText("SEADS — ATM-Sphere globe viewer (read-only / layer-4a interp)", 12, 12, 20, RAYWHITE);
-    char line[160];
-    std::snprintf(line, sizeof(line), "render_tick %.1f  (%.2fs)  delay %.0fms  %dHz snaps",
+void draw_hud(const Playback& pb, double render_tick, const std::vector<RenderEntity>& ents,
+              const WeaponView& wv, const std::vector<RenderHp>& maxhp) {
+    DrawText("SEADS — ATM-Sphere globe viewer (read-only / layer-4a interp + WEAPON-001 wire)", 12,
+             12, 20, RAYWHITE);
+    char line[200];
+    std::snprintf(line, sizeof(line),
+                  "render_tick %.1f  (%.2fs)  delay %.0fms  %dHz snaps   rounds airborne %zu",
                   render_tick, render_tick / pb.tick_hz(), pb.delay_ticks() / pb.tick_hz() * 1000.0,
-                  pb.snap_hz());
+                  pb.snap_hz(), wv.rounds.size());
     DrawText(line, 12, 38, 16, LIGHTGRAY);
     int y = 70;
     for (const auto& e : ents) {
-        std::snprintf(line, sizeof(line),
-                      "#%lld  lat %+7.3f  lon %+8.3f  alt %5.0fm  brg %5.1f  bank %+5.1f  tas %5.1f",
-                      static_cast<long long>(e.id), e.lat_deg, e.lon_deg, e.alt_m, e.bearing_deg,
-                      e.phi_deg, e.tas_mps);
-        DrawText(line, 12, y, 16, SKYBLUE);
+        double mh = hp_for(maxhp, e.id, 100.0);
+        double hp = hp_for(wv.hp, e.id, mh);
+        bool dead = hp <= 0.0;
+        char bar[12];
+        int n = (mh > 0.0) ? static_cast<int>(std::lround(hp / mh * 10.0)) : 0;
+        if (n < 0) n = 0; if (n > 10) n = 10;
+        for (int k = 0; k < 10; ++k) bar[k] = (k < n) ? '#' : '.';
+        bar[10] = '\0';
+        if (dead)
+            std::snprintf(line, sizeof(line), "#%lld  *** KILLED ***   hp [%s] 0/%.0f",
+                          static_cast<long long>(e.id), bar, mh);
+        else
+            std::snprintf(line, sizeof(line),
+                          "#%lld  alt %5.0fm  brg %5.1f  bank %+5.1f  tas %5.1f   hp [%s] %.0f/%.0f",
+                          static_cast<long long>(e.id), e.alt_m, e.bearing_deg, e.phi_deg,
+                          e.tas_mps, bar, hp, mh);
+        DrawText(line, 12, y, 16, dead ? GRAY : SKYBLUE);
         y += 22;
     }
     DrawText("drag: orbit   wheel: zoom   space: pause   R: restart", 12,
@@ -166,6 +191,9 @@ int run_gui(Playback& pb, double speed) {
     const double span = (t1 - t0);
     // Per-aircraft trails (display-space points), keyed by slot order.
     std::vector<std::vector<Vector3>> trails;
+    // WEAPON-001 (seal v1.12r0): starting hp per aircraft (full HP bars) + the tracer round colour.
+    const std::vector<RenderHp> maxhp = pb.sample_weapons(t0).hp;
+    const Color TRACER{255, 225, 74, 255};  // yellow point cloud, mirrors the web viewer
     bool paused = false;
     double sim_clock = 0.0;     // seconds of playback elapsed
     double last_wall = GetTime();
@@ -187,10 +215,12 @@ int run_gui(Playback& pb, double speed) {
         if (render_tick < t0) render_tick = t0;
 
         std::vector<RenderEntity> ents = pb.sample(render_tick);
+        WeaponView wv = pb.sample_weapons(render_tick);  // hp + live rounds (WEAPON-001 wire)
         if (trails.size() < ents.size()) trails.resize(ents.size());
         for (size_t i = 0; i < ents.size(); ++i) {
             Vector3 d = to_display(ents[i].pos, pb.radius_m());
             if (loop < pb.delay_ticks() + 1.0) trails[i].clear();  // reset trails on loop
+            // A dead aircraft is frozen on the wire, so its trail naturally stops growing.
             trails[i].push_back(d);
             if (trails[i].size() > 400) trails[i].erase(trails[i].begin());
         }
@@ -202,7 +232,9 @@ int run_gui(Playback& pb, double speed) {
         DrawGrid(0, 0);  // no-op floor; keeps depth nice
         const Color palette[4] = {GOLD, LIME, ORANGE, VIOLET};
         for (size_t i = 0; i < ents.size(); ++i) {
-            Color c = palette[i % 4];
+            double hp = hp_for(wv.hp, ents[i].id, hp_for(maxhp, ents[i].id, 100.0));
+            bool dead = hp <= 0.0;
+            Color c = dead ? Color{90, 90, 96, 255} : palette[i % 4];  // kills grey out
             // Trail.
             for (size_t k = 1; k < trails[i].size(); ++k)
                 DrawLine3D(trails[i][k - 1], trails[i][k], Fade(c, 0.6f));
@@ -215,8 +247,30 @@ int run_gui(Playback& pb, double speed) {
                                     pb.radius_m());
             DrawLine3D(d, up, Fade(c, 0.8f));
         }
+        // WEAPON-001 tracer rounds: a yellow point cloud at each live round (from the decoded wire).
+        for (const auto& r : wv.rounds)
+            DrawSphere(to_display(r.pos, pb.radius_m()), 0.045f, TRACER);
         EndMode3D();
-        draw_hud(pb, render_tick, ents);
+        // Per-aircraft HP bars, projected to screen above each marker (always faces the camera).
+        for (size_t i = 0; i < ents.size(); ++i) {
+            Vector2 sp = GetWorldToScreen(to_display(ents[i].pos, pb.radius_m()), cam);
+            if (sp.x < -50 || sp.x > GetScreenWidth() + 50 || sp.y < -50 ||
+                sp.y > GetScreenHeight() + 50)
+                continue;
+            double mh = hp_for(maxhp, ents[i].id, 100.0);
+            double hp = hp_for(wv.hp, ents[i].id, mh);
+            bool dead = hp <= 0.0;
+            double frac = (mh > 0.0) ? hp / mh : 0.0;
+            if (frac < 0) frac = 0; if (frac > 1) frac = 1;
+            int bw = 46, bh = 5, bx = static_cast<int>(sp.x) - bw / 2, by = static_cast<int>(sp.y) - 26;
+            DrawRectangle(bx, by, bw, bh, Color{30, 30, 36, 200});
+            Color fill = dead ? Color{120, 120, 120, 255}
+                              : (frac > 0.5 ? GREEN : (frac > 0.25 ? ORANGE : RED));
+            DrawRectangle(bx, by, static_cast<int>(bw * frac), bh, fill);
+            DrawRectangleLines(bx, by, bw, bh, Fade(BLACK, 0.5f));
+            if (dead) DrawText("KILLED", bx - 2, by - 13, 12, Color{230, 90, 90, 255});
+        }
+        draw_hud(pb, render_tick, ents, wv, maxhp);
         EndDrawing();
     }
     CloseWindow();

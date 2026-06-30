@@ -23,6 +23,21 @@ struct RenderEntity {
     double bearing_deg = 0, phi_deg = 0, tas_mps = 0;
 };
 
+// One per-aircraft hitpoint reading and one live ballistic round, both lifted from the WEAPON-001
+// snapshot section (seal v1.12r0). Unlike RenderEntity these are NOT interpolated — hitpoints are
+// discrete and rounds are transient, so they are read from the nearest received frame (a freeze of
+// the latest snapshot the client holds), mirroring how the web viewer snaps tracers to a frame.
+struct RenderHp { int64_t id = 0; double hp = 0; };
+struct RenderRound {
+    Vec3 pos;             // world-space position (metres), globe frame
+    double lat_deg = 0, lon_deg = 0, alt_m = 0;
+    int64_t owner = 0;    // firing aircraft id (for colour/attribution)
+};
+struct WeaponView {
+    std::vector<RenderHp> hp;        // per aircraft in the nearest frame
+    std::vector<RenderRound> rounds; // live rounds in the nearest frame
+};
+
 class Playback {
 public:
     // Load decoded frames into the interpolation buffer. Returns false if the recording is empty.
@@ -43,6 +58,11 @@ public:
     // Sample the buffer at an absolute render tick (may be fractional). Returns interpolated
     // aircraft mapped to world space. Clamps/holds at the recording's edges (interp semantics).
     std::vector<RenderEntity> sample(double render_tick) const;
+
+    // Sample the WEAPON-001 gunnery state at a render tick: the per-aircraft hitpoints and the
+    // live rounds from the NEAREST received frame (server_tick <= render_tick, else the first).
+    // These ride the decoded snapshot wire — no interpolation (hp is discrete, rounds transient).
+    WeaponView sample_weapons(double render_tick) const;
 
 private:
     interp::SnapshotBuffer buffer_;
