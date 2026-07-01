@@ -32,6 +32,7 @@ jobs:
           python tools/gen_interp_vectors.py --check
           python tools/gen_predict_vectors.py --check
           python tools/gen_session_vectors.py --check
+          python tools/gen_event_vectors.py --check
       - name: Rails + roster
         run: python tools/spec_monotone_check.py config/rails/atm.json
       - name: det_math oracle (vs MPFR)
@@ -52,6 +53,8 @@ jobs:
         run: python tools/predict_ref.py
       - name: Server<->client session loop reference self-test
         run: python tools/session_ref.py
+      - name: Reliable event-channel reference self-test
+        run: python tools/event_ref.py
       - name: Property tests (metamorphic)
         run: python -m pytest tests/property -q
       - name: Reference golden matches seal
@@ -117,6 +120,7 @@ jobs:
             echo "itest=build/Release/seads_interp_test.exe" >> "$GITHUB_OUTPUT"
             echo "ptest=build/Release/seads_predict_test.exe" >> "$GITHUB_OUTPUT"
             echo "sstest=build/Release/seads_session_test.exe" >> "$GITHUB_OUTPUT"
+            echo "evtest=build/Release/seads_event_test.exe" >> "$GITHUB_OUTPUT"
             echo "cltest=build/Release/seads_client_test.exe" >> "$GITHUB_OUTPUT"
           else
             echo "golden=build/seads_golden" >> "$GITHUB_OUTPUT"
@@ -129,6 +133,7 @@ jobs:
             echo "itest=build/seads_interp_test" >> "$GITHUB_OUTPUT"
             echo "ptest=build/seads_predict_test" >> "$GITHUB_OUTPUT"
             echo "sstest=build/seads_session_test" >> "$GITHUB_OUTPUT"
+            echo "evtest=build/seads_event_test" >> "$GITHUB_OUTPUT"
             echo "cltest=build/seads_client_test" >> "$GITHUB_OUTPUT"
           fi
 
@@ -163,6 +168,10 @@ jobs:
       - name: Server<->client session reconstruction parity test
         shell: bash
         run: "${{ steps.bin.outputs.sstest }}"
+
+      - name: Reliable event-channel parity test (journal + blackout bound)
+        shell: bash
+        run: "${{ steps.bin.outputs.evtest }}"
 
       - name: Client presentation test (globe + .seadsrec + playback)
         shell: bash

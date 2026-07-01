@@ -83,6 +83,18 @@ add_library(seads_session STATIC src/net/session.cpp)
 target_include_directories(seads_session PUBLIC src/net)
 target_link_libraries(seads_session PUBLIC seads_predict seads_net seads_kernel seads_replay seads_det_flags)
 
+# --- reliable combat-EVENT channel (netcode layer 6) ---
+# Server DERIVES hit/kill events by OBSERVING the authoritative kernel's hp deltas (the kernel is
+# NOT modified — pure observation, so all goldens stay byte-identical); each 20 Hz frame re-sends the
+# last K events; the client applies them by monotonic seq (a de-duped redundant journal) and so
+# reconstructs the exact event stream over the lossy wire. Derivation drives the kernel (like
+# session), so it is its OWN lib (links seads_kernel + seads_net for the geo001 varint + replay's
+# sha256). Windowing/transport/dedup are integer-only, so its whole-run event digest reproduces
+# bit-for-bit cross-toolchain. Composes the EXISTING protocol-4 session — no rail/golden/wire change.
+add_library(seads_event STATIC src/net/event.cpp)
+target_include_directories(seads_event PUBLIC src/net)
+target_link_libraries(seads_event PUBLIC seads_kernel seads_net seads_replay seads_det_flags)
+
 # --- client presentation lib (Step 5 renderer): recording container + playback ---
 # DOWNSTREAM-ONLY. Decodes the GEO-001/KIN-001 wire (via seads_net) and interpolates remotes
 # (layer 4a) for display. It NEVER feeds the sim: it links seads_net but NOT the kernel/det_math,
@@ -136,6 +148,10 @@ target_link_libraries(seads_predict_test PRIVATE seads_predict seads_kernel sead
 add_executable(seads_session_test src/net/session_test_main.cpp)
 target_link_libraries(seads_session_test PRIVATE seads_session seads_predict seads_net seads_kernel seads_replay seads_det_math seads_det_flags)
 
+# --- reliable event-channel parity test (event derivation + redundant journal + blackout bound) ---
+add_executable(seads_event_test src/net/event_test_main.cpp)
+target_link_libraries(seads_event_test PRIVATE seads_event seads_kernel seads_net seads_replay seads_det_math seads_det_flags)
+
 # --- client presentation test (globe projection + .seadsrec container + playback interp) ---
 add_executable(seads_client_test src/client/client_test_main.cpp)
 target_link_libraries(seads_client_test PRIVATE seads_client seads_net seads_det_flags)
@@ -169,5 +185,6 @@ add_test(NAME lockstep_equal COMMAND seads_lockstep_test)
 add_test(NAME interp_bitexact COMMAND seads_interp_test)
 add_test(NAME predict_equal COMMAND seads_predict_test)
 add_test(NAME session_reconstruct COMMAND seads_session_test)
+add_test(NAME event_reliable COMMAND seads_event_test)
 add_test(NAME client_presentation COMMAND seads_client_test)
 # Golden hash compare is run in CI (guardian.yml) across the toolchain matrix.

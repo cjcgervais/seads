@@ -83,6 +83,10 @@ def main():
     session_ref_ok, _ = run([PY, str(TOOLS / "session_ref.py")])
     session_vec_ok, _ = run([PY, str(TOOLS / "gen_session_vectors.py"), "--check"])
     gates["session"] = session_ref_ok and session_vec_ok
+    # Reliable event channel (netcode layer 6): reference self-test + parity header in sync.
+    event_ref_ok, _ = run([PY, str(TOOLS / "event_ref.py")])
+    event_vec_ok, _ = run([PY, str(TOOLS / "gen_event_vectors.py"), "--check"])
+    gates["event"] = event_ref_ok and event_vec_ok
 
     # regenerate golden candidate and validate against the seal
     cand = Path(tempfile.gettempdir()) / "seads_golden_candidate.bin"

@@ -1,6 +1,43 @@
 # SEADS 2026 — Next Steps (handoff)
 
-> ## ►► CURRENT STATE (2026-06-30): seal **ATM-Sphere v1.12r0** — **NETCODE LAYER 5: server↔client SESSION loop DONE ✅ (no-seal, rides v1.12r0)**
+> ## ►► CURRENT STATE (2026-06-30): seal **ATM-Sphere v1.12r0** — **NETCODE LAYER 6: reliable combat-EVENT channel DONE ✅ (no-seal, rides v1.12r0)**
+> **Latest (no-seal): the transient combat MOMENTS now replicate RELIABLY over the same lossy wire.**
+> Layer 5 replicates combat STATE (HP/positions/rounds) via nearest-frame — HP is *idempotent*, so a
+> dropped frame is healed by the next. But a **HIT** ("T lost D hp this tick" → impact spark/damage
+> number) and a **KILL** ("T died at *this* tick" → kill-feed) are transient EVENTS, not idempotent:
+> read off the nearest STATE frame they smear the exact tick, lump aggregate hp, and vanish if that
+> frame drops. New **netcode layer 6 — a reliable EVENT channel** (`tools/event_ref.py` ↔
+> `src/net/event.{h,cpp}`, new `seads_event` lib) fixes that. The **server DERIVES events by OBSERVING
+> the authoritative kernel's hp deltas** each tick (before/after `step()` — **the kernel is NOT
+> modified**, pure observation, so all 9 goldens stay byte-identical); each 20 Hz frame piggybacks the
+> **last EVENT_WINDOW_K=4 events** (a session-layer message — **NOT** a new snapshot-wire section, so
+> **no wire reseal**); the **client applies a de-duped, append-only journal** by monotonic `seq`. So it
+> reconstructs the **exact event sequence** — over SESSION-SK-001 the P-47's burst walks the A6M2's hp
+> **70→0 in 5 hits + 1 kill at tick 54** — **bit-for-bit** even though 5 frames drop. **Reliability
+> bound is explicit + gated:** an event is lost only if **K consecutive frames carrying it all drop**;
+> under the scenario's isolated single drops the reconstruction is COMPLETE (`applied == server log`),
+> and the tail (incl. the kill) rides *every* later frame so it's essentially always delivered. A
+> **blackout vector** (`BLACKOUT_DROPS={40,45,50}` covers the whole in-window life of the two earliest
+> hits) proves the bound cross-impl: the client recovers exactly `{2,3,4,5}` — aged-out hits lost, the
+> **journal RESYNCS (no head-of-line block), the kill still delivered** — and both the full digest
+> `dfcc1aaf…` and the `BLACKOUT_DIGEST 94ae31ea…` are reproduced by the C++ mirror. **Lossy ≠
+> nondeterministic:** derivation is det_math hp quantized to ints, windowing/transport/dedup are pure
+> integer, so it reconstructs identically cross-toolchain. **NO rail/golden/wire/kernel/det_math
+> change** — composes the EXISTING protocol-4 session, rides v1.12r0 (Tier-2 net layer like layer 5).
+> **Gates: 15/15 receipt (new `event`), 113 property tests (+7: determinism/full-recovery/any-single-
+> drop/soundness-subsequence/kill-reliability/K-blackout-bound), ctest 10/10 GCC+Clang (new
+> `event_reliable`), 13 generated headers in sync, 9/9 goldens byte-identical (C++ Sphere/Gunfire/Hit
+> re-validated locally).** Ledger: **ADR-Step6-Events-v1.12r0**, receipt `…v1.12r0-<sha>.yml`;
+> guardian.yml gains the event gen-check + ref self-test + parity-test legs (one per matrix cell).
+> **Deferred (honest scope):** attacker attribution ("who fired") + per-round granularity would need a
+> kernel-side event hook (a kernel touch); wiring events into the live `--fly` viewer (kill-feed/damage
+> numbers) is renderer work. **NEXT (free pick, none blocking): cross-PROCESS sockets over the same
+> frames; attacker-attribution via a kernel event hook (its own ADR); wire the session+events into the
+> live `--fly` viewer; renderer meshes; or an optional new seal (ammo/convergence/component-damage, B5
+> ISA atm).** **GIT: committed + PUSHED to `origin/main`; guardian CI expected GREEN (non-kernel rider;
+> all 9 goldens unchanged).** _(The layer-5 SESSION-loop banner below is retained as history — COMPLETE.)_
+>
+> ## ►► PRIOR STATE (2026-06-30): seal **ATM-Sphere v1.12r0** — **NETCODE LAYER 5: server↔client SESSION loop DONE ✅ (no-seal, rides v1.12r0)**
 > **Latest (no-seal, `97f0331`): the WEAPON-001 wire transport is now USED end-to-end between two
 > endpoints.** A new **netcode layer 5 — the server↔client SESSION loop** (`tools/session_ref.py` ↔
 > `src/net/session.{h,cpp}`, new `seads_session` lib) drives the sealed kernel over the canonical
@@ -166,10 +203,15 @@
 >   server→transport→client loop that finally USES the WEAPON-001 wire between two endpoints and
 >   reconstructs the full dogfight clientside (own predicted + remotes interpolated + HP/kills/rounds
 >   from the wire). Built to the standard net-layer pattern (mirror + `gen_session_vectors` parity test +
->   CI leg). **Remaining stretch on THIS axis:** a genuinely cross-PROCESS transport (real sockets, not
->   in-process) over the same frames; explicit **kill/impact EVENT messages** or hp/round interpolation
->   (vs nearest-frame); wiring the session loop into the live `--fly` viewer so remotes come off a real
->   transport instead of a recording.
+>   CI leg). **Explicit kill/impact EVENT messages — ✅ DONE (netcode LAYER 6, no-seal; see the TOP
+>   banner).** `event_ref.py` ↔ `src/net/event.{h,cpp}` (`seads_event`) ships a reliable, redundant
+>   event journal (HIT/KILL, K=4 window) over the same lossy transport — the client reconstructs the
+>   exact hit/kill sequence bit-for-bit, with a gated K-consecutive-drop failure bound. **Remaining
+>   stretch on THIS axis:** a genuinely cross-PROCESS transport (real sockets, not in-process) over the
+>   same frames; **attacker attribution** ("who fired the killing round") + per-round granularity, which
+>   need a kernel-side event hook (a kernel touch → its own ADR); hp/round interpolation (vs
+>   nearest-frame); wiring the session loop + event channel into the live `--fly` viewer (kill-feed /
+>   damage numbers off a real transport instead of a recording).
 > - (b) **More renderer polish (no-seal):** the **aircraft attitude pass is now DONE** (`7160fd3` — replay +
 >   remotes bank/pitch from the wire). Remaining: aircraft **meshes** (vs the marker stick-figure, web + native);
 >   **guns in the live `--fly` path** (the own ship would need `Command.fire` wired into the keyboard input +
@@ -180,8 +222,8 @@
 >   atmosphere (§8.5 — the doc explicitly recommends deferring B5; biggest lift, forces det_exp/det_pow).
 >
 > Read `CLAUDE.md` first (the constitution; governance is lean, §2), then run the **"Verify everything still
-> works"** sweep below to confirm the green baseline (**14** receipt gates, **106** property tests, ctest
-> **9/9**, 9 goldens) BEFORE and AFTER any change. Memory: `seads-canon`, `seads-harness`,
+> works"** sweep below to confirm the green baseline (**15** receipt gates, **113** property tests, ctest
+> **10/10**, 9 goldens) BEFORE and AFTER any change. Memory: `seads-canon`, `seads-harness`,
 > `seads-flight-model-roadmap`, `seads-guns-roadmap`, `seads-netcode-session`. **Git: netcode-layer-5
 > SESSION loop committed + PUSHED to `origin/main` (layer `97f0331` + handoff/receipt `d3646c7`);
 > guardian CI run 28485828068 GREEN (non-kernel rider; all 9 goldens unchanged).**
@@ -320,12 +362,13 @@ python tools/snapshot_ref.py                # GEO-001 snapshot reference self-te
 python tools/lockstep_ref.py                # loopback lockstep reference self-test (+ negative control)
 python tools/predict_ref.py                 # client-side prediction reference self-test
 python tools/session_ref.py                 # server<->client session loop reference self-test (layer 5)
+python tools/event_ref.py                   # reliable combat-EVENT channel reference self-test (layer 6)
 for g in gen_coeffs gen_golden_params gen_detmath_vectors gen_envelope_tables gen_scenario_params \
          gen_geo001_vectors gen_snapshot_vectors gen_weapon_vectors gen_lockstep_vectors \
-         gen_interp_vectors gen_predict_vectors gen_session_vectors; do \
-  python tools/$g.py --check; done          # all 12 generated headers in sync (session added layer 5)
-python -m pytest tests/property -q          # 106 pass (scenario/energy/pitch/stall + projectile/hit/weapon/weapon_wire + net layers incl. session)
-python tools/make_receipt.py                # runs all 14 gates -> overall: PASS (writes docs/receipts/...yml)
+         gen_interp_vectors gen_predict_vectors gen_session_vectors gen_event_vectors; do \
+  python tools/$g.py --check; done          # all 13 generated headers in sync (event added layer 6)
+python -m pytest tests/property -q          # 113 pass (scenario/energy/pitch/stall + projectile/hit/weapon/weapon_wire + net layers incl. session + event)
+python tools/make_receipt.py                # runs all 15 gates -> overall: PASS (writes docs/receipts/...yml)
 ```
 ```powershell
 # C++ side (PATH set as above). Builds seads_golden (Sphere) + seads_scenario (8 scenario goldens).
@@ -344,8 +387,8 @@ foreach ($id in "GOLDEN-SK-Turn-001","GOLDEN-SK-Climb-001","GOLDEN-SK-TurnClimb-
 #   .\build-client\seads_viewer.exe gun.seadsrec              # GUI: tracers + HP bars + KILLED
 #   .\build-client\seads_viewer.exe gun.seadsrec --selfcheck 8   # headless: prints hp/KILLED + rounds=N (no GPU)
 # Net codec + client parity tests (also built by the same cmake): fastest full check is ctest.
-ctest --test-dir build-gcc --output-on-failure    # 9/9: detmath, geo001, snapshot, weapon, lockstep, interp, predict, session, client
-ctest --test-dir build-clang --output-on-failure   # 9/9 under Clang too
+ctest --test-dir build-gcc --output-on-failure    # 10/10: detmath, geo001, snapshot, weapon, lockstep, interp, predict, session, event, client
+ctest --test-dir build-clang --output-on-failure   # 10/10 under Clang too
 
 # OPTIONAL — the renderer (Step 5). Record a flight, then view it:
 .\build-gcc\seads_record.exe --demo --out flight.seadsrec --js src\client\web\trajectory.js
