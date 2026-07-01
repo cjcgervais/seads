@@ -34,8 +34,11 @@
 > numbers) is renderer work. **NEXT (free pick, none blocking): cross-PROCESS sockets over the same
 > frames; attacker-attribution via a kernel event hook (its own ADR); wire the session+events into the
 > live `--fly` viewer; renderer meshes; or an optional new seal (ammo/convergence/component-damage, B5
-> ISA atm).** **GIT: committed + PUSHED to `origin/main`; guardian CI expected GREEN (non-kernel rider;
-> all 9 goldens unchanged).** _(The layer-5 SESSION-loop banner below is retained as history — COMPLETE.)_
+> ISA atm).** **GIT: layer-6 code `c61f1f6` + receipt `09ea974` committed + PUSHED to `origin/main`;
+> guardian CI run [28486934155](https://github.com/cjcgervais/seads/actions/runs/28486934155) GREEN —
+> MSVC + GCC/Clang × x64/AArch64 reproduce all 9 goldens + the new `seads_event_test` parity leg (event
+> digest bit-identical) + the event reference self-test + the cross-toolchain aggregation gate.**
+> _(The layer-5 SESSION-loop banner below is retained as history — COMPLETE.)_
 >
 > ## ►► PRIOR STATE (2026-06-30): seal **ATM-Sphere v1.12r0** — **NETCODE LAYER 5: server↔client SESSION loop DONE ✅ (no-seal, rides v1.12r0)**
 > **Latest (no-seal, `97f0331`): the WEAPON-001 wire transport is now USED end-to-end between two
