@@ -41,7 +41,12 @@ AERO_FIELDS = ("mass_kg", "wing_area_m2", "cd0", "induced_k", "thrust_static_n",
                # (airframe toughness), muzzle velocity (added to firer TAS), damage per round, and
                # the fire-rate interval in ticks (min ticks between shots; the kernel gates firing
                # with a per-aircraft cooldown). See ADR-Step7-Guns-G3.
-               "hp_start", "muzzle_v_mps", "damage_per_round", "rof_interval_ticks")
+               "hp_start", "muzzle_v_mps", "damage_per_round", "rof_interval_ticks",
+               # G4 finite ammunition (Step 7 guns, seal v1.13r0): the magazine size (abstract
+               # rounds). Firing is gated on ammo > 0 (decrement one per spawned round); at 0 the
+               # gun falls silent ("Winchester"). Relative WWII endurance (A6M2 fewest — the famous
+               # ~60-rpg 20 mm cannon; P-47D most — eight deep .50-cal belts). See ADR-Step7-Guns-G4.
+               "ammo_start")
 
 
 def deg2rad(d):

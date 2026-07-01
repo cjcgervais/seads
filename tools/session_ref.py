@@ -145,6 +145,7 @@ def _build_server_kernel(scenario):
                         psi=rk.deg2rad(s["psi_deg"]), phi=rk.deg2rad(s["phi_deg"]),
                         alt=float(s["alt_m"]), tas=float(s["tas_mps"]))
         a.hp = env["hp_start"]          # G3: per-airframe starting hitpoints (matches build_scenario)
+        a.ammo = env["ammo_start"]      # G4: per-airframe magazine (matches build_scenario)
         k.aircraft.append(a)
         scheds.append(ac["schedule"])
         envs.append(env)

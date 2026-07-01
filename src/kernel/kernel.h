@@ -21,9 +21,11 @@ public:
     explicit Kernel(const Rails& r) : rails_(r) {}
 
     // returns index of the new aircraft. gamma (flight-path angle, rad) defaults to 0 (level);
-    // hp (G2 hitpoints) defaults to 100.0 == START_HP (scenarios pass the per-airframe hp_start).
+    // hp (G2 hitpoints) defaults to 100.0 == START_HP (scenarios pass the per-airframe hp_start);
+    // ammo (G4 magazine, rounds) defaults to 500.0 == START_AMMO (scenarios pass the per-airframe
+    // ammo_start). The no-arg Sphere golden never fires, so its ammo stays at the default.
     std::size_t add(double lat, double lon, double psi, double phi, double alt, double tas,
-                    double gamma = 0.0, double hp = 100.0);
+                    double gamma = 0.0, double hp = 100.0, double ammo = 500.0);
 
     void step();                  // straight golden: pure kinematic tail, phi/gamma unchanged
     // envelope-driven step (B2): cmd[i] = per-aircraft (target_phi, target_g, throttle); env[i] =
@@ -44,6 +46,7 @@ public:
     double gamma(std::size_t i) const { return gamma_[i]; }
     double hp(std::size_t i) const { return hp_[i]; }   // G2 (v1.10r0): hitpoints; hp<=0 == dead
     double fire_cd(std::size_t i) const { return fire_cd_[i]; }  // G3 (v1.11r0): fire-rate cooldown
+    double ammo(std::size_t i) const { return ammo_[i]; }  // G4 (v1.13r0): rounds left; 0 == Winchester
 
     // G1 (v1.9r0) ballistic projectiles — read-only accessors (the renderer/tests inspect them; the
     // sim spawns them internally on a fire Command). SoA, deterministic array iteration order.
@@ -72,8 +75,8 @@ private:
     std::ptrdiff_t projectile_hit_(std::size_t p_idx) const;
 
     Rails rails_;
-    // aircraft SoA: 7-tuple kinematics + hp (G2) + fire_cd (G3 fire-rate cooldown)
-    std::vector<double> lat_, lon_, psi_, phi_, alt_, tas_, gamma_, hp_, fire_cd_;
+    // aircraft SoA: 7-tuple kinematics + hp (G2) + fire_cd (G3 fire-rate cooldown) + ammo (G4 magazine)
+    std::vector<double> lat_, lon_, psi_, phi_, alt_, tas_, gamma_, hp_, fire_cd_, ammo_;
     // projectile SoA: kinematic 6-tuple + carried damage (G3) + integer ttl + owner aircraft index
     std::vector<double> p_lat_, p_lon_, p_psi_, p_alt_, p_tas_, p_gamma_, p_damage_;
     std::vector<std::uint32_t> p_ttl_, p_owner_;

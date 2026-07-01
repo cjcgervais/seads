@@ -109,6 +109,7 @@
     "hp_start": 70,
     "muzzle_v_mps": 650,
     "damage_per_round": 40,
-    "rof_interval_ticks": 9
+    "rof_interval_ticks": 9,
+    "ammo_start": 100
   }
 }

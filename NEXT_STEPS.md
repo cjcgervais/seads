@@ -1,6 +1,39 @@
 # SEADS 2026 — Next Steps (handoff)
 
-> ## ►► CURRENT STATE (2026-06-30): seal **ATM-Sphere v1.12r0** — **NETCODE LAYER 6: reliable combat-EVENT channel DONE ✅ (no-seal, rides v1.12r0)**
+> ## ►► CURRENT STATE (2026-06-30): seal **ATM-Sphere v1.13r0** — **Step 7 guns / G4: FINITE AMMUNITION DONE ✅ — GUNS ARC G1→G4 COMPLETE**
+> **Latest (SEAL v1.13r0): guns now run out of bullets.** The last gap in a WWII gun sim closes — every
+> airframe carries a finite magazine. Each envelope gains **`ammo_start`** (per-airframe rounds; A6M2
+> fewest at 100 = the famous ~60-rpg 20 mm cannon, P-47D most at 340 = eight deep .50-cal belts), loaded
+> through the single-source-of-truth `envelopes.AERO_FIELDS`. Firing — already gated on `fire && alive &&
+> fire_cd==0` — gains **`&& ammo > 0`**; a shot spawns the round, **decrements ammo** (clamped at 0), and
+> resets the cooldown. An empty magazine falls silent (**"Winchester"**): the trigger may stay held and the
+> aircraft alive, but no round spawns and the cooldown is not reset. **`ammo` is the 10th per-aircraft
+> snapshot f64** (appended after `fire_cd`) — canonical state hashed into the world_hash, so as `gamma`(B2)/
+> `hp`(G2)/`fire_cd`(G3) did, **all 9 prior goldens move** (ammo constant/identical — verified the Sphere
+> golden's first 9 f64 + projectile block are BYTE-IDENTICAL to v1.12r0, only `ammo=500` inserted). **NEW
+> `GOLDEN-SK-Winchester-001`** gates the depletion: an A6M2 flies wings-level holding the trigger, looses
+> one round every 9 ticks (ticks 0,9,…,891 = 100 rounds), **empties at tick 891**, and the cannon goes
+> silent for the rest of the 950-tick run (22 rounds still airborne at the end). **NO new det_math** (a
+> pure integer-valued counter, like fire_cd — det_sin/det_cos + ÷×− only). **NO wire change:** ammo lives
+> in the CANONICAL state but is deliberately kept OFF the WEAPON-001 wire this seal (exactly as `fire_cd`
+> was kernel-state at G3 before it rode the wire at v1.12r0) ⇒ the sealed `seads_weapon_test` parity gate
+> is byte-identical and **the layer-5/6 session & event digests are UNCHANGED** (`25fcc41e…`, `dfcc1aaf…` —
+> ammo is off-wire and no airframe depletes in the short SESSION-SK-001 fight). **Reseal because a golden
+> world_hash changes** (state grows + a new golden); rails version 220→230, seal string bumped everywhere.
+> **10 goldens now, C++ ≡ Python bit-for-bit under GCC + Clang (Winchester `473bcad9…7630ad66`, 22 live
+> rounds on both).** **Gates: 15/15 receipt PASS, 116 property tests (+3: ammo character / exact-depletion
+> cadence / no-underflow), ctest 10/10 GCC+Clang, 13 generated headers in sync, 10 goldens C++≡Python.**
+> Ledger: **ADR-Step7-Guns-G4-v1.13r0**, SEAL_CARD v1.13r0, receipt `…v1.13r0-<sha>.yml`; guardian.yml
+> gains the Winchester id in its 3 golden loops. **Guns arc G1→G4 COMPLETE — the kernel gunnery model
+> (ballistics + hit/damage + roster/fire-rate + ammunition) is closed.** **NEXT (free pick, none blocking):**
+> put `ammo` on the WEAPON-001 wire (a small follow-up reseal ⇒ a remote client shows a rounds-remaining
+> counter); cross-PROCESS sockets over the layer-5/6 frames; attacker attribution (a kernel event hook, its
+> own ADR); renderer meshes / guns in the live `--fly` path; or an optional new seal (convergence /
+> component-damage, **B5** ISA atmosphere). **GIT: committed + PUSHED to `origin/main`; guardian CI expected
+> GREEN** (goldens moved — the matrix reproduces all 10 + the parity/session/event legs).
+> _(The layer-6 EVENT-channel banner below is retained as history — COMPLETE.)_
+>
+> ## ►► PRIOR STATE (2026-06-30): seal **ATM-Sphere v1.12r0** — **NETCODE LAYER 6: reliable combat-EVENT channel DONE ✅ (no-seal, rides v1.12r0)**
 > **Latest (no-seal): the transient combat MOMENTS now replicate RELIABLY over the same lossy wire.**
 > Layer 5 replicates combat STATE (HP/positions/rounds) via nearest-frame — HP is *idempotent*, so a
 > dropped frame is healed by the next. But a **HIT** ("T lost D hp this tick" → impact spark/damage

@@ -33,6 +33,11 @@ static constexpr std::uint32_t PROJ_TTL_TICKS = 250u;                    // 2.5 
 // |Δalt| gate it is a cylinder test using det_sin/det_cos only (NO new det_math). G3 (v1.11r0):
 // hp_start / damage are per-airframe; START_HP remains the GLOBAL default for the no-arg/Sphere path.
 static constexpr double START_HP         = 0x1.9000000000000p+6;   // 100.0 default hitpoints (no-arg/Sphere)
+// G4 finite ammunition (Step 7 guns, ATM-Sphere v1.13r0). START_AMMO is the GLOBAL default magazine
+// for the no-arg/Sphere path (per-airframe ammo_start comes from the envelope). Firing is gated on
+// ammo > 0 (one round consumed per shot); at 0 the gun falls silent ("Winchester"). No new det_math
+// (a pure integer-valued counter, like fire_cd). Shared hex-float with tools/ref_kernel.py.
+static constexpr double START_AMMO       = 0x1.f400000000000p+8;   // 500.0 default magazine (no-arg/Sphere)
 static constexpr double HIT_ALT_GATE_M   = 0x1.e000000000000p+5;   // 60.0 m vertical hit gate
 static constexpr double COS_HIT_ANGLE    = 0x1.fffef3909d697p-1;   // cos(HIT_RADIUS/R); horizontal hit test
 
@@ -86,11 +91,12 @@ static inline double lut_eval(const double* xs, const double* ys, double x) {
 }
 
 std::size_t Kernel::add(double lat, double lon, double psi, double phi, double alt, double tas,
-                        double gamma, double hp) {
+                        double gamma, double hp, double ammo) {
     lat_.push_back(lat); lon_.push_back(lon); psi_.push_back(psi);
     phi_.push_back(phi); alt_.push_back(alt); tas_.push_back(tas); gamma_.push_back(gamma);
     hp_.push_back(hp);                           // G2 hitpoints (G3: per-airframe hp_start passed in)
     fire_cd_.push_back(0.0);                     // G3 (v1.11r0): fire-rate cooldown starts ready
+    ammo_.push_back(ammo);                       // G4 (v1.13r0): magazine (per-airframe ammo_start)
     return lat_.size() - 1;
 }
 
@@ -268,8 +274,11 @@ void Kernel::step(const std::vector<Command>& cmd, const std::vector<const Envel
     advance_projectiles_();
     for (std::size_t i = 0; i < lat_.size(); ++i) {
         if (fire_cd_[i] > 0.0) fire_cd_[i] = fire_cd_[i] - 1.0;
-        if (cmd[i].fire && hp_[i] > 0.0 && fire_cd_[i] == 0.0) {   // ready, alive, trigger held
+        // G4 (v1.13r0): also gate on ammo > 0 — an empty magazine ("Winchester") falls silent (no
+        // spawn, no cooldown reset). One round is consumed per shot. Mirrors ref_kernel.step_scenario.
+        if (cmd[i].fire && hp_[i] > 0.0 && fire_cd_[i] == 0.0 && ammo_[i] > 0.0) {  // ready, alive, loaded
             spawn_projectile_(i, *env[i]);
+            ammo_[i] = ammo_[i] - 1.0;                            // G4: one round consumed
             fire_cd_[i] = env[i]->rof_interval_ticks;             // G3: reset to the per-airframe interval
         }
     }
@@ -294,7 +303,7 @@ static void put_f64(std::vector<std::uint8_t>& b, double d) {
 
 std::vector<std::uint8_t> Kernel::snapshot(std::uint32_t tick_count) const {
     std::vector<std::uint8_t> b;
-    b.reserve(32 + 72 * lat_.size() + 8 + 64 * p_lat_.size());   // hdr + 9f64/ac + projblock(7f64+2u32)
+    b.reserve(32 + 80 * lat_.size() + 8 + 64 * p_lat_.size());   // hdr + 10f64/ac + projblock(7f64+2u32)
     put_u16(b, 1);                 // mode = ATM
     put_u16(b, 0);                 // pad
     put_u32(b, tick_count);        // tick_count
@@ -307,6 +316,7 @@ std::vector<std::uint8_t> Kernel::snapshot(std::uint32_t tick_count) const {
         put_f64(b, phi_[i]); put_f64(b, alt_[i]); put_f64(b, tas_[i]); put_f64(b, gamma_[i]);
         put_f64(b, hp_[i]);                          // G2 (v1.10r0): 8th per-aircraft f64
         put_f64(b, fire_cd_[i]);                     // G3 (v1.11r0): 9th per-aircraft f64 (fire cooldown)
+        put_f64(b, ammo_[i]);                        // G4 (v1.13r0): 10th per-aircraft f64 (magazine)
     }
     // G1 (v1.9r0): projectile block — u32 n_projectiles, u32 pad, then per round 7 x f64
     // [lat, lon, psi, alt, tas, gamma, damage] + u32 ttl + u32 owner (damage added in G3 v1.11r0).

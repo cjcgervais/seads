@@ -14,9 +14,10 @@ Canonical snapshot format (little-endian), so C++ and Python produce identical b
   offset 16 : f64  R_m
   offset 24 : u32  n_aircraft
   offset 28 : u32  pad (0)
-  offset 32 : per aircraft, 9 x f64 = [lat, lon, psi, phi, alt, tas, gamma, hp, fire_cd]
-              (radians / meters / m s^-1 / radians / hitpoints / cooldown ticks)  -- gamma added in
-              B2 (v1.6r0); hp added in G2 (v1.10r0, hp<=0 == dead); fire_cd added in G3 (v1.11r0)
+  offset 32 : per aircraft, 10 x f64 = [lat, lon, psi, phi, alt, tas, gamma, hp, fire_cd, ammo]
+              (radians / meters / m s^-1 / radians / hitpoints / cooldown ticks / rounds)  -- gamma
+              added in B2 (v1.6r0); hp added in G2 (v1.10r0, hp<=0 == dead); fire_cd added in G3
+              (v1.11r0); ammo added in G4 (v1.13r0, firing gated on ammo>0, one round consumed/shot)
   then      : u32 n_projectiles, u32 pad            -- G1 (Step 7 guns, v1.9r0)
   then      : per projectile, 7 x f64 [lat, lon, psi, alt, tas, gamma, damage] + u32 ttl + u32 owner
               (damage added in G3 v1.11r0; the projectile block is ALWAYS present, n=0 for gun-less
@@ -86,6 +87,12 @@ PROJ_TTL_TICKS = 250                                 # 2.5 s lifetime, then the 
 # global (they reflect target size, not the weapon). The round CARRIES its damage (set at spawn from
 # the firer's gun) so its lethality is fixed at fire time and the advance/hit stay self-contained.
 START_HP = float.fromhex('0x1.9000000000000p+6')     # 100.0 default hitpoints (no-arg/Sphere; per-airframe via env)
+# --- G4 finite ammunition (Step 7 guns, ATM-Sphere v1.13r0) ------------------------------
+# START_AMMO is the GLOBAL default magazine for the no-arg/Sphere path (per-airframe ammo_start
+# comes from the envelope). Firing is gated on ammo > 0 (one round consumed per shot); at 0 the
+# gun falls silent ("Winchester"). A pure integer-valued counter (like fire_cd) — NO new det_math.
+# Exact hex-float shared bit-for-bit with kernel.cpp. See ADR-Step7-Guns-G4.
+START_AMMO = float.fromhex('0x1.f400000000000p+8')   # 500.0 default magazine (no-arg/Sphere; per-airframe via env)
 HIT_RADIUS_M = float.fromhex('0x1.e000000000000p+5')  # 60.0 m horizontal hit radius (validation/doc)
 HIT_ALT_GATE_M = float.fromhex('0x1.e000000000000p+5')  # 60.0 m vertical hit gate
 COS_HIT_ANGLE = float.fromhex('0x1.fffef3909d697p-1')  # cos(HIT_RADIUS_M/R) via det_cos; the binding test
@@ -136,13 +143,17 @@ class Aircraft:
     # prior caller builds a healthy aircraft (and the no-damage paths leave it at full HP).
     # G3 (v1.11r0): fire_cd (fire-rate cooldown, ticks) is a stored state; firing is gated by it
     # (decrement-then-fire). Defaults to 0.0 (ready to fire).
-    __slots__ = ("lat", "lon", "psi", "phi", "alt", "tas", "gamma", "hp", "fire_cd")
+    # G4 (v1.13r0): ammo (magazine, rounds) is a stored state; firing is gated on ammo > 0 and one
+    # round is consumed per shot. Defaults to START_AMMO (the no-arg/Sphere path; per-airframe via env).
+    __slots__ = ("lat", "lon", "psi", "phi", "alt", "tas", "gamma", "hp", "fire_cd", "ammo")
 
-    def __init__(self, lat, lon, psi, phi, alt, tas, gamma=0.0, hp=START_HP, fire_cd=0.0):
+    def __init__(self, lat, lon, psi, phi, alt, tas, gamma=0.0, hp=START_HP, fire_cd=0.0,
+                 ammo=START_AMMO):
         self.lat, self.lon, self.psi, self.phi, self.alt, self.tas = lat, lon, psi, phi, alt, tas
         self.gamma = gamma
         self.hp = hp
         self.fire_cd = fire_cd
+        self.ammo = ammo
 
 
 class Projectile:
@@ -367,8 +378,11 @@ class Kernel:
             if ac.fire_cd > 0.0:
                 ac.fire_cd = ac.fire_cd - 1.0
             want_fire = len(commands[i]) > 3 and commands[i][3]
-            if want_fire and ac.hp > 0.0 and ac.fire_cd == 0.0:
+            # G4 (v1.13r0): also gate on ammo > 0 — an empty magazine ("Winchester") falls silent
+            # (no spawn, no cooldown reset). One round is consumed per shot. Mirror Kernel::step.
+            if want_fire and ac.hp > 0.0 and ac.fire_cd == 0.0 and ac.ammo > 0.0:
                 self._spawn_projectile(ac, i, envelopes[i])
+                ac.ammo = ac.ammo - 1.0                       # G4: one round consumed
                 ac.fire_cd = envelopes[i]["rof_interval_ticks"]
 
     def run(self, ticks):
@@ -381,10 +395,11 @@ class Kernel:
                            self.dt, self.R, len(self.aircraft), 0)
         for ac in self.aircraft:
             # G2 (v1.10r0): hp is the 8th per-aircraft f64 (after gamma). G3 (v1.11r0): fire_cd (the
-            # fire-rate cooldown) is the 9th. Appending each grows every snapshot -> all prior goldens
-            # move (trajectory/hp/fire_cd identical for the unchanged scenarios), as gamma did in B2.
-            buf += struct.pack("<9d", ac.lat, ac.lon, ac.psi, ac.phi, ac.alt, ac.tas, ac.gamma,
-                               ac.hp, ac.fire_cd)
+            # fire-rate cooldown) is the 9th. G4 (v1.13r0): ammo (the magazine) is the 10th. Appending
+            # each grows every snapshot -> all prior goldens move (trajectory/hp/fire_cd/ammo identical
+            # for the unchanged scenarios), as gamma did in B2.
+            buf += struct.pack("<10d", ac.lat, ac.lon, ac.psi, ac.phi, ac.alt, ac.tas, ac.gamma,
+                               ac.hp, ac.fire_cd, ac.ammo)
         # G1 (v1.9r0): projectile block appended after the aircraft block. n_projectiles (u32) + pad,
         # then per round 7 x f64 [lat, lon, psi, alt, tas, gamma, damage] + ttl (u32) + owner (u32);
         # damage was added in G3 (v1.11r0). The block is always present (n=0 for gun-less scenarios),
@@ -429,6 +444,7 @@ def build_scenario(rails, scenario):
             alt=float(s["alt_m"]), tas=float(s["tas_mps"]),
         )
         a.hp = env["hp_start"]                 # G3 (v1.11r0): per-airframe starting hitpoints
+        a.ammo = env["ammo_start"]             # G4 (v1.13r0): per-airframe magazine size
         k.aircraft.append(a)
         schedules.append(ac["schedule"])
         envelopes.append(env)

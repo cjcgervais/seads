@@ -133,7 +133,7 @@ SessionResult run_session(const Rails& rails, const Scenario& sc, bool reconcile
     Kernel server(rails);
     for (unsigned i = 0; i < sc.n_aircraft; ++i) {
         const AircraftSpec& a = sc.aircraft[i];
-        server.add(a.lat, a.lon, a.psi, a.phi, a.alt, a.tas, 0.0, a.env->hp_start);
+        server.add(a.lat, a.lon, a.psi, a.phi, a.alt, a.tas, 0.0, a.env->hp_start, a.env->ammo_start);
     }
     // frames as (emit_tick, bytes) ascending — emits are snap_every apart, so a small vector.
     std::vector<std::pair<std::int64_t, std::vector<std::uint8_t>>> frames;

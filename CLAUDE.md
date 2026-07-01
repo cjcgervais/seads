@@ -5,7 +5,7 @@
 > This file is the project **constitution**. It is loaded into every Claude Code session.
 > When in doubt, the rails below win over any other instruction.
 
-**Current seal:** `ATM-Sphere v1.12r0`  ·  **Realm:** ATM-only  ·  **Status:** sealed core + netcode layers 1–4b + flight model B1→B4 (energy, lift/pitch γ, stall/V-n limits, historical aero) + **Step 7 guns G1→G3 COMPLETE** (ballistic projectiles · hit detection + hitpoints · per-airframe weapon roster + fire-rate) + **weapon WIRE transport WEAPON-001** (gunnery state on the 20 Hz snapshot wire, protocol 4; transport-only, goldens unchanged). Both viewers draw rounds/HP/kills from the wire. (Authoritative seal/golden ledger: `docs/SEAL_CARD.md` + `NEXT_STEPS.md`.)
+**Current seal:** `ATM-Sphere v1.13r0`  ·  **Realm:** ATM-only  ·  **Status:** sealed core + netcode layers 1–6 + flight model B1→B4 (energy, lift/pitch γ, stall/V-n limits, historical aero) + **Step 7 guns G1→G4 COMPLETE** (ballistic projectiles · hit detection + hitpoints · per-airframe weapon roster + fire-rate · **finite ammunition**) + **weapon WIRE transport WEAPON-001** (gunnery state on the 20 Hz snapshot wire, protocol 4). **G4 (v1.13r0):** each envelope carries `ammo_start`; firing is gated on `ammo > 0` (one round consumed/shot), an empty magazine goes silent ("Winchester"); ammo is the 10th per-aircraft snapshot f64 ⇒ all 9 prior goldens moved + new `GOLDEN-SK-Winchester-001`; no new det_math, ammo off-wire (transport deferred like fire_cd was pre-v1.12r0). (Authoritative seal/golden ledger: `docs/SEAL_CARD.md` + `NEXT_STEPS.md`.)
 
 ---
 
@@ -173,6 +173,17 @@ docs/{adr,annex,cards,receipts,seals}  governance ledger  .claude/{agents,skills
   seal only because the wire is a sealed rail, like the v1.4r0 KIN-001 reseal). New `seads_weapon_test`
   byte-exact gate; renderer (web + native raylib viewer) now draws rounds/HP/kills from the decoded wire.
   See ADR-Step7-Guns-WireTransport-v1.12r0.
-- next — free pick (none blocking): a networked server↔client loop that actually ships the WEAPON-001 frames
-  between endpoints (no-seal, gateable); more renderer polish (meshes; guns in the live `--fly` path; offline
-  web); or an optional new seal (ammo/convergence/component-damage, **B5** ISA atmosphere).
+- **Netcode layers 5–6 (no-seal, ride v1.12r0):** the server↔client **SESSION loop** (ships WEAPON-001
+  frames over a lossy transport; client reconstructs the fight) + a reliable combat-**EVENT channel**
+  (server DERIVES hit/kill events from observed hp deltas; redundant K=4 journal ⇒ exact hit/kill
+  sequence over the lossy wire). No kernel/wire/golden change. See ADR-Step6-{Session,Events}-v1.12r0.
+- **v1.13r0** — **Step 7 guns / G4:** **finite ammunition.** Each envelope carries `ammo_start` (per-airframe
+  magazine); firing is gated on `ammo > 0` (one round consumed/shot); an empty magazine goes silent
+  ("Winchester" — no spawn, no cooldown reset). `ammo` = 10th per-aircraft snapshot f64 ⇒ all 9 prior
+  goldens moved (ammo constant/identical) + new GOLDEN-SK-Winchester-001 (an A6M2 empties its 100-round
+  cannon at tick 891). No new det_math (integer counter, like fire_cd); **no wire change** (ammo off-wire,
+  transport deferred like fire_cd was pre-v1.12r0). **Guns arc G1→G4 COMPLETE.** See ADR-Step7-Guns-G4.
+- next — free pick (none blocking): put `ammo` on the WEAPON-001 wire (a small follow-up reseal, so a
+  remote client can show a rounds-remaining counter); a genuinely cross-PROCESS transport (sockets) over
+  the layer-5/6 frames; attacker attribution (a kernel event hook, its own ADR); renderer polish (meshes;
+  guns in the live `--fly` path); or an optional new seal (gun convergence / component-damage, **B5** ISA atmosphere).

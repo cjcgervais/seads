@@ -1,0 +1,19 @@
+{
+  "header": {
+    "id": "GOLDEN-SK-Winchester-001",
+    "version": 230,
+    "seal": "ATM-Sphere v1.13r0",
+    "description": "Single-ship ammunition-depletion scenario pinning G4 finite ammunition (Step 7 guns, seal v1.13r0). AC0 (A6M2) flies wings-level due east along the equator (bank 0, n=1.0, throttle 0.8) and holds the trigger from tick 0 to the end. Its 20 mm cannon carries the roster's smallest magazine (ammo_start=100) and the slowest fire-rate (rof_interval_ticks=9), so with the decrement-then-fire cooldown it looses one round every 9 ticks: shots at ticks 0, 9, 18, ..., 891 (100 rounds), and at tick 891 the magazine reaches 0. From tick 892 on the gun is 'Winchester' (empty): the trigger is still held and the aircraft is alive, but firing is gated on ammo>0 so NO further rounds spawn and the projectile count stops growing. At tick 950 the final snapshot shows AC0 with ammo=0 (the 10th per-aircraft f64) and exactly the rounds fired in the last ttl=250 ticks still airborne (spawned at ticks 702..891). This is the FIRST golden to exercise the depletion gate: it proves an emptied magazine deterministically silences the gun, bit-for-bit cross-toolchain. Level equatorial flight keeps the aircraft far from the ground and inside +/-90 deg flight-path angle (no cos(gamma) singularity); firing at empty air means hp stays 70 (no self-hit, no target). NEW golden for G4.",
+    "introduced": "first golden with an ammunition-depletion (Winchester) event; the 9 prior goldens move at v1.13r0 only because ammo (the 10th per-aircraft f64) is appended to every aircraft in the snapshot."
+  },
+  "ticks": 950,
+  "aircraft": [
+    {
+      "envelope": "a6m2",
+      "start": { "lat_deg": 0.0, "lon_deg": 0.0, "psi_deg": 90.0, "phi_deg": 0.0, "alt_m": 5000.0, "tas_mps": 150.0 },
+      "schedule": [
+        { "start_tick": 0, "bank_deg": 0.0, "g_cmd": 1.0, "throttle": 0.8, "fire": true }
+      ]
+    }
+  ]
+}
