@@ -1,8 +1,8 @@
 // SEADS WEAPON-001 snapshot-section parity test. Asserts C++ netsnap == Python reference
-// vectors for the gunnery state (seal v1.12r0, snapshot protocol 4): byte-identical wire on
-// encode of a full GEO+KIN+WEAPON frame, and exact round-trip on decode — per-aircraft
-// hp/fire_cd within one quantum, every live projectile within a quantum (position/damage) with
-// ttl/owner EXACT. Exit 0 PASS, 1 FAIL.
+// vectors for the gunnery state (WEAPON-001 sealed v1.12r0; snapshot protocol 5 since v1.14r0
+// added the G4 magazine ammo): byte-identical wire on encode of a full GEO+KIN+WEAPON frame,
+// and exact round-trip on decode — per-aircraft hp/fire_cd/ammo within one quantum, every live
+// projectile within a quantum (position/damage) with ttl/owner EXACT. Exit 0 PASS, 1 FAIL.
 #include "snapshot.h"
 #include "weapon_vectors.h"
 
@@ -26,7 +26,7 @@ int main() {
             const auto& se = v.entities[e];
             snap.entities.push_back(netsnap::EntityState{
                 se.id, se.lat_deg, se.lon_deg, se.bearing_deg, se.alt_m, se.phi_deg, se.tas_mps,
-                se.gamma_deg, se.hp, se.fire_cd});
+                se.gamma_deg, se.hp, se.fire_cd, se.ammo});
         }
         for (int p = 0; p < v.n_projectiles; ++p) {
             const auto& sp = v.projectiles[p];
@@ -62,7 +62,9 @@ int main() {
                 geo001::quantize(b.hp, netsnap::HP_SCALE)
                     != geo001::quantize(a.hp, netsnap::HP_SCALE) ||
                 geo001::quantize(b.fire_cd, netsnap::FIRECD_SCALE)
-                    != geo001::quantize(a.fire_cd, netsnap::FIRECD_SCALE)) {
+                    != geo001::quantize(a.fire_cd, netsnap::FIRECD_SCALE) ||
+                geo001::quantize(b.ammo, netsnap::AMMO_SCALE)
+                    != geo001::quantize(a.ammo, netsnap::AMMO_SCALE)) {
                 same = false;
             }
         }

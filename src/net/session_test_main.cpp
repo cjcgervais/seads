@@ -6,8 +6,9 @@
 //      entire fight — own predicted ship + interpolated remotes + wire-sourced HP/kills/rounds —
 //      reconstructs to the identical bytes, even though the transport is lossy);
 //   2) CHECKPOINTS — the client-view hash at selected ticks matches (readable localization);
-//   3) KILL REPLICATION — the client's freshest-frame per-aircraft (hp_milli, dead) matches
-//      FINAL_WEAPON (A6M2 dead, P-47 + Spitfire alive — the gun kill crossed the wire);
+//   3) KILL REPLICATION — the client's freshest-frame per-aircraft (hp_milli, dead, ammo) matches
+//      FINAL_WEAPON (A6M2 dead, P-47 + Spitfire alive — the gun kill crossed the wire; and the
+//      P-47's rounds-remaining counter replicated from the wire — v1.14r0);
 //   4) TRANSPORT accounting — frames emitted (N_FRAMES) / received (DELIVERED) match under the
 //      deterministic packet-loss set;
 //   5) reconcile is LOAD-BEARING — turning the own-ship wire reconcile off changes the
@@ -87,13 +88,15 @@ int main() {
                 const auto& e = wents[i];
                 std::int64_t hp_milli = geo001::quantize(e.hp, netsnap::HP_SCALE);
                 int dead = e.hp <= 0.0 ? 1 : 0;
-                if (e.id != f.id || hp_milli != f.hp_milli || dead != f.dead) {
+                std::int64_t ammo = geo001::quantize(e.ammo, netsnap::AMMO_SCALE);
+                if (e.id != f.id || hp_milli != f.hp_milli || dead != f.dead || ammo != f.ammo) {
                     ++fails;
-                    std::printf("FAIL weapon fact id=%lld: got (hp_milli=%lld, dead=%d) "
-                                "exp (id=%lld, hp_milli=%lld, dead=%d)\n",
+                    std::printf("FAIL weapon fact id=%lld: got (hp_milli=%lld, dead=%d, ammo=%lld) "
+                                "exp (id=%lld, hp_milli=%lld, dead=%d, ammo=%lld)\n",
                                 static_cast<long long>(e.id), static_cast<long long>(hp_milli),
-                                dead, static_cast<long long>(f.id),
-                                static_cast<long long>(f.hp_milli), f.dead);
+                                dead, static_cast<long long>(ammo), static_cast<long long>(f.id),
+                                static_cast<long long>(f.hp_milli), f.dead,
+                                static_cast<long long>(f.ammo));
                 }
             }
         }

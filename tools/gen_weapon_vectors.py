@@ -3,11 +3,12 @@
 gen_weapon_vectors.py — emit src/net/weapon_vectors.h from the snapshot reference.
 
 Cross-impl parity vectors for the WEAPON-001 section of the GEO-001 snapshot framing
-(protocol 4, seal v1.12r0). The C++ test (src/net/weapon_test_main.cpp) asserts, per vector:
+(protocol 5 since v1.14r0 added the G4 magazine `ammo`; WEAPON-001 first sealed at v1.12r0). The
+C++ test (src/net/weapon_test_main.cpp) asserts, per vector:
   * ENCODE parity — C++ encode_snapshot(snap) == these exact wire bytes (full GEO+KIN+WEAPON
     frame), and
-  * DECODE round-trip — C++ decode_snapshot(wire) reproduces the per-aircraft hp/fire_cd within
-    one quantum AND every live projectile (position/damage within a quantum; ttl/owner EXACT).
+  * DECODE round-trip — C++ decode_snapshot(wire) reproduces the per-aircraft hp/fire_cd/ammo
+    within one quantum AND every live projectile (position/damage within a quantum; ttl/owner EXACT).
 
 Reproducibility: degree/kernel-unit fields are emitted as exact hex-float literals and
 ids/tick/ttl/owner as integers, so C++ quantizes the identical IEEE doubles -> identical wire
@@ -44,27 +45,28 @@ E = s.EntityState
 P = s.ProjectileState
 
 
-# Weapon-bearing snapshots (protocol 4). Entity fields in DEGREES (GEO) + KIN units + WEAPON
-# units (hp/fire_cd). Projectile fields in DEGREES + damage + integer ttl/owner. Cases exercise:
-# the empty world (weapon section = projectile count 0), the golden start (full hp, no rounds),
-# a mixed furball (P-47 hp150 firing .50cal vs a glass-cannon A6M2 hp70 + a DEAD hp0 corpse,
-# with rounds carrying distinct damage/ttl/owner and antimeridian / ceiling extremes), and the
-# full 8-aircraft roster with a dense round cloud (multi-byte LEB128 in every field).
+# Weapon-bearing snapshots (protocol 5). Entity fields in DEGREES (GEO) + KIN units + WEAPON
+# units (hp/fire_cd/ammo). Projectile fields in DEGREES + damage + integer ttl/owner. Cases exercise:
+# the empty world (weapon section = projectile count 0), the golden start (full hp + full mag, no
+# rounds), a mixed furball (P-47 hp150/ammo337 firing .50cal vs a glass-cannon A6M2 hp70/ammo100 +
+# a DEAD hp0/Winchester(ammo0) corpse, with rounds carrying distinct damage/ttl/owner and
+# antimeridian / ceiling extremes), and the full 8-aircraft roster with varied magazines + a dense
+# round cloud (multi-byte LEB128 in every field).
 def weapon_inputs():
     return [
         (0, [], []),                                                   # empty world
-        (1, [E(1, 0.0, 0.0, 45.0, 1000.0, 0.0, 250.0, 0.0, 150.0, 0.0)], []),  # golden start, full hp
+        (1, [E(1, 0.0, 0.0, 45.0, 1000.0, 0.0, 250.0, 0.0, 150.0, 0.0, 340.0)], []),  # golden start, full mag
         (52000,
-         [E(1, 12.3456789, -98.7654321, 359.999999, 7999.999, 39.999999, 175.25, 12.5, 150.0, 3.0),
-          E(2, -45.5, 180.0, 0.0, 0.0, -60.5, 0.0, -8.25, 70.0, 9.0),
-          E(7, 89.9999999, -179.9999999, 270.0, 8000.0, 0.000001, 305.999, 0.000001, 0.0, 0.0)],  # dead
+         [E(1, 12.3456789, -98.7654321, 359.999999, 7999.999, 39.999999, 175.25, 12.5, 150.0, 3.0, 337.0),
+          E(2, -45.5, 180.0, 0.0, 0.0, -60.5, 0.0, -8.25, 70.0, 9.0, 100.0),
+          E(7, 89.9999999, -179.9999999, 270.0, 8000.0, 0.000001, 305.999, 0.000001, 0.0, 0.0, 0.0)],  # dead, Winchester
          [P(1000, 12.34, -98.76, 0.123456, 7995.5, 12.0, 248, 0),
           P(1001, -45.4, 179.999, 359.0, 50.0, 40.0, 5, 1),
           P(1002, 0.0, 0.0, 180.0, 4000.0, 30.5, 1, 4)]),
         (100000,
          [E(i, (i * 7) % 90, (i * 13) % 180 - 90, (i * 11) % 360, (i * 137) % 8000,
             (i * 17) % 80 - 40, (i * 29) % 320, (i * 19) % 60 - 30,
-            (i * 23) % 160, (i * 5) % 12)
+            (i * 23) % 160, (i * 5) % 12, (i * 43) % 400)
           for i in range(1, 9)],
          [P(2000 + j, (j * 9) % 90 - 45, (j * 31) % 360 - 180, (j * 7) % 360, (j * 211) % 8000,
             (j * 3) % 45 + 5, (j * 53) % 250 + 1, j % 8)
@@ -81,7 +83,7 @@ def build():
          "",
          "struct WEntity { long long id; double lat_deg; double lon_deg; double bearing_deg;",
          "                 double alt_m; double phi_deg; double tas_mps; double gamma_deg;",
-         "                 double hp; double fire_cd; };",
+         "                 double hp; double fire_cd; double ammo; };",
          "struct WProj { long long id; double lat_deg; double lon_deg; double bearing_deg;",
          "               double alt_m; double damage; long long ttl; long long owner; };",
          ""]
@@ -93,7 +95,7 @@ def build():
             for e in ents:
                 L.append(f"  {{ {i64lit(e.id)}, {hx(e.lat_deg)}, {hx(e.lon_deg)}, "
                          f"{hx(e.bearing_deg)}, {hx(e.alt_m)}, {hx(e.phi_deg)}, {hx(e.tas_mps)}, "
-                         f"{hx(e.gamma_deg)}, {hx(e.hp)}, {hx(e.fire_cd)} }},")
+                         f"{hx(e.gamma_deg)}, {hx(e.hp)}, {hx(e.fire_cd)}, {hx(e.ammo)} }},")
             L.append("};")
         if projs:
             L.append(f"constexpr WProj W{idx}_PROJS[] = {{")

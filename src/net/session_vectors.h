@@ -69,12 +69,12 @@ constexpr session::Scenario SCENARIO = {
 constexpr unsigned N_FRAMES  = 41u;
 constexpr unsigned DELIVERED = 36u;
 
-// --- replicated final weapon state on the client (id, hp_milli = round(hp*1e3), dead) ---
-struct WeaponFact { std::int64_t id; std::int64_t hp_milli; int dead; };
+// --- replicated final weapon state on the client (id, hp_milli = round(hp*1e3), dead, ammo = rounds remaining) ---
+struct WeaponFact { std::int64_t id; std::int64_t hp_milli; int dead; std::int64_t ammo; };
 constexpr WeaponFact FINAL_WEAPON[] = {
-  { 0, 150000, 0 },
-  { 1, 0, 1 },
-  { 2, 100000, 0 },
+  { 0, 150000, 0, 333 },
+  { 1, 0, 1, 100 },
+  { 2, 100000, 0, 150 },
 };
 constexpr int FINAL_WEAPON_COUNT = sizeof(FINAL_WEAPON)/sizeof(FINAL_WEAPON[0]);
 
@@ -82,13 +82,13 @@ constexpr int FINAL_WEAPON_COUNT = sizeof(FINAL_WEAPON)/sizeof(FINAL_WEAPON[0]);
 struct Checkpoint { unsigned tick; const char* hash; };
 constexpr Checkpoint CHECKPOINTS[] = {
   { 1u, "0a035ddaef51e444ec87d3c57e2f3dd72a6f47d1c2fe247e1e87d838734bede7" },
-  { 50u, "47ccece8b070c136491776585be3d5c2fc7e9686eab5407e79cfb93441c8d0f7" },
-  { 100u, "bcee823e50f1a9a72d0ad4b18fb70a6b791e0027b565d03ef648e91b7cc59717" },
-  { 150u, "b3ace87463ac4950092f033276ff65c4e148545e09cc250f9fd77cbd3d2c1b01" },
-  { 200u, "3f22819f5661dfae79568f49710c0f31598d8e08ff60daffea123500dd670597" },
+  { 50u, "44b557fb6a446f9023d02ed764eb3e71e9bc86f59c071329592da7df8eb085cb" },
+  { 100u, "65ae4221266a780b6b857537851b5e147d8bacd9a68968374aa600b7feff2e5e" },
+  { 150u, "27e81246020551c94c1cb4d04fbd00f33b965cca7ce76f295bacf7c19c91247d" },
+  { 200u, "a2f041b038a52633bd789de253eeca525930e7b9a919e8e911376e8bef160a2c" },
 };
 constexpr int CHECKPOINT_COUNT = sizeof(CHECKPOINTS)/sizeof(CHECKPOINTS[0]);
 
-constexpr const char* SEQUENCE_DIGEST = "25fcc41ee4cf341f7edf40edce35a78df585afd105574b369fa48bc62c3198b8";
+constexpr const char* SEQUENCE_DIGEST = "78e013abda72bee09f0420f604cbe86a8a803fa84cf6ff8daa3f50cf81fbdae5";
 
 }} // namespace seads::sess_vec

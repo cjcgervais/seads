@@ -33,8 +33,8 @@ Command own_kinematic_command_at(const AircraftSpec& a, unsigned t) {
     return Command{p.target_phi, p.target_g, p.throttle, false};
 }
 
-// Serialize the kernel's FULL world to a protocol-4 wire frame (every aircraft: GEO + KIN-002 +
-// WEAPON hp/fire_cd; every live round: GEO + damage + ttl/owner). Aircraft/projectile id = SoA
+// Serialize the kernel's FULL world to a protocol-5 wire frame (every aircraft: GEO + KIN-002 +
+// WEAPON hp/fire_cd/ammo; every live round: GEO + damage + ttl/owner). Aircraft/projectile id = SoA
 // index (rounds are transient — a per-frame index is all the client needs to draw + count them).
 std::vector<std::uint8_t> serialize_world(const Kernel& k, std::int64_t server_tick) {
     netsnap::Snapshot s;
@@ -42,7 +42,7 @@ std::vector<std::uint8_t> serialize_world(const Kernel& k, std::int64_t server_t
     for (std::size_t i = 0; i < k.count(); ++i) {
         s.entities.push_back(netsnap::from_kernel(
             static_cast<std::int64_t>(i), k.lat(i), k.lon(i), k.psi(i), k.alt(i),
-            k.phi(i), k.tas(i), k.gamma(i), k.hp(i), k.fire_cd(i)));
+            k.phi(i), k.tas(i), k.gamma(i), k.hp(i), k.fire_cd(i), k.ammo(i)));
     }
     for (std::size_t j = 0; j < k.proj_count(); ++j) {
         s.projectiles.push_back(netsnap::proj_from_kernel(
@@ -101,6 +101,7 @@ std::vector<std::uint8_t> encode_client_view(std::int64_t client_tick, std::int6
             geo001::encode_i64(geo001::quantize(e.hp, netsnap::HP_SCALE), out);
             geo001::encode_i64(e.hp <= 0.0 ? 1 : 0, out);  // dead flag (kill replicated)
             geo001::encode_i64(geo001::quantize(e.fire_cd, netsnap::FIRECD_SCALE), out);
+            geo001::encode_i64(geo001::quantize(e.ammo, netsnap::AMMO_SCALE), out);  // rounds remaining (v1.14r0)
         }
         geo001::encode_i64(static_cast<std::int64_t>(wframe->projectiles.size()), out);
         for (const auto& p : wframe->projectiles) {
@@ -129,7 +130,7 @@ const netsnap::Snapshot* freshest_frame(const interp::SnapshotBuffer& buf, std::
 SessionResult run_session(const Rails& rails, const Scenario& sc, bool reconcile) {
     const unsigned ticks = sc.ticks;
 
-    // --- server: drive the authoritative kernel; emit protocol-4 frames at 20 Hz -------------
+    // --- server: drive the authoritative kernel; emit protocol-5 frames at 20 Hz -------------
     Kernel server(rails);
     for (unsigned i = 0; i < sc.n_aircraft; ++i) {
         const AircraftSpec& a = sc.aircraft[i];

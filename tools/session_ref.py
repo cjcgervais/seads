@@ -4,8 +4,9 @@ session_ref.py — SEADS server<->client SESSION loop REFERENCE (netcode layer 5
 
 The layer that finally USES the wire transport between two endpoints. A SERVER runs the
 authoritative sealed kernel over a scripted multi-aircraft dogfight and, at the 20 Hz snapshot
-cadence, serializes the FULL protocol-4 world into a WEAPON-001 wire frame (GEO + KIN-002 +
-WEAPON sections). An in-process TRANSPORT ships those frames server->client with a fixed integer
+cadence, serializes the FULL protocol-5 world into a WEAPON-001 wire frame (GEO + KIN-002 +
+WEAPON sections, incl. the per-aircraft magazine `ammo` since v1.14r0). An in-process TRANSPORT
+ships those frames server->client with a fixed integer
 latency and deterministic packet loss. The CLIENT reconstructs the entire dogfight from the bytes
 it receives — tying together the four netcode layers built earlier:
 
@@ -37,9 +38,10 @@ to the bit.
 
 Boundaries (doctrine): net code stays OUTSIDE the kernel. The server DRIVES the kernel (like
 lockstep/predict) to produce authoritative state; the wire is lossy and downstream; decoded bits
-feed the renderer's client view and the predictor's RESEED, never the canonical sim. No rail /
-golden / wire change — this composes the EXISTING protocol-4 wire, so it rides seal v1.12r0 (a
-Tier-2 net layer like interp was, not a seal).
+feed the renderer's client view and the predictor's RESEED, never the canonical sim. No kernel /
+golden change — this composes the CURRENT protocol-5 wire, riding seal v1.14r0 (the client view now
+surfaces the per-aircraft magazine `ammo` from the wire — a rounds-remaining counter). A Tier-2 net
+layer like interp was, not a seal itself.
 
 Usage:  python tools/session_ref.py        # internal self-test (kill replication + determinism + bounds)
 """
@@ -134,7 +136,7 @@ def own_kinematic_command_at(sched, t):
     return (rk.deg2rad(ph["bank_deg"]), float(ph["g_cmd"]), float(ph.get("throttle", 0.0)))
 
 
-# ---- server: drive the authoritative kernel, emit protocol-4 wire frames at 20 Hz ----------
+# ---- server: drive the authoritative kernel, emit protocol-5 wire frames at 20 Hz ----------
 def _build_server_kernel(scenario):
     k = rk.Kernel({"rails": _RAILS})
     scheds, envs = [], []
@@ -153,14 +155,14 @@ def _build_server_kernel(scenario):
 
 
 def _serialize_world(k, server_tick):
-    """Serialize the kernel's FULL world to a protocol-4 wire frame: every aircraft (GEO + KIN-002
-    + WEAPON hp/fire_cd) and every live round (GEO + damage + ttl/owner). Aircraft id = SoA index;
+    """Serialize the kernel's FULL world to a protocol-5 wire frame: every aircraft (GEO + KIN-002
+    + WEAPON hp/fire_cd/ammo) and every live round (GEO + damage + ttl/owner). Aircraft id = SoA index;
     projectile id = SoA index (rounds are transient — a per-frame index is all the client needs to
     draw + count them). Mirrors what seads_record's --gundemo writes, over the sealed codec."""
     ents = []
     for i, ac in enumerate(k.aircraft):
         ents.append(snap.from_kernel(i, ac.lat, ac.lon, ac.psi, ac.alt,
-                                     ac.phi, ac.tas, ac.gamma, ac.hp, ac.fire_cd))
+                                     ac.phi, ac.tas, ac.gamma, ac.hp, ac.fire_cd, ac.ammo))
     projs = []
     for j, p in enumerate(k.projectiles):
         projs.append(snap.proj_from_kernel(j, p.lat, p.lon, p.psi, p.alt,
@@ -224,7 +226,7 @@ def encode_client_view(client_tick, render_tick, own_ent, remotes, wframe):
       header : client_tick, render_tick
       OWN    : predicted geometry @ now (GEO + KIN phi/tas/gamma) — always present
       REMOTES: count + per-remote (id, interpolated GEO @ render_tick), sorted by id
-      WEAPONS: count + per-aircraft (id, hp_q, dead flag, fire_cd_q) from the freshest frame
+      WEAPONS: count + per-aircraft (id, hp_q, dead flag, fire_cd_q, ammo_q) from the freshest frame
       ROUNDS : count + per-round (pid, GEO, damage_q, ttl, owner) from the freshest frame
     A freshly-connected client (before any frame arrives) emits empty REMOTES/WEAPONS/ROUNDS but
     still its own predicted ship — a faithful 'I only know myself yet' state."""
@@ -254,6 +256,7 @@ def encode_client_view(client_tick, render_tick, own_ent, remotes, wframe):
             out += g.encode_i64(g.quantize(e.hp, snap.HP_SCALE))
             out += g.encode_i64(1 if e.hp <= 0.0 else 0)          # dead flag (kill replicated)
             out += g.encode_i64(g.quantize(e.fire_cd, snap.FIRECD_SCALE))
+            out += g.encode_i64(g.quantize(e.ammo, snap.AMMO_SCALE))  # rounds remaining (v1.14r0)
         out += g.encode_i64(len(wframe.projectiles))
         for p in wframe.projectiles:
             out += g.encode_i64(p.id)
@@ -358,11 +361,13 @@ def checkpoint_ticks(ticks):
 
 
 def final_weapon_facts(wframe):
-    """Per-aircraft (id, hp_milli, dead) from the client's freshest frame — the replicated combat
-    outcome. hp_milli is the quantized hp (ints, byte-reproducible); dead = hp<=0."""
+    """Per-aircraft (id, hp_milli, dead, ammo) from the client's freshest frame — the replicated
+    combat outcome. hp_milli is the quantized hp (ints, byte-reproducible); dead = hp<=0; ammo is
+    the quantized magazine rounds remaining (v1.14r0 — the rounds-remaining counter off the wire)."""
     facts = []
     for e in sorted(wframe.entities, key=lambda e: e.id):
-        facts.append((int(e.id), g.quantize(e.hp, snap.HP_SCALE), 1 if e.hp <= 0.0 else 0))
+        facts.append((int(e.id), g.quantize(e.hp, snap.HP_SCALE), 1 if e.hp <= 0.0 else 0,
+                      g.quantize(e.ammo, snap.AMMO_SCALE)))
     return facts
 
 
@@ -449,7 +454,7 @@ def _selftest():
         print(f"  digest={res['digest']}")
         print(f"  frames emitted={res['n_frames']} delivered={res['delivered']} "
               f"max_rounds_on_client={max_rounds}")
-        print(f"  final client HP (id,hp_milli,dead)={facts}")
+        print(f"  final client weapon (id,hp_milli,dead,ammo)={facts}")
         print(f"  own_err={own_err:.3e} m  remote_err={remote_err:.3e} deg")
         return 0
     print(f"RESULT: SESSION REFERENCE SELFTEST FAIL ({fails})")

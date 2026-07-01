@@ -1,10 +1,12 @@
-"""Round-trip / framing properties for the WEAPON-001 snapshot section (seal v1.12r0).
+"""Round-trip / framing properties for the WEAPON-001 snapshot section (sealed v1.12r0; the G4
+magazine `ammo` joined the block at v1.14r0, protocol 5).
 
 Byte-exact C++<->reference parity is proven by the generated-vector gate
 (src/net/weapon_test_main.cpp). Here we prove the reference framing is self-consistent: the
-gunnery state (per-aircraft hp/fire_cd + the live ballistic rounds) round-trips within one
-quantum, ttl/owner are carried EXACTLY, the protocol gates the section (a protocol-3 frame
-omits the weapon block entirely), and the section stays self-delimiting + id-aligned."""
+gunnery state (per-aircraft hp/fire_cd/ammo + the live ballistic rounds) round-trips within one
+quantum, ttl/owner are carried EXACTLY, the protocol gates the section (a protocol-3 frame omits
+the weapon block entirely; a protocol-4 frame omits ammo), and the section stays self-delimiting
++ id-aligned."""
 import sys
 from pathlib import Path
 
@@ -25,12 +27,13 @@ GAMMA = st.floats(min_value=-89.0, max_value=89.0, allow_nan=False, allow_infini
 HP = st.floats(min_value=-50.0, max_value=200.0, allow_nan=False, allow_infinity=False)  # neg = exercise ZigZag sign on a corpse frame
 FIRECD = st.floats(min_value=0.0, max_value=30.0, allow_nan=False, allow_infinity=False)
 DAMAGE = st.floats(min_value=0.0, max_value=60.0, allow_nan=False, allow_infinity=False)
+AMMO = st.floats(min_value=0.0, max_value=500.0, allow_nan=False, allow_infinity=False)  # magazine rounds (unit-scale quantized)
 TTL = st.integers(min_value=0, max_value=250)
 OWNER = st.integers(min_value=0, max_value=7)
 ID = st.integers(min_value=0, max_value=(1 << 31) - 1)
 TICK = st.integers(min_value=0, max_value=(1 << 40))
 
-ENTITY = st.builds(s.EntityState, ID, LAT, LON, BEAR, ALT, PHI, TAS, GAMMA, HP, FIRECD)
+ENTITY = st.builds(s.EntityState, ID, LAT, LON, BEAR, ALT, PHI, TAS, GAMMA, HP, FIRECD, AMMO)
 PROJ = st.builds(s.ProjectileState, ID, LAT, LON, BEAR, ALT, DAMAGE, TTL, OWNER)
 
 
@@ -40,7 +43,7 @@ def test_weapon_roundtrip(tick, entities, projectiles):
     wire = s.encode_snapshot(snap)
     dec, pos = s.decode_snapshot(wire)
     assert pos == len(wire)
-    assert dec.protocol == s.SNAPSHOT_PROTOCOL  # 4
+    assert dec.protocol == s.SNAPSHOT_PROTOCOL  # 5
     assert dec.server_tick == tick
     assert len(dec.entities) == len(entities)
     assert len(dec.projectiles) == len(projectiles)
@@ -48,6 +51,7 @@ def test_weapon_roundtrip(tick, entities, projectiles):
         assert a.id == b.id
         assert abs(a.hp - b.hp) <= 1.0 / s.HP_SCALE
         assert abs(a.fire_cd - b.fire_cd) <= 1.0 / s.FIRECD_SCALE
+        assert abs(a.ammo - b.ammo) <= 1.0 / s.AMMO_SCALE
     for a, b in zip(projectiles, dec.projectiles):
         assert a.id == b.id
         assert abs(a.lat_deg - b.lat_deg) <= 1.0 / g.LATLON_SCALE
@@ -72,6 +76,23 @@ def test_protocol3_omits_weapon_section(entities, projectiles):
     assert d3.projectiles == []
     for e in d3.entities:
         assert e.hp == 0.0 and e.fire_cd == 0.0
+
+
+@given(st.lists(ENTITY, min_size=1, max_size=4), st.lists(PROJ, max_size=4))
+def test_protocol4_omits_ammo(entities, projectiles):
+    # a protocol-4 (pre-v1.14r0 WEAPON-001) frame carries hp/fire_cd + rounds but NOT ammo: it is
+    # strictly shorter than the protocol-5 wire (one extra LEB128 per aircraft) and decode leaves
+    # ammo at 0 while hp/fire_cd still round-trip — the older gunnery wire stays readable.
+    p4 = s.Snapshot(9, entities, projectiles, protocol=4)
+    p5 = s.Snapshot(9, entities, projectiles, protocol=5)
+    w4, w5 = s.encode_snapshot(p4), s.encode_snapshot(p5)
+    assert len(w4) < len(w5)
+    d4, pos4 = s.decode_snapshot(w4)
+    assert pos4 == len(w4) and d4.protocol == 4
+    for a, b in zip(entities, d4.entities):
+        assert b.ammo == 0.0
+        assert abs(a.hp - b.hp) <= 1.0 / s.HP_SCALE
+        assert abs(a.fire_cd - b.fire_cd) <= 1.0 / s.FIRECD_SCALE
 
 
 @given(st.lists(ENTITY, min_size=1, max_size=3), st.lists(PROJ, min_size=1, max_size=4))

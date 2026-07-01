@@ -14,7 +14,9 @@
 //      KIN-002 (protocol >= 3, seal v1.6r0) — gamma ×1e6 (flight-path angle, micro-degree).
 //      Present iff protocol >= 2; gamma carried iff protocol >= 3. NON-geographic, OUTSIDE GeoPoint.
 //   3. WEAPON section (WEAPON-001, protocol >= 4, seal v1.12r0) over wire.weapon — the Step 7
-//      gunnery state: per-aircraft n × (id, hp_q, fire_cd_q) (hp/fire_cd ×1e3), then a
+//      gunnery state: per-aircraft n × (id, hp_q, fire_cd_q [, ammo_q]) (hp/fire_cd ×1e3; and —
+//      for the G4 magazine, protocol >= 5, seal v1.14r0 — ammo ×1 (a pure integer counter, so
+//      unit scale is exact + compact like ttl/owner; carried iff protocol >= 5)), then a
 //      projectile count m and m × (pid, GeoPoint, damage_q ×1e3, ttl, owner). ttl/owner are
 //      EXACT i64 (kernel u32 counters, NOT quantized). Present iff protocol >= 4.
 // Section 1 alone (protocol 1) feeds remote interpolation; section 2 adds bank+speed (+gamma in
@@ -36,7 +38,7 @@ constexpr double PI_      = 0x1.921fb54442d18p+1;  // 3.141592653589793 (matches
 constexpr double RAD2DEG  = 180.0 / PI_;           // one IEEE division — same double both sides
 constexpr double DEG2RAD  = PI_ / 180.0;
 
-constexpr int64_t SNAPSHOT_PROTOCOL = 4;  // (>=2 KIN; >=3 KIN-002 gamma; >=4 WEAPON-001 gunnery)
+constexpr int64_t SNAPSHOT_PROTOCOL = 5;  // (>=2 KIN; >=3 KIN-002 gamma; >=4 WEAPON-001 gunnery; >=5 ammo)
 
 // Auxiliary KIN-002 scales (must match config/rails/atm.json wire.kin). phi and gamma are angles
 // in degrees -> reuse the bearing-style 1e6; tas is m/s -> reuses the alt-style 1e3.
@@ -49,6 +51,7 @@ constexpr int64_t GAMMA_SCALE = 1000000;  // 1e6 (flight-path angle, KIN-002 —
 constexpr int64_t HP_SCALE     = 1000;    // 1e3
 constexpr int64_t FIRECD_SCALE = 1000;    // 1e3
 constexpr int64_t DAMAGE_SCALE = 1000;    // 1e3
+constexpr int64_t AMMO_SCALE   = 1;       // 1e0 (magazine rounds — integer counter, exact+compact; protocol >= 5)
 
 // One aircraft on the wire. GEO fields in GEO-001 units (degrees / metres); KIN fields in KIN
 // units (phi/gamma degrees, tas m/s); WEAPON fields hp/fire_cd (kernel units). All of
@@ -64,6 +67,7 @@ struct EntityState {
     double gamma_deg = 0.0;
     double hp = 0.0;        // WEAPON-001: hitpoints (hp<=0 == dead)
     double fire_cd = 0.0;   // WEAPON-001: fire-rate cooldown (ticks remaining)
+    double ammo = 0.0;      // WEAPON-001 (v1.14r0, protocol >= 5): magazine rounds remaining
 };
 
 // One ballistic round on the wire (WEAPON-001). GEO fields (bearing == round heading psi);
@@ -88,10 +92,11 @@ struct Snapshot {
 
 // Build a wire EntityState from raw kernel state (radians/metres). The kernel `psi` heading
 // maps to GEO-001 `bearing`; `phi`/`gamma` (rad) -> KIN degrees; `tas` passes through (m/s);
-// `hp`/`fire_cd` (WEAPON-001) pass through (kernel units). Transmits faithfully (no normalization).
+// `hp`/`fire_cd`/`ammo` (WEAPON-001) pass through (kernel units). Transmits faithfully (no normalization).
 EntityState from_kernel(int64_t id, double lat_rad, double lon_rad, double psi_rad,
                         double alt_m, double phi_rad = 0.0, double tas_mps = 0.0,
-                        double gamma_rad = 0.0, double hp = 0.0, double fire_cd = 0.0);
+                        double gamma_rad = 0.0, double hp = 0.0, double fire_cd = 0.0,
+                        double ammo = 0.0);
 
 // Build a wire ProjectileState from raw kernel projectile state (radians/metres). The round's
 // heading `psi` maps to GEO-001 `bearing`; `damage` passes through; `ttl`/`owner` carried exactly.

@@ -6,9 +6,9 @@ namespace netsnap {
 
 EntityState from_kernel(int64_t id, double lat_rad, double lon_rad, double psi_rad,
                         double alt_m, double phi_rad, double tas_mps, double gamma_rad,
-                        double hp, double fire_cd) {
+                        double hp, double fire_cd, double ammo) {
     return EntityState{id, lat_rad * RAD2DEG, lon_rad * RAD2DEG, psi_rad * RAD2DEG, alt_m,
-                       phi_rad * RAD2DEG, tas_mps, gamma_rad * RAD2DEG, hp, fire_cd};
+                       phi_rad * RAD2DEG, tas_mps, gamma_rad * RAD2DEG, hp, fire_cd, ammo};
 }
 
 ProjectileState proj_from_kernel(int64_t id, double lat_rad, double lon_rad, double psi_rad,
@@ -19,8 +19,8 @@ ProjectileState proj_from_kernel(int64_t id, double lat_rad, double lon_rad, dou
 
 // Wire framing: header (protocol, server_tick, n), then the GEO section n*(id, GeoPoint),
 // then — iff protocol >= 2 — the KIN section n*(id, phi_q, tas_q[, gamma_q]), then — iff
-// protocol >= 4 — the WEAPON section: n*(id, hp_q, fire_cd_q), a projectile count m, and
-// m*(pid, GeoPoint, damage_q, ttl, owner). All self-delimiting; the GEO-001 codec is reused
+// protocol >= 4 — the WEAPON section: n*(id, hp_q, fire_cd_q[, ammo_q]) (ammo_q iff protocol >= 5),
+// a projectile count m, and m*(pid, GeoPoint, damage_q, ttl, owner). All self-delimiting; the GEO-001 codec is reused
 // verbatim so its byte layout / parity vectors are untouched.
 void encode_snapshot(const Snapshot& s, std::vector<uint8_t>& out) {
     geo001::encode_i64(s.protocol, out);
@@ -45,6 +45,8 @@ void encode_snapshot(const Snapshot& s, std::vector<uint8_t>& out) {
             geo001::encode_i64(e.id, out);
             geo001::encode_i64(geo001::quantize(e.hp, HP_SCALE), out);
             geo001::encode_i64(geo001::quantize(e.fire_cd, FIRECD_SCALE), out);
+            if (s.protocol >= 5)  // G4 ammo: magazine rounds remaining (v1.14r0)
+                geo001::encode_i64(geo001::quantize(e.ammo, AMMO_SCALE), out);
         }
         geo001::encode_i64(static_cast<int64_t>(s.projectiles.size()), out);  // live rounds
         for (const auto& p : s.projectiles) {
@@ -105,6 +107,11 @@ bool decode_snapshot(const uint8_t* data, size_t len, size_t& pos, Snapshot& out
             out.entities[static_cast<size_t>(i)].hp = geo001::dequantize(hp_q, HP_SCALE);
             out.entities[static_cast<size_t>(i)].fire_cd =
                 geo001::dequantize(firecd_q, FIRECD_SCALE);
+            if (out.protocol >= 5) {  // G4 ammo: magazine rounds remaining (v1.14r0)
+                int64_t ammo_q = 0;
+                if (!geo001::decode_i64(data, len, pos, ammo_q)) return false;
+                out.entities[static_cast<size_t>(i)].ammo = geo001::dequantize(ammo_q, AMMO_SCALE);
+            }
         }
         int64_t m = 0;
         if (!geo001::decode_i64(data, len, pos, m)) return false;

@@ -5,7 +5,7 @@
 > This file is the project **constitution**. It is loaded into every Claude Code session.
 > When in doubt, the rails below win over any other instruction.
 
-**Current seal:** `ATM-Sphere v1.13r0`  ·  **Realm:** ATM-only  ·  **Status:** sealed core + netcode layers 1–6 + flight model B1→B4 (energy, lift/pitch γ, stall/V-n limits, historical aero) + **Step 7 guns G1→G4 COMPLETE** (ballistic projectiles · hit detection + hitpoints · per-airframe weapon roster + fire-rate · **finite ammunition**) + **weapon WIRE transport WEAPON-001** (gunnery state on the 20 Hz snapshot wire, protocol 4). **G4 (v1.13r0):** each envelope carries `ammo_start`; firing is gated on `ammo > 0` (one round consumed/shot), an empty magazine goes silent ("Winchester"); ammo is the 10th per-aircraft snapshot f64 ⇒ all 9 prior goldens moved + new `GOLDEN-SK-Winchester-001`; no new det_math, ammo off-wire (transport deferred like fire_cd was pre-v1.12r0). (Authoritative seal/golden ledger: `docs/SEAL_CARD.md` + `NEXT_STEPS.md`.)
+**Current seal:** `ATM-Sphere v1.14r0`  ·  **Realm:** ATM-only  ·  **Status:** sealed core + netcode layers 1–6 + flight model B1→B4 (energy, lift/pitch γ, stall/V-n limits, historical aero) + **Step 7 guns G1→G4 COMPLETE** (ballistic projectiles · hit detection + hitpoints · per-airframe weapon roster + fire-rate · **finite ammunition**) + **weapon WIRE transport WEAPON-001** (gunnery state on the 20 Hz snapshot wire, protocol 5). **G4 (v1.13r0):** each envelope carries `ammo_start`; firing is gated on `ammo > 0` (one round consumed/shot), an empty magazine goes silent ("Winchester"); ammo is the 10th per-aircraft snapshot f64 ⇒ all 9 prior goldens moved + new `GOLDEN-SK-Winchester-001`; no new det_math. **v1.14r0:** `ammo` now also **rides the WEAPON-001 wire** (10th per-aircraft field, unit-scale, snapshot **protocol 4→5**) so a remote client shows a rounds-remaining counter — transport-only, **all 10 goldens byte-identical**; the session client-view surfaces ammo (digest moved), the event layer is byte-identical. (Authoritative seal/golden ledger: `docs/SEAL_CARD.md` + `NEXT_STEPS.md`.)
 
 ---
 
@@ -35,7 +35,7 @@ Human summary:
 | Ceiling | **ATM_TOP = 8,000 m**, **SOFT = 100 m** (predamp 7,900–8,000 → hard clamp) |
 | Kinematics | Intrinsic S²; closed-form great-circle step. **B2 (v1.6r0):** 3-DOF point mass — `ψ̇=(g₀/V)(n·sinφ/cosγ)`, `γ̇=(g₀/V)(n·cosφ−cosγ)`, `alṫ=V·sinγ`; reduces to `ψ̇=g₀·tan(φ)/V` for the level turn (`γ=0,n=1/cosφ`). No-arg straight golden keeps the pure kinematic tail. **No Cartesian fallback.** |
 | Determinism | `det_math` only. **Ban** `std::sin/cos/tan/atan2/asin/acos/sqrt/pow`, fast-math, FMA, x87. |
-| Wire/Hash | **GEO-001** — lat/lon×1e7, bearing×1e6, h×1e3; ZigZag+LEB128. **+KIN-002** aux block (phi×1e6, tas×1e3, **gamma×1e6**) for prediction. **+WEAPON-001** aux block (per-aircraft hp×1e3, fire_cd×1e3; per round: GeoPoint + damage×1e3 + ttl/owner exact i64) for MP gunnery replication; snapshot **protocol 4** (v1.12r0). The wire is lossy/downstream — `Kernel::snapshot()` stays the world_hash source of truth |
+| Wire/Hash | **GEO-001** — lat/lon×1e7, bearing×1e6, h×1e3; ZigZag+LEB128. **+KIN-002** aux block (phi×1e6, tas×1e3, **gamma×1e6**) for prediction. **+WEAPON-001** aux block (per-aircraft hp×1e3, fire_cd×1e3, **ammo×1e0**; per round: GeoPoint + damage×1e3 + ttl/owner exact i64) for MP gunnery replication; snapshot **protocol 5** (WEAPON-001 v1.12r0; `ammo` added v1.14r0, protocol 4→5). The wire is lossy/downstream — `Kernel::snapshot()` stays the world_hash source of truth |
 | Roster | Sealed **8**: P-47D, Bf 109 F-4, Ki-61, A6M2, Yak-3, La-7, Spitfire Mk V, **P-51** |
 | State | Per-aircraft 7-tuple `(lat, lon, psi, phi, alt, tas, gamma)` — γ (flight-path angle) added in B2 (v1.6r0). |
 | Golden | **GOLDEN-SK-Sphere-001** — 10,000 ticks from (0°,0°), ψ=45°, TAS=250 m/s → world_hash matches cross-toolchain (6 sealed goldens total; see SEAL_CARD) |
@@ -183,7 +183,15 @@ docs/{adr,annex,cards,receipts,seals}  governance ledger  .claude/{agents,skills
   goldens moved (ammo constant/identical) + new GOLDEN-SK-Winchester-001 (an A6M2 empties its 100-round
   cannon at tick 891). No new det_math (integer counter, like fire_cd); **no wire change** (ammo off-wire,
   transport deferred like fire_cd was pre-v1.12r0). **Guns arc G1→G4 COMPLETE.** See ADR-Step7-Guns-G4.
-- next — free pick (none blocking): put `ammo` on the WEAPON-001 wire (a small follow-up reseal, so a
-  remote client can show a rounds-remaining counter); a genuinely cross-PROCESS transport (sockets) over
-  the layer-5/6 frames; attacker attribution (a kernel event hook, its own ADR); renderer polish (meshes;
-  guns in the live `--fly` path); or an optional new seal (gun convergence / component-damage, **B5** ISA atmosphere).
+- **v1.14r0** — **Step 7 guns / `ammo` on the WEAPON-001 wire:** the per-aircraft magazine `ammo` joins the
+  WEAPON-001 snapshot section as a 10th per-aircraft field (**snapshot protocol 4→5**), quantized at unit
+  scale (1e0 — integer counter, exact + compact, like ttl/owner); new rail field `wire.weapon.ammo_scale=1`.
+  A remote/late-join client now shows a rounds-remaining counter. **Transport-only** (like KIN-001 v1.4r0 /
+  WEAPON-001 v1.12r0): no kernel/det_math/tuning touched ⇒ **all 10 goldens byte-identical**, no new golden,
+  guardian.yml unchanged. Downstream riders (no-seal): the session client-view surfaces ammo (digest moved,
+  regenerated); `seads_record` emits an `"ammo"` HUD array; the event layer is byte-identical. +1 property
+  test (`test_protocol4_omits_ammo`) ⇒ 117. **Guns arc G1→G4 now fully wired (canonical + replicable).**
+  See ADR-Step7-Guns-WireTransport-Ammo-v1.14r0.
+- next — free pick (none blocking): a genuinely cross-PROCESS transport (sockets) over the layer-5/6 frames;
+  attacker attribution (a kernel event hook, its own ADR); renderer polish (meshes; guns in the live `--fly`
+  path); or an optional new seal (gun convergence / component-damage, **B5** ISA atmosphere).

@@ -1,6 +1,32 @@
 # SEADS 2026 — Next Steps (handoff)
 
-> ## ►► CURRENT STATE (2026-06-30): seal **ATM-Sphere v1.13r0** — **Step 7 guns / G4: FINITE AMMUNITION DONE ✅ — GUNS ARC G1→G4 COMPLETE**
+> ## ►► CURRENT STATE (2026-06-30): seal **ATM-Sphere v1.14r0** — **`ammo` ON THE WEAPON-001 WIRE DONE ✅ — GUNS ARC G1→G4 FULLY WIRED (canonical + replicable)**
+> **Latest (SEAL v1.14r0): the magazine now crosses the wire — a remote client shows rounds-remaining.**
+> The one gap G4 left open (ammo was canonical state but OFF the wire) closes. The per-aircraft magazine
+> **`ammo` joins the WEAPON-001 snapshot section** as a 10th per-aircraft field (**snapshot protocol 4→5**),
+> quantized at **unit scale** (`wire.weapon.ammo_scale=1` — a pure integer counter, so exact AND compact, a
+> 2-byte varint for a 340-round belt, exactly like `ttl`/`owner`). This is the **third instance** of the
+> proven wire-reseal pattern (KIN-001 v1.4r0 → WEAPON-001 v1.12r0 → this): edit the reference
+> `snapshot_ref.py` FIRST (ammo gated on `protocol>=5`; a protocol-4 frame stays byte-identical, proven by a
+> back-compat self-test + the new `test_protocol4_omits_ammo`), mirror `snapshot.{h,cpp}` bit-for-bit,
+> regenerate `gen_weapon_vectors.py`→`weapon_vectors.h`→`seads_weapon_test`. **TRANSPORT-ONLY: no
+> `src/kernel/**`, `src/det_math/**`, or `data/tuning/**` touched ⇒ ALL 10 GOLDENS BYTE-IDENTICAL** (Sphere
+> `40ff6dd2…59315881` … Winchester `473bcad9…7630ad66`, gcc==clang==committed), **no new golden, no new
+> ctest target ⇒ guardian.yml unchanged.** **Downstream riders (no-seal, bundled):** the layer-5 session
+> **client-view now surfaces `ammo`** (so the reconstructed fight shows the P-47 walk its magazine 340→333
+> over its 20-tick burst while the never-firing A6M2/Spitfire stay full) — the session **digest moved**
+> (`78e013ab…`), `session_ref.py`↔`session.cpp` + `session_vectors.h` regenerated, `FINAL_WEAPON` gains
+> `ammo`; the layer-6 **event digest is UNCHANGED** (`event_vectors.h` byte-identical — events derive from
+> `hp` deltas, not `ammo`); `seads_record` emits an `"ammo"` array so the web viewer HUD can draw a
+> rounds-remaining counter off the decoded wire. **Reseal only because the wire is a sealed rail** (rails
+> version 230→240, seal string bumped). **Gates: 117 property tests (+1), ctest 10/10 GCC+Clang, all 4
+> generated headers in sync (event byte-identical), 10 goldens C++≡committed under GCC+Clang.** Ledger:
+> **ADR-Step7-Guns-WireTransport-Ammo-v1.14r0**, SEAL_CARD v1.14r0, receipt `…v1.14r0-<sha>.yml`.
+> **NEXT (free pick, none blocking):** a genuinely cross-PROCESS transport (sockets) over the layer-5/6
+> frames; attacker attribution (a kernel event hook, its own ADR); renderer meshes / guns in the live
+> `--fly` path; or an optional new seal (gun convergence / component-damage, **B5** ISA atmosphere).
+>
+> ## ►► PRIOR STATE (2026-06-30): seal **ATM-Sphere v1.13r0** — **Step 7 guns / G4: FINITE AMMUNITION DONE ✅ — GUNS ARC G1→G4 COMPLETE**
 > **Latest (SEAL v1.13r0): guns now run out of bullets.** The last gap in a WWII gun sim closes — every
 > airframe carries a finite magazine. Each envelope gains **`ammo_start`** (per-airframe rounds; A6M2
 > fewest at 100 = the famous ~60-rpg 20 mm cannon, P-47D most at 340 = eight deep .50-cal belts), loaded

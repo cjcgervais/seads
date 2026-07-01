@@ -180,7 +180,8 @@ netsnap::Snapshot capture(const Kernel& k, const Flight& f, uint32_t tick,
     for (std::size_t a = 0; a < f.ac.size(); ++a) {
         snap.entities.push_back(netsnap::from_kernel(
             f.ac[a].id, k.lat(a), k.lon(a), k.psi(a), k.alt(a), k.phi(a), k.tas(a), k.gamma(a),
-            k.hp(a), k.fire_cd(a)));   // WEAPON-001 (v1.12r0): hp + fire-rate cooldown on the wire
+            k.hp(a), k.fire_cd(a),
+            k.ammo(a)));   // WEAPON-001: hp + fire-rate cooldown (v1.12r0) + magazine ammo (v1.14r0)
     }
     for (std::size_t i = 0; i < k.proj_count(); ++i) {  // WEAPON-001: live ballistic rounds
         snap.projectiles.push_back(netsnap::proj_from_kernel(
@@ -220,12 +221,16 @@ void write_js(const std::string& path, const client::RecordingMeta& meta, const 
                 en.alt_m, en.phi_deg, en.tas_mps, en.gamma_deg,
                 (e + 1 < fr.entities.size()) ? "," : "");
         }
-        // G1→G3 extras now sourced from the DECODED WEAPON-001 wire (seal v1.12r0): per-aircraft
-        // hp + live rounds [lat,lon,alt,owner] exactly as a client receives them (quantization-
-        // faithful), NOT read out-of-band from the kernel.
+        // G1→G4 extras now sourced from the DECODED WEAPON-001 wire (hp + fire-rate v1.12r0; the
+        // magazine `ammo` v1.14r0): per-aircraft hp + rounds-remaining + live rounds
+        // [lat,lon,alt,owner] exactly as a client receives them (quantization-faithful), NOT read
+        // out-of-band from the kernel.
         std::fprintf(fp, "],\"hp\":[");
         for (std::size_t e = 0; e < fr.entities.size(); ++e)
             std::fprintf(fp, "%.1f%s", fr.entities[e].hp, (e + 1 < fr.entities.size()) ? "," : "");
+        std::fprintf(fp, "],\"ammo\":[");
+        for (std::size_t e = 0; e < fr.entities.size(); ++e)
+            std::fprintf(fp, "%.0f%s", fr.entities[e].ammo, (e + 1 < fr.entities.size()) ? "," : "");
         std::fprintf(fp, "],\"p\":[");
         for (std::size_t pi = 0; pi < fr.projectiles.size(); ++pi) {
             const auto& pr = fr.projectiles[pi];
