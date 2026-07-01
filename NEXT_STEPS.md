@@ -29,8 +29,11 @@
 > put `ammo` on the WEAPON-001 wire (a small follow-up reseal ⇒ a remote client shows a rounds-remaining
 > counter); cross-PROCESS sockets over the layer-5/6 frames; attacker attribution (a kernel event hook, its
 > own ADR); renderer meshes / guns in the live `--fly` path; or an optional new seal (convergence /
-> component-damage, **B5** ISA atmosphere). **GIT: committed + PUSHED to `origin/main`; guardian CI expected
-> GREEN** (goldens moved — the matrix reproduces all 10 + the parity/session/event legs).
+> component-damage, **B5** ISA atmosphere). **GIT: committed + PUSHED to `origin/main` (code `2de3fc3` +
+> receipt `6d4d842`); guardian CI run [28488783947](https://github.com/cjcgervais/seads/actions/runs/28488783947)
+> GREEN** — MSVC + GCC/Clang × x64/AArch64 reproduce all 10 goldens bit-for-bit (incl. the new Winchester)
+> + the geo001/snapshot/weapon/lockstep/interp/predict/session/event parity legs + the cross-toolchain
+> aggregation gate.
 > _(The layer-6 EVENT-channel banner below is retained as history — COMPLETE.)_
 >
 > ## ►► PRIOR STATE (2026-06-30): seal **ATM-Sphere v1.12r0** — **NETCODE LAYER 6: reliable combat-EVENT channel DONE ✅ (no-seal, rides v1.12r0)**
