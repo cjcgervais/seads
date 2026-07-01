@@ -25,6 +25,10 @@
 > **NEXT (free pick, none blocking):** a genuinely cross-PROCESS transport (sockets) over the layer-5/6
 > frames; attacker attribution (a kernel event hook, its own ADR); renderer meshes / guns in the live
 > `--fly` path; or an optional new seal (gun convergence / component-damage, **B5** ISA atmosphere).
+> **GIT: merged + PUSHED to `origin/main`** (code `370334c` + receipt `caefdc2`; `5751ec8..caefdc2`);
+> guardian CI run [28496444072](https://github.com/cjcgervais/seads/actions/runs/28496444072) **GREEN** —
+> MSVC + GCC/Clang × x64/AArch64 reproduce all 10 goldens bit-for-bit + the geo001/snapshot/weapon/
+> lockstep/interp/predict/session/event parity legs + the cross-toolchain aggregation gate.
 >
 > ## ►► PRIOR STATE (2026-06-30): seal **ATM-Sphere v1.13r0** — **Step 7 guns / G4: FINITE AMMUNITION DONE ✅ — GUNS ARC G1→G4 COMPLETE**
 > **Latest (SEAL v1.13r0): guns now run out of bullets.** The last gap in a WWII gun sim closes — every
