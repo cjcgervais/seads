@@ -87,6 +87,38 @@ Flight make_gundemo() {
     return f;
 }
 
+// Built-in 4-ship dogfight (NOT a golden) — a longer, rolling engagement: two hunter/prey pairs in
+// parallel lanes. AC0 P-47D kills AC1 A6M2, then AC2 P-51 (slightly staggered) kills AC3 Ki-61; both
+// victors then BREAK into hard banking turns over the tiny globe. The firing runs use the proven
+// co-altitude tail-chase geometry from GOLDEN-SK-Hit-001 (gentle shared bank, attacker faster + fast
+// rounds overtake), so the kills land reliably before the hard maneuvering begins. ~26 s of action.
+Flight make_dogfight() {
+    Flight f;
+    f.id = "DEMO-DOGFIGHT";
+    f.ticks = 2600;  // 26 s at 100 Hz
+    // --- Pair A (equatorial lane): P-47D hunts an A6M2 ~520 m ahead, co-altitude ---
+    f.ac.push_back(Ac{0, 0.0, 0.0, 90.0, 0.0, 4000.0, 235.0, &envtab::P47D, {
+        {0,     6.0, 1.01, 0.96, 0.0},
+        {150,   6.0, 1.01, 0.96, 1.0},   // FIRE — downs the A6M2 (~t280)
+        {430,   6.0, 1.01, 0.96, 0.0},   // cease fire after the kill
+        {650,  55.0, 1.65, 0.97, 0.0},   // BREAK hard right + climb
+        {1450,-48.0, 1.55, 0.97, 0.0},   // reverse the turn
+        {2200, 20.0, 1.12, 0.95, 0.0}}});
+    f.ac.push_back(Ac{1, 0.0, 2.0, 90.0, 0.0, 4000.0, 172.0, &envtab::A6M2, {
+        {0,     6.0, 1.01, 0.72, 0.0}}}); // flies the shared gentle turn, takes the burst, dies
+    // --- Pair B (northern lane, lat +3): P-51 hunts a Ki-61 ~650 m ahead, staggered later ---
+    f.ac.push_back(Ac{2, 3.0, 0.0, 90.0, 0.0, 3600.0, 240.0, &envtab::P51, {
+        {0,     6.0, 1.01, 0.96, 0.0},
+        {300,   6.0, 1.01, 0.96, 1.0},   // FIRE — downs the Ki-61 (~t500), staggered after Pair A
+        {600,   6.0, 1.01, 0.96, 0.0},
+        {820,  60.0, 1.70, 0.97, 0.0},   // BREAK
+        {1650,-42.0, 1.45, 0.97, 0.0},
+        {2300,  0.0, 1.0,  0.95, 0.0}}});
+    f.ac.push_back(Ac{3, 3.0, 2.5, 90.0, 0.0, 3600.0, 176.0, &envtab::KI61, {
+        {0,     6.0, 1.01, 0.74, 0.0}}});
+    return f;
+}
+
 // Adapt a sealed scenario (radians already baked in) into the recorder's Flight shape.
 Flight from_scenario(const scen::Scenario& S) {
     Flight f;
@@ -213,11 +245,12 @@ int main(int argc, char** argv) {
     const char* id = nullptr;
     const char* out_path = nullptr;
     const char* js_path = nullptr;
-    bool demo = false, gundemo = false;
+    bool demo = false, gundemo = false, dogfight = false;
     unsigned snap_every = 5;  // 20 Hz at 100 Hz physics
     for (int i = 1; i < argc; ++i) {
         if (!std::strcmp(argv[i], "--demo")) demo = true;
         else if (!std::strcmp(argv[i], "--gundemo")) { gundemo = true; demo = true; }
+        else if (!std::strcmp(argv[i], "--dogfight")) { dogfight = true; demo = true; }
         else if (!std::strcmp(argv[i], "--id") && i + 1 < argc) id = argv[++i];
         else if (!std::strcmp(argv[i], "--out") && i + 1 < argc) out_path = argv[++i];
         else if (!std::strcmp(argv[i], "--js") && i + 1 < argc) js_path = argv[++i];
@@ -234,7 +267,8 @@ int main(int argc, char** argv) {
 
     Flight flight;
     bool deg = false;
-    if (gundemo) { flight = make_gundemo(); deg = true; }
+    if (dogfight) { flight = make_dogfight(); deg = true; }
+    else if (gundemo) { flight = make_gundemo(); deg = true; }
     else if (demo) { flight = make_demo(); deg = true; }
     else {
         const scen::Scenario* S = nullptr;
