@@ -79,6 +79,10 @@ def main():
     predict_ref_ok, _ = run([PY, str(TOOLS / "predict_ref.py")])
     predict_vec_ok, _ = run([PY, str(TOOLS / "gen_predict_vectors.py"), "--check"])
     gates["predict"] = predict_ref_ok and predict_vec_ok
+    # Server<->client session loop (netcode layer 5): reference self-test + parity header in sync.
+    session_ref_ok, _ = run([PY, str(TOOLS / "session_ref.py")])
+    session_vec_ok, _ = run([PY, str(TOOLS / "gen_session_vectors.py"), "--check"])
+    gates["session"] = session_ref_ok and session_vec_ok
 
     # regenerate golden candidate and validate against the seal
     cand = Path(tempfile.gettempdir()) / "seads_golden_candidate.bin"

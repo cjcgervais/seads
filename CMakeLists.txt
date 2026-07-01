@@ -71,6 +71,18 @@ add_library(seads_predict STATIC src/net/predict.cpp)
 target_include_directories(seads_predict PUBLIC src/net)
 target_link_libraries(seads_predict PUBLIC seads_kernel seads_replay seads_det_flags)
 
+# --- net / server<->client SESSION loop (netcode layer 5) ---
+# The layer that finally USES the wire transport between two endpoints: a server DRIVES the kernel
+# and emits protocol-4 WEAPON-001 frames at 20 Hz; an in-process transport ships them with latency
+# + deterministic packet loss; the client reconstructs the whole dogfight (own PREDICTED @ now via
+# seads_predict, remotes INTERPOLATED via seads_net's interp, HP/kills/rounds from the decoded
+# weapon wire). Composes the earlier layers — links seads_predict (+ its kernel/replay) and
+# seads_net (wire codecs + interp) — so it is its OWN lib, like lockstep/predict. Reconstruction is
+# det_math + IEEE + integer only, so its whole-session digest reproduces bit-for-bit cross-toolchain.
+add_library(seads_session STATIC src/net/session.cpp)
+target_include_directories(seads_session PUBLIC src/net)
+target_link_libraries(seads_session PUBLIC seads_predict seads_net seads_kernel seads_replay seads_det_flags)
+
 # --- client presentation lib (Step 5 renderer): recording container + playback ---
 # DOWNSTREAM-ONLY. Decodes the GEO-001/KIN-001 wire (via seads_net) and interpolates remotes
 # (layer 4a) for display. It NEVER feeds the sim: it links seads_net but NOT the kernel/det_math,
@@ -120,6 +132,10 @@ target_link_libraries(seads_interp_test PRIVATE seads_net seads_det_flags)
 add_executable(seads_predict_test src/net/predict_test_main.cpp)
 target_link_libraries(seads_predict_test PRIVATE seads_predict seads_kernel seads_replay seads_det_math seads_det_flags)
 
+# --- server<->client session parity test (reconstructed dogfight digest + kill replication) ---
+add_executable(seads_session_test src/net/session_test_main.cpp)
+target_link_libraries(seads_session_test PRIVATE seads_session seads_predict seads_net seads_kernel seads_replay seads_det_math seads_det_flags)
+
 # --- client presentation test (globe projection + .seadsrec container + playback interp) ---
 add_executable(seads_client_test src/client/client_test_main.cpp)
 target_link_libraries(seads_client_test PRIVATE seads_client seads_net seads_det_flags)
@@ -152,5 +168,6 @@ add_test(NAME weapon_byteexact COMMAND seads_weapon_test)
 add_test(NAME lockstep_equal COMMAND seads_lockstep_test)
 add_test(NAME interp_bitexact COMMAND seads_interp_test)
 add_test(NAME predict_equal COMMAND seads_predict_test)
+add_test(NAME session_reconstruct COMMAND seads_session_test)
 add_test(NAME client_presentation COMMAND seads_client_test)
 # Golden hash compare is run in CI (guardian.yml) across the toolchain matrix.
