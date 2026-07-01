@@ -5,7 +5,7 @@
 > This file is the project **constitution**. It is loaded into every Claude Code session.
 > When in doubt, the rails below win over any other instruction.
 
-**Current seal:** `ATM-Sphere v1.14r0`  ·  **Realm:** ATM-only  ·  **Status:** sealed core + netcode layers 1–6 + flight model B1→B4 (energy, lift/pitch γ, stall/V-n limits, historical aero) + **Step 7 guns G1→G4 COMPLETE** (ballistic projectiles · hit detection + hitpoints · per-airframe weapon roster + fire-rate · **finite ammunition**) + **weapon WIRE transport WEAPON-001** (gunnery state on the 20 Hz snapshot wire, protocol 5). **G4 (v1.13r0):** each envelope carries `ammo_start`; firing is gated on `ammo > 0` (one round consumed/shot), an empty magazine goes silent ("Winchester"); ammo is the 10th per-aircraft snapshot f64 ⇒ all 9 prior goldens moved + new `GOLDEN-SK-Winchester-001`; no new det_math. **v1.14r0:** `ammo` now also **rides the WEAPON-001 wire** (10th per-aircraft field, unit-scale, snapshot **protocol 4→5**) so a remote client shows a rounds-remaining counter — transport-only, **all 10 goldens byte-identical**; the session client-view surfaces ammo (digest moved), the event layer is byte-identical. (Authoritative seal/golden ledger: `docs/SEAL_CARD.md` + `NEXT_STEPS.md`.)
+**Current seal:** `ATM-Sphere v1.15r0`  ·  **Realm:** ATM-only  ·  **Status:** sealed core + netcode layers 1–6 + flight model B1→B4 (energy, lift/pitch γ, stall/V-n limits, historical aero) + **Step 7 guns G1→G4 COMPLETE** (ballistic projectiles · hit detection + hitpoints · per-airframe weapon roster + fire-rate · **finite ammunition**) + **gun convergence** (per-airframe boresight harmonization) + **weapon WIRE transport WEAPON-001** (gunnery state on the 20 Hz snapshot wire, protocol 5). **G4 (v1.13r0):** each envelope carries `ammo_start`; firing is gated on `ammo > 0` (one round consumed/shot), an empty magazine goes silent ("Winchester"); ammo is the 10th per-aircraft snapshot f64 ⇒ all 9 prior goldens moved + new `GOLDEN-SK-Winchester-001`; no new det_math. **v1.14r0:** `ammo` now also **rides the WEAPON-001 wire** (10th per-aircraft field, unit-scale, snapshot **protocol 4→5**) so a remote client shows a rounds-remaining counter — transport-only, **all 10 goldens byte-identical**; the session client-view surfaces ammo (digest moved), the event layer is byte-identical. **v1.15r0:** **gun convergence** — each envelope carries `convergence_m` (per-airframe boresight range); a fired round's initial γ is offset up by the flat-fire drop-compensation angle `δ=½·g₀·convergence_m/v²` (single centerline battery ⇒ vertical zeroing), pure ±×÷ (**no new det_math**); a kernel spawn-geometry change ⇒ only the **3 firing goldens move** (Gunfire/Hit/Winchester; kill + depletion preserved), the 7 non-firing stay byte-identical; no wire change. (Authoritative seal/golden ledger: `docs/SEAL_CARD.md` + `NEXT_STEPS.md`.)
 
 ---
 
@@ -192,6 +192,15 @@ docs/{adr,annex,cards,receipts,seals}  governance ledger  .claude/{agents,skills
   regenerated); `seads_record` emits an `"ammo"` HUD array; the event layer is byte-identical. +1 property
   test (`test_protocol4_omits_ammo`) ⇒ 117. **Guns arc G1→G4 now fully wired (canonical + replicable).**
   See ADR-Step7-Guns-WireTransport-Ammo-v1.14r0.
+- **v1.15r0** — **Step 7 guns / gun convergence (boresight harmonization):** each envelope gains
+  `convergence_m` (per-airframe boresight range; new AERO field). A single centerline battery ⇒
+  harmonization is **vertical boresight zeroing**: a fired round's initial γ is offset up by the flat-fire
+  drop-compensation angle `δ = ½·g₀·convergence_m / v²` (v = firer TAS + muzzle_v) so its trajectory crosses
+  the aim line at convergence_m. **Pure ±×÷ — no new det_math.** A kernel spawn-geometry change ⇒ only the
+  **3 firing goldens move** (Gunfire/Hit/Winchester; Hit kill + Winchester depletion preserved); the 7
+  non-firing goldens are byte-identical. **No wire change** (γ already on KIN-002/projectile block): session
+  digest moves, event digest unchanged. +2 property tests ⇒ 119. No new golden/ctest target ⇒ guardian.yml
+  unchanged. Rails 240→250. See ADR-Step7-Guns-Convergence-v1.15r0.
 - next — free pick (none blocking): a genuinely cross-PROCESS transport (sockets) over the layer-5/6 frames;
   attacker attribution (a kernel event hook, its own ADR); renderer polish (meshes; guns in the live `--fly`
-  path); or an optional new seal (gun convergence / component-damage, **B5** ISA atmosphere).
+  path); or an optional new seal (component-damage, **B5** ISA atmosphere).

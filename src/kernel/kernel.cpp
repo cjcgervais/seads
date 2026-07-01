@@ -182,9 +182,14 @@ void Kernel::advance_projectiles_() {
 }
 
 void Kernel::spawn_projectile_(std::size_t owner, const Envelope& e) {
+    const double v = tas_[owner] + e.muzzle_v_mps;    // muzzle speed (firer TAS + per-airframe muzzle, G3)
     p_lat_.push_back(lat_[owner]);   p_lon_.push_back(lon_[owner]);   p_psi_.push_back(psi_[owner]);
-    p_alt_.push_back(alt_[owner]);   p_tas_.push_back(tas_[owner] + e.muzzle_v_mps);  // G3: per-airframe muzzle
-    p_gamma_.push_back(gamma_[owner]);
+    p_alt_.push_back(alt_[owner]);   p_tas_.push_back(v);
+    // Convergence / harmonization (v1.15r0): a single centerline battery is zeroed VERTICALLY —
+    // aim the round UP by the flat-fire drop-compensation angle so its ballistic trajectory crosses
+    // the aim (sight) line at the per-airframe convergence range. Pure +-*/ (no new det_math).
+    const double delta = 0.5 * rails_.g0 * e.convergence_m / (v * v);
+    p_gamma_.push_back(gamma_[owner] + delta);
     p_damage_.push_back(e.damage_per_round);          // G3: carried per-round damage from the firer's gun
     p_ttl_.push_back(PROJ_TTL_TICKS); p_owner_.push_back(static_cast<std::uint32_t>(owner));
 }

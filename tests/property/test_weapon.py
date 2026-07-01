@@ -18,7 +18,8 @@ import envelopes as envmod       # noqa: E402
 import ref_kernel as rk          # noqa: E402
 
 ROSTER = ("p47d", "bf109f4", "ki61", "a6m2", "yak3", "la7", "spitfire_mk5", "p51")
-WEAPON_FIELDS = ("hp_start", "muzzle_v_mps", "damage_per_round", "rof_interval_ticks", "ammo_start")
+WEAPON_FIELDS = ("hp_start", "muzzle_v_mps", "damage_per_round", "rof_interval_ticks", "ammo_start",
+                 "convergence_m")
 
 
 def test_every_airframe_has_sane_weapon_stats():
@@ -31,6 +32,7 @@ def test_every_airframe_has_sane_weapon_stats():
         assert 5.0 <= e["damage_per_round"] <= 60.0, name     # per-round damage sane
         assert 1.0 <= e["rof_interval_ticks"] <= 20.0, name   # >=100 ms? no — 1..20 ticks between shots
         assert 50.0 <= e["ammo_start"] <= 600.0, name         # G4: magazine in a sane band
+        assert 100.0 <= e["convergence_m"] <= 500.0, name     # v1.15r0: harmonization range sane (m)
 
 
 def test_roster_is_distinct_not_a_single_global_gun():

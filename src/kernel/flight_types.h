@@ -22,12 +22,16 @@ struct Lut5 { double x[5]; double y[5]; };
 // rof_interval_ticks (min ticks between shots; the kernel gates firing with a per-aircraft cooldown).
 // The G4 block (seal v1.13r0) adds ammo_start: the per-airframe magazine size (abstract rounds). The
 // kernel gates firing on ammo > 0 and decrements one round per shot; at 0 the gun falls silent.
+// The convergence block (seal v1.15r0) adds convergence_m: the per-airframe gun harmonization range.
+// SEADS models a single centerline battery, so it is realized as VERTICAL boresight zeroing — a
+// fired round's initial gamma is offset up by the flat-fire drop-compensation angle so its
+// trajectory crosses the aim line at convergence_m (see Kernel::spawn_projectile_).
 // Scalar field order MUST match tools/envelopes.py AERO_FIELDS (the single source of truth).
 struct Envelope { Lut5 phi_max, roll_rate, climb_max, climb_min;
                   double mass_kg, wing_area_m2, cd0, induced_k, thrust_static_n, v_max_mps,
                          cl_max, n_max_struct, n_min_struct,
                          hp_start, muzzle_v_mps, damage_per_round, rof_interval_ticks,
-                         ammo_start; };
+                         ammo_start, convergence_m; };
 
 // Per-tick command: target bank (rad), commanded load factor n (target_g, dimensionless; B2 —
 // replaces the B1 climb rate), throttle [0,1] (B1), and the gun trigger fire (G1, v1.9r0). n=1

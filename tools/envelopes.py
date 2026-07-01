@@ -46,7 +46,14 @@ AERO_FIELDS = ("mass_kg", "wing_area_m2", "cd0", "induced_k", "thrust_static_n",
                # rounds). Firing is gated on ammo > 0 (decrement one per spawned round); at 0 the
                # gun falls silent ("Winchester"). Relative WWII endurance (A6M2 fewest — the famous
                # ~60-rpg 20 mm cannon; P-47D most — eight deep .50-cal belts). See ADR-Step7-Guns-G4.
-               "ammo_start")
+               "ammo_start",
+               # Gun convergence / harmonization (Step 7 guns, seal v1.15r0): the per-airframe
+               # boresight range (m). SEADS models a single CENTERLINE battery, so harmonization is
+               # realized as VERTICAL zeroing — a fired round's initial gamma is offset UP by the
+               # flat-fire drop-compensation angle (0.5*g0*convergence_m / v^2, v = firer TAS +
+               # muzzle_v) so its trajectory crosses the aim (sight) line at convergence_m. Pure
+               # +-*/ (no new det_math). See ADR-Step7-Guns-Convergence.
+               "convergence_m")
 
 
 def deg2rad(d):

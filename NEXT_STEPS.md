@@ -1,6 +1,34 @@
 # SEADS 2026 — Next Steps (handoff)
 
-> ## ►► CURRENT STATE (2026-06-30): seal **ATM-Sphere v1.14r0** — **`ammo` ON THE WEAPON-001 WIRE DONE ✅ — GUNS ARC G1→G4 FULLY WIRED (canonical + replicable)**
+> ## ►► CURRENT STATE (2026-06-30): seal **ATM-Sphere v1.15r0** — **GUN CONVERGENCE (BORESIGHT HARMONIZATION) DONE ✅**
+> **Latest (SEAL v1.15r0): the guns are now harmonized — rounds are boresight-zeroed to a per-airframe range.**
+> Each envelope gains **`convergence_m`** (per-airframe boresight range; a new `envelopes.AERO_FIELDS` scalar,
+> appended after `ammo_start` in all 8 JSONs + the C++ `Envelope` struct). SEADS models a single **centerline**
+> battery, so lateral convergence is undefined; harmonization is realized as **vertical boresight zeroing** —
+> at spawn a fired round's initial **γ is offset UP** by the flat-fire drop-compensation angle
+> **`δ = 0.5*g0*convergence_m / (v*v)`** (v = firer TAS + muzzle_v_mps) so its ballistic trajectory crosses the
+> aim (sight) line at `convergence_m` instead of always falling below the nose. Mirror C++ `Kernel::spawn_projectile_`
+> ↔ `ref_kernel._spawn_projectile` with **identical op order** (bit-exact). **Pure +-*/ ⇒ NO new det_math**
+> (the guns arc's zero-new-transcendental streak holds). This is a **kernel spawn-geometry** change ⇒ a golden
+> hash moves ⇒ seal. **Surgical golden movement:** only the **3 firing goldens move** — Gunfire `b25bb81c…ba33dc50`,
+> Hit `8b8a84be…7d73e15c`, Winchester `14aa488b…5c061196` — the **7 non-firing goldens are BYTE-IDENTICAL** (they
+> never hit the spawn path) and keep their v1.13r0 stamp (verified by a dry pre-reseal diff: 7 MATCH / 3 DIFFER,
+> and C++ gcc==clang==committed on all 10). **Outcomes preserved:** Hit-001 still kills the A6M2 (hp→0, corpse
+> frozen), Winchester-001 still empties to ammo 0 (22 rounds live) — the sub-metre elevation (δ≈1e-3 rad) shifts
+> trajectories without changing which rounds hit or when (≪ the 60 m hit gate). **No wire change** (γ already rides
+> KIN-002 / the projectile block): weapon-vector parity untouched, **session digest moves** (SESSION-SK-001's P-47
+> fires → round positions shift; `session_vectors.h` regenerated), **event digest UNCHANGED** (`event_vectors.h`
+> byte-identical — hit/kill events derive from hp deltas, kill sequence identical). Per-airframe convergence_m
+> (initial balance, ~180–275 m): p47d 270, p51 275, spitfire/ki61 230, a6m2 250, la7 200, bf109/yak3 180.
+> **Gates: 119 property tests (+2: exact spawn formula + monotonicity; the level-fire "compensates bullet drop
+> at range" zeroing test), ctest 10/10 GCC+Clang, all 6 generated headers in sync (envelope_tables/scenario_params
+> + snapshot/weapon/session/event vectors), 10 goldens C++≡committed GCC+Clang.** No new golden / ctest target ⇒
+> guardian.yml unchanged. Rails version 240→250. Ledger: **ADR-Step7-Guns-Convergence-v1.15r0**, SEAL_CARD
+> v1.15r0, receipt `…v1.15r0-<sha>.yml`. **NEXT (free pick, none blocking):** cross-PROCESS sockets over the
+> layer-5/6 frames; attacker attribution (a kernel event hook, its own ADR); renderer meshes / guns in the live
+> `--fly` path; or an optional new seal (component-damage, **B5** ISA atmosphere).
+>
+> ## ►► PRIOR STATE (2026-06-30): seal **ATM-Sphere v1.14r0** — **`ammo` ON THE WEAPON-001 WIRE DONE ✅ — GUNS ARC G1→G4 FULLY WIRED (canonical + replicable)**
 > **Latest (SEAL v1.14r0): the magazine now crosses the wire — a remote client shows rounds-remaining.**
 > The one gap G4 left open (ammo was canonical state but OFF the wire) closes. The per-aircraft magazine
 > **`ammo` joins the WEAPON-001 snapshot section** as a 10th per-aircraft field (**snapshot protocol 4→5**),

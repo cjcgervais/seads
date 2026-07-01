@@ -132,9 +132,15 @@ def test_fire_command_spawns_at_post_step_muzzle():
     assert p.owner == 0
     assert p.ttl == rk.PROJ_TTL_TICKS
     # muzzle == the firer's post-step kinematics (the aircraft moved this tick; the round did not)
-    assert (p.lat, p.lon, p.psi, p.alt, p.gamma) == (ac.lat, ac.lon, ac.psi, ac.alt, ac.gamma)
+    assert (p.lat, p.lon, p.psi, p.alt) == (ac.lat, ac.lon, ac.psi, ac.alt)
     assert p.tas == ac.tas + env["muzzle_v_mps"]        # per-airframe muzzle (G3)
     assert p.damage == env["damage_per_round"]          # carried per-round damage (G3)
+    # convergence / harmonization (v1.15r0): the round is boresight-zeroed — its initial gamma is the
+    # firer's gamma PLUS the flat-fire drop-compensation angle (aimed UP). Pin the exact formula.
+    v = ac.tas + env["muzzle_v_mps"]
+    delta = 0.5 * k.g0 * env["convergence_m"] / (v * v)
+    assert p.gamma == ac.gamma + delta
+    assert delta > 0.0                                   # a real airframe (convergence_m > 0) aims up
 
 
 def test_no_fire_command_spawns_nothing():
@@ -145,3 +151,67 @@ def test_no_fire_command_spawns_nothing():
     k.step_scenario([(0.0, 1.0, 0.8, False)], [env])
     k.step_scenario([(0.0, 1.0, 0.8)], [env])         # legacy 3-tuple, no fire field
     assert len(k.projectiles) == 0
+
+
+def _fire_level(convergence_m, ticks=60, tas0=200.0, alt0=4000.0):
+    """Fire one round level (gamma=phi=0) from a p47d-like envelope whose convergence_m is overridden,
+    then coast. Returns (launch_lat, launch_lon, launch_alt, [(range_m, alt), ...]) — the round's
+    horizontal great-circle range from the muzzle and its altitude each tick while alive."""
+    k = rk.Kernel(RAILS)
+    k.aircraft.append(rk.Aircraft(0.0, 0.0, rk.deg2rad(90.0), 0.0, alt0, tas0, 0.0))  # level, heading east
+    env = dict(envmod.load_envelope("p47d")); env["convergence_m"] = float(convergence_m)
+    k.step_scenario([(0.0, 1.0, 0.0, True)], [env])   # spawn (level flight: g=1, no throttle)
+    p0 = k.projectiles[0]
+    lat0, lon0, launch_alt = p0.lat, p0.lon, p0.alt   # capture by value (p0 is mutated as it coasts)
+    trace = []
+    for _ in range(ticks):
+        k.step_scenario([(0.0, 1.0, 0.0, False)], [env])  # coast (no further fire)
+        if not k.projectiles:
+            break
+        p = k.projectiles[0]
+        dlat, dlon = p.lat - lat0, p.lon - lon0
+        a = math.sin(dlat / 2) ** 2 + math.cos(lat0) * math.cos(p.lat) * math.sin(dlon / 2) ** 2
+        rng = 2.0 * rk.R_M * math.asin(min(1.0, math.sqrt(a))) if hasattr(rk, "R_M") else \
+              2.0 * float(RAILS["rails"]["geometry"]["radius_m"]) * math.asin(min(1.0, math.sqrt(a)))
+        trace.append((rng, p.alt))
+    return launch_alt, trace
+
+
+def test_convergence_scales_boresight_elevation():
+    # The boresight elevation delta = 0.5*g0*convergence_m / v^2 grows with convergence_m (longer
+    # zero => aim higher) and shrinks with muzzle speed. Isolate each variable via env overrides.
+    k = rk.Kernel(RAILS)
+    ac = rk.Aircraft(0.0, 0.0, rk.deg2rad(90.0), 0.0, 4000.0, 200.0, 0.0)
+    base = envmod.load_envelope("p47d")
+
+    def elev(conv, muzzle):
+        kk = rk.Kernel(RAILS)
+        kk.aircraft.append(rk.Aircraft(0.0, 0.0, rk.deg2rad(90.0), 0.0, 4000.0, 200.0, 0.0))
+        e = dict(base); e["convergence_m"] = float(conv); e["muzzle_v_mps"] = float(muzzle)
+        kk.step_scenario([(0.0, 1.0, 0.0, True)], [e])
+        return kk.projectiles[0].gamma - kk.aircraft[0].gamma
+
+    assert elev(100.0, 850.0) < elev(300.0, 850.0)     # longer convergence -> more elevation
+    assert elev(250.0, 1200.0) < elev(250.0, 600.0)    # faster muzzle -> flatter -> less elevation
+    assert elev(0.0, 850.0) == 0.0                      # a hypothetical zero-convergence gun aims flat
+
+
+def test_convergence_compensates_bullet_drop_at_range():
+    # The physical meaning of harmonization: fired LEVEL, a boresight-zeroed round rides ABOVE a
+    # non-harmonized (convergence_m=0) round, so near the convergence range it sits much closer to
+    # the launch (sight-line) altitude — the gun is "zeroed" there instead of always dropping low.
+    conv_m = 270.0
+    launch_alt, tr_conv = _fire_level(conv_m)
+    _,          tr_flat = _fire_level(0.0)
+
+    def alt_at_range(trace, target):
+        for rng, alt in trace:
+            if rng >= target:
+                return alt
+        return trace[-1][1]
+
+    alt_conv = alt_at_range(tr_conv, conv_m)
+    alt_flat = alt_at_range(tr_flat, conv_m)
+    assert alt_conv > alt_flat                                  # harmonization lifts the round
+    # and the zeroed round is far closer to the sight line (launch altitude) at convergence range
+    assert abs(alt_conv - launch_alt) < abs(alt_flat - launch_alt)

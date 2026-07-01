@@ -269,11 +269,16 @@ class Kernel:
     def _spawn_projectile(self, ac, owner_idx, env):
         """Spawn a round from aircraft `ac` (its POST-step state this tick): muzzle along the
         velocity vector (psi, gamma), speed = firer TAS + the firer's per-airframe muzzle velocity,
-        carrying the firer's per-round damage (G3). The round does NOT advance on its spawn tick
+        carrying the firer's per-round damage (G3). Convergence / harmonization (v1.15r0): the
+        single centerline battery is zeroed VERTICALLY — the initial gamma is offset UP by the
+        flat-fire drop-compensation angle so the round's trajectory crosses the aim (sight) line at
+        the per-airframe convergence range (pure +-*/). The round does NOT advance on its spawn tick
         (it is appended after _advance_projectiles), so it appears at the muzzle."""
+        v = ac.tas + env["muzzle_v_mps"]                 # muzzle speed (firer TAS + per-airframe muzzle, G3)
+        delta = 0.5 * self.g0 * env["convergence_m"] / (v * v)   # boresight elevation (v1.15r0)
         self.projectiles.append(Projectile(
             lat=ac.lat, lon=ac.lon, psi=ac.psi, alt=ac.alt,
-            tas=ac.tas + env["muzzle_v_mps"], gamma=ac.gamma,
+            tas=v, gamma=ac.gamma + delta,
             damage=env["damage_per_round"], ttl=PROJ_TTL_TICKS, owner=owner_idx))
 
     def step(self, climb_inputs=None):

@@ -110,6 +110,7 @@
     "muzzle_v_mps": 800,
     "damage_per_round": 14,
     "rof_interval_ticks": 6,
-    "ammo_start": 190
+    "ammo_start": 190,
+    "convergence_m": 230
   }
 }
