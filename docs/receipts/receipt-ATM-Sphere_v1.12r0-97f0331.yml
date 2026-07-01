@@ -1,0 +1,35 @@
+seal: ATM-Sphere v1.12r0
+realm: ATM-only
+geometry:
+  radius_m: 15000
+  flattening: 0
+tick_dt_s: 0.01
+gravity_mps2: 9.80665
+ceiling:
+  atm_top_m: 8000
+  soft_band_m: 100
+wire_hash: GEO-001+KIN-002
+change_summary: "Netcode layer 5 (server<->client SESSION loop): reconstruct the full dogfight from the transported WEAPON-001 wire (own predicted, remotes interpolated, HP/kills/rounds nearest-frame). No rail/golden/wire change — rides v1.12r0. 14 gates, 106 property tests, ctest 9/9 GCC+Clang, cross-compiler digest reproduced."
+rail_change: false
+gates:
+  spec_monotone_check: PASS
+  det_math_oracle: PASS
+  tuning_probe: PASS
+  atm_top_probe: PASS
+  geo001_codec: PASS
+  snapshot_codec: PASS
+  weapon_codec: PASS
+  lockstep: PASS
+  interp: PASS
+  predict: PASS
+  session: PASS
+  validate_snapshot: PASS
+  validate_scenarios: PASS
+  property_tests: PASS
+golden_id: GOLDEN-SK-Sphere-001
+golden_sha256: "f28ac5611af384de1c2ccde12f3bb3d7b367ed8bd48d6b9bafe1d781a0d4a475"
+commit_sha: "97f0331d0341169ad711b99e50264ca329a04b39"
+toolchain_matrix: [python-ref, MSVC2022, Clang18, GCC13, x64, AArch64]
+date: "2026-06-30"
+overall: PASS
+signoff: "Forge"

@@ -1,6 +1,39 @@
 # SEADS 2026 — Next Steps (handoff)
 
-> ## ►► CURRENT STATE (2026-06-30): seal **ATM-Sphere v1.12r0** — **Step 7 guns / weapon WIRE transport (WEAPON-001) DONE ✅**
+> ## ►► CURRENT STATE (2026-06-30): seal **ATM-Sphere v1.12r0** — **NETCODE LAYER 5: server↔client SESSION loop DONE ✅ (no-seal, rides v1.12r0)**
+> **Latest (no-seal, `97f0331`): the WEAPON-001 wire transport is now USED end-to-end between two
+> endpoints.** A new **netcode layer 5 — the server↔client SESSION loop** (`tools/session_ref.py` ↔
+> `src/net/session.{h,cpp}`, new `seads_session` lib) drives the sealed kernel over the canonical
+> **SESSION-SK-001** dogfight (the 3-ship gundemo shape: a **P-47D guns down an A6M2 while a Spitfire
+> maneuvers**), emits full **protocol-4** frames at 20 Hz, ships them through an in-process **transport
+> with fixed latency + deterministic packet loss**, and the **client reconstructs the whole fight from
+> the decoded bytes** — composing the earlier layers: **OWN ship PREDICTED @ now** (layer 4b, reconciled
+> against the DEQUANTIZED wire each frame — the realistic lossy-decode reseed path), **REMOTES
+> INTERPOLATED ~150 ms in the past** (layer 4a), and **HP / KILLS / tracer ROUNDS from the freshest
+> delivered frame's WEAPON section** (nearest-frame). The reconstructed per-tick **client view** is
+> serialized (every field through the same GEO-001 quantize) and hashed → a whole-session **digest**
+> (`25fcc41e…`) that the C++ mirror reproduces **bit-for-bit** (ctest `session_reconstruct`, GCC+Clang).
+> **Key result: the gun KILL replicates over the lossy wire** — the client's final HP reads
+> `[(P-47 150, alive), (A6M2 0, DEAD), (Spitfire 100, alive)]`, and `test_client_hp_mirrors_server_exactly`
+> proves the client HP equals the server's authoritative HP to the quantum (hp is integer-valued ⇒ the
+> 1e3 wire carries it losslessly). **Lossy ≠ nondeterministic:** every reconstruction op is det_math
+> (predictor's kernel) / IEEE (interp) / integer (quantize+transport), so the fight reconstructs
+> identically cross-toolchain — a STRONGER proof than layer 4b's canonical-state digest (this reconciles
+> against the WIRE). **NO rail/golden/wire/kernel/det_math change** — composes the EXISTING protocol-4
+> wire ⇒ **all 9 goldens byte-identical**, rides v1.12r0 (Tier-2 like layer 4a interp). **Gates:
+> 14/14 receipt (new `session`), 106 property tests (+6: determinism/heal/lag-bounded/drop-tolerance/
+> kill-replication), ctest 9/9 GCC+Clang (new `session_reconstruct`), 9/9 goldens byte-identical.**
+> Adversarial Auditor **APPROVE** (rails/golden/wire untouched; byte-exact C++↔Python parity incl. the
+> reconcile field-reorder; determinism; non-vacuous gate; cross-compiler digest reproduced). Ledger:
+> **ADR-Step6-Session-v1.12r0**, receipt `…v1.12r0-97f0331.yml`, guardian.yml gains the session
+> gen-check + ref self-test + parity-test legs (one per matrix cell). **Committed to `main` at `97f0331`;
+> NOT yet pushed** (owner triggers the push → guardian CI, expected green: non-kernel rider, goldens
+> unchanged). **NEXT (free pick, none blocking): a genuinely cross-PROCESS transport (sockets) over the
+> same frames; hp/round interpolation or explicit kill/impact EVENT messages; wiring this loop into the
+> live viewer; aircraft meshes; or an optional new seal (ammo/convergence/component-damage, B5 ISA atm).**
+> _(The v1.12r0 weapon-WIRE + attitude-pass summary below is retained as history — those are COMPLETE.)_
+>
+> ## ►► PRIOR STATE (2026-06-30): seal **ATM-Sphere v1.12r0** — **Step 7 guns / weapon WIRE transport (WEAPON-001) DONE ✅**
 > **Latest (v1.12r0): the gunnery state now rides the 20 Hz snapshot wire.** Multiplayer/replay can finally
 > REPLICATE the dogfight from the wire (HP bars, tracer rounds, kills) instead of reading it out-of-band from
 > the local kernel. A third self-delimiting snapshot section **WEAPON-001** (snapshot **protocol 3 → 4**) carries
@@ -126,11 +159,15 @@
 > COMPLETE; BOTH the web AND native viewers now draw rounds/kills/HP from the wire). Everything in this
 > `START HERE` block and §1–§8 below is HISTORY** (how each layer shipped), kept for context. **The actual
 > next task now that flight + guns + the weapon wire are all done is a free pick (none blocking):**
-> - (a) **Networked server↔client loop (no-seal, recommended next):** an in-process transport that actually
->   SHIPS the WEAPON-001 snapshot frames server→client and reconstructs the full dogfight clientside (ties
->   lockstep + snapshot + interp + predict + the new weapon wire together). Gateable like the other netcode
->   layers (a `*_ref.py` ↔ `src/net/*` mirror + `gen_*_vectors` parity test + CI leg). This is the natural
->   thing that finally USES the wire transport between two endpoints.
+> - (a) **Networked server↔client loop — ✅ DONE (`97f0331`, no-seal; see the TOP banner).** Netcode
+>   **layer 5** (`session_ref.py` ↔ `src/net/session.{h,cpp}`, `seads_session`) is the in-process
+>   server→transport→client loop that finally USES the WEAPON-001 wire between two endpoints and
+>   reconstructs the full dogfight clientside (own predicted + remotes interpolated + HP/kills/rounds
+>   from the wire). Built to the standard net-layer pattern (mirror + `gen_session_vectors` parity test +
+>   CI leg). **Remaining stretch on THIS axis:** a genuinely cross-PROCESS transport (real sockets, not
+>   in-process) over the same frames; explicit **kill/impact EVENT messages** or hp/round interpolation
+>   (vs nearest-frame); wiring the session loop into the live `--fly` viewer so remotes come off a real
+>   transport instead of a recording.
 > - (b) **More renderer polish (no-seal):** the **aircraft attitude pass is now DONE** (`7160fd3` — replay +
 >   remotes bank/pitch from the wire). Remaining: aircraft **meshes** (vs the marker stick-figure, web + native);
 >   **guns in the live `--fly` path** (the own ship would need `Command.fire` wired into the keyboard input +
@@ -141,9 +178,11 @@
 >   atmosphere (§8.5 — the doc explicitly recommends deferring B5; biggest lift, forces det_exp/det_pow).
 >
 > Read `CLAUDE.md` first (the constitution; governance is lean, §2), then run the **"Verify everything still
-> works"** sweep below to confirm the green baseline (13 receipt gates, 100 property tests, ctest 8/8, 9
-> goldens) BEFORE and AFTER any change. Memory: `seads-canon`, `seads-harness`, `seads-flight-model-roadmap`,
-> `seads-guns-roadmap`. **Git: attitude-pass rider at `7160fd3` + this handoff/receipt commit on `main`, pushed; guardian CI expected green (non-kernel; goldens unchanged).**
+> works"** sweep below to confirm the green baseline (**14** receipt gates, **106** property tests, ctest
+> **9/9**, 9 goldens) BEFORE and AFTER any change. Memory: `seads-canon`, `seads-harness`,
+> `seads-flight-model-roadmap`, `seads-guns-roadmap`, `seads-netcode-session`. **Git: netcode-layer-5
+> SESSION loop committed to `main` at `97f0331` (+ this handoff/receipt commit); NOT yet pushed — owner
+> triggers the push → guardian CI, expected green (non-kernel rider; all 9 goldens unchanged).**
 >
 > _(Everything below is the original v1.4r0-era handoff, retained as history.)_
 > **Steps 1–6 are DONE and Step 5 (renderer) now has a working first cut.** The deterministic
@@ -278,12 +317,13 @@ python tools/geo001_ref.py                  # GEO-001 codec reference self-test
 python tools/snapshot_ref.py                # GEO-001 snapshot reference self-test
 python tools/lockstep_ref.py                # loopback lockstep reference self-test (+ negative control)
 python tools/predict_ref.py                 # client-side prediction reference self-test
+python tools/session_ref.py                 # server<->client session loop reference self-test (layer 5)
 for g in gen_coeffs gen_golden_params gen_detmath_vectors gen_envelope_tables gen_scenario_params \
          gen_geo001_vectors gen_snapshot_vectors gen_weapon_vectors gen_lockstep_vectors \
-         gen_interp_vectors gen_predict_vectors; do \
-  python tools/$g.py --check; done          # all 11 generated headers in sync (weapon added v1.12r0)
-python -m pytest tests/property -q          # 100 pass (scenario/energy/pitch/stall + projectile/hit/weapon/weapon_wire + net layers)
-python tools/make_receipt.py                # runs all 13 gates -> overall: PASS (writes docs/receipts/...yml)
+         gen_interp_vectors gen_predict_vectors gen_session_vectors; do \
+  python tools/$g.py --check; done          # all 12 generated headers in sync (session added layer 5)
+python -m pytest tests/property -q          # 106 pass (scenario/energy/pitch/stall + projectile/hit/weapon/weapon_wire + net layers incl. session)
+python tools/make_receipt.py                # runs all 14 gates -> overall: PASS (writes docs/receipts/...yml)
 ```
 ```powershell
 # C++ side (PATH set as above). Builds seads_golden (Sphere) + seads_scenario (8 scenario goldens).
@@ -302,8 +342,8 @@ foreach ($id in "GOLDEN-SK-Turn-001","GOLDEN-SK-Climb-001","GOLDEN-SK-TurnClimb-
 #   .\build-client\seads_viewer.exe gun.seadsrec              # GUI: tracers + HP bars + KILLED
 #   .\build-client\seads_viewer.exe gun.seadsrec --selfcheck 8   # headless: prints hp/KILLED + rounds=N (no GPU)
 # Net codec + client parity tests (also built by the same cmake): fastest full check is ctest.
-ctest --test-dir build-gcc --output-on-failure    # 8/8: detmath, geo001, snapshot, weapon, lockstep, interp, predict, client
-ctest --test-dir build-clang --output-on-failure   # 8/8 under Clang too
+ctest --test-dir build-gcc --output-on-failure    # 9/9: detmath, geo001, snapshot, weapon, lockstep, interp, predict, session, client
+ctest --test-dir build-clang --output-on-failure   # 9/9 under Clang too
 
 # OPTIONAL — the renderer (Step 5). Record a flight, then view it:
 .\build-gcc\seads_record.exe --demo --out flight.seadsrec --js src\client\web\trajectory.js
