@@ -27,6 +27,13 @@
 > v1.15r0, receipt `…v1.15r0-<sha>.yml`. **NEXT (free pick, none blocking):** cross-PROCESS sockets over the
 > layer-5/6 frames; attacker attribution (a kernel event hook, its own ADR); renderer meshes / guns in the live
 > `--fly` path; or an optional new seal (component-damage, **B5** ISA atmosphere).
+> **GIT: merged + PUSHED to `origin/main`** (code `0c9365b` + receipt `9500ee9`; `8fd08e6..9500ee9`);
+> guardian CI run [28498500225](https://github.com/cjcgervais/seads/actions/runs/28498500225) **GREEN** —
+> MSVC + GCC/Clang × x64/AArch64 reproduce all 10 goldens bit-for-bit (3 moved: Gunfire/Hit/Winchester;
+> 7 frozen) + the geo001/snapshot/weapon/lockstep/interp/predict/session/event parity legs.
+> **GOTCHA for the next agent:** a new `envelopes.AERO_FIELDS` scalar also feeds `gen_lockstep_vectors.py`
+> + `gen_predict_vectors.py` (they embed the envelope table) — regenerate ALL 13 generators, not just the
+> obvious ones. make_receipt caught it here (lockstep/predict gates FAILed until regenerated).
 >
 > ## ►► PRIOR STATE (2026-06-30): seal **ATM-Sphere v1.14r0** — **`ammo` ON THE WEAPON-001 WIRE DONE ✅ — GUNS ARC G1→G4 FULLY WIRED (canonical + replicable)**
 > **Latest (SEAL v1.14r0): the magazine now crosses the wire — a remote client shows rounds-remaining.**
