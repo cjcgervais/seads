@@ -26,9 +26,11 @@
 > Adversarial Auditor **APPROVE** (rails/golden/wire untouched; byte-exact C++↔Python parity incl. the
 > reconcile field-reorder; determinism; non-vacuous gate; cross-compiler digest reproduced). Ledger:
 > **ADR-Step6-Session-v1.12r0**, receipt `…v1.12r0-97f0331.yml`, guardian.yml gains the session
-> gen-check + ref self-test + parity-test legs (one per matrix cell). **Committed to `main` at `97f0331`;
-> NOT yet pushed** (owner triggers the push → guardian CI, expected green: non-kernel rider, goldens
-> unchanged). **NEXT (free pick, none blocking): a genuinely cross-PROCESS transport (sockets) over the
+> gen-check + ref self-test + parity-test legs (one per matrix cell). **Committed + PUSHED to
+> `origin/main`** (layer `97f0331` + handoff/receipt `d3646c7`); **guardian CI run
+> [28485828068](https://github.com/cjcgervais/seads/actions/runs/28485828068) GREEN** (non-kernel rider,
+> all 9 goldens unchanged: MSVC + GCC/Clang × x64/AArch64 reproduce the goldens + the new
+> `seads_session_test` leg + the cross-compiler digest bit-identity). **NEXT (free pick, none blocking): a genuinely cross-PROCESS transport (sockets) over the
 > same frames; hp/round interpolation or explicit kill/impact EVENT messages; wiring this loop into the
 > live viewer; aircraft meshes; or an optional new seal (ammo/convergence/component-damage, B5 ISA atm).**
 > _(The v1.12r0 weapon-WIRE + attitude-pass summary below is retained as history — those are COMPLETE.)_
@@ -181,8 +183,8 @@
 > works"** sweep below to confirm the green baseline (**14** receipt gates, **106** property tests, ctest
 > **9/9**, 9 goldens) BEFORE and AFTER any change. Memory: `seads-canon`, `seads-harness`,
 > `seads-flight-model-roadmap`, `seads-guns-roadmap`, `seads-netcode-session`. **Git: netcode-layer-5
-> SESSION loop committed to `main` at `97f0331` (+ this handoff/receipt commit); NOT yet pushed — owner
-> triggers the push → guardian CI, expected green (non-kernel rider; all 9 goldens unchanged).**
+> SESSION loop committed + PUSHED to `origin/main` (layer `97f0331` + handoff/receipt `d3646c7`);
+> guardian CI run 28485828068 GREEN (non-kernel rider; all 9 goldens unchanged).**
 >
 > _(Everything below is the original v1.4r0-era handoff, retained as history.)_
 > **Steps 1–6 are DONE and Step 5 (renderer) now has a working first cut.** The deterministic
