@@ -1,6 +1,56 @@
 # SEADS 2026 — Next Steps (handoff)
 
-> ## ►► CURRENT STATE (2026-07-01): **NETCODE LAYER 10 — LATE-JOIN CATCH-UP (PREFIX REPLAY) DONE ✅** (no-seal, rides **ATM-Sphere v1.17r0**)
+> ## ►► CURRENT STATE (2026-07-01): **NETCODE LAYER 11 — ASYNC SINGLE-THREAD OUTPUT (PER-CLIENT SEND BUFFERS) DONE ✅** (no-seal, rides **ATM-Sphere v1.17r0**)
+> **Latest: no client can back-pressure the broadcast — the last blocking send is gone from the fan-out.**
+> Layers 9/10 streamed with blocking `send_all`: one stalled reader's full kernel buffers wedged the
+> WHOLE broadcast (and the layer-10 catch-up replay was a blocking burst — its named honest boundary).
+> Layer 11 closes it with **async output**: every accepted client is non-blocking and owns a **userspace
+> send buffer**; frames (and a joiner's catch-up prefix) are **ENQUEUED**, the kernel takes what it can
+> now (**`send_some`** — new non-blocking primitive, 0 == EWOULDBLOCK), and the remainder flushes when
+> the SAME single select that services JOIN/LEAVE reports the client **writable** (**`select_rw`** — the
+> layer-9 `select_readable` generalized with a write set). Delivered BYTES are unchanged — same frames,
+> same order, same envelope — so every layer-5–10 byte-stream statement holds verbatim. Three pieces:
+> **(a) Socket primitives + the async loop** (`src/net/socket.{h,cpp}`, `src/net/broadcast.{h,cpp}`):
+> `netbcast::broadcast_async(...)` — same signature/contract as `broadcast_select` (incl. `on_frame` +
+> `catchup`), which is **UNTOUCHED** (layers 9/10 verbatim; their bridges keep gating it). Fast path:
+> `enqueue_bytes` flushes opportunistically, so an unclogged client never accumulates a buffer. The
+> catch-up prefix is enqueued, not burst. After the last frame, a bounded DRAIN phase (progress-bound +
+> ~30 s idle cap) flushes stragglers; still-pending at deadline ⇒ dropped as a leave (fail-not-wedge).
+> Also new: `set_sndbuf`/`set_rcvbuf` (bridge instrumentation; listener-inherited).
+> **(b) The async-output BRIDGE** (`seads_netasync_test`): **LEG 1 (no back-pressure)** — a synthetic
+> **~8 MiB** stream (512×16 KiB) to a SLOW client that reads NOTHING while the server runs, through
+> pinned 16-KiB kernel buffers (a blocking server provably wedges there; the watchdog would FAIL): the
+> async frame loop reached the LAST frame with SLOW at **0 bytes read** (on_frame-observed, no sleeps),
+> then SLOW drained to EOF **byte-identical**, zero leaves. **LEG 2 (sealed-session fidelity)** — the
+> exact layer-10 shape through `broadcast_async(catchup=true)`: EARLY + CATCHUP (joined at frame J=20,
+> prefix ENQUEUED) both receive the whole 41 frames byte-identically and reconstruct the SAME sealed
+> SESSION-SK-001 digest `24f71845…c332` (GCC+Clang). 12/12 (gcc) + 8/8 (clang) stress reruns clean.
+> **(c) The demo server exposes it** (`seads_netserver [port] [num_clients] [catchup] [async]`, async
+> default 0): shares the same loops the bridges gate (no untested divergence).
+> **TRANSPORT-ONLY — no `src/kernel/**`, `src/det_math/**`, `config/rails/**`, framing envelope, wire
+> scales, or goldens touched ⇒ ALL 10 GOLDENS BYTE-IDENTICAL**, no new golden, no seal. **Gates: +2
+> property tests ⇒ 143 (`tests/property/test_broadcast.py`: the pure send-buffer model
+> `sendbuffer_deliver` — for ANY kernel-acceptance pattern incl. all-EWOULDBLOCK and all-greedy the
+> delivered bytes == `encode_stream(frames)` exactly; composition with the layer-7 codec — enqueue →
+> partial flushes → re-chunking → reassemble == identity), ctest 15→16 (`netasync_bridge`, x64 legs),
+> 15/15 receipt gates PASS, 10 goldens byte-identical.** guardian.yml: `seads_netasync_test`
+> build-only-smoked on all 5 legs (default target) + `netasync_bridge` run on the native x64 legs (like
+> the layer-7/8/9/10 bridges). Ledger: **ADR-Step-Net-Layer11-AsyncOutput-v1.17r0**. **Seal stays
+> v1.17r0** (Tier-2 net layer). Layer-9/10 regression: `netdyn_bridge` + `netcatchup_bridge` unchanged
+> + still green.
+> **NEXT (free pick, none blocking):** a send-buffer byte-cap + drop-slowest policy (live-stream
+> hygiene — the honest boundary layer 11 leaves); per-round hit granularity (a kernel event QUEUE — its
+> own ADR); renderer polish (guns + kill-feed in the live `--fly` path); or an optional new seal
+> (component/region damage; **B5** ISA atmosphere).
+> **NOTE FOR THE NEXT AGENT:** layer 11 is code-complete + green locally (GCC+Clang, ctest 16/16, 143
+> property tests, async bridge PASS + 12/12+8/8 stress, all 10 goldens byte-identical). Verify guardian
+> CI green after push. `broadcast_select` is deliberately UNTOUCHED — keep the two loops separate (the
+> old bridges gate the old loop). `std::future` stays avoided (cv+`notify_all`); all bridge rendezvous
+> use `on_frame` so there are NO sleeps — keep it that way. The per-client buffer is unbounded by
+> design here (stream is precomputed/finite); add the byte-cap policy BEFORE pointing this at an
+> open-ended live stream.
+>
+> ## ►► PRIOR STATE (2026-07-01): **NETCODE LAYER 10 — LATE-JOIN CATCH-UP (PREFIX REPLAY) DONE ✅** (no-seal, rides **ATM-Sphere v1.17r0**)
 > **Latest: a client that joins mid-stream now reconstructs the WHOLE fight — the layer-9 honest-scope gap is closed.**
 > Layer 9 proved a late joiner receives EXACTLY the contiguous frame suffix `frames[K:]` from its join
 > point — but it deliberately couldn't reconstruct the full session (it missed the ticks before K).

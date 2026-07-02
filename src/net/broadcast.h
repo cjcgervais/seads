@@ -26,6 +26,21 @@
 // synchronous burst on the accepting select iteration (a slow catch-up joiner back-pressures the
 // broadcast for that iteration — bounded by the prefix length; async per-client send buffers are a
 // separate deferred layer). Still TRANSPORT — no kernel/wire/golden/seal.
+//
+// Layer 11 (ASYNC single-thread OUTPUT): broadcast_select's sends are still BLOCKING send_all —
+// once a slow client's kernel buffers fill, the whole broadcast (every other client's frames)
+// stalls behind it, and the layer-10 catch-up replay is a blocking burst. broadcast_async removes
+// that back-pressure: every accepted client is non-blocking and owns a USERSPACE send buffer;
+// each frame (and a joiner's catch-up prefix) is ENQUEUED, the kernel takes what it can now
+// (send_some), and the remainder is flushed when the same single select() that services JOIN/LEAVE
+// also reports the client WRITABLE (select_rw). The frame loop therefore never blocks on any one
+// client: a slow client just accumulates buffer (bounded by the total stream size — an explicit
+// byte-cap/drop policy is the honest boundary this layer leaves) while the others stream at full
+// rate. After the last frame is enqueued, a bounded DRAIN phase flushes the stragglers (a client
+// still pending when the drain deadline expires is dropped as a leave — fail-not-wedge). Delivered
+// BYTES are identical to broadcast_select's: same frames, same order, same length prefix — the
+// bridge (seads_netasync_test) proves a never-reading-during-broadcast client still reconstructs
+// the sealed SESSION-SK-001 digest. Still TRANSPORT — no kernel/wire/golden/seal.
 #pragma once
 #include <cstddef>
 #include <cstdint>
@@ -57,6 +72,18 @@ Stats broadcast_select(netsock::socket_t listener,
                        std::size_t min_initial, int accept_deadline_ms,
                        const std::function<void(std::size_t)>& on_frame = {},
                        bool catchup = false);
+
+// Layer-11 async-output variant of broadcast_select — SAME contract and delivered bytes, but no
+// client can back-pressure the frame loop: sends are non-blocking into per-client userspace send
+// buffers, flushed on select() writability; the catch-up prefix is enqueued, not burst. After the
+// frame loop a bounded drain phase flushes stragglers (still-pending at deadline => dropped as a
+// leave). `frames_sent` counts frames ENQUEUED to the then-current broadcast set; ok == every frame
+// enqueued (per-client delivery shortfalls surface as `leaves`, exactly like a send failure did).
+Stats broadcast_async(netsock::socket_t listener,
+                      const std::vector<std::vector<std::uint8_t>>& payloads,
+                      std::size_t min_initial, int accept_deadline_ms,
+                      const std::function<void(std::size_t)>& on_frame = {},
+                      bool catchup = false);
 
 }  // namespace netbcast
 }  // namespace seads

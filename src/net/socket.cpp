@@ -52,6 +52,13 @@ bool set_nonblocking(socket_t s) {
     return ::ioctlsocket(s, FIONBIO, &mode) == 0;
 }
 
+std::ptrdiff_t send_some(socket_t s, const std::uint8_t* buf, std::size_t n) {
+    if (n == 0) return 0;
+    int r = ::send(s, reinterpret_cast<const char*>(buf), static_cast<int>(n), 0);
+    if (r >= 0) return static_cast<std::ptrdiff_t>(r);
+    return (WSAGetLastError() == WSAEWOULDBLOCK) ? 0 : -1;
+}
+
 #else  // ---------------- POSIX ----------------
 
 WsaGuard::WsaGuard() {}
@@ -92,6 +99,16 @@ bool set_nonblocking(socket_t s) {
     int fl = ::fcntl(s, F_GETFL, 0);
     if (fl < 0) return false;
     return ::fcntl(s, F_SETFL, fl | O_NONBLOCK) == 0;
+}
+
+std::ptrdiff_t send_some(socket_t s, const std::uint8_t* buf, std::size_t n) {
+    if (n == 0) return 0;
+    ssize_t r;
+    do {
+        r = ::send(s, static_cast<const void*>(buf), n, kSendFlags);
+    } while (r < 0 && errno == EINTR);
+    if (r >= 0) return static_cast<std::ptrdiff_t>(r);
+    return (errno == EAGAIN || errno == EWOULDBLOCK) ? 0 : -1;
 }
 
 #endif
@@ -151,6 +168,63 @@ bool select_readable(const std::vector<socket_t>& fds, int timeout_ms,
         if (is_valid(s) && FD_ISSET(s, &rfds)) ready.push_back(s);
     return !ready.empty();
 }
+
+// Portable read+write select() (layer 11). One call watches readability (joins, leaves) AND
+// writability (a slow client's kernel buffer opened up — flush its userspace send buffer). On
+// Winsock nfds is ignored; on POSIX it is max(fd)+1 over BOTH sets. Negative timeout blocks.
+bool select_rw(const std::vector<socket_t>& rfds_in, const std::vector<socket_t>& wfds_in,
+               int timeout_ms, std::vector<socket_t>& readable, std::vector<socket_t>& writable) {
+    readable.clear();
+    writable.clear();
+    if (rfds_in.empty() && wfds_in.empty()) return false;
+    fd_set rfds, wfds;
+    FD_ZERO(&rfds);
+    FD_ZERO(&wfds);
+#ifndef _WIN32
+    socket_t maxfd = 0;
+#endif
+    for (socket_t s : rfds_in) {
+        if (!is_valid(s)) continue;
+        FD_SET(s, &rfds);
+#ifndef _WIN32
+        if (s > maxfd) maxfd = s;
+#endif
+    }
+    for (socket_t s : wfds_in) {
+        if (!is_valid(s)) continue;
+        FD_SET(s, &wfds);
+#ifndef _WIN32
+        if (s > maxfd) maxfd = s;
+#endif
+    }
+    timeval tv;
+    tv.tv_sec = timeout_ms / 1000;
+    tv.tv_usec = (timeout_ms % 1000) * 1000;
+    timeval* ptv = (timeout_ms < 0) ? nullptr : &tv;
+#ifdef _WIN32
+    int r = ::select(0, &rfds, &wfds, nullptr, ptv);
+#else
+    int r = ::select(static_cast<int>(maxfd) + 1, &rfds, &wfds, nullptr, ptv);
+#endif
+    if (r <= 0) return false;
+    for (socket_t s : rfds_in)
+        if (is_valid(s) && FD_ISSET(s, &rfds)) readable.push_back(s);
+    for (socket_t s : wfds_in)
+        if (is_valid(s) && FD_ISSET(s, &wfds)) writable.push_back(s);
+    return !readable.empty() || !writable.empty();
+}
+
+static bool set_bufopt(socket_t s, int opt, int bytes) {
+#ifdef _WIN32
+    return ::setsockopt(s, SOL_SOCKET, opt, reinterpret_cast<const char*>(&bytes),
+                        sizeof(bytes)) == 0;
+#else
+    return ::setsockopt(s, SOL_SOCKET, opt, static_cast<const void*>(&bytes), sizeof(bytes)) == 0;
+#endif
+}
+
+bool set_sndbuf(socket_t s, int bytes) { return set_bufopt(s, SO_SNDBUF, bytes); }
+bool set_rcvbuf(socket_t s, int bytes) { return set_bufopt(s, SO_RCVBUF, bytes); }
 
 // --- shared (portable) setup helpers, using the type aliases above --------------------
 socket_t listen_loopback(std::uint16_t port, std::uint16_t& bound_port, int backlog) {

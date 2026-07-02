@@ -140,3 +140,50 @@ def test_catchup_stream_reassembles_to_all_frames(payloads, join, step):
     assert stream == fr.encode_stream(all_payloads)  # concatenation is exactly the whole stream
     chunks = [stream[i:i + step] for i in range(0, len(stream), step)]
     assert fr.reassemble(chunks) == all_payloads
+
+
+# --- layer 11: ASYNC OUTPUT (per-client userspace send buffers) ------------------------------------
+def sendbuffer_deliver(frames, accepts):
+    """Reference layer-11 send-buffer model — mirrors netbcast::{enqueue_bytes,flush_client}: each
+    frame's encoded bytes are APPENDED to a userspace queue, and the kernel accepts an arbitrary
+    (OS-timing-chosen) byte count per flush attempt — 0 == EWOULDBLOCK, a full-buffer no-op. The
+    delivered bytes are whatever the acceptance pattern has let through, then one final drain (the
+    layer's bounded drain phase) emits the remainder. Returns the delivered byte stream."""
+    queue = b""
+    delivered = b""
+    accepts = list(accepts)
+    for f in frames:
+        queue += fr.encode_stream([f])          # enqueue_bytes: append the length-prefixed frame
+        take = min(accepts.pop(0), len(queue)) if accepts else 0
+        delivered += queue[:take]               # flush_client: kernel accepted `take` bytes
+        queue = queue[take:]
+    return delivered + queue                    # drain phase: the pending tail flushes last
+
+
+@given(st.lists(st.binary(min_size=0, max_size=60), min_size=1, max_size=10), st.data())
+def test_sendbuffer_delivery_is_chunking_invariant(frames, data):
+    # Whatever per-flush byte counts the kernel accepts (including 0 == EWOULDBLOCK stalls — the
+    # slow-client case), the DELIVERED byte stream after the drain is exactly encode_stream(frames):
+    # buffering changes WHEN bytes move, never WHICH bytes move or their order. This is the pure
+    # form of the netasync_bridge volume-leg claim (a never-reading client still gets the exact
+    # stream once it drains).
+    frames = [bytes(f) for f in frames]
+    accepts = [data.draw(st.integers(min_value=0, max_value=200)) for _ in frames]
+    assert sendbuffer_deliver(frames, accepts) == fr.encode_stream(frames)
+    # Degenerate corners pin the invariant: a never-accepting kernel (all EWOULDBLOCK — everything
+    # rides the drain) and an always-greedy one (nothing ever queues) deliver the same bytes.
+    assert sendbuffer_deliver(frames, [0] * len(frames)) == fr.encode_stream(frames)
+    assert sendbuffer_deliver(frames, [10**9] * len(frames)) == fr.encode_stream(frames)
+
+
+@given(st.lists(st.binary(min_size=0, max_size=60), min_size=1, max_size=10),
+       st.integers(min_value=1, max_value=7), st.data())
+def test_sendbuffer_composes_with_framing(frames, step, data):
+    # Compose the send-buffer model with the layer-7 codec: enqueue -> arbitrary partial flushes ->
+    # arbitrary TCP re-chunking -> StreamReassembler yields the original frames byte-identically.
+    # The full layer-11 receive path (write buffering + wire chunking) is the identity on frames.
+    frames = [bytes(f) for f in frames]
+    accepts = [data.draw(st.integers(min_value=0, max_value=200)) for _ in frames]
+    stream = sendbuffer_deliver(frames, accepts)
+    chunks = [stream[i:i + step] for i in range(0, len(stream), step)]
+    assert fr.reassemble(chunks) == frames

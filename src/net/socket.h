@@ -63,6 +63,28 @@ bool wait_readable(socket_t s, int timeout_ms);
 bool select_readable(const std::vector<socket_t>& fds, int timeout_ms,
                      std::vector<socket_t>& ready);
 
+// --- read+write select (netcode layer 11: async single-thread output) ----------------------
+// select_readable generalized with a WRITE set: blocks up to `timeout_ms` for any of `rfds` to
+// become readable OR any of `wfds` to become writable, filling `readable`/`writable` with the ready
+// subsets. Returns true iff >=1 socket (either set) became ready; false on timeout OR error. Lets
+// the async broadcast server flush a slow client's userspace send buffer exactly when the kernel
+// can accept more bytes, in the SAME select() that services joins/leaves. Both sets empty => false.
+bool select_rw(const std::vector<socket_t>& rfds, const std::vector<socket_t>& wfds,
+               int timeout_ms, std::vector<socket_t>& readable, std::vector<socket_t>& writable);
+
+// One NON-BLOCKING send attempt (the socket must be non-blocking): returns the byte count the
+// kernel accepted (>=0; 0 means the kernel send buffer is full right now — EWOULDBLOCK — try again
+// on the next writability), or <0 on a fatal error (peer gone). The layer-11 building block: unlike
+// send_all it NEVER blocks, so a slow client cannot back-pressure the broadcast frame loop.
+std::ptrdiff_t send_some(socket_t s, const std::uint8_t* buf, std::size_t n);
+
+// Pin a socket's kernel send/receive buffer to `bytes` (SO_SNDBUF / SO_RCVBUF; disables autotuning
+// where the OS would otherwise grow it). On a LISTENER, accepted sockets inherit the value. Test
+// instrumentation: the layer-11 bridge pins tiny kernel buffers so a blocking send provably wedges
+// where the async path must not. Returns false on error.
+bool set_sndbuf(socket_t s, int bytes);
+bool set_rcvbuf(socket_t s, int bytes);
+
 // Send exactly `n` bytes (loops over short writes). Returns false on error/EOF before all sent.
 bool send_all(socket_t s, const std::uint8_t* buf, std::size_t n);
 bool send_all(socket_t s, const std::vector<std::uint8_t>& buf);
