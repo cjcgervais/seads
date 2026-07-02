@@ -1,9 +1,9 @@
 {
   "header": {
     "id": "TUNE-A6M2",
-    "version": 220,
-    "seal": "ATM-Sphere v1.22r0",
-    "adr": "docs/adr/ADR-Step8-FlightModel-Supercharger-v1.22r0.md"
+    "version": 230,
+    "seal": "ATM-Sphere v1.23r0",
+    "adr": "docs/adr/ADR-Step7-Guns-A6M2EngineToughness-v1.23r0.md"
   },
   "aircraft": "A6M2 Zero",
   "tuning": {
@@ -112,7 +112,7 @@
     "rof_interval_ticks": 9,
     "ammo_start": 100,
     "convergence_m": 250,
-    "engine_frac": 0.375,
+    "engine_frac": 0.5,
     "wing_frac": 0.375,
     "tail_frac": 0.25,
     "crit_alt_m": 4500.0

@@ -1,6 +1,47 @@
 # SEADS 2026 — Next Steps (handoff)
 
-> ## ►► CURRENT STATE (2026-07-02): seal **ATM-Sphere v1.22r0** — **SUPERCHARGER CRITICAL ALTITUDE DONE ✅** (B5's named follow-up — the roster gains its altitude personalities)
+> ## ►► CURRENT STATE (2026-07-02): seal **ATM-Sphere v1.23r0** — **A6M2 ENGINE-TOUGHNESS RETUNE DONE ✅** (data-only — the Sakae radial gets its due)
+> **Latest (SEAL v1.23r0): `a6m2.json engine_frac 0.375 → 0.5` — ONE value in ONE JSON.** The
+> Sakae joins the radial class (La-7-level 0.5, still under the R-2800's 0.625), retiring
+> v1.20r0's explicit golden-preservation pin ("a6m2 keeps 0.375 so EngineOut-001 is preserved
+> byte-for-byte" — its ADR named this retune as the future data-only seal). ZERO code, ZERO new
+> det_math (eleventh consecutive); the 1/8 exactness contract holds (0.5 = 4/8; tuning_probe
+> green).
+> **The measured surprise: GOLDEN-SK-EngineOut-001 is BYTE-IDENTICAL through the retune**
+> (`e8ca968a…9dea8777` re-derived + verified). Reason: four 12-damage head-on rounds kill the
+> 35-pool on the SAME 3rd connecting round the 26.25-pool died on (35→23→11→0(clamped) at ticks
+> 29/31/33/35) ⇒ the thrust-cut tick, the glider trajectory, and the FINAL snapshot (engine_hp
+> 0.0 either way) are unchanged — only the never-serialized mid-run drain VALUES differ (the
+> scenario description is re-written with them; its golden dir is untouched in git). **Exactly
+> 3 goldens move — Gunfire `897f543a…` / Hit `dd24a23b…` / Winchester `f28a0fa7…`** (the goldens
+> whose A6M2 ends with a LIVE engine pool). **Value-only proof (field-wise snapshot diff): in
+> each, exactly ONE f64 changed — the A6M2's engine_hp, 26.25 → 35.0** — kinematics/hp/fire_cd/
+> ammo/last_hit_by/kills and every projectile byte identical; Sphere + the other 9 scenario
+> goldens verified byte-identical.
+> Fingerprint: `envelope_tables.h` (one hex literal), **session digest `ccc2f504…` →
+> `f67368e9…`** (the client view carries the resized pool; the astern TAIL kill untouched);
+> **event digest BYTE-IDENTICAL** (`--check`); lockstep/predict in sync UNTOUCHED (their
+> scenarios carry no A6M2). `test_region_toughness.py`'s deliberate pin moved 0.375 → 0.5 with
+> the retune (the guard's documented procedure); property tests stay **190**. Rails 320→330
+> (header seal only — no rail value changes, B4-style). guardian.yml UNCHANGED (no new golden,
+> no new ctest target — the 14 golden ids are the same; 3 of their sealed hashes moved).
+> **Gates: ctest 19/19 GCC + 19/19 Clang, Sphere + all 13 scenario goldens C++ ≡ Python
+> bit-for-bit on GCC AND Clang locally (11 unchanged + 3 moved, validated hash-by-hash), 190
+> property tests, det_math oracle + tuning/spec/ceiling probes + determinism lint PASS.**
+> Ledger: **ADR-Step7-Guns-A6M2EngineToughness-v1.23r0**, SEAL_CARD v1.23r0 (header + 4 golden
+> rows + region-toughness paragraph + history row), CLAUDE.md header/roadmap current.
+> **NEXT (free pick, none blocking):** per-airframe toughness / σ / crit-alt surfaced in the
+> HUD (presentation-only — the pools already ride the wire, crit_alt is static tuning data);
+> projectile σ-drag (a kernel seal moving every firing golden, deliberately deferred at B5); a
+> two-speed blower schedule (deferred at v1.22r0); or more netcode (layer 15 — e.g. a
+> heartbeat/timeout LEAVE for silently-dead clients, or input upstreaming).
+> **NOTE FOR THE NEXT AGENT:** the A6M2 engine pin in `test_toughness_is_actually_per_airframe`
+> now reads 0.5 — any further toughness retune must move the pin AND re-measure which goldens
+> carry a live pool of that airframe (a drained pool ends 0.0 and may not move the hash at all,
+> exactly as EngineOut-001 proved here). The EngineOut description's drain values (35→23→11→0)
+> are v1.23r0 claims; a damage or fraction retune invalidates them even if the hash holds.
+>
+> ## ►► PRIOR STATE (2026-07-02): seal **ATM-Sphere v1.22r0** — **SUPERCHARGER CRITICAL ALTITUDE DONE ✅** (B5's named follow-up — the roster gains its altitude personalities)
 > **Latest (SEAL v1.22r0): engines finally hold power to altitude — each envelope carries
 > `crit_alt_m` (19th AERO field) and the B5 thrust scaling `T ×= σ` becomes `T ×= lapse` with
 > `lapse = min(1, σ(alt)/σ(crit_alt_m))` — ONE comparison + ONE divide, ZERO new det_math (tenth

@@ -81,9 +81,10 @@ def test_toughness_is_actually_per_airframe():
     # Non-degeneracy guard (the data really is a retune, not the old globals under new names):
     # at least one roster airframe departs from the v1.18r0 default in EACH region slot, and the
     # radial-vs-inline flavor holds — the P-47D's engine fraction out-toughs every liquid-cooled
-    # inline, and no airframe is uniformly at the old defaults in all three slots... except where
-    # chosen deliberately (a6m2 keeps engine_frac=0.375 so GOLDEN-SK-EngineOut-001's drain
-    # sequence is preserved byte-for-byte).
+    # inline. v1.23r0: the a6m2's Sakae radial gets its due (engine_frac 0.375 -> 0.5, La-7
+    # class, still under the R-2800's 0.625) — the v1.20r0 pin existed only to preserve
+    # EngineOut-001 byte-for-byte, and that golden was re-sealed WITH this retune (its engine
+    # still dies on the 3rd connecting round: 35 -> 23 -> 11 -> 0).
     envs = {name: envmod.load_envelope(name) for name in ROSTER}
     defaults = {"engine_frac": rk.ENGINE_FRAC, "wing_frac": rk.WING_FRAC,
                 "tail_frac": rk.TAIL_FRAC}
@@ -92,7 +93,7 @@ def test_toughness_is_actually_per_airframe():
     p47_engine = envs["p47d"]["engine_frac"]
     for n in INLINE:
         assert envs[n]["engine_frac"] < p47_engine, (n, "inline should be tenderer than the P-47")
-    assert envs["a6m2"]["engine_frac"] == 0.375   # EngineOut-001 story pinned
+    assert envs["a6m2"]["engine_frac"] == 0.5     # v1.23r0: the Sakae radial (EngineOut-001 re-sealed with it)
 
 
 def test_toughness_binds_through_the_kernel():
