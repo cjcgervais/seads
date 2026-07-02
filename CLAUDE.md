@@ -315,7 +315,15 @@ docs/{adr,annex,cards,receipts,seals}  governance ledger  .claude/{agents,skills
   trajectory.js; both viewer modes draw each aircraft's variant (fly own ship = Ki-61) and HUD/
   scoreboard/selfcheck/web rows carry airframe names. Structural gates run over all 9 models +
   pairwise distinctness. Presentation-only ⇒ all 11 goldens byte-identical.
+- **Yak-3/La-7 envtab entries (no-seal, rides v1.19r0):** the mesh-variant arc's last gap —
+  `gen_envelope_tables.py` now emits the FULL 8-airframe roster (every `data/tuning/envelopes/*.json`,
+  not just scenario-referenced; asserts scenario refs exist) ⇒ `envelope_tables.h` gains YAK3 + LA7
+  (purely additive, 6 existing entries byte-identical, value-inert constants); the recorder maps them
+  to v3 type codes 4/5 and the `--dogfight` demo gains a third staggered hunter/prey pair (Yak-3
+  guns down a La-7: 6 ships, 3 kills, 18 journal events) so every roster silhouette appears on
+  screen. trajectory.js demo refreshed (stale protocol-4 GUNKILL → protocol-7 6-ship dogfight).
+  Data/tooling + presentation only ⇒ all 11 goldens byte-identical.
 - next — free pick (none blocking): **B5** ISA atmosphere (a seal); an open-ended live frame SOURCE
   feeding `broadcast_async` incrementally; per-airframe region toughness (data-only envelopes + a
-  kernel consumer — its own ADR); or generate the missing Yak-3/La-7 envelope-table entries so
-  those two mesh variants can appear in a recording.
+  kernel consumer — its own ADR); or a sealed scenario exercising Yak-3/La-7 envelope
+  interpolation in C++ ↔ Python lockstep.

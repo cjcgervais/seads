@@ -1,6 +1,49 @@
 # SEADS 2026 — Next Steps (handoff)
 
-> ## ►► CURRENT STATE (2026-07-02): **PER-AIRFRAME MESH VARIANTS — ROSTER SILHOUETTES IN THE VIEWER DONE ✅** (no-seal, rides **ATM-Sphere v1.19r0**)
+> ## ►► CURRENT STATE (2026-07-02): **YAK-3 / LA-7 ENVTAB ENTRIES — THE FULL SEALED ROSTER FLIES DONE ✅** (no-seal, rides **ATM-Sphere v1.19r0**)
+> **Latest: the mesh-variant arc's last gap closes — Yak-3 and La-7 (the two roster types whose
+> silhouettes existed but could never appear in a recording) now have generated envelope-table
+> entries and fly in the built-in dogfight demo.** Three small pieces (data/tooling + presentation):
+> **(a) `tools/gen_envelope_tables.py` emits the FULL roster:** previously it emitted only
+> scenario-referenced envelopes (6 of 8); now it emits every `data/tuning/envelopes/*.json`
+> (sorted; with an assert that every scenario-referenced envelope still exists). Both JSONs were
+> already complete 15-field B4-retuned tuning data — only the generator's filter excluded them.
+> `envelope_tables.h` gains `constexpr Envelope YAK3` + `LA7`; the diff is **purely additive
+> (+14 lines — the 6 existing entries byte-identical)**, and unused constexpr constants are inert
+> ⇒ lockstep/predict/scenario vector headers verified in sync, untouched.
+> **(b) The recorder maps them** (`record_main.cpp type_code_of`): `&envtab::YAK3` → code 4,
+> `&envtab::LA7` → code 5 (the STABLE .seadsrec v3 presentation codes that already existed in
+> `AircraftType`); the stale "Yak-3 / La-7 simply can't appear" comment is gone.
+> **(c) The `--dogfight` demo grows a third staggered hunter/prey pair** (southern lane, lat −3):
+> a Yak-3 (tas 230) hunts a La-7 (tas 172) with the proven GOLDEN-SK-Hit-001 tail-chase geometry,
+> fires t=450–750 (4×28-dmg rounds kill the 100-hp La-7 at t=514, TAIL region, overkill-clamped
+> final round), then breaks. **6 ships, 3 kills, 18 per-round journal events** (was 4 ships / 2
+> kills / 14 events). `trajectory.js` demo data refreshed — it had been the STALE protocol-4
+> DEMO-GUNKILL since v1.12r0; now the protocol-7 6-ship dogfight incl. the `types` name array.
+> **DATA/TOOLING + PRESENTATION ONLY: envtab additions are value-inert generated constants; no
+> `src/det_math/**`, `src/net/**`, `config/rails/**`, wire bytes, or tuning VALUES touched ⇒ ALL
+> 11 GOLDENS BYTE-IDENTICAL, no digest moved, no new ctest target ⇒ guardian.yml UNCHANGED. No seal.**
+> **Gates: 15/15 receipt PASS (`receipt-ATM-Sphere_v1.19r0-223ebd5.yml`), ctest 17/17 GCC + 17/17
+> Clang, 166 property tests (unchanged), all 4 gen-header `--check`s in sync, replay selfcheck over
+> the fresh 6-ship recording echoes `types: … #4=Yak-3 #5=La-7` + the Yak-3's 4-round TAIL kill
+> (kills=1, victim lhb=4, tail=0.00 — per-airframe hp/damage provably flow from the new entries),
+> fly selfcheck green, 10 s GUI smoke of BOTH modes clean.**
+> **GIT: code `223ebd5` + receipt on `main`; guardian CI pending at commit time (verify GREEN —
+> a data/presentation-only change moves no golden; the client is off the gate).**
+> **NEXT (free pick, none blocking):** **B5** ISA atmosphere (a seal); an open-ended live frame
+> SOURCE feeding `broadcast_async` incrementally; per-airframe region toughness (data-only envelope
+> scalars + a kernel consumer — its own ADR, would move goldens); or a sealed SCENARIO exercising
+> Yak-3/La-7 (they fly in demos now, but no golden covers their envelope interpolation in C++ ↔
+> Python lockstep).
+> **NOTE FOR THE NEXT AGENT:** `gen_envelope_tables.py` now emits ALL tuning JSONs — dropping a
+> new JSON into `data/tuning/envelopes/` auto-adds an envtab entry on regen (keep tuning_probe
+> green over it). If a future scenario references a newly-emitted envelope, lockstep/predict
+> vectors will move — that is the scenario change, not this pattern. The demo ammo counter starts
+> at 500 for every ship (kernel `add()` default, pre-existing behavior) — per-airframe
+> `ammo_start` gates firing via envelopes in sealed scenarios; wiring demo ammo to
+> `env->ammo_start` would be a recorder-only tweak if wanted.
+>
+> ## ►► PRIOR STATE (2026-07-02): **PER-AIRFRAME MESH VARIANTS — ROSTER SILHOUETTES IN THE VIEWER DONE ✅** (no-seal, rides **ATM-Sphere v1.19r0**)
 > **Latest: the one-size fighter becomes eight — each aircraft now draws its ROSTER TYPE's silhouette (radial vs inline nose, wing plan, tail, size), fed by a new `.seadsrec` v3 per-aircraft type trailer. The named blocker ("the wire carries no type field") is resolved the honest way: the type is STATIC per flight, so it rides the recording META, not the sealed 20 Hz wire — no reseal, nothing kernel-side.**
 > Five pieces, ALL `src/client` + web (downstream-only presentation):
 > **(a) `aircraft_mesh.{h,cpp}` — the builder is PARAMETERIZED** (`Proportions`, internal): the same
