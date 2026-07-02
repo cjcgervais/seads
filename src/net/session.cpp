@@ -42,7 +42,8 @@ std::vector<std::uint8_t> serialize_world(const Kernel& k, std::int64_t server_t
     for (std::size_t i = 0; i < k.count(); ++i) {
         s.entities.push_back(netsnap::from_kernel(
             static_cast<std::int64_t>(i), k.lat(i), k.lon(i), k.psi(i), k.alt(i),
-            k.phi(i), k.tas(i), k.gamma(i), k.hp(i), k.fire_cd(i), k.ammo(i)));
+            k.phi(i), k.tas(i), k.gamma(i), k.hp(i), k.fire_cd(i), k.ammo(i),
+            k.last_hit_by(i)));   // v1.17r0: attacker attribution on the wire
     }
     for (std::size_t j = 0; j < k.proj_count(); ++j) {
         s.projectiles.push_back(netsnap::proj_from_kernel(
@@ -102,6 +103,7 @@ std::vector<std::uint8_t> encode_client_view(std::int64_t client_tick, std::int6
             geo001::encode_i64(e.hp <= 0.0 ? 1 : 0, out);  // dead flag (kill replicated)
             geo001::encode_i64(geo001::quantize(e.fire_cd, netsnap::FIRECD_SCALE), out);
             geo001::encode_i64(geo001::quantize(e.ammo, netsnap::AMMO_SCALE), out);  // rounds remaining (v1.14r0)
+            geo001::encode_i64(geo001::quantize(e.last_hit_by, netsnap::LASTHITBY_SCALE), out);  // attacker idx (v1.17r0)
         }
         geo001::encode_i64(static_cast<std::int64_t>(wframe->projectiles.size()), out);
         for (const auto& p : wframe->projectiles) {

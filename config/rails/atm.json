@@ -1,8 +1,8 @@
 {
   "header": {
     "id": "SEADS-RAILS",
-    "version": 260,
-    "seal": "ATM-Sphere v1.16r0",
+    "version": 270,
+    "seal": "ATM-Sphere v1.17r0",
     "note": "Data-driven immutable rails. Any change here REQUIRES a new seal (ADR + Forge audit card + Chronicle receipt). See CLAUDE.md > Change-Control Law."
   },
   "rails": {
@@ -60,11 +60,12 @@
       },
       "weapon": {
         "format": "WEAPON-001",
-        "note": "Auxiliary NON-geographic block for multiplayer GUNNERY replication (first sealed v1.12r0 at snapshot protocol 3 -> 4; the G4 magazine `ammo` joined it at v1.14r0, protocol 4 -> 5). A third self-delimiting snapshot section, present iff protocol >= 4, carrying the Step 7 weapon state so a remote/late-join client can DRAW the dogfight (tracer rounds, HP bars, kills, AND a rounds-remaining counter) instead of reading it out-of-band from the local kernel: (a) per-aircraft hp + fire_cd (the 8th/9th canonical f64) and — for protocol >= 5 — ammo (the 10th canonical f64), then (b) a projectile count and, per live ballistic round, a GeoPoint (bearing == round heading psi), its carried damage, and its integer ttl + owner. Same ZigZag+LEB128 encoding as GEO-001; hp/fire_cd/damage are quantized (1e3), ammo is quantized at unit scale (1e0 — a pure integer counter, so exact AND compact, like ttl/owner), while ttl/owner are integer counters carried EXACTLY (not quantized). Transmitted as a SEPARATE section so GEO-001 stays geography-only and KIN-002 framing is byte-identical. Lossy by quantization for the f64 fields -> never fed back as canonical (the world_hash source of truth is Kernel::snapshot(); this wire is downstream presentation/transport only, see CLAUDE.md determinism rules). No kernel/golden change: hp/fire_cd/ammo/damage already live in the canonical state, so all 10 goldens are byte-identical across this (and the v1.12r0) wire reseal.",
+        "note": "Auxiliary NON-geographic block for multiplayer GUNNERY replication (first sealed v1.12r0 at snapshot protocol 3 -> 4; the G4 magazine `ammo` joined it at v1.14r0, protocol 4 -> 5; per-aircraft `last_hit_by` (attacker attribution) joined at v1.17r0, protocol 5 -> 6). A third self-delimiting snapshot section, present iff protocol >= 4, carrying the Step 7 weapon state so a remote/late-join client can DRAW the dogfight (tracer rounds, HP bars, kills, a rounds-remaining counter, AND an ATTRIBUTED kill-feed 'P-47D downed A6M2') instead of reading it out-of-band from the local kernel: (a) per-aircraft hp + fire_cd (the 8th/9th canonical f64), then — for protocol >= 5 — ammo (the 10th canonical f64), then — for protocol >= 6 — last_hit_by (the 11th canonical f64: index of the aircraft that last damaged me, or -1 == never hit), then (b) a projectile count and, per live ballistic round, a GeoPoint (bearing == round heading psi), its carried damage, and its integer ttl + owner. Same ZigZag+LEB128 encoding as GEO-001; hp/fire_cd/damage are quantized (1e3), ammo AND last_hit_by are quantized at unit scale (1e0 — pure integer counters, so exact AND compact, like ttl/owner; ZigZag carries last_hit_by's -1 sign), while ttl/owner are integer counters carried EXACTLY (not quantized). Transmitted as a SEPARATE section so GEO-001 stays geography-only and KIN-002 framing is byte-identical. Lossy by quantization for the f64 fields -> never fed back as canonical (the world_hash source of truth is Kernel::snapshot(); this wire is downstream presentation/transport only, see CLAUDE.md determinism rules). No kernel/golden change: hp/fire_cd/ammo/last_hit_by/damage already live in the canonical state, so all 10 goldens are byte-identical across this (and the v1.12r0/v1.14r0) wire reseal.",
         "hp_scale": 1000,
         "firecd_scale": 1000,
         "damage_scale": 1000,
-        "ammo_scale": 1
+        "ammo_scale": 1,
+        "lasthitby_scale": 1
       }
     },
     "weapons": {

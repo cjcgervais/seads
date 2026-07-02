@@ -181,7 +181,8 @@ netsnap::Snapshot capture(const Kernel& k, const Flight& f, uint32_t tick,
         snap.entities.push_back(netsnap::from_kernel(
             f.ac[a].id, k.lat(a), k.lon(a), k.psi(a), k.alt(a), k.phi(a), k.tas(a), k.gamma(a),
             k.hp(a), k.fire_cd(a),
-            k.ammo(a)));   // WEAPON-001: hp + fire-rate cooldown (v1.12r0) + magazine ammo (v1.14r0)
+            k.ammo(a),         // WEAPON-001: hp + fire-rate cooldown (v1.12r0) + magazine ammo (v1.14r0)
+            k.last_hit_by(a)));   // + attacker attribution (v1.17r0)
     }
     for (std::size_t i = 0; i < k.proj_count(); ++i) {  // WEAPON-001: live ballistic rounds
         snap.projectiles.push_back(netsnap::proj_from_kernel(

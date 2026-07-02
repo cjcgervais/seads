@@ -69,12 +69,12 @@ constexpr session::Scenario SCENARIO = {
 constexpr unsigned N_FRAMES  = 41u;
 constexpr unsigned DELIVERED = 36u;
 
-// --- replicated final weapon state on the client (id, hp_milli = round(hp*1e3), dead, ammo = rounds remaining) ---
-struct WeaponFact { std::int64_t id; std::int64_t hp_milli; int dead; std::int64_t ammo; };
+// --- replicated final weapon state on the client (id, hp_milli = round(hp*1e3), dead, ammo = rounds remaining, last_hit_by = attacker index or -1) ---
+struct WeaponFact { std::int64_t id; std::int64_t hp_milli; int dead; std::int64_t ammo; std::int64_t last_hit_by; };
 constexpr WeaponFact FINAL_WEAPON[] = {
-  { 0, 150000, 0, 333 },
-  { 1, 0, 1, 100 },
-  { 2, 100000, 0, 150 },
+  { 0, 150000, 0, 333, -1 },
+  { 1, 0, 1, 100, 0 },
+  { 2, 100000, 0, 150, -1 },
 };
 constexpr int FINAL_WEAPON_COUNT = sizeof(FINAL_WEAPON)/sizeof(FINAL_WEAPON[0]);
 
@@ -82,13 +82,13 @@ constexpr int FINAL_WEAPON_COUNT = sizeof(FINAL_WEAPON)/sizeof(FINAL_WEAPON[0]);
 struct Checkpoint { unsigned tick; const char* hash; };
 constexpr Checkpoint CHECKPOINTS[] = {
   { 1u, "0a035ddaef51e444ec87d3c57e2f3dd72a6f47d1c2fe247e1e87d838734bede7" },
-  { 50u, "a7e608552311c805cfd051b2e32d370bc64d387aed743f9a22ecf0f5bccf1b43" },
-  { 100u, "a5fe5fa162a76d49765f675c56e8030db5fa93ec77f8189cf5fad9e95854a069" },
-  { 150u, "33a72635fd30ce1bac90c9e3b66f3b4ee1a16e27f5ee7b20ee758813d7eee33f" },
-  { 200u, "8a2824e4a7c816efb3f8d0c651e395166f300d333a84dcfeefa2174fc657b59d" },
+  { 50u, "27e0d97a0cc84c316073d389326e24f41166b5ad1fd8df390e6664aaa3005f11" },
+  { 100u, "f858605d4358d9700de1aa22d7dae591cc19c3119f2ec6b40d59f6fed7a93be9" },
+  { 150u, "7c6d906381b9db929bc82a30e2420484ee3febaf3e1543e161cdbd94107aa518" },
+  { 200u, "855ced9059e4c3b55fcc4c53ff3f8ba99825ee8c87a328af115ec03564496b5d" },
 };
 constexpr int CHECKPOINT_COUNT = sizeof(CHECKPOINTS)/sizeof(CHECKPOINTS[0]);
 
-constexpr const char* SEQUENCE_DIGEST = "fda717fefd7f5110fb8fa90743853ec9b6db3e26f22a168d090270245c316926";
+constexpr const char* SEQUENCE_DIGEST = "24f7184583bdce5623b05202d2928f223cdc23f29817550eac8180ba2fe3c332";
 
 }} // namespace seads::sess_vec

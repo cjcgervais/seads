@@ -11,15 +11,15 @@ namespace seads { namespace event_vec {
 
 constexpr int WINDOW_K = 4;   // must equal seads::event::EVENT_WINDOW_K
 
-// --- server-derived authoritative event log (seq, tick, target, damage_milli, hp_after_milli, killed) ---
-struct ExpectEvent { std::int64_t seq, tick, target, damage_milli, hp_after_milli, killed; };
+// --- server-derived authoritative event log (seq, tick, target, damage_milli, hp_after_milli, killed, attacker) ---
+struct ExpectEvent { std::int64_t seq, tick, target, damage_milli, hp_after_milli, killed, attacker; };
 constexpr ExpectEvent EXPECTED_EVENTS[] = {
-  { 0, 40, 1, 12000, 58000, 0 },
-  { 1, 43, 1, 12000, 46000, 0 },
-  { 2, 46, 1, 12000, 34000, 0 },
-  { 3, 49, 1, 12000, 22000, 0 },
-  { 4, 51, 1, 12000, 10000, 0 },
-  { 5, 54, 1, 10000, 0, 1 },
+  { 0, 40, 1, 12000, 58000, 0, 0 },
+  { 1, 43, 1, 12000, 46000, 0, 0 },
+  { 2, 46, 1, 12000, 34000, 0, 0 },
+  { 3, 49, 1, 12000, 22000, 0, 0 },
+  { 4, 51, 1, 12000, 10000, 0, 0 },
+  { 5, 54, 1, 10000, 0, 1, 0 },
 };
 constexpr int EXPECTED_EVENT_COUNT = sizeof(EXPECTED_EVENTS)/sizeof(EXPECTED_EVENTS[0]);
 constexpr int KILL_INDEX = 5;   // index of the killed==1 event in EXPECTED_EVENTS
@@ -29,7 +29,7 @@ constexpr unsigned N_WINDOWS = 41u;
 constexpr unsigned DELIVERED = 36u;
 
 // --- full-reconstruction digest (SHA-256 over the client's applied event log) ---
-constexpr const char* EVENT_DIGEST = "dfcc1aaf29e888ee408462c10a610eb0957bfe03182dd49bac5c494a7cceb009";
+constexpr const char* EVENT_DIGEST = "06629a692551102c862dacbc2c520b3cecbd63e2984ee0dfd76da695016257a6";
 
 // --- reliability-bound vector: a K-consecutive-frame blackout (aged-out early hits lost, 
 //     journal resyncs, kill still delivered) — the client recovers exactly these seqs ---
@@ -37,6 +37,6 @@ constexpr std::int64_t BLACKOUT_DROPS[] = { 40, 45, 50 };
 constexpr unsigned BLACKOUT_N_DROPS = 3u;
 constexpr std::int64_t BLACKOUT_APPLIED_SEQS[] = { 2, 3, 4, 5 };
 constexpr int BLACKOUT_APPLIED_COUNT = 4;
-constexpr const char* BLACKOUT_DIGEST = "94ae31ea0dbd3adcd86f060ede57807466aaa3f5ab9ae25e61c1ae66dcd1323b";
+constexpr const char* BLACKOUT_DIGEST = "90d6e67c7275876a6af5e95fe5f7ce1b69da603b36aa52d8ea7bb31adeda3b38";
 
 }} // namespace seads::event_vec

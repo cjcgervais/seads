@@ -46,6 +46,8 @@ struct Event {
     std::int64_t damage_milli;
     std::int64_t hp_after_milli;
     std::int64_t killed;
+    std::int64_t attacker = -1;   // v1.17r0: aircraft that dealt this tick's damage (target's
+                                  // last_hit_by), or -1 == unknown. Turns "AC1 died" into "AC0 downed AC1".
 };
 
 struct EventResult {

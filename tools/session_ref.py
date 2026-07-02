@@ -155,14 +155,16 @@ def _build_server_kernel(scenario):
 
 
 def _serialize_world(k, server_tick):
-    """Serialize the kernel's FULL world to a protocol-5 wire frame: every aircraft (GEO + KIN-002
-    + WEAPON hp/fire_cd/ammo) and every live round (GEO + damage + ttl/owner). Aircraft id = SoA index;
-    projectile id = SoA index (rounds are transient — a per-frame index is all the client needs to
-    draw + count them). Mirrors what seads_record's --gundemo writes, over the sealed codec."""
+    """Serialize the kernel's FULL world to a protocol-6 wire frame: every aircraft (GEO + KIN-002
+    + WEAPON hp/fire_cd/ammo/last_hit_by) and every live round (GEO + damage + ttl/owner). Aircraft
+    id = SoA index; projectile id = SoA index (rounds are transient — a per-frame index is all the
+    client needs to draw + count them). Mirrors what seads_record's --gundemo writes, over the sealed
+    codec. v1.17r0: last_hit_by rides the wire so the client reconstructs an ATTRIBUTED kill-feed."""
     ents = []
     for i, ac in enumerate(k.aircraft):
         ents.append(snap.from_kernel(i, ac.lat, ac.lon, ac.psi, ac.alt,
-                                     ac.phi, ac.tas, ac.gamma, ac.hp, ac.fire_cd, ac.ammo))
+                                     ac.phi, ac.tas, ac.gamma, ac.hp, ac.fire_cd, ac.ammo,
+                                     ac.last_hit_by))
     projs = []
     for j, p in enumerate(k.projectiles):
         projs.append(snap.proj_from_kernel(j, p.lat, p.lon, p.psi, p.alt,
@@ -257,6 +259,7 @@ def encode_client_view(client_tick, render_tick, own_ent, remotes, wframe):
             out += g.encode_i64(1 if e.hp <= 0.0 else 0)          # dead flag (kill replicated)
             out += g.encode_i64(g.quantize(e.fire_cd, snap.FIRECD_SCALE))
             out += g.encode_i64(g.quantize(e.ammo, snap.AMMO_SCALE))  # rounds remaining (v1.14r0)
+            out += g.encode_i64(g.quantize(e.last_hit_by, snap.LASTHITBY_SCALE))  # attacker idx (v1.17r0)
         out += g.encode_i64(len(wframe.projectiles))
         for p in wframe.projectiles:
             out += g.encode_i64(p.id)
@@ -361,13 +364,15 @@ def checkpoint_ticks(ticks):
 
 
 def final_weapon_facts(wframe):
-    """Per-aircraft (id, hp_milli, dead, ammo) from the client's freshest frame — the replicated
-    combat outcome. hp_milli is the quantized hp (ints, byte-reproducible); dead = hp<=0; ammo is
-    the quantized magazine rounds remaining (v1.14r0 — the rounds-remaining counter off the wire)."""
+    """Per-aircraft (id, hp_milli, dead, ammo, last_hit_by) from the client's freshest frame — the
+    replicated combat outcome. hp_milli is the quantized hp (ints, byte-reproducible); dead = hp<=0;
+    ammo is the quantized magazine rounds remaining (v1.14r0); last_hit_by is the attacker index off
+    the wire (v1.17r0 — an ATTRIBUTED kill-feed: who downed whom, reconstructed from bytes)."""
     facts = []
     for e in sorted(wframe.entities, key=lambda e: e.id):
         facts.append((int(e.id), g.quantize(e.hp, snap.HP_SCALE), 1 if e.hp <= 0.0 else 0,
-                      g.quantize(e.ammo, snap.AMMO_SCALE)))
+                      g.quantize(e.ammo, snap.AMMO_SCALE),
+                      int(g.quantize(e.last_hit_by, snap.LASTHITBY_SCALE))))
     return facts
 
 
@@ -397,6 +402,12 @@ def _selftest():
             print(f"FAIL kill not replicated: AC1 hp={by_id[1].hp} (expected dead)"); fails += 1
         if by_id[0].hp <= 0.0 or by_id[2].hp <= 0.0:
             print("FAIL bystanders should be alive (AC0/AC2)"); fails += 1
+        # ATTRIBUTION replicated (v1.17r0): the client reconstructs WHO downed the A6M2 — the P-47
+        # (AC0) — purely from the wire's last_hit_by field; the never-hit P-47/Spitfire stay -1.
+        if int(round(by_id[1].last_hit_by)) != 0:
+            print(f"FAIL kill attribution not replicated: AC1 last_hit_by={by_id[1].last_hit_by} (expected 0)"); fails += 1
+        if int(round(by_id[0].last_hit_by)) != -1 or int(round(by_id[2].last_hit_by)) != -1:
+            print("FAIL never-hit aircraft should report last_hit_by=-1 (AC0/AC2)"); fails += 1
         # server truth agrees (AC1 dead, AC0/AC2 alive at the end)
         srv = server_states[ticks]
         if not (srv[1][7] <= 0.0 and srv[0][7] > 0.0 and srv[2][7] > 0.0):

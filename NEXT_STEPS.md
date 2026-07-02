@@ -1,6 +1,43 @@
 # SEADS 2026 — Next Steps (handoff)
 
-> ## ►► CURRENT STATE (2026-07-01): seal **ATM-Sphere v1.16r0** — **ATTACKER ATTRIBUTION (last_hit_by / "who fired the killing round") DONE ✅**
+> ## ►► CURRENT STATE (2026-07-01): seal **ATM-Sphere v1.17r0** — **`last_hit_by` ON THE WEAPON-001 WIRE + `Event.attacker` DONE ✅ — ATTRIBUTION ARC CLOSED END-TO-END**
+> **Latest (SEAL v1.17r0): attribution now replicates — a remote client renders the attributed kill-feed.**
+> The one gap v1.16r0 left open closes, in BOTH replication paths at once. **(a) State path:** the
+> per-aircraft attacker index **`last_hit_by` joins the WEAPON-001 snapshot section** as the 11th
+> per-aircraft field (**snapshot protocol 5→6**), quantized at **unit scale** (new rail field
+> `wire.weapon.lasthitby_scale=1` — an integer-valued index like ammo/ttl/owner, so exact AND compact;
+> ZigZag carries the **-1 == never hit** sign natively, one byte). **(b) Event path:** the layer-6
+> reliable EVENT channel gains **`Event.attacker`** (7th event field) — the server, which derives each
+> hit/kill from the observed hp delta, now also reads the target's **post-step `last_hit_by`** (by
+> construction the striking round's owner) and stamps it into the event ⇒ the client's exact-sequence
+> journal reconstructs **"AC0 downed AC1"**, not just "AC1 died". Fourth instance of the proven
+> wire-reseal pattern (KIN-001 v1.4r0 → WEAPON-001 v1.12r0 → ammo v1.14r0 → this): reference edited
+> FIRST (`snapshot_ref.py` gates on `protocol>=6`, protocol-5 back-compat proven by self-test +
+> property test), C++ mirrored bit-for-bit, all **4 vector headers regenerated + in sync**
+> (snapshot/weapon/session/event). **TRANSPORT-ONLY: no `src/kernel/**`, `src/det_math/**`, or
+> `data/tuning/**` touched ⇒ ALL 10 GOLDENS BYTE-IDENTICAL, no new golden, no new ctest target ⇒
+> guardian.yml UNCHANGED.** Digests that legitimately move (regenerated net-layer artifacts, not
+> goldens): session `fda717fe…`→`24f71845…` (client view + `FINAL_WEAPON` surface last_hit_by — the
+> dead A6M2 reads **last_hit_by=0, the P-47**, never-hit ships read -1); event `dfcc1aaf…`→`06629a69…`
+> + blackout `94ae31ea…`→`90d6e67c…` (the canonical event log gains the 7th field — unlike v1.14r0,
+> the event digest moves this time BY DESIGN). `seads_record` carries `last_hit_by` into recordings.
+> **Gates: 128 property tests (+2: `test_protocol5_omits_lasthitby` back-compat;
+> events-are-attributed-and-attribution-replicates under ANY loss pattern), ctest 10/10 GCC+Clang,
+> all 4 generated headers in sync, 10 goldens byte-identical.** Rails version 260→270. Ledger:
+> **ADR-Step7-Guns-WireTransport-Attribution-v1.17r0**, SEAL_CARD v1.17r0 (+ CLAUDE.md header/rails/
+> roadmap brought current for v1.16r0+v1.17r0 — the v1.16r0 session missed CLAUDE.md), receipt
+> `…v1.17r0-<sha>.yml`. **The guns arc (G1→G4 + convergence + attribution) is now FULLY canonical AND
+> fully replicable — kernel hook + snapshot wire + reliable event journal.**
+> **NEXT (free pick, none blocking):** a genuinely cross-PROCESS transport (sockets) over the
+> layer-5/6 frames; per-round hit granularity (a kernel event QUEUE, not a last-writer field — its own
+> ADR); renderer polish (meshes; guns + kill-feed in the live `--fly` path); or an optional new seal
+> (component/region damage; **B5** ISA atmosphere).
+> **NOTE FOR THE NEXT AGENT:** the prior session died on an API error AFTER the v1.17r0 code was
+> complete and green but BEFORE tests/ledger/commit; this session added the +2 property tests, wrote
+> the ledger, and committed. Also: **v1.16r0 was committed but never pushed** — this push ships BOTH
+> seals; guardian CI must reproduce the 10 v1.16r0-moved goldens AND the v1.17r0 net-layer parity legs.
+>
+> ## ►► PRIOR STATE (2026-07-01): seal **ATM-Sphere v1.16r0** — **ATTACKER ATTRIBUTION (last_hit_by / "who fired the killing round") DONE ✅**
 > **Latest (SEAL v1.16r0): the kernel now records WHO killed whom.** The guns/netcode arc could model a
 > full dogfight and even reliably replicate the *moments* of combat (layer 6 DERIVES hit/kill events from
 > hp deltas over the lossy wire) — but nothing recorded the **attacker**. The kernel knew it at hit time

@@ -91,19 +91,24 @@ HP_SCALE = snap.HP_SCALE   # sealed 1e3 quantum shared with the snapshot weapon 
 # reliable-delivery key; `tick` is the server tick the damage was observed (1..ticks).
 # ---------------------------------------------------------------------------------------
 class Event:
-    __slots__ = ("seq", "tick", "target", "damage_milli", "hp_after_milli", "killed")
+    # v1.17r0: `attacker` = the aircraft index that dealt this tick's damage (the target's last_hit_by
+    # observed AFTER the step), or -1 if unknown. This is what turns "AC1 died" into "AC0 downed AC1"
+    # — an ATTRIBUTED kill-feed. Optional (defaults -1) so the synthetic bound-test constructions and
+    # any pre-attribution caller still build. See ADR-Step7-Guns-Attribution.
+    __slots__ = ("seq", "tick", "target", "damage_milli", "hp_after_milli", "killed", "attacker")
 
-    def __init__(self, seq, tick, target, damage_milli, hp_after_milli, killed):
+    def __init__(self, seq, tick, target, damage_milli, hp_after_milli, killed, attacker=-1):
         self.seq = int(seq)
         self.tick = int(tick)
         self.target = int(target)
         self.damage_milli = int(damage_milli)
         self.hp_after_milli = int(hp_after_milli)
         self.killed = int(killed)
+        self.attacker = int(attacker)
 
     def as_tuple(self):
         return (self.seq, self.tick, self.target, self.damage_milli,
-                self.hp_after_milli, self.killed)
+                self.hp_after_milli, self.killed, self.attacker)
 
 
 # ---- server: drive the authoritative kernel, DERIVE events from hp deltas ----------------
@@ -139,6 +144,7 @@ def run_event_server(scenario=sr.SESSION):
             out += g.encode_i64(e.damage_milli)
             out += g.encode_i64(e.hp_after_milli)
             out += g.encode_i64(e.killed)
+            out += g.encode_i64(e.attacker)          # v1.17r0: attributed kill-feed
         return bytes(out)
 
     windows = {0: encode_window(window_at(0))}   # tick-0 frame (no events yet -> empty window)
@@ -152,8 +158,11 @@ def run_event_server(scenario=sr.SESSION):
             if after < before:
                 d_milli = g.quantize(before, HP_SCALE) - g.quantize(after, HP_SCALE)
                 killed = 1 if (before > 0.0 and after <= 0.0) else 0
+                # v1.17r0: the kernel set ac.last_hit_by to the striking round's owner THIS tick, so
+                # it is the attacker for this observed hp delta -> an attributed hit/kill event.
+                attacker = int(round(ac.last_hit_by))
                 events.append(Event(len(events), t, i, d_milli,
-                                    g.quantize(after, HP_SCALE), killed))
+                                    g.quantize(after, HP_SCALE), killed, attacker))
         if t % snap_every == 0:
             windows[t] = encode_window(window_at(t))
     return events, windows, ticks
@@ -172,7 +181,8 @@ def decode_window(data):
         dmg, pos = g.decode_i64(data, pos)
         hp_after, pos = g.decode_i64(data, pos)
         killed, pos = g.decode_i64(data, pos)
-        win.append(Event(seq, tick, target, dmg, hp_after, killed))
+        attacker, pos = g.decode_i64(data, pos)   # v1.17r0: attributed kill-feed
+        win.append(Event(seq, tick, target, dmg, hp_after, killed, attacker))
     return win
 
 
@@ -216,9 +226,10 @@ def run_events(scenario=sr.SESSION, drop_emit_ticks=None):
 
 # ---- canonical serialization of the reconstructed event log (the parity artifact) --------
 def encode_event_log(applied):
-    """Serialize the client's reconstructed event log to canonical bytes (count + each event's six
+    """Serialize the client's reconstructed event log to canonical bytes (count + each event's seven
     integer fields, in applied order) — all through the SAME GEO-001 ZigZag/LEB128 the wire uses, so
-    the digest is byte-identical in C++ and Python (no float bit-format assumptions)."""
+    the digest is byte-identical in C++ and Python (no float bit-format assumptions). v1.17r0 added
+    the 7th field `attacker` (attributed kill-feed) -> the EVENT_DIGEST moves this seal."""
     out = bytearray()
     out += g.encode_i64(len(applied))
     for e in applied:
@@ -228,6 +239,7 @@ def encode_event_log(applied):
         out += g.encode_i64(e.damage_milli)
         out += g.encode_i64(e.hp_after_milli)
         out += g.encode_i64(e.killed)
+        out += g.encode_i64(e.attacker)   # v1.17r0
     return bytes(out)
 
 
@@ -264,6 +276,11 @@ def _selftest():
         print("FAIL server derived no KILL event (A6M2 should die)"); fails += 1
     elif kev.target != 1:
         print(f"FAIL kill target {kev.target}, expected AC1 (A6M2)"); fails += 1
+    elif kev.attacker != 0:
+        print(f"FAIL kill attacker {kev.attacker}, expected AC0 (P-47) — v1.17r0 attribution"); fails += 1
+    # every derived HIT/KILL event on AC1 is attributed to the P-47 (the only shooter here)
+    if any(e.attacker != 0 for e in events):
+        print("FAIL an event was not attributed to AC0 (P-47)"); fails += 1
 
     # 3) FULL RECONSTRUCTION under the standard (isolated single) drop set: redundancy delivers
     #    EVERY event — the client's applied log equals the server's log exactly (same digest).
@@ -292,8 +309,8 @@ def _selftest():
               f"(K={EVENT_WINDOW_K}, {res['ticks']} ticks, drops {scenario['drop_emit_ticks']})")
         print(f"  server events={len(events)} ({hitcount} hits + 1 kill), "
               f"applied={len(applied)}, windows delivered={res['delivered']}/{res['n_windows']}")
-        print(f"  kill: seq={kev.seq} tick={kev.tick} target={kev.target} "
-              f"hp_after_milli={kev.hp_after_milli}")
+        print(f"  kill: seq={kev.seq} tick={kev.tick} attacker={kev.attacker} -> target={kev.target} "
+              f"hp_after_milli={kev.hp_after_milli}  (AC{kev.attacker} downed AC{kev.target})")
         print(f"  event_digest={event_digest(applied)}")
         return 0
     print(f"RESULT: EVENT REFERENCE SELFTEST FAIL ({fails})")

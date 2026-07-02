@@ -58,6 +58,23 @@ def test_server_stream_is_nonvacuous_and_ends_in_a_kill():
     assert sum(e.killed for e in _SERVER) == 1     # exactly one kill
 
 
+@given(drops=st.lists(st.sampled_from(_EMIT_TICKS), min_size=0, max_size=12, unique=True))
+@settings(max_examples=30, deadline=None)
+def test_events_are_attributed_and_attribution_replicates(drops):
+    # v1.17r0: every derived HIT/KILL event carries the ATTACKER (the target's last_hit_by, set by
+    # the kernel from the striking round's owner) — here the P-47 (AC0) is the only shooter, so every
+    # server event is attributed to it, incl. the kill ("AC0 downed AC1"). The attacker field rides
+    # the same redundant journal, so every event the client reconstructs — under ANY loss pattern —
+    # reports the server's exact attribution (never -1/unknown, never a bystander).
+    assert all(e.attacker == 0 for e in _SERVER)
+    srv_kill = ev.kill_event(_SERVER)
+    assert srv_kill.attacker == 0 and srv_kill.target == 1
+    applied = ev.run_events(SCENARIO, drop_emit_ticks=drops)["applied"]
+    by_seq = {e.seq: e for e in _SERVER}
+    for e in applied:
+        assert e.attacker == by_seq[e.seq].attacker == 0
+
+
 @given(drop=st.sampled_from(_EMIT_TICKS))
 @settings(max_examples=len(_EMIT_TICKS), deadline=None)
 def test_any_single_dropped_frame_still_fully_reconstructs(drop):

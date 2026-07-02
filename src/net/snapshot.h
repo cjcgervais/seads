@@ -38,7 +38,7 @@ constexpr double PI_      = 0x1.921fb54442d18p+1;  // 3.141592653589793 (matches
 constexpr double RAD2DEG  = 180.0 / PI_;           // one IEEE division — same double both sides
 constexpr double DEG2RAD  = PI_ / 180.0;
 
-constexpr int64_t SNAPSHOT_PROTOCOL = 5;  // (>=2 KIN; >=3 KIN-002 gamma; >=4 WEAPON-001 gunnery; >=5 ammo)
+constexpr int64_t SNAPSHOT_PROTOCOL = 6;  // (>=2 KIN; >=3 KIN-002 gamma; >=4 WEAPON-001 gunnery; >=5 ammo; >=6 last_hit_by)
 
 // Auxiliary KIN-002 scales (must match config/rails/atm.json wire.kin). phi and gamma are angles
 // in degrees -> reuse the bearing-style 1e6; tas is m/s -> reuses the alt-style 1e3.
@@ -52,6 +52,7 @@ constexpr int64_t HP_SCALE     = 1000;    // 1e3
 constexpr int64_t FIRECD_SCALE = 1000;    // 1e3
 constexpr int64_t DAMAGE_SCALE = 1000;    // 1e3
 constexpr int64_t AMMO_SCALE   = 1;       // 1e0 (magazine rounds — integer counter, exact+compact; protocol >= 5)
+constexpr int64_t LASTHITBY_SCALE = 1;    // 1e0 (attacker attribution: last-damager index, or -1; ZigZag carries the sign; protocol >= 6)
 
 // One aircraft on the wire. GEO fields in GEO-001 units (degrees / metres); KIN fields in KIN
 // units (phi/gamma degrees, tas m/s); WEAPON fields hp/fire_cd (kernel units). All of
@@ -68,6 +69,7 @@ struct EntityState {
     double hp = 0.0;        // WEAPON-001: hitpoints (hp<=0 == dead)
     double fire_cd = 0.0;   // WEAPON-001: fire-rate cooldown (ticks remaining)
     double ammo = 0.0;      // WEAPON-001 (v1.14r0, protocol >= 5): magazine rounds remaining
+    double last_hit_by = -1.0;  // WEAPON-001 (v1.17r0, protocol >= 6): attacker index, or -1 == never hit
 };
 
 // One ballistic round on the wire (WEAPON-001). GEO fields (bearing == round heading psi);
@@ -96,7 +98,7 @@ struct Snapshot {
 EntityState from_kernel(int64_t id, double lat_rad, double lon_rad, double psi_rad,
                         double alt_m, double phi_rad = 0.0, double tas_mps = 0.0,
                         double gamma_rad = 0.0, double hp = 0.0, double fire_cd = 0.0,
-                        double ammo = 0.0);
+                        double ammo = 0.0, double last_hit_by = -1.0);
 
 // Build a wire ProjectileState from raw kernel projectile state (radians/metres). The round's
 // heading `psi` maps to GEO-001 `bearing`; `damage` passes through; `ttl`/`owner` carried exactly.

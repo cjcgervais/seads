@@ -44,7 +44,7 @@ def _emit_event_rows(events):
     rows = []
     for e in events:
         rows.append(f"  {{ {e.seq}, {e.tick}, {e.target}, {e.damage_milli}, "
-                    f"{e.hp_after_milli}, {e.killed} }},")
+                    f"{e.hp_after_milli}, {e.killed}, {e.attacker} }},")
     return rows
 
 
@@ -79,8 +79,9 @@ def build():
         f"constexpr int WINDOW_K = {ev.EVENT_WINDOW_K};   // must equal seads::event::EVENT_WINDOW_K",
         "",
         "// --- server-derived authoritative event log (seq, tick, target, damage_milli, "
-        "hp_after_milli, killed) ---",
-        "struct ExpectEvent { std::int64_t seq, tick, target, damage_milli, hp_after_milli, killed; };",
+        "hp_after_milli, killed, attacker) ---",
+        "struct ExpectEvent { std::int64_t seq, tick, target, damage_milli, hp_after_milli, killed,"
+        " attacker; };",
         "constexpr ExpectEvent EXPECTED_EVENTS[] = {",
     ]
     L += _emit_event_rows(events)

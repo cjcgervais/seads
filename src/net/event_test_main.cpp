@@ -37,7 +37,7 @@ static Rails sealed_rails() {
 static bool eq_event(const event::Event& a, const event_vec::ExpectEvent& e) {
     return a.seq == e.seq && a.tick == e.tick && a.target == e.target &&
            a.damage_milli == e.damage_milli && a.hp_after_milli == e.hp_after_milli &&
-           a.killed == e.killed;
+           a.killed == e.killed && a.attacker == e.attacker;   // v1.17r0: attributed kill-feed
 }
 
 int main() {

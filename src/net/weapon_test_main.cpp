@@ -26,7 +26,7 @@ int main() {
             const auto& se = v.entities[e];
             snap.entities.push_back(netsnap::EntityState{
                 se.id, se.lat_deg, se.lon_deg, se.bearing_deg, se.alt_m, se.phi_deg, se.tas_mps,
-                se.gamma_deg, se.hp, se.fire_cd, se.ammo});
+                se.gamma_deg, se.hp, se.fire_cd, se.ammo, se.last_hit_by});
         }
         for (int p = 0; p < v.n_projectiles; ++p) {
             const auto& sp = v.projectiles[p];
@@ -64,7 +64,9 @@ int main() {
                 geo001::quantize(b.fire_cd, netsnap::FIRECD_SCALE)
                     != geo001::quantize(a.fire_cd, netsnap::FIRECD_SCALE) ||
                 geo001::quantize(b.ammo, netsnap::AMMO_SCALE)
-                    != geo001::quantize(a.ammo, netsnap::AMMO_SCALE)) {
+                    != geo001::quantize(a.ammo, netsnap::AMMO_SCALE) ||
+                geo001::quantize(b.last_hit_by, netsnap::LASTHITBY_SCALE)
+                    != geo001::quantize(a.last_hit_by, netsnap::LASTHITBY_SCALE)) {
                 same = false;
             }
         }

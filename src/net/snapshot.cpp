@@ -6,9 +6,9 @@ namespace netsnap {
 
 EntityState from_kernel(int64_t id, double lat_rad, double lon_rad, double psi_rad,
                         double alt_m, double phi_rad, double tas_mps, double gamma_rad,
-                        double hp, double fire_cd, double ammo) {
+                        double hp, double fire_cd, double ammo, double last_hit_by) {
     return EntityState{id, lat_rad * RAD2DEG, lon_rad * RAD2DEG, psi_rad * RAD2DEG, alt_m,
-                       phi_rad * RAD2DEG, tas_mps, gamma_rad * RAD2DEG, hp, fire_cd, ammo};
+                       phi_rad * RAD2DEG, tas_mps, gamma_rad * RAD2DEG, hp, fire_cd, ammo, last_hit_by};
 }
 
 ProjectileState proj_from_kernel(int64_t id, double lat_rad, double lon_rad, double psi_rad,
@@ -19,7 +19,8 @@ ProjectileState proj_from_kernel(int64_t id, double lat_rad, double lon_rad, dou
 
 // Wire framing: header (protocol, server_tick, n), then the GEO section n*(id, GeoPoint),
 // then — iff protocol >= 2 — the KIN section n*(id, phi_q, tas_q[, gamma_q]), then — iff
-// protocol >= 4 — the WEAPON section: n*(id, hp_q, fire_cd_q[, ammo_q]) (ammo_q iff protocol >= 5),
+// protocol >= 4 — the WEAPON section: n*(id, hp_q, fire_cd_q[, ammo_q][, last_hit_by_q]) (ammo_q iff
+// protocol >= 5; last_hit_by_q iff protocol >= 6),
 // a projectile count m, and m*(pid, GeoPoint, damage_q, ttl, owner). All self-delimiting; the GEO-001 codec is reused
 // verbatim so its byte layout / parity vectors are untouched.
 void encode_snapshot(const Snapshot& s, std::vector<uint8_t>& out) {
@@ -47,6 +48,8 @@ void encode_snapshot(const Snapshot& s, std::vector<uint8_t>& out) {
             geo001::encode_i64(geo001::quantize(e.fire_cd, FIRECD_SCALE), out);
             if (s.protocol >= 5)  // G4 ammo: magazine rounds remaining (v1.14r0)
                 geo001::encode_i64(geo001::quantize(e.ammo, AMMO_SCALE), out);
+            if (s.protocol >= 6)  // attacker attribution: last_hit_by (v1.17r0)
+                geo001::encode_i64(geo001::quantize(e.last_hit_by, LASTHITBY_SCALE), out);
         }
         geo001::encode_i64(static_cast<int64_t>(s.projectiles.size()), out);  // live rounds
         for (const auto& p : s.projectiles) {
@@ -111,6 +114,12 @@ bool decode_snapshot(const uint8_t* data, size_t len, size_t& pos, Snapshot& out
                 int64_t ammo_q = 0;
                 if (!geo001::decode_i64(data, len, pos, ammo_q)) return false;
                 out.entities[static_cast<size_t>(i)].ammo = geo001::dequantize(ammo_q, AMMO_SCALE);
+            }
+            if (out.protocol >= 6) {  // attacker attribution: last_hit_by (v1.17r0)
+                int64_t lhb_q = 0;
+                if (!geo001::decode_i64(data, len, pos, lhb_q)) return false;
+                out.entities[static_cast<size_t>(i)].last_hit_by =
+                    geo001::dequantize(lhb_q, LASTHITBY_SCALE);
             }
         }
         int64_t m = 0;

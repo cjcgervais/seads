@@ -33,6 +33,7 @@ void put_event(std::vector<std::uint8_t>& out, const Event& e) {
     geo001::encode_i64(e.damage_milli, out);
     geo001::encode_i64(e.hp_after_milli, out);
     geo001::encode_i64(e.killed, out);
+    geo001::encode_i64(e.attacker, out);   // v1.17r0: attributed kill-feed
 }
 
 // Encode the last-K window of events with tick <= emit_tick (mirrors event_ref.window_at/encode_window).
@@ -62,6 +63,7 @@ std::vector<Event> decode_window(const std::vector<std::uint8_t>& data) {
         geo001::decode_i64(data.data(), data.size(), pos, e.damage_milli);
         geo001::decode_i64(data.data(), data.size(), pos, e.hp_after_milli);
         geo001::decode_i64(data.data(), data.size(), pos, e.killed);
+        geo001::decode_i64(data.data(), data.size(), pos, e.attacker);   // v1.17r0
         win.push_back(e);
     }
     return win;
@@ -118,10 +120,14 @@ EventResult run_events(const Rails& rails, const session::Scenario& sc,
                 std::int64_t d_milli = geo001::quantize(before, netsnap::HP_SCALE)
                                      - geo001::quantize(after, netsnap::HP_SCALE);
                 std::int64_t killed = (before > 0.0 && after <= 0.0) ? 1 : 0;
+                // v1.17r0: the kernel set last_hit_by(i) to the striking round's owner THIS tick ->
+                // the attacker for this observed hp delta (an attributed hit/kill event). last_hit_by
+                // is always an exact integer-valued double (an index, or -1), so the cast is exact.
+                std::int64_t attacker = static_cast<std::int64_t>(server.last_hit_by(i));
                 events.push_back(Event{static_cast<std::int64_t>(events.size()),
                                        static_cast<std::int64_t>(t),
                                        static_cast<std::int64_t>(i), d_milli,
-                                       geo001::quantize(after, netsnap::HP_SCALE), killed});
+                                       geo001::quantize(after, netsnap::HP_SCALE), killed, attacker});
             }
         }
         if (t % sc.snap_every == 0) windows.emplace_back(t, encode_window(events, t));
