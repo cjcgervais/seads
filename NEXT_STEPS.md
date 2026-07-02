@@ -1,6 +1,49 @@
 # SEADS 2026 — Next Steps (handoff)
 
-> ## ►► CURRENT STATE (2026-07-01): **NETCODE LAYER 8 — MULTI-CLIENT FAN-OUT DONE ✅** (no-seal, rides **ATM-Sphere v1.17r0**)
+> ## ►► CURRENT STATE (2026-07-01): **NETCODE LAYER 9 — SINGLE-THREAD select() BROADCAST + DYNAMIC JOIN/LEAVE DONE ✅** (no-seal, rides **ATM-Sphere v1.17r0**)
+> **Latest: the fan-out is now a genuine single-threaded `select()` event loop with live membership churn — and every membership case is byte-exact.**
+> Layer 8 broadcast to N clients that ALL connected before streaming, one blocking `send_all` per
+> already-connected client. Layer 9 makes it a real async fan-out: **one thread, one `select()` over
+> `{listener} ∪ {clients}`, dynamic JOIN and LEAVE** — and proves the natural determinism statement for
+> a live session with churn. Three pieces:
+> **(a) `select_readable`** (`src/net/socket`): the layer-8 `wait_readable` generalized to many fds at
+> once (Winsock ignores nfds / POSIX `max(fd)+1`), so one loop multiplexes a readable listener (a
+> pending **JOIN**) and a readable receive-only client (`recv()==0` EOF ⇒ a **LEAVE**).
+> **(b) The single-thread broadcast server** (`src/net/broadcast`, new `seads_broadcast` lib =
+> `seads_framing`+`seads_socket`): `netbcast::broadcast_select(...)` waits for `min_initial` clients,
+> then ships each payload as **one atomically length-prefixed frame** (joiners stay frame-aligned),
+> running one `select` per frame to accept late joiners (they receive every frame **from their join
+> point onward**) and drop leavers (EOF / send error) — **no thread-per-client**. An `on_frame(fi)` hook
+> lets a test pin a mid-stream join to an EXACT frame with no sleeps. The demo `seads_netserver` now
+> uses this same loop (shared code ⇒ no untested divergence; it now tolerates join/leave).
+> **(c) The dynamic-membership BRIDGE** (`seads_netdyn_test`): reference = the sealed in-process
+> `run_session(...).digest`. Over 41 real 127.0.0.1 frames, three clients with distinct lifetimes:
+> **FULL** (present from frame 0) reconstructs the sealed digest `24f71845…c332` (the layer-8 result,
+> now driven by the select loop; GCC **and** Clang); **LATE** (rendezvoused to frame J=20 via the hook)
+> receives **exactly `frames[20:]`** — its join index computed from its first frame's decoded
+> `server_tick`, asserted byte-exact; **LEAVER** (reads 10 frames then closes) receives a clean prefix
+> and departs cleanly (server `joins=3 leaves=1`) **without disturbing FULL/LATE**. Finite watchdog
+> fails-not-wedges; 12/12 stress reruns clean.
+> **TRANSPORT-ONLY — no `src/kernel/**`, `src/det_math/**`, `config/rails/**`, framing envelope, wire
+> scales, or goldens touched ⇒ ALL 10 GOLDENS BYTE-IDENTICAL** (Sphere re-validated `f2db95bd…`), no
+> new golden, no seal. **Gates: +6 property tests ⇒ 139 (`tests/property/test_broadcast.py`: the pure
+> membership model — window-exactness / full=whole / late=suffix / leaver=prefix / leave-doesn't-disturb
+> / composition with the layer-7 framing codec), ctest 13→14 (`netdyn_bridge`, x64 legs), 15/15 receipt
+> gates PASS, 10 goldens byte-identical.** guardian.yml: `seads_netdyn_test` build-only-smoked on all 5
+> legs (default target) + `netdyn_bridge` run on the native x64 legs (like the layer-7/8 bridges).
+> Ledger: **ADR-Step-Net-Layer9-DynamicBroadcast-v1.17r0**. **Seal stays v1.17r0** (Tier-2 net layer).
+> **NEXT (free pick, none blocking):** async single-thread OUTPUT (writability `select` + per-client
+> send buffers, so a slow client can't back-pressure the broadcast); late-join CATCH-UP (replay the
+> missed prefix to a joiner so it too reconstructs the whole fight); per-round hit granularity (a kernel
+> event QUEUE — its own ADR); renderer polish (guns + kill-feed in the live `--fly` path); or an
+> optional new seal (component/region damage; **B5** ISA atmosphere).
+> **NOTE FOR THE NEXT AGENT:** layer 9 is code-complete + green locally (GCC+Clang, ctest 14/14, 139
+> property tests, dynamic bridge PASS + 12/12 stress, 2-process demo PASS, all 10 goldens byte-identical).
+> Verify guardian CI green after push (this session couldn't — `gh` CLI absent locally). `std::future`
+> stays avoided (cv+`notify_all` handshake); the late-join rendezvous uses the `on_frame` hook so there
+> are NO sleeps/timing guesses — keep it that way if you extend the bridge.
+>
+> ## ►► PRIOR STATE (2026-07-01): **NETCODE LAYER 8 — MULTI-CLIENT FAN-OUT DONE ✅** (no-seal, rides **ATM-Sphere v1.17r0**)
 > **Latest: the socket transport now fans one authoritative stream out to N clients — and every client is bit-exact.**
 > Layer 7 proved a *single* client over a real 127.0.0.1 socket reconstructs SESSION-SK-001 to the
 > sealed in-process digest. Layer 8 proves the fan-out case: **one server broadcasts the frame stream

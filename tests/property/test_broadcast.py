@@ -1,0 +1,98 @@
+"""Dynamic-membership properties for the netcode layer-9 single-thread select() broadcast server.
+
+The byte-exact end-to-end claim (a full client reconstructs the sealed SESSION-SK-001 digest, a
+late joiner receives exactly the frame suffix from its join point, a leaver receives a clean prefix)
+is proven over REAL 127.0.0.1 sockets by the determinism bridge src/net/netdyn_test_main.cpp
+(ctest netdyn_bridge). Here we prove the underlying MEMBERSHIP model — which frames each client
+receives as a pure function of when it was connected — is self-consistent and composes with the
+layer-7 framing codec:
+
+  * a client present for frame-index window [join, leave) receives EXACTLY those frames, contiguous;
+  * full (join=0, never leaves)  -> the whole stream;
+  * late (join=j>0, never leaves) -> exactly the suffix frames[j:];
+  * leaver (join=0, leaves at L)  -> exactly the prefix frames[:L];
+  * reassembling any client's delivered frames (each shipped atomically, length-prefixed) through
+    an arbitrary TCP chunking yields byte-identical payloads (fan-out adds no per-client info).
+
+This mirrors netbcast::broadcast_select: a joiner accepted before frame fi receives fi onward; a
+leaver dropped before frame fi does not receive fi.
+"""
+import sys
+from pathlib import Path
+
+from hypothesis import given, strategies as st
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tools"))
+import framing_ref as fr
+
+
+def broadcast_delivery(n_frames, members):
+    """Reference layer-9 delivery: client c (present for fi in [join, leave)) receives frame fi.
+    Returns {client: [frame indices received, ascending]} — a pure function of the membership."""
+    out = {c: [] for c in members}
+    for fi in range(n_frames):
+        for c, (join, leave) in members.items():
+            if join <= fi < leave:
+                out[c].append(fi)
+    return out
+
+
+N = st.integers(min_value=0, max_value=40)
+
+
+@given(N, st.data())
+def test_window_is_exact_contiguous_range(n_frames, data):
+    # Each client receives EXACTLY the frames in its [join, leave) window — contiguous, no gaps.
+    members = {}
+    for c in range(data.draw(st.integers(min_value=1, max_value=4))):
+        join = data.draw(st.integers(min_value=0, max_value=n_frames))
+        leave = data.draw(st.integers(min_value=join, max_value=n_frames))
+        members[c] = (join, leave)
+    got = broadcast_delivery(n_frames, members)
+    for c, (join, leave) in members.items():
+        assert got[c] == list(range(join, leave))
+
+
+@given(N)
+def test_full_client_gets_whole_stream(n_frames):
+    got = broadcast_delivery(n_frames, {"full": (0, n_frames)})
+    assert got["full"] == list(range(n_frames))
+
+
+@given(N, st.data())
+def test_late_join_is_the_suffix(n_frames, data):
+    j = data.draw(st.integers(min_value=0, max_value=n_frames))
+    got = broadcast_delivery(n_frames, {"late": (j, n_frames)})
+    assert got["late"] == list(range(j, n_frames))  # exactly frames[j:], no earlier frame leaks
+
+
+@given(N, st.data())
+def test_leaver_is_the_prefix(n_frames, data):
+    leave = data.draw(st.integers(min_value=0, max_value=n_frames))
+    got = broadcast_delivery(n_frames, {"leaver": (0, leave)})
+    assert got["leaver"] == list(range(0, leave))  # exactly frames[:leave], then gone
+
+
+@given(N, st.data())
+def test_leave_does_not_disturb_a_coresident_full_client(n_frames, data):
+    # A leaver departing mid-stream must not change what a co-resident full client receives.
+    leave = data.draw(st.integers(min_value=0, max_value=n_frames))
+    members = {"full": (0, n_frames), "leaver": (0, leave)}
+    got = broadcast_delivery(n_frames, members)
+    assert got["full"] == list(range(n_frames))            # full is unaffected
+    assert got["leaver"] == list(range(0, leave))
+
+
+@given(st.lists(st.binary(min_size=0, max_size=80), min_size=1, max_size=12),
+       st.integers(min_value=0, max_value=11),
+       st.integers(min_value=1, max_value=7))
+def test_delivered_suffix_reassembles_byte_exact(payloads, join, step):
+    # Compose the membership model with the layer-7 framing codec: the frames a late joiner receives
+    # (frames[join:], each length-prefixed and shipped atomically) reassemble — under ANY TCP
+    # chunking — to exactly those payloads. This is the pure-codec form of what netdyn_bridge proves
+    # over real sockets.
+    join = min(join, len(payloads))
+    suffix = [bytes(p) for p in payloads[join:]]
+    stream = fr.encode_stream(suffix)
+    chunks = [stream[i:i + step] for i in range(0, len(stream), step)]
+    assert fr.reassemble(chunks) == suffix

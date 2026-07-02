@@ -1,16 +1,20 @@
-// SEADS layer-7/8 demo SERVER (cross-process socket transport). Drives the sealed kernel over
+// SEADS layer-7/8/9 demo SERVER (cross-process socket transport). Drives the sealed kernel over
 // SESSION-SK-001, then serves every 20 Hz protocol-6 snapshot frame — each wrapped in the layer-7
-// length prefix — to one OR MORE connecting clients over TCP (layer-8 fan-out). A companion to
-// seads_netclient; the loopback determinism BRIDGE (seads_netloop_test / seads_multiclient_test) is
-// what CI gates, this pair is the human demo.
+// length prefix — to connecting clients over TCP. Layer 9: a single-thread select()-based
+// broadcast (netbcast::broadcast_select) with DYNAMIC join/leave — it waits for num_clients to
+// connect, then streams, ALSO accepting any late joiner (who receives every frame from its join
+// point onward) and dropping any client that closes. A companion to seads_netclient; the loopback
+// determinism BRIDGEs (seads_netloop_test / seads_multiclient_test / seads_netdyn_test) are what CI
+// gates, this pair is the human demo.
 //
 // Usage:  seads_netserver [port] [num_clients]
 //   port 0 or omitted => OS-assigned (the chosen port is printed); num_clients defaults to 1.
-//   With num_clients>1 the server waits for that many connections (non-blocking accept), then
-//   broadcasts the identical frame stream to each — every client reconstructs the same dogfight.
+//   The server waits for num_clients connection(s), then broadcasts the identical frame stream to
+//   each — every client present from the start reconstructs the same dogfight; a client that joins
+//   mid-stream gets the remaining frames.
 #include "session.h"
 #include "session_vectors.h"
-#include "framing.h"
+#include "broadcast.h"
 #include "socket.h"
 #include "golden_params.h"
 #include "kernel.h"
@@ -54,32 +58,23 @@ int main(int argc, char** argv) {
                 port, frames.size(), num_clients);
     std::fflush(stdout);
 
-    // one contiguous stream: concat of LEB128(len)||payload frames — broadcast identically to each
-    std::vector<std::uint8_t> stream;
-    for (const auto& f : frames) framing::encode_frame(f.second, stream);
+    // the raw per-frame payloads (broadcast_select length-prefixes each so joiners stay frame-aligned)
+    std::vector<std::vector<std::uint8_t>> payloads;
+    for (const auto& f : frames) payloads.push_back(f.second);
 
-    // gather num_clients connections (blocking accept; the layer-8 fan-out demo waits for them all)
-    std::vector<netsock::socket_t> conns;
-    for (int i = 0; i < num_clients; ++i) {
-        netsock::socket_t conn = netsock::accept_one(listener);
-        if (!netsock::is_valid(conn)) {
-            std::printf("ERROR: accept failed for client %d\n", i);
-            for (netsock::socket_t c : conns) netsock::close_socket(c);
-            netsock::close_socket(listener);
-            return 1;
-        }
-        conns.push_back(conn);
-        std::printf("seads_netserver: client %d connected\n", i);
-    }
-    std::printf("seads_netserver: %d client(s) connected; broadcasting...\n", num_clients);
-
-    bool ok = true;
-    for (netsock::socket_t c : conns) ok = netsock::send_all(c, stream) && ok;
-
-    for (netsock::socket_t c : conns) netsock::close_socket(c);
+    // layer-9 single-thread select() broadcast: wait for num_clients, then stream, accepting any
+    // late joiner (gets the suffix) and dropping any client that closes. 60 s bounded initial-wait.
+    netsock::set_nonblocking(listener);
+    netbcast::Stats st = netbcast::broadcast_select(
+        listener, payloads, static_cast<std::size_t>(num_clients), /*accept_deadline_ms=*/60000);
     netsock::close_socket(listener);
-    if (!ok) { std::printf("ERROR: send failed\n"); return 1; }
-    std::printf("seads_netserver: sent %zu frames (%zu bytes) to %d client(s); done\n",
-                frames.size(), stream.size(), num_clients);
+
+    if (!st.ok) {
+        std::printf("ERROR: broadcast failed (only %zu of %d client(s) connected in time)\n",
+                    st.joins, num_clients);
+        return 1;
+    }
+    std::printf("seads_netserver: broadcast %zu frames (joins=%zu, leaves=%zu); done\n",
+                st.frames_sent, st.joins, st.leaves);
     return 0;
 }

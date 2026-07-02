@@ -115,6 +115,15 @@ if(WIN32)
   target_link_libraries(seads_socket PUBLIC ws2_32)
 endif()
 
+# --- net / layer-9 single-thread select() broadcast server (dynamic join/leave) ---
+# A genuine single-threaded fan-out event loop over the layer-7/8 socket + framing: one select()
+# multiplexes accepting late joiners (JOIN — they get the frame suffix from their join point) and
+# reaping departed clients (LEAVE — recv EOF / send error) with no thread-per-client. Composes
+# seads_framing (length-prefix each frame) + seads_socket. TRANSPORT: outside the world_hash.
+add_library(seads_broadcast STATIC src/net/broadcast.cpp)
+target_include_directories(seads_broadcast PUBLIC src/net)
+target_link_libraries(seads_broadcast PUBLIC seads_framing seads_socket seads_det_flags)
+
 # --- client presentation lib (Step 5 renderer): recording container + playback ---
 # DOWNSTREAM-ONLY. Decodes the GEO-001/KIN-001 wire (via seads_net) and interpolates remotes
 # (layer 4a) for display. It NEVER feeds the sim: it links seads_net but NOT the kernel/det_math,
@@ -176,10 +185,11 @@ target_link_libraries(seads_event_test PRIVATE seads_event seads_kernel seads_ne
 add_executable(seads_framing_test src/net/framing_test_main.cpp)
 target_link_libraries(seads_framing_test PRIVATE seads_framing seads_net seads_det_flags)
 
-# --- layer-7 cross-process demo (two-process server/client over a real TCP socket) ---
+# --- layer-7/9 cross-process demo (two-process server/client over a real TCP socket) ---
+# The server uses the layer-9 single-thread select() broadcast (seads_broadcast) => dynamic join/leave.
 add_executable(seads_netserver src/net/netserver_main.cpp)
-target_link_libraries(seads_netserver PRIVATE seads_session seads_event seads_framing seads_socket
-                      seads_predict seads_net seads_kernel seads_replay seads_det_math seads_det_flags)
+target_link_libraries(seads_netserver PRIVATE seads_session seads_event seads_broadcast seads_framing
+                      seads_socket seads_predict seads_net seads_kernel seads_replay seads_det_math seads_det_flags)
 add_executable(seads_netclient src/net/netclient_main.cpp)
 target_link_libraries(seads_netclient PRIVATE seads_session seads_event seads_framing seads_socket
                       seads_predict seads_net seads_kernel seads_replay seads_det_math seads_det_flags)
@@ -193,6 +203,11 @@ target_link_libraries(seads_netloop_test PRIVATE seads_session seads_event seads
 add_executable(seads_multiclient_test src/net/netmulti_test_main.cpp)
 target_link_libraries(seads_multiclient_test PRIVATE seads_session seads_event seads_framing seads_socket
                       seads_predict seads_net seads_kernel seads_replay seads_det_math seads_det_flags)
+
+# --- layer-9 dynamic-membership bridge: full/late/leaver clients over one select() broadcast ---
+add_executable(seads_netdyn_test src/net/netdyn_test_main.cpp)
+target_link_libraries(seads_netdyn_test PRIVATE seads_session seads_event seads_broadcast seads_framing
+                      seads_socket seads_predict seads_net seads_kernel seads_replay seads_det_math seads_det_flags)
 
 # --- client presentation test (globe projection + .seadsrec container + playback interp) ---
 add_executable(seads_client_test src/client/client_test_main.cpp)
@@ -237,5 +252,6 @@ option(SEADS_SOCKET_TESTS "Run the layer-7 socket loopback determinism bridge te
 if(SEADS_SOCKET_TESTS AND NOT CMAKE_CROSSCOMPILING)
   add_test(NAME netloop_bridge COMMAND seads_netloop_test)
   add_test(NAME multiclient_bridge COMMAND seads_multiclient_test)
+  add_test(NAME netdyn_bridge COMMAND seads_netdyn_test)
 endif()
 # Golden hash compare is run in CI (guardian.yml) across the toolchain matrix.

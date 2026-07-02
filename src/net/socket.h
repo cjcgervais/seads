@@ -54,6 +54,15 @@ bool set_nonblocking(socket_t s);
 // portable select() wrapper (Winsock ignores nfds; POSIX uses s+1). timeout_ms<0 => wait forever.
 bool wait_readable(socket_t s, int timeout_ms);
 
+// --- multi-fd readability select (netcode layer 9: single-thread broadcast event loop) -----
+// Block up to `timeout_ms` for ANY socket in `fds` to become readable, filling `ready` with the
+// subset that are. Returns true iff >=1 became ready; false on timeout OR error. One select() over
+// {listener} u {clients} lets a single-threaded fan-out server multiplex accepting new clients
+// (JOIN, listener readable) and reaping departed ones (LEAVE, a client readable then recv()==0)
+// without a thread per connection. Empty `fds` => false. timeout_ms<0 => wait forever.
+bool select_readable(const std::vector<socket_t>& fds, int timeout_ms,
+                     std::vector<socket_t>& ready);
+
 // Send exactly `n` bytes (loops over short writes). Returns false on error/EOF before all sent.
 bool send_all(socket_t s, const std::uint8_t* buf, std::size_t n);
 bool send_all(socket_t s, const std::vector<std::uint8_t>& buf);

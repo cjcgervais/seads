@@ -130,6 +130,7 @@ jobs:
             echo "ncli=build/Release/seads_netclient.exe" >> "$GITHUB_OUTPUT"
             echo "nloop=build/Release/seads_netloop_test.exe" >> "$GITHUB_OUTPUT"
             echo "nmulti=build/Release/seads_multiclient_test.exe" >> "$GITHUB_OUTPUT"
+            echo "ndyn=build/Release/seads_netdyn_test.exe" >> "$GITHUB_OUTPUT"
           else
             echo "golden=build/seads_golden" >> "$GITHUB_OUTPUT"
             echo "scenario=build/seads_scenario" >> "$GITHUB_OUTPUT"
@@ -148,6 +149,7 @@ jobs:
             echo "ncli=build/seads_netclient" >> "$GITHUB_OUTPUT"
             echo "nloop=build/seads_netloop_test" >> "$GITHUB_OUTPUT"
             echo "nmulti=build/seads_multiclient_test" >> "$GITHUB_OUTPUT"
+            echo "ndyn=build/seads_netdyn_test" >> "$GITHUB_OUTPUT"
           fi
 
       - name: det_math bit-exact test
@@ -210,6 +212,14 @@ jobs:
         if: matrix.name == 'MSVC x64' || matrix.name == 'GCC x64' || matrix.name == 'Clang x64'
         shell: bash
         run: "${{ steps.bin.outputs.nmulti }}"
+
+      # Layer 9. seads_netdyn_test is a default target (build-only-smoked on every leg above); the
+      # single-thread select() broadcast with dynamic join/leave needs live 127.0.0.1 ports, so the
+      # full/late/leaver bridge runs only on the NATIVE x64 legs, like the layer-7/8 bridges.
+      - name: Dynamic-membership broadcast determinism bridge (layer 9)
+        if: matrix.name == 'MSVC x64' || matrix.name == 'GCC x64' || matrix.name == 'Clang x64'
+        shell: bash
+        run: "${{ steps.bin.outputs.ndyn }}"
 
       - name: Run all goldens + hash + validate
         shell: bash

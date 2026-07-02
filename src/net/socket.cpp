@@ -118,6 +118,40 @@ bool wait_readable(socket_t s, int timeout_ms) {
     return r > 0 && FD_ISSET(s, &rfds);
 }
 
+// Portable multi-fd select() readability wait (layer 9). Watches {listener} u {clients} at once so
+// a single-threaded broadcast server multiplexes joins (listener) and leaves (client EOF). On
+// Winsock the first arg (nfds) is ignored; on POSIX it must be max(fd)+1. Negative timeout blocks.
+bool select_readable(const std::vector<socket_t>& fds, int timeout_ms,
+                     std::vector<socket_t>& ready) {
+    ready.clear();
+    if (fds.empty()) return false;
+    fd_set rfds;
+    FD_ZERO(&rfds);
+#ifndef _WIN32
+    socket_t maxfd = 0;
+#endif
+    for (socket_t s : fds) {
+        if (!is_valid(s)) continue;
+        FD_SET(s, &rfds);
+#ifndef _WIN32
+        if (s > maxfd) maxfd = s;
+#endif
+    }
+    timeval tv;
+    tv.tv_sec = timeout_ms / 1000;
+    tv.tv_usec = (timeout_ms % 1000) * 1000;
+    timeval* ptv = (timeout_ms < 0) ? nullptr : &tv;
+#ifdef _WIN32
+    int r = ::select(0, &rfds, nullptr, nullptr, ptv);
+#else
+    int r = ::select(static_cast<int>(maxfd) + 1, &rfds, nullptr, nullptr, ptv);
+#endif
+    if (r <= 0) return false;
+    for (socket_t s : fds)
+        if (is_valid(s) && FD_ISSET(s, &rfds)) ready.push_back(s);
+    return !ready.empty();
+}
+
 // --- shared (portable) setup helpers, using the type aliases above --------------------
 socket_t listen_loopback(std::uint16_t port, std::uint16_t& bound_port, int backlog) {
     socket_t s = ::socket(AF_INET, SOCK_STREAM, 0);
