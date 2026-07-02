@@ -73,6 +73,23 @@
 // broadcast_async as a vector — the bridge (seads_netlive_test) proves a live-stepped sealed
 // session reconstructs the sealed digest, batch == incremental byte-for-byte. Still TRANSPORT —
 // no kernel/wire/golden/seal.
+//
+// Layer 14 (bounded/windowed catch-up): layer 13's catch-up retains EVERY produced payload —
+// O(stream) server memory, exactly what a genuinely open-ended source cannot afford (the honest
+// boundary layer 13 named). broadcast_live gains an opt-in `catchup_window` (0 = retain all =
+// layer-13 behavior EXACTLY): with a window W, only the LAST W produced payloads are retained —
+// the oldest is evicted as each new frame lands (counted in `trimmed`) — so catch-up runs in
+// O(W) memory on a stream of ANY length. A mid-stream joiner accepted at frame fi is replayed
+// the retained window frames[max(0,fi-W):fi] and enters live at fi: its delivered stream is
+// EXACTLY the contiguous suffix frames[max(0,fi-W):] — frame-aligned, no gap, no duplicate. The
+// window decides only how far BACK a joiner's replay reaches, never which bytes flow to anyone
+// else (it is consulted only at accept time; live clients' bytes are untouched). A joiner the
+// window still fully covers (fi <= W) receives the WHOLE stream and reconstructs the sealed
+// digest — the layer-13 degenerate case. Honest scope: a joiner beyond the window CANNOT
+// reconstruct the full digest (the trimmed prefix is gone forever — that is the point of
+// bounding memory); the claim is the transport delivered precisely frames[max(0,fi-W):], and
+// the join frame is knowable from the first decoded server_tick, exactly the layer-9 law. Still
+// TRANSPORT — no kernel/wire/golden/seal.
 #pragma once
 #include <cstddef>
 #include <cstdint>
@@ -91,6 +108,8 @@ struct Stats {
     std::size_t capped = 0;       // layer-12 policy drops: pending backlog exceeded cap_bytes (a
                                   // live client so dropped also counts as a leave; a joiner capped
                                   // during its catch-up replay was never live — capped only)
+    std::size_t trimmed = 0;      // layer-14 window evictions: payloads dropped from the catch-up
+                                  // history once it exceeded catchup_window (0 when unwindowed)
     bool ok = false;              // reached >=min_initial clients and sent every frame
 };
 
@@ -133,13 +152,18 @@ using FrameSource = std::function<bool(std::vector<std::uint8_t>&)>;
 // front; the stream ends when the source says so). `on_frame(fi)` fires after frame fi is
 // produced and BEFORE it is enqueued (same rendezvous semantics as the batch loops). With
 // catchup=true every produced payload is retained so a mid-stream joiner is replayed the full
-// missed prefix (O(stream) server memory — use catchup=false for a genuinely open-ended source).
+// missed prefix (O(stream) server memory when unwindowed).
+// Layer 14: `catchup_window` (0 = retain all, layer-13 behavior exactly) bounds the retained
+// history to the LAST catchup_window payloads — a joiner accepted at frame fi is replayed
+// frames[max(0,fi-catchup_window):fi] (evictions counted in `trimmed`), so an open-ended source
+// can run catch-up in O(window) memory; see the file header for the delivered-suffix law.
 // `frames_sent` counts frames produced + enqueued to the then-current broadcast set; ok == the
 // initial gather succeeded and the source was drained to its end.
 Stats broadcast_live(netsock::socket_t listener, const FrameSource& source,
                      std::size_t min_initial, int accept_deadline_ms,
                      const std::function<void(std::size_t)>& on_frame = {},
-                     bool catchup = false, std::size_t cap_bytes = 0);
+                     bool catchup = false, std::size_t cap_bytes = 0,
+                     std::size_t catchup_window = 0);
 
 }  // namespace netbcast
 }  // namespace seads

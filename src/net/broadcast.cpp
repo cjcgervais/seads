@@ -359,13 +359,19 @@ Stats broadcast_async(netsock::socket_t listener,
 // catchup=true each produced payload is retained in `history` AS IT IS MADE, so a mid-stream
 // joiner is replayed exactly frames[0:fi] — the batch semantics, from a stream that never existed
 // as a whole. catchup=false retains nothing (the open-ended posture).
+// Layer 14: catchup_window>0 bounds `history` to the LAST catchup_window payloads (the oldest is
+// evicted as each new frame lands — counted in `trimmed`), so a joiner accepted at frame fi is
+// replayed exactly frames[max(0,fi-W):fi] and catch-up runs in O(W) memory on a stream of any
+// length. The window is consulted only where history grows — the replay path (accept_pending_async
+// with upto=history.size()) already sends "the whole retained history", which IS the window.
 Stats broadcast_live(netsock::socket_t listener, const FrameSource& source,
                      std::size_t min_initial, int accept_deadline_ms,
                      const std::function<void(std::size_t)>& on_frame, bool catchup,
-                     std::size_t cap_bytes) {
+                     std::size_t cap_bytes, std::size_t catchup_window) {
     Stats st;
     std::vector<BufClient> clients;
-    std::vector<std::vector<std::uint8_t>> history;  // produced payloads (retained iff catchup)
+    std::vector<std::vector<std::uint8_t>> history;  // produced payloads (retained iff catchup;
+                                                     // last catchup_window of them when windowed)
 
     // --- gather the initial clients (bounded wait) before frame 0, exactly as broadcast_async ---
     int waited = 0;
@@ -418,7 +424,15 @@ Stats broadcast_live(netsock::socket_t listener, const FrameSource& source,
                 drop_client(clients, i, st);
             }
         }
-        if (catchup) history.push_back(std::move(payload));  // retain for future joiners
+        if (catchup) {
+            history.push_back(std::move(payload));  // retain for future joiners
+            // layer 14: the window evicts the oldest retained payload (at most one — exactly one
+            // push happens per iteration), keeping catch-up memory O(catchup_window).
+            if (catchup_window > 0 && history.size() > catchup_window) {
+                history.erase(history.begin());
+                ++st.trimmed;
+            }
+        }
         ++st.frames_sent;
     }
 

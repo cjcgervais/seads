@@ -1,6 +1,55 @@
 # SEADS 2026 — Next Steps (handoff)
 
-> ## ►► CURRENT STATE (2026-07-02): seal **ATM-Sphere v1.21r0** — **FLIGHT MODEL B5: ISA ATMOSPHERE DONE ✅ — ARC B1→B5 COMPLETE**
+> ## ►► CURRENT STATE (2026-07-02): **NETCODE LAYER 14 — BOUNDED/WINDOWED CATCH-UP DONE ✅** (no-seal, rides **ATM-Sphere v1.21r0**)
+> **Latest: layer 13's named honest boundary closes — catch-up no longer needs O(stream) server
+> memory. `broadcast_live` gains an opt-in `catchup_window` (0 = retain all = layer-13 behavior
+> EXACTLY): with a window W only the LAST W produced payloads are retained (the oldest evicted as
+> each new frame lands — counted in the new `Stats.trimmed`), so a genuinely open-ended live
+> stream can finally run catch-up in O(W) memory.** The delivered-suffix LAW: a mid-stream joiner
+> accepted at frame fi is replayed the retained window and enters live at fi ⇒ its delivered
+> stream is EXACTLY the contiguous suffix **frames[max(0,fi−W):]** — frame-aligned, no gap, no
+> duplicate, start knowable from the first decoded server_tick (the layer-9 law, reached further
+> back). The window is consulted ONLY at accept time — it never changes which bytes flow to a
+> live client; a joiner the window still fully covers (fi ≤ W) receives frames[0:] and
+> reconstructs the sealed digest (layer-13 degenerate case recovered exactly). Implementation is
+> ONE eviction at the single point where history grows (the replay path already sends "the whole
+> retained history", which now IS the window); `broadcast_select`/`broadcast_async` untouched —
+> layers 9–13 verbatim. HONEST SCOPE: a joiner beyond the window CANNOT reconstruct the full
+> digest (the trimmed prefix is gone forever — that is the point of bounding memory); the window
+> is a FRAME count, not bytes (frames are near-uniform 20 Hz snapshots; layer-12 `cap_bytes`
+> stays the byte-denominated knob on the outgoing side) and not time (no wall-clock in the loop —
+> doctrine; the caller expresses "T seconds" as T×20 frames).
+> **BRIDGE `seads_netwindow_test`** (ctest `netwindow_bridge`, native-x64 CI legs like layers
+> 7–13; all legs catchup=true against a live-stepped `session::FrameProducer`, 41 frames, join
+> rendezvoused at J=20): **LEG 0** W=1 minimal — joiner gets exactly frames[19:], trimmed=40;
+> **LEG 1** W=10 partial — joiner gets exactly frames[10:] byte-for-byte, EARLY byte-identical to
+> the batch reference + sealed digest, trimmed=31; **LEG 2** W≥N degenerate — trimmed=0, joiner
+> gets the WHOLE stream + reconstructs the SAME sealed digest. Demo: `seads_netserver [port] [n]
+> [catchup] [async] [cap_bytes] [live] [window]` — smoke-verified cross-process (live=1 catchup=1
+> window=10 ⇒ trimmed=31; a real `seads_netclient` from frame 0 reconstructed `21aaab49…`).
+> **TRANSPORT-ONLY: no `src/kernel/**`, `src/det_math/**`, `config/rails/**`, wire bytes, or
+> tuning touched ⇒ ALL 13 GOLDENS BYTE-IDENTICAL, no digest moved. No seal.**
+> **Gates: ctest 18→19 GCC + 18→19 Clang (`netwindow_bridge`), property tests 182 → 184 (+2
+> `test_broadcast.py` layer-14: windowed history == the exact tail frames[max(0,j−W):j] with
+> trimmed == max(0,j−W) ⇒ replay+live == a contiguous canonical suffix, W≥j degenerates to the
+> whole stream; the window never changes live delivery under any kernel-acceptance pattern and
+> window=0 == the layer-13 model bit-for-bit).**
+> Ledger: **ADR-Step-Net-Layer14-BoundedCatchup-v1.21r0**; guardian.yml gains the layer-14
+> bridge step (native x64 legs, like layers 7–13).
+> **NEXT (free pick, none blocking):** per-airframe **supercharger critical altitude** (B5's
+> named data-driven follow-up — a thrust-lapse envelope scalar, its own seal); an A6M2
+> engine-toughness retune (data-only seal that moves EngineOut-001's story); per-airframe
+> toughness / σ surfaced in the HUD (presentation-only); or projectile σ-drag (scaling
+> PROJ_DRAG_K by σ(alt) — a kernel seal that moves every firing golden, deliberately deferred at
+> B5).
+> **NOTE FOR THE NEXT AGENT:** the window evicts at the ONE place history grows — if you ever add
+> a second retention point, route it through the same eviction or `trimmed` lies. The replay path
+> deliberately still sends "the whole retained history" (`upto=history.size()`); windowing is
+> invisible to `accept_pending_async` — keep it that way (a window-aware replay path would be a
+> second code path under the sealed bridges for nothing). `catchup_window` is live-only BY DESIGN
+> (batch mode owns the whole vector anyway); the demo rejects window without live=1 catchup=1.
+>
+> ## ►► PRIOR STATE (2026-07-02): seal **ATM-Sphere v1.21r0** — **FLIGHT MODEL B5: ISA ATMOSPHERE DONE ✅ — ARC B1→B5 COMPLETE**
 > **Latest (SEAL v1.21r0): the air finally THINS with altitude — the long-deferred B5 lands as
 > the ninth consecutive zero-new-det_math seal.** The original plan feared B5 "forces
 > det_exp/det_pow" (§8.5 below); the envelope-LUT machinery built since v1.3r0 makes that fear

@@ -296,3 +296,70 @@ def test_live_history_replays_a_joiner_the_whole_stream(frames, data):
     j = data.draw(st.integers(min_value=0, max_value=len(frames)))
     replay_then_live = fr.encode_stream(history[:j]) + fr.encode_stream(frames[j:])
     assert replay_then_live == fr.encode_stream(frames)  # joiner at j reconstructs the whole stream
+
+
+# --- layer 14: bounded/windowed catch-up ------------------------------------------------------------
+def live_deliver_windowed(source_frames, accepts, window):
+    """Reference layer-14 windowed live-source model — mirrors netbcast::broadcast_live with
+    catchup_window=W: identical pull + send-buffer delivery to live_deliver, but the retained
+    catch-up history holds only the LAST W produced payloads (the oldest is evicted as each new
+    frame lands; 0 = retain all = the layer-13 model). Returns (delivered, history, trimmed)."""
+    queue = b""
+    delivered = b""
+    history = []
+    trimmed = 0
+    accepts = list(accepts)
+    it = iter(source_frames)                    # the loop has no len(); only StopIteration ends it
+    while True:
+        try:
+            f = next(it)
+        except StopIteration:
+            break
+        history.append(f)                       # retained as produced...
+        if window and len(history) > window:    # ...bounded to the last `window` payloads
+            history.pop(0)
+            trimmed += 1
+        queue += fr.encode_stream([f])          # enqueue_bytes: append the length-prefixed frame
+        take = min(accepts.pop(0), len(queue)) if accepts else 0
+        delivered += queue[:take]               # flush_client: kernel accepted `take` bytes
+        queue = queue[take:]
+    return delivered + queue, history, trimmed  # drain phase: the pending tail flushes last
+
+
+@given(st.lists(st.binary(min_size=0, max_size=60), min_size=1, max_size=10),
+       st.integers(min_value=1, max_value=12), st.data())
+def test_windowed_history_is_the_exact_tail_and_a_joiner_gets_a_contiguous_suffix(frames, window,
+                                                                                  data):
+    # After j pulls a W-window retains EXACTLY frames[max(0,j-W):j] (the newest W, evicting
+    # max(0,j-W) — bounded memory on a stream of any length), so a joiner accepted at production
+    # point j receives replay(history) ++ live(frames[j:]) == encode_stream(frames[max(0,j-W):]) —
+    # a CONTIGUOUS canonical suffix, frame-aligned, no gap, no duplicate. A window still covering
+    # the whole stream so far (W >= j) hands the joiner the whole stream — the layer-13 degenerate
+    # case. This is the pure form of the netwindow_bridge claims.
+    frames = [bytes(f) for f in frames]
+    j = data.draw(st.integers(min_value=0, max_value=len(frames)))
+    _, history, trimmed = live_deliver_windowed(frames[:j], [10**9] * j, window)
+    start = max(0, j - window)
+    assert history == frames[start:j]           # the retained window is the exact tail
+    assert trimmed == start                     # every older retention was evicted, none skipped
+    replay_then_live = fr.encode_stream(history) + fr.encode_stream(frames[j:])
+    assert replay_then_live == fr.encode_stream(frames[start:])  # a contiguous canonical suffix
+    if window >= j:                             # degenerate: window covers everything produced
+        assert replay_then_live == fr.encode_stream(frames)
+
+
+@given(st.lists(st.binary(min_size=0, max_size=60), min_size=1, max_size=10),
+       st.integers(min_value=0, max_value=12), st.data())
+def test_window_never_changes_live_delivery_and_window0_is_layer13(frames, window, data):
+    # The window bounds ONLY how far back a joiner's replay reaches — a live client's delivered
+    # bytes are identical under ANY window (and any kernel-acceptance pattern) to the unwindowed
+    # layer-13 model == the canonical encoded stream. window=0 disables eviction bit-for-bit
+    # (history == everything produced, trimmed == 0): layer-13 behavior exactly.
+    frames = [bytes(f) for f in frames]
+    accepts = [data.draw(st.integers(min_value=0, max_value=200)) for _ in frames]
+    delivered_w, _, _ = live_deliver_windowed(frames, accepts, window)
+    delivered_13, history_13 = live_deliver(frames, accepts)
+    assert delivered_w == delivered_13                   # the window never touches live bytes
+    assert delivered_w == fr.encode_stream(frames)       # == the canonical encoded stream
+    delivered_0, history_0, trimmed_0 = live_deliver_windowed(frames, accepts, 0)
+    assert (delivered_0, history_0, trimmed_0) == (delivered_13, history_13, 0)

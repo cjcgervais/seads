@@ -135,6 +135,7 @@ jobs:
             echo "nasync=build/Release/seads_netasync_test.exe" >> "$GITHUB_OUTPUT"
             echo "ncap=build/Release/seads_netcap_test.exe" >> "$GITHUB_OUTPUT"
             echo "nlive=build/Release/seads_netlive_test.exe" >> "$GITHUB_OUTPUT"
+            echo "nwindow=build/Release/seads_netwindow_test.exe" >> "$GITHUB_OUTPUT"
           else
             echo "golden=build/seads_golden" >> "$GITHUB_OUTPUT"
             echo "scenario=build/seads_scenario" >> "$GITHUB_OUTPUT"
@@ -158,6 +159,7 @@ jobs:
             echo "nasync=build/seads_netasync_test" >> "$GITHUB_OUTPUT"
             echo "ncap=build/seads_netcap_test" >> "$GITHUB_OUTPUT"
             echo "nlive=build/seads_netlive_test" >> "$GITHUB_OUTPUT"
+            echo "nwindow=build/seads_netwindow_test" >> "$GITHUB_OUTPUT"
           fi
 
       - name: det_math bit-exact test
@@ -268,6 +270,17 @@ jobs:
         if: matrix.name == 'MSVC x64' || matrix.name == 'GCC x64' || matrix.name == 'Clang x64'
         shell: bash
         run: "${{ steps.bin.outputs.nlive }}"
+
+      # Layer 14. seads_netwindow_test is a default target (build-only-smoked on every leg above);
+      # the bounded/windowed catch-up bridge (catchup_window retains only the last W produced
+      # payloads — a mid-stream joiner receives exactly the contiguous suffix frames[max(0,J-W):],
+      # the early client is byte-identical under any window, and W >= stream recovers layer-13
+      # full catch-up incl. the sealed session digest) needs live 127.0.0.1 ports, so it runs
+      # only on the NATIVE x64 legs, exactly like the layer-7..13 bridges.
+      - name: Bounded catch-up determinism bridge (layer 14)
+        if: matrix.name == 'MSVC x64' || matrix.name == 'GCC x64' || matrix.name == 'Clang x64'
+        shell: bash
+        run: "${{ steps.bin.outputs.nwindow }}"
 
       - name: Run all goldens + hash + validate
         shell: bash

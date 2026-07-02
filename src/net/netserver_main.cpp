@@ -7,7 +7,7 @@
 // determinism BRIDGEs (seads_netloop_test / seads_multiclient_test / seads_netdyn_test) are what CI
 // gates, this pair is the human demo.
 //
-// Usage:  seads_netserver [port] [num_clients] [catchup] [async] [cap_bytes] [live]
+// Usage:  seads_netserver [port] [num_clients] [catchup] [async] [cap_bytes] [live] [window]
 //   port 0 or omitted => OS-assigned (the chosen port is printed); num_clients defaults to 1.
 //   catchup 0/1 (default 0): with 1 (layer 10) a client that joins mid-stream is first replayed the
 //   missed prefix frames[0:join], so it too reconstructs the WHOLE dogfight; with 0 (layer 9) a late
@@ -20,6 +20,9 @@
 //   live 0/1 (default 0): with 1 (layer 13) the frame stream is NOT precomputed — the sealed
 //   kernel is stepped INSIDE the broadcast loop (session::FrameProducer pulled by
 //   netbcast::broadcast_live, inherently async; the async flag is implied, cap_bytes applies).
+//   window (default 0 = retain all; needs live=1 catchup=1): layer-14 bounded catch-up — only the
+//   last `window` produced frames are retained, so a late joiner is replayed frames[max(0,J-W):J]
+//   (an open-ended live stream can run catch-up in O(window) memory).
 //   The server waits for num_clients connection(s), then broadcasts the identical frame stream to
 //   each — every client present from the start reconstructs the same dogfight.
 #include "session.h"
@@ -58,9 +61,14 @@ int main(int argc, char** argv) {
     bool use_async = (argc > 4) && std::atoi(argv[4]) != 0;
     std::size_t cap_bytes = (argc > 5) ? static_cast<std::size_t>(std::atoll(argv[5])) : 0;
     bool live = (argc > 6) && std::atoi(argv[6]) != 0;
+    std::size_t window = (argc > 7) ? static_cast<std::size_t>(std::atoll(argv[7])) : 0;
     if (cap_bytes > 0 && !use_async && !live) {
         std::printf("NOTE: cap_bytes applies only to the async/live paths (layers 12/13); ignoring it\n");
         cap_bytes = 0;
+    }
+    if (window > 0 && (!live || !catchup)) {
+        std::printf("NOTE: window applies only to live catch-up (layer 14: live=1 catchup=1); ignoring it\n");
+        window = 0;
     }
 
     const Rails rails = sealed_rails();
@@ -76,8 +84,9 @@ int main(int argc, char** argv) {
     }
     if (live)
         std::printf("seads_netserver: listening on 127.0.0.1:%u (LIVE source — kernel stepped in "
-                    "the broadcast loop, expecting %d client(s), catchup=%d, cap_bytes=%zu)\n",
-                    port, num_clients, catchup ? 1 : 0, cap_bytes);
+                    "the broadcast loop, expecting %d client(s), catchup=%d, cap_bytes=%zu, "
+                    "window=%zu)\n",
+                    port, num_clients, catchup ? 1 : 0, cap_bytes, window);
     else
         std::printf("seads_netserver: listening on 127.0.0.1:%u (%zu frames ready, expecting %d client(s), "
                     "catchup=%d, async=%d, cap_bytes=%zu)\n",
@@ -106,7 +115,7 @@ int main(int argc, char** argv) {
         };
         st = netbcast::broadcast_live(listener, source, static_cast<std::size_t>(num_clients),
                                       /*accept_deadline_ms=*/60000, /*on_frame=*/{}, catchup,
-                                      cap_bytes);
+                                      cap_bytes, window);
     } else {
         st = use_async ? netbcast::broadcast_async(listener, payloads,
                                                    static_cast<std::size_t>(num_clients),
@@ -124,7 +133,8 @@ int main(int argc, char** argv) {
                     st.joins, num_clients);
         return 1;
     }
-    std::printf("seads_netserver: broadcast %zu frames (joins=%zu, leaves=%zu, capped=%zu); done\n",
-                st.frames_sent, st.joins, st.leaves, st.capped);
+    std::printf("seads_netserver: broadcast %zu frames (joins=%zu, leaves=%zu, capped=%zu, "
+                "trimmed=%zu); done\n",
+                st.frames_sent, st.joins, st.leaves, st.capped, st.trimmed);
     return 0;
 }
