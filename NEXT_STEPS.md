@@ -1,6 +1,48 @@
 # SEADS 2026 — Next Steps (handoff)
 
-> ## ►► CURRENT STATE (2026-07-02): **YAK-3 / LA-7 ENVTAB ENTRIES — THE FULL SEALED ROSTER FLIES DONE ✅** (no-seal, rides **ATM-Sphere v1.19r0**)
+> ## ►► CURRENT STATE (2026-07-02): **GOLDEN-SK-YakLa-001 — YAK-3/LA-7 ENVELOPE INTERPOLATION SEALED IN LOCKSTEP DONE ✅** (no-seal, rides **ATM-Sphere v1.19r0**)
+> **Latest: the Yak-3/La-7 arc gets its sealed capstone — a 12th golden proves the two new
+> envelope-table entries drive BIT-IDENTICAL C++ ↔ Python trajectories, closing the named gap
+> ("they fly in demos now, but no golden covers their envelope interpolation in lockstep").**
+> **The scenario** (`config/scenarios/GOLDEN-SK-YakLa-001.json`, 3,000 ticks, 2 ships,
+> near-antipodal — lon 0 vs lon 180, ~47 km apart on the 94 km-circumference sphere ⇒ provably
+> non-interacting, hp/regions full, kills 0, lhb -1): each airframe is flown to traverse its OWN
+> `phi_max`/`roll_rate` LUT **interpolation segments** at non-breakpoint TAS with **over-limit
+> commanded banks** (70°/−60° ⇒ the interpolated clamp, not the command, sets the achieved bank;
+> the roll_rate(V) slew shapes every reversal). **Yak-3** (TAS 150, inside [120,160]): accelerating
+> 48°-clamped turn crosses the **160 m/s breakpoint upward**, a throttle-0.3 reversal to −20°
+> re-crosses it **downward**; ends wings-level firing 29 rounds (rof 7, ammo 140→111). **La-7**
+> (TAS 110, inside [85,125]): −60° commanded turn (clamps −52°…−49° as the limit tightens with
+> speed) crosses **125 upward** (~131 by t=1800), then a 1 s **g-8 pull in which the STRUCTURAL
+> limit binds throughout** (n_aero ∈ [8.20, 9.27] > n_max_struct 8 — measured, not assumed), then
+> recovery falls back **down through 125 AND 85** (three LUT segments visited); fires 34 rounds
+> (rof 6, ammo 170→136). **63 live rounds ride the sealed final snapshot**, pinning per-airframe
+> muzzle_v (800), convergence (180/200), and damage (28/30) in the golden bytes.
+> **world_hash `54e237a9d7dcba92de4945a9dc40e9b94b1866cdbbaed9c5b38349a426267d8d`** — Python
+> reference sealed it; `seads_scenario --id GOLDEN-SK-YakLa-001` reproduces it BIT-FOR-BIT on GCC
+> and Clang (63 projectiles echoed identically).
+> **PURELY ADDITIVE — NO SEAL: no rail value changed, no existing golden hash moved (all 11 prior
+> re-validated byte-identical), no kernel/det_math/wire/tuning-value edit.** Diff: the scenario
+> JSON + sealed `tests/golden/GOLDEN-SK-YakLa-001/` + `scenario_params.h` regen (+19 lines, purely
+> additive — lockstep/predict/all other vector headers untouched, they embed their own scenarios) +
+> guardian.yml gains the 12th golden in its THREE lists (python-gates loop, build-matrix `run_one`,
+> cross-toolchain aggregation — first golden-list change since v1.18r0) + 3 non-degeneracy property
+> tests (`tests/property/test_yakla_golden.py`: start TAS strictly inside a LUT segment, commanded
+> banks exceed phi_max everywhere, lut_eval strictly interpolates between differing nodes) ⇒ **169**.
+> **Gates: ctest 17/17 GCC + 17/17 Clang, 169 property tests PASS, spec-monotone + tuning probes
+> PASS, all 12 goldens validate against the reference, scenario_params --check in sync.**
+> **NEXT (free pick, none blocking):** **B5** ISA atmosphere (a seal); an open-ended live frame
+> SOURCE feeding `broadcast_async` incrementally; or per-airframe region toughness (data-only
+> envelope scalars + a kernel consumer — its own ADR, would move goldens).
+> **NOTE FOR THE NEXT AGENT:** the scenario was DESIGNED against measured reference dynamics
+> (instrumented run) — the description's numbers (segment crossings, n_aero range, ammo counts)
+> are verified claims; `test_yakla_golden.py` guards the setup against silently going degenerate
+> (a start TAS moved onto a LUT node, a bank tuned below the clamp). Any Yak-3/La-7 tuning retune
+> now MOVES this golden ⇒ that retune becomes a seal (that is the point — the two airframes'
+> envelopes are no longer unpinned data). The two ships must STAY non-interacting: they share the
+> tick loop, so a future edit that brings them inside 2.4 km round-reach changes hit outcomes.
+>
+> ## ►► PRIOR STATE (2026-07-02): **YAK-3 / LA-7 ENVTAB ENTRIES — THE FULL SEALED ROSTER FLIES DONE ✅** (no-seal, rides **ATM-Sphere v1.19r0**)
 > **Latest: the mesh-variant arc's last gap closes — Yak-3 and La-7 (the two roster types whose
 > silhouettes existed but could never appear in a recording) now have generated envelope-table
 > entries and fly in the built-in dogfight demo.** Three small pieces (data/tooling + presentation):
