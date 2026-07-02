@@ -93,6 +93,14 @@ START_HP = float.fromhex('0x1.9000000000000p+6')     # 100.0 default hitpoints (
 # gun falls silent ("Winchester"). A pure integer-valued counter (like fire_cd) — NO new det_math.
 # Exact hex-float shared bit-for-bit with kernel.cpp. See ADR-Step7-Guns-G4.
 START_AMMO = float.fromhex('0x1.f400000000000p+8')   # 500.0 default magazine (no-arg/Sphere; per-airframe via env)
+# --- Attacker attribution (Step 7 guns, ATM-Sphere v1.16r0) ------------------------------
+# last_hit_by is the index of the aircraft whose round most recently damaged a given aircraft,
+# or NO_ATTACKER (-1.0) if it has never been hit. Set at hit time in _advance_projectiles from
+# the striking round's owner (the kernel-side event hook the guns arc deferred). It persists
+# through death, so at hp<=0 it names the KILLER. A pure integer-valued state (like fire_cd/ammo),
+# stored as an f64 in the snapshot -> NO new det_math. Exact hex-float shared bit-for-bit with
+# kernel.cpp. See ADR-Step7-Guns-Attribution-v1.16r0.
+NO_ATTACKER = float.fromhex('-0x1.0000000000000p+0')  # -1.0 sentinel: "never hit"
 HIT_RADIUS_M = float.fromhex('0x1.e000000000000p+5')  # 60.0 m horizontal hit radius (validation/doc)
 HIT_ALT_GATE_M = float.fromhex('0x1.e000000000000p+5')  # 60.0 m vertical hit gate
 COS_HIT_ANGLE = float.fromhex('0x1.fffef3909d697p-1')  # cos(HIT_RADIUS_M/R) via det_cos; the binding test
@@ -145,15 +153,21 @@ class Aircraft:
     # (decrement-then-fire). Defaults to 0.0 (ready to fire).
     # G4 (v1.13r0): ammo (magazine, rounds) is a stored state; firing is gated on ammo > 0 and one
     # round is consumed per shot. Defaults to START_AMMO (the no-arg/Sphere path; per-airframe via env).
-    __slots__ = ("lat", "lon", "psi", "phi", "alt", "tas", "gamma", "hp", "fire_cd", "ammo")
+    # Attribution (v1.16r0): last_hit_by (index of the aircraft whose round most recently damaged this
+    # one, or -1 == never hit) is a stored state — the kernel-side event hook for "who fired the
+    # killing round". Set on hit (see _advance_projectiles); persists through death (a corpse keeps its
+    # killer). Pure integer-valued counter (like fire_cd), NO new det_math. Defaults to NO_ATTACKER.
+    __slots__ = ("lat", "lon", "psi", "phi", "alt", "tas", "gamma", "hp", "fire_cd", "ammo",
+                 "last_hit_by")
 
     def __init__(self, lat, lon, psi, phi, alt, tas, gamma=0.0, hp=START_HP, fire_cd=0.0,
-                 ammo=START_AMMO):
+                 ammo=START_AMMO, last_hit_by=NO_ATTACKER):
         self.lat, self.lon, self.psi, self.phi, self.alt, self.tas = lat, lon, psi, phi, alt, tas
         self.gamma = gamma
         self.hp = hp
         self.fire_cd = fire_cd
         self.ammo = ammo
+        self.last_hit_by = last_hit_by
 
 
 class Projectile:
@@ -242,6 +256,7 @@ class Kernel:
                 ac.hp = ac.hp - p.damage              # G3: per-round damage carried from the firer's gun
                 if ac.hp < 0.0:
                     ac.hp = 0.0
+                ac.last_hit_by = float(p.owner)       # v1.16r0: attribute the hit to the firing aircraft
             if p.ttl > 0 and not hit_ground and hit_ac < 0:
                 survivors.append(p)
         self.projectiles = survivors
@@ -400,11 +415,13 @@ class Kernel:
                            self.dt, self.R, len(self.aircraft), 0)
         for ac in self.aircraft:
             # G2 (v1.10r0): hp is the 8th per-aircraft f64 (after gamma). G3 (v1.11r0): fire_cd (the
-            # fire-rate cooldown) is the 9th. G4 (v1.13r0): ammo (the magazine) is the 10th. Appending
-            # each grows every snapshot -> all prior goldens move (trajectory/hp/fire_cd/ammo identical
-            # for the unchanged scenarios), as gamma did in B2.
-            buf += struct.pack("<10d", ac.lat, ac.lon, ac.psi, ac.phi, ac.alt, ac.tas, ac.gamma,
-                               ac.hp, ac.fire_cd, ac.ammo)
+            # fire-rate cooldown) is the 9th. G4 (v1.13r0): ammo (the magazine) is the 10th. v1.16r0:
+            # last_hit_by (attacker attribution) is the 11th. Appending each grows every snapshot ->
+            # all prior goldens move (trajectory/hp/fire_cd/ammo/last_hit_by identical for the
+            # unchanged scenarios; last_hit_by stays NO_ATTACKER where nothing is ever hit), as gamma
+            # did in B2. See ADR-Step7-Guns-Attribution-v1.16r0.
+            buf += struct.pack("<11d", ac.lat, ac.lon, ac.psi, ac.phi, ac.alt, ac.tas, ac.gamma,
+                               ac.hp, ac.fire_cd, ac.ammo, ac.last_hit_by)
         # G1 (v1.9r0): projectile block appended after the aircraft block. n_projectiles (u32) + pad,
         # then per round 7 x f64 [lat, lon, psi, alt, tas, gamma, damage] + ttl (u32) + owner (u32);
         # damage was added in G3 (v1.11r0). The block is always present (n=0 for gun-less scenarios),

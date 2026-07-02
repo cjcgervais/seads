@@ -38,16 +38,16 @@ constexpr unsigned HEAL_TICK   = 15u;             // perturbed predictor heals h
 // --- expected nominal predicted per-tick hash checkpoints + whole-sequence digest ---
 struct Checkpoint { unsigned tick; const char* hash; };
 constexpr Checkpoint CHECKPOINTS[] = {
-  { 1u, "71d3556a9504a2ee9377299a2b12781b4fca28a75ea4df575409ddfcc58bed86" },
-  { 50u, "ff0dab5c04f1973e354c3b003c1ef98b6246ef47653234f1bb417a348f5b1b04" },
-  { 100u, "16d0f33d8a7f6c2d0b795ed9c02a57f493de5f198126e9284266ce53624ddd2a" },
-  { 150u, "5d26a62dbe9b7fa6457b79107b1d5997f42f02fc4c9de9d313fbab1f00a90cee" },
-  { 200u, "cae678cc330a3786ee9819c1c40df44b88bed4fbe514d631e22846c37edf2233" },
-  { 250u, "2a71031255daa55bda1a3cfa2b342d50fc308dbe58b767f438e8696e7bdb0d08" },
-  { 300u, "11ae1634fbccae3db963b75233f20d3b241b7b509f19a082a993ab7b2183a0da" },
+  { 1u, "6023c4be8751a9eed67b4d994bae76346b9541b2d9a89df034fae3b2f9c30cf3" },
+  { 50u, "70df37142f2fd444309568370a11c23330930485e1198b3912b008a17634e9f8" },
+  { 100u, "fc4889ef86212892d37c68674dcd2a5e9d0810717bf0935b6a6ae91c6e1b33ef" },
+  { 150u, "298ef2018582e58ba286fea98e340764d0e0658e555b44590315aad74b47d871" },
+  { 200u, "a0080f107fe5096544318920475034e0fec97bc062a5c7b9fae92526c9f1ba5a" },
+  { 250u, "105d5e5fba01e017359d4eadf8e644151424b1c96b88acf93d60f448d68c24e1" },
+  { 300u, "e6f039d8d27ffb8427d1616e7dec414cb05dd8caeae368f44482e3d4c1101b5a" },
 };
 constexpr int CHECKPOINT_COUNT = sizeof(CHECKPOINTS)/sizeof(CHECKPOINTS[0]);
 
-constexpr const char* SEQUENCE_DIGEST = "d1824629aaca7b40ec53ec60062ffa5f881d2aa6e09dd9275e2dea5776333b70";
+constexpr const char* SEQUENCE_DIGEST = "719c0642f5434fc88d7f1e919d4f1f6b946c3bdb3f1b6b3d7e495582d05d071e";
 
 }} // namespace seads::pred_vec

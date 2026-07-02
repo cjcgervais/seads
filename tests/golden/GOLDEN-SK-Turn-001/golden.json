@@ -1,8 +1,8 @@
 {
   "id": "GOLDEN-SK-Turn-001",
-  "seal": "ATM-Sphere v1.13r0",
+  "seal": "ATM-Sphere v1.16r0",
   "ticks": 6000,
-  "world_hash": "1e2e1f35c5f732762e48c0542466c3e67cf58bd09a293682accf6b8ac0c79b8b",
+  "world_hash": "9e85dd3a6f770942c187bec730d14f157cc26808f9a815f15289bbe526d06d2f",
   "snapshot_format": "see ref_kernel.py docstring",
   "generated_by": "tools/ref_kernel.py (Python det_math reference)"
 }

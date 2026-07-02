@@ -1,6 +1,41 @@
 # SEADS 2026 — Next Steps (handoff)
 
-> ## ►► CURRENT STATE (2026-06-30): seal **ATM-Sphere v1.15r0** — **GUN CONVERGENCE (BORESIGHT HARMONIZATION) DONE ✅**
+> ## ►► CURRENT STATE (2026-07-01): seal **ATM-Sphere v1.16r0** — **ATTACKER ATTRIBUTION (last_hit_by / "who fired the killing round") DONE ✅**
+> **Latest (SEAL v1.16r0): the kernel now records WHO killed whom.** The guns/netcode arc could model a
+> full dogfight and even reliably replicate the *moments* of combat (layer 6 DERIVES hit/kill events from
+> hp deltas over the lossy wire) — but nothing recorded the **attacker**. The kernel knew it at hit time
+> (the striking round carries `owner`, used since G2 for the self-hit exclusion) and threw it away. This
+> seal is the **kernel-side event hook** every prior handoff deferred. Each aircraft gains **`last_hit_by`**
+> — the index of the aircraft whose round most recently damaged it, or **-1 (`NO_ATTACKER`) == never hit** —
+> set at hit time from the round's `owner` (`ac.last_hit_by = float(p.owner)`, one line beside the existing
+> damage apply). It **persists through death**, so at hp≤0 it names the **killer** ⇒ an attributed kill-feed.
+> **`last_hit_by` is the 11th per-aircraft snapshot f64** (appended after `ammo`), so it is canonical hashed
+> state ⇒ **ALL 10 goldens move** — but **provably additive**: stripping the 11th f64 from each v1.16r0 golden
+> reproduces its v1.15r0 hash **byte-for-byte** (10/10 dry strip-diff), so attribution perturbs **no**
+> trajectory/hp/fire_cd/ammo/gamma/projectile. **Meaningful new behavior tied to a golden:** GOLDEN-SK-Hit-001's
+> a6m2 now ends `hp 0` **and `last_hit_by = 0`** (the p47d); the p47d, never hit, stays -1. **STILL no new
+> det_math** (a pure integer-valued state, like fire_cd/ammo — the guns arc's zero-new-transcendental streak
+> holds). **Off-wire this seal** (deferred one seal, exactly as `ammo` was kernel-state at G4 then rode the
+> wire at v1.14r0): only the **2 vectors that hash `kernel.snapshot()` move** — `lockstep_vectors.h` (desync
+> tripwire) + `predict_vectors.h` (client-prediction canonical digest), regenerated; the wire-based vectors
+> (`snapshot`/`weapon`/`session`/`event`/`interp`/`geo001`) are **byte-identical**. **No new golden, no new
+> ctest target ⇒ guardian.yml UNCHANGED** (same 10 IDs). New goldens: Sphere `f2db95bd…`, Hit `612e5407…`,
+> Winchester `f351ee04…`, Gunfire `0e648539…` (+6 flight goldens). **Gates: 15/15 receipt PASS, 126 property
+> tests (+7: `test_attribution.py` — default -1 / attributes-to-firer / no-hit-no-attribution / persists-
+> through-death / 11th-snapshot-f64 / Hit-scenario-records-the-kill / deterministic), ctest 10/10 GCC+Clang,
+> all generated headers in sync, 10 goldens C++≡Python bit-for-bit GCC+Clang.** Rails version 250→260. Ledger:
+> **ADR-Step7-Guns-Attribution-v1.16r0**, SEAL_CARD v1.16r0, receipt `…v1.16r0-<sha>.yml`.
+> **NEXT (the natural v1.17r0 follow-up, then free pick):** put `last_hit_by` on the WEAPON-001 wire
+> (protocol 5→6, a transport-only reseal like `ammo` v1.14r0) + add `Event.attacker` to the layer-6 channel
+> ⇒ an **attributed kill-feed** a remote client can render; then cross-PROCESS sockets over the layer-5/6
+> frames; component/region damage; renderer meshes / guns in the live `--fly` path; or **B5** ISA atmosphere.
+> **GOTCHA confirmed for the next agent:** a new per-aircraft canonical f64 moves ONLY `lockstep`+`predict`
+> vectors (they hash the world_hash); wire-based vectors stay frozen while the field is off-wire. Regenerate
+> those two (not all 13) and rebuild — `make_receipt` catches it if you miss one.
+> **GIT: committed locally; push + guardian CI is the final gate (expected GREEN — MSVC + GCC/Clang ×
+> x64/AArch64 reproduce all 10 moved goldens + the off-wire parity legs).**
+>
+> ## ►► PRIOR STATE (2026-06-30): seal **ATM-Sphere v1.15r0** — **GUN CONVERGENCE (BORESIGHT HARMONIZATION) DONE ✅**
 > **Latest (SEAL v1.15r0): the guns are now harmonized — rounds are boresight-zeroed to a per-airframe range.**
 > Each envelope gains **`convergence_m`** (per-airframe boresight range; a new `envelopes.AERO_FIELDS` scalar,
 > appended after `ammo_start` in all 8 JSONs + the C++ `Envelope` struct). SEADS models a single **centerline**

@@ -59,16 +59,16 @@ constexpr unsigned TICKS      = 600u;
 
 struct Checkpoint { unsigned tick; const char* hash; };
 constexpr Checkpoint CHECKPOINTS[] = {
-  { 1u, "6efb39b81ee7f89ab2db9196b11b0e97f347adb817724546979ecf5cd1baa22f" },
-  { 100u, "e0f64b68edb68bcf13374f45ced62bfeae32a0495eca09b403079d210729ec8b" },
-  { 200u, "d1af0495eef4924a28893e22e140ab10d72dc3035b32472fac5a958073fbef78" },
-  { 300u, "e81e8047f239ef86472e8519f4d2d502cd5b6593ef09393eaa3e75ecfeeb4767" },
-  { 400u, "caa878365d619c26231feccaf18bf389ee21e7a67f92a145023d6943bbe86f10" },
-  { 500u, "871c6cae4181844a10c08597927e79abe6478f63468b9590e26de217d89d7a79" },
-  { 600u, "c7f4fba6a587348ea8dabb2a0e3499aa04640303c9f947da0c4cb70e0e9444fa" },
+  { 1u, "108204e9e5a491cdcad8c0215d11fdd3af59e91c47c9e8fe1d499a5101b6a4a2" },
+  { 100u, "f7cb3676d65cd224ca6eb8c4e53d94098b633b9bb666b6606c57fabdb93e6f75" },
+  { 200u, "6ace2d5c443eaaa73a27141115b9fd6fb13f0a432f7e49d9e31cfc5315151284" },
+  { 300u, "1691f22cb16913aa2f8212219331efc80f418f2e2102d58ed98115defaed809c" },
+  { 400u, "bb1d684438f1453d41b54ff1ad03a0030254fc9d4614887d7c4bde14d11b2415" },
+  { 500u, "c4d04c19ee2fd3bc988cda60d49a617b8ae10a4d1bbb9302de29ac55aea7555a" },
+  { 600u, "9f5ec089a34e0200592639e39a1e5ed9b814f1a33400b68809d079cd2e1ffe8a" },
 };
 constexpr int CHECKPOINT_COUNT = sizeof(CHECKPOINTS)/sizeof(CHECKPOINTS[0]);
 
-constexpr const char* SEQUENCE_DIGEST = "313f0df71e433cdeca92be8b15d3202226bfec02988cfae2641c8aead59b89e0";
+constexpr const char* SEQUENCE_DIGEST = "73a73d04f13dcbbd30ea5b0effce155c1c737ad803be93cda4a91665669b94bb";
 
 }} // namespace seads::ls_vec

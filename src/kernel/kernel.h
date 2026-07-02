@@ -47,6 +47,7 @@ public:
     double hp(std::size_t i) const { return hp_[i]; }   // G2 (v1.10r0): hitpoints; hp<=0 == dead
     double fire_cd(std::size_t i) const { return fire_cd_[i]; }  // G3 (v1.11r0): fire-rate cooldown
     double ammo(std::size_t i) const { return ammo_[i]; }  // G4 (v1.13r0): rounds left; 0 == Winchester
+    double last_hit_by(std::size_t i) const { return last_hit_by_[i]; }  // v1.16r0: attacker idx; -1 == never hit
 
     // G1 (v1.9r0) ballistic projectiles — read-only accessors (the renderer/tests inspect them; the
     // sim spawns them internally on a fire Command). SoA, deterministic array iteration order.
@@ -76,7 +77,8 @@ private:
 
     Rails rails_;
     // aircraft SoA: 7-tuple kinematics + hp (G2) + fire_cd (G3 fire-rate cooldown) + ammo (G4 magazine)
-    std::vector<double> lat_, lon_, psi_, phi_, alt_, tas_, gamma_, hp_, fire_cd_, ammo_;
+    // + last_hit_by (v1.16r0 attacker attribution; -1 == never hit, set to the striking round's owner)
+    std::vector<double> lat_, lon_, psi_, phi_, alt_, tas_, gamma_, hp_, fire_cd_, ammo_, last_hit_by_;
     // projectile SoA: kinematic 6-tuple + carried damage (G3) + integer ttl + owner aircraft index
     std::vector<double> p_lat_, p_lon_, p_psi_, p_alt_, p_tas_, p_gamma_, p_damage_;
     std::vector<std::uint32_t> p_ttl_, p_owner_;

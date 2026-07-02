@@ -38,6 +38,12 @@ static constexpr double START_HP         = 0x1.9000000000000p+6;   // 100.0 defa
 // ammo > 0 (one round consumed per shot); at 0 the gun falls silent ("Winchester"). No new det_math
 // (a pure integer-valued counter, like fire_cd). Shared hex-float with tools/ref_kernel.py.
 static constexpr double START_AMMO       = 0x1.f400000000000p+8;   // 500.0 default magazine (no-arg/Sphere)
+// Attacker attribution (Step 7 guns, ATM-Sphere v1.16r0). last_hit_by names the aircraft whose round
+// most recently damaged a given aircraft (NO_ATTACKER == -1 == never hit), set at hit time from the
+// striking round's owner — the kernel-side event hook the guns arc deferred. Persists through death, so
+// at hp<=0 it is the KILLER. A pure integer-valued state (like fire_cd/ammo) ⇒ NO new det_math. Shared
+// hex-float with tools/ref_kernel.py. See ADR-Step7-Guns-Attribution-v1.16r0.
+static constexpr double NO_ATTACKER      = -0x1.0000000000000p+0;  // -1.0 sentinel: never hit
 static constexpr double HIT_ALT_GATE_M   = 0x1.e000000000000p+5;   // 60.0 m vertical hit gate
 static constexpr double COS_HIT_ANGLE    = 0x1.fffef3909d697p-1;   // cos(HIT_RADIUS/R); horizontal hit test
 
@@ -97,6 +103,7 @@ std::size_t Kernel::add(double lat, double lon, double psi, double phi, double a
     hp_.push_back(hp);                           // G2 hitpoints (G3: per-airframe hp_start passed in)
     fire_cd_.push_back(0.0);                     // G3 (v1.11r0): fire-rate cooldown starts ready
     ammo_.push_back(ammo);                       // G4 (v1.13r0): magazine (per-airframe ammo_start)
+    last_hit_by_.push_back(NO_ATTACKER);         // v1.16r0: never hit yet
     return lat_.size() - 1;
 }
 
@@ -169,6 +176,8 @@ void Kernel::advance_projectiles_() {
             double nhp = hp_[static_cast<std::size_t>(hit_ac)] - p_damage_[i];  // G3: carried damage
             if (nhp < 0.0) nhp = 0.0;
             hp_[static_cast<std::size_t>(hit_ac)] = nhp;
+            last_hit_by_[static_cast<std::size_t>(hit_ac)] =
+                static_cast<double>(p_owner_[i]);   // v1.16r0: attribute the hit to the firing aircraft
         }
         if (nttl > 0u && !hit_ground && hit_ac < 0) {   // survivor: write compacted into slot w
             p_lat_[w] = p_lat_[i]; p_lon_[w] = p_lon_[i]; p_psi_[w] = p_psi_[i];
@@ -308,7 +317,7 @@ static void put_f64(std::vector<std::uint8_t>& b, double d) {
 
 std::vector<std::uint8_t> Kernel::snapshot(std::uint32_t tick_count) const {
     std::vector<std::uint8_t> b;
-    b.reserve(32 + 80 * lat_.size() + 8 + 64 * p_lat_.size());   // hdr + 10f64/ac + projblock(7f64+2u32)
+    b.reserve(32 + 88 * lat_.size() + 8 + 64 * p_lat_.size());   // hdr + 11f64/ac + projblock(7f64+2u32)
     put_u16(b, 1);                 // mode = ATM
     put_u16(b, 0);                 // pad
     put_u32(b, tick_count);        // tick_count
@@ -322,6 +331,7 @@ std::vector<std::uint8_t> Kernel::snapshot(std::uint32_t tick_count) const {
         put_f64(b, hp_[i]);                          // G2 (v1.10r0): 8th per-aircraft f64
         put_f64(b, fire_cd_[i]);                     // G3 (v1.11r0): 9th per-aircraft f64 (fire cooldown)
         put_f64(b, ammo_[i]);                        // G4 (v1.13r0): 10th per-aircraft f64 (magazine)
+        put_f64(b, last_hit_by_[i]);                 // v1.16r0: 11th per-aircraft f64 (attacker attribution)
     }
     // G1 (v1.9r0): projectile block — u32 n_projectiles, u32 pad, then per round 7 x f64
     // [lat, lon, psi, alt, tas, gamma, damage] + u32 ttl + u32 owner (damage added in G3 v1.11r0).
