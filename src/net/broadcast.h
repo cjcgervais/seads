@@ -41,6 +41,19 @@
 // BYTES are identical to broadcast_select's: same frames, same order, same length prefix — the
 // bridge (seads_netasync_test) proves a never-reading-during-broadcast client still reconstructs
 // the sealed SESSION-SK-001 digest. Still TRANSPORT — no kernel/wire/golden/seal.
+//
+// Layer 12 (send-buffer BYTE-CAP + drop-slowest): layer 11's per-client send buffer is unbounded —
+// fine for a precomputed finite stream, but pointed at an open-ended live stream a permanently-slow
+// client accumulates server memory without bound. broadcast_async gains an opt-in `cap_bytes`
+// (0 = unbounded = layer-11 behavior EXACTLY): whenever a frame enqueue leaves a client's PENDING
+// userspace backlog above the cap, that client is dropped (drop-slowest — the clients that cannot
+// keep up are shed; everyone else streams on untouched). The policy is applied uniformly, catch-up
+// prefix replay included. A drop is deliberate hygiene, not an error: it is counted in `capped`
+// (and, for a live client, also as a leave, exactly like a send failure). The delivered bytes of a
+// SURVIVING client are unchanged — the cap decides only WHO is dropped, never WHICH bytes flow — and
+// a dropped client's delivered bytes are always a clean byte-PREFIX of the encoded stream (the
+// kernel-accepted prefix; the pending tail is discarded whole). Still TRANSPORT — no
+// kernel/wire/golden/seal.
 #pragma once
 #include <cstddef>
 #include <cstdint>
@@ -55,7 +68,10 @@ namespace netbcast {
 struct Stats {
     std::size_t frames_sent = 0;  // frames pushed to the broadcast set (== payloads.size() on success)
     std::size_t joins = 0;        // clients accepted (initial + dynamic late joins)
-    std::size_t leaves = 0;       // clients dropped on EOF/send-error mid-stream
+    std::size_t leaves = 0;       // clients dropped mid-stream (EOF/send-error, or a policy drop)
+    std::size_t capped = 0;       // layer-12 policy drops: pending backlog exceeded cap_bytes (a
+                                  // live client so dropped also counts as a leave; a joiner capped
+                                  // during its catch-up replay was never live — capped only)
     bool ok = false;              // reached >=min_initial clients and sent every frame
 };
 
@@ -79,11 +95,14 @@ Stats broadcast_select(netsock::socket_t listener,
 // frame loop a bounded drain phase flushes stragglers (still-pending at deadline => dropped as a
 // leave). `frames_sent` counts frames ENQUEUED to the then-current broadcast set; ok == every frame
 // enqueued (per-client delivery shortfalls surface as `leaves`, exactly like a send failure did).
+// Layer 12: `cap_bytes` (0 = unbounded, layer-11 behavior exactly) bounds each client's pending
+// userspace backlog — a client left above the cap by an enqueue (live frame OR catch-up prefix
+// frame) is dropped and counted in `capped` (drop-slowest; see the file header).
 Stats broadcast_async(netsock::socket_t listener,
                       const std::vector<std::vector<std::uint8_t>>& payloads,
                       std::size_t min_initial, int accept_deadline_ms,
                       const std::function<void(std::size_t)>& on_frame = {},
-                      bool catchup = false);
+                      bool catchup = false, std::size_t cap_bytes = 0);
 
 }  // namespace netbcast
 }  // namespace seads

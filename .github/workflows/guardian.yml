@@ -133,6 +133,7 @@ jobs:
             echo "ndyn=build/Release/seads_netdyn_test.exe" >> "$GITHUB_OUTPUT"
             echo "ncatch=build/Release/seads_netcatchup_test.exe" >> "$GITHUB_OUTPUT"
             echo "nasync=build/Release/seads_netasync_test.exe" >> "$GITHUB_OUTPUT"
+            echo "ncap=build/Release/seads_netcap_test.exe" >> "$GITHUB_OUTPUT"
           else
             echo "golden=build/seads_golden" >> "$GITHUB_OUTPUT"
             echo "scenario=build/seads_scenario" >> "$GITHUB_OUTPUT"
@@ -154,6 +155,7 @@ jobs:
             echo "ndyn=build/seads_netdyn_test" >> "$GITHUB_OUTPUT"
             echo "ncatch=build/seads_netcatchup_test" >> "$GITHUB_OUTPUT"
             echo "nasync=build/seads_netasync_test" >> "$GITHUB_OUTPUT"
+            echo "ncap=build/seads_netcap_test" >> "$GITHUB_OUTPUT"
           fi
 
       - name: det_math bit-exact test
@@ -243,6 +245,16 @@ jobs:
         if: matrix.name == 'MSVC x64' || matrix.name == 'GCC x64' || matrix.name == 'Clang x64'
         shell: bash
         run: "${{ steps.bin.outputs.nasync }}"
+
+      # Layer 12. seads_netcap_test is a default target (build-only-smoked on every leg above); the
+      # byte-cap drop-slowest bridge (the slowest client is shed at cap_bytes while the survivor's
+      # stream stays byte-identical and a generously-capped run reconstructs the sealed session
+      # digest) needs live 127.0.0.1 ports, so it runs only on the NATIVE x64 legs, exactly like
+      # the layer-7/8/9/10/11 bridges.
+      - name: Byte-cap drop-slowest determinism bridge (layer 12)
+        if: matrix.name == 'MSVC x64' || matrix.name == 'GCC x64' || matrix.name == 'Clang x64'
+        shell: bash
+        run: "${{ steps.bin.outputs.ncap }}"
 
       - name: Run all goldens + hash + validate
         shell: bash

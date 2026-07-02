@@ -145,21 +145,32 @@ struct BufClient {
     std::vector<std::uint8_t> buf;
     std::size_t off = 0;
     bool pending() const { return off < buf.size(); }
+    std::size_t pending_bytes() const { return buf.size() - off; }
 };
 
 // Push as much of the pending tail as the kernel will take right now. Returns false only on a
 // fatal send error (peer gone); a full kernel buffer (send_some == 0) is not an error — the tail
-// stays queued for the next writability.
+// stays queued for the next writability. The consumed prefix is compacted away so per-client
+// memory tracks the pending BACKLOG (the quantity the layer-12 cap bounds), not the total bytes
+// ever flushed.
 static bool flush_client(BufClient& c) {
     while (c.pending()) {
         std::ptrdiff_t r = netsock::send_some(c.s, c.buf.data() + c.off, c.buf.size() - c.off);
         if (r < 0) return false;
-        if (r == 0) return true;  // kernel full; select_rw will report writability later
+        if (r == 0) break;  // kernel full; select_rw will report writability later
         c.off += static_cast<std::size_t>(r);
     }
-    c.buf.clear();
-    c.off = 0;
+    if (c.off > 0) {
+        c.buf.erase(c.buf.begin(), c.buf.begin() + static_cast<std::ptrdiff_t>(c.off));
+        c.off = 0;
+    }
     return true;
+}
+
+// Layer-12 byte-cap policy: with cap_bytes>0, a client whose pending backlog an enqueue has left
+// above the cap is beyond the drop threshold (drop-slowest). cap_bytes==0 disables the policy.
+static bool over_cap(const BufClient& c, std::size_t cap_bytes) {
+    return cap_bytes > 0 && c.pending_bytes() > cap_bytes;
 }
 
 // Append bytes to the client's queue and opportunistically flush (fast path: an unclogged client
@@ -179,10 +190,12 @@ static void drop_client(std::vector<BufClient>& clients, std::size_t i, Stats& s
 // — is ENQUEUED the missed prefix frames[0:upto] (not burst: unlike layer 10's catch_up_client, a
 // slow joiner's replay cannot stall the loop; it drains on writability like any other pending
 // bytes). A joiner whose very first flush hits a fatal error is dropped before counting as a join.
+// The layer-12 cap applies to each replayed prefix frame too: a joiner it trips is closed before
+// ever becoming live (counted in `capped` only — it was never a member, so it is not a leave).
 static void accept_pending_async(netsock::socket_t listener, std::vector<BufClient>& clients,
                                  Stats& st,
                                  const std::vector<std::vector<std::uint8_t>>& payloads,
-                                 std::size_t upto, bool catchup) {
+                                 std::size_t upto, bool catchup, std::size_t cap_bytes) {
     std::vector<std::uint8_t> frame;
     while (true) {
         netsock::socket_t c = netsock::accept_one(listener);
@@ -196,10 +209,14 @@ static void accept_pending_async(netsock::socket_t listener, std::vector<BufClie
                 frame.clear();
                 framing::encode_frame(payloads[i], frame);
                 alive = enqueue_bytes(bc, frame);
+                if (alive && over_cap(bc, cap_bytes)) {
+                    ++st.capped;
+                    alive = false;
+                }
             }
         }
         if (!alive) {
-            netsock::close_socket(bc.s);  // died on the replay's first accepted bytes; never live
+            netsock::close_socket(bc.s);  // died/capped on the replay; never live
             continue;
         }
         clients.push_back(std::move(bc));
@@ -239,7 +256,8 @@ static void flush_writable(std::vector<BufClient>& clients,
 Stats broadcast_async(netsock::socket_t listener,
                       const std::vector<std::vector<std::uint8_t>>& payloads,
                       std::size_t min_initial, int accept_deadline_ms,
-                      const std::function<void(std::size_t)>& on_frame, bool catchup) {
+                      const std::function<void(std::size_t)>& on_frame, bool catchup,
+                      std::size_t cap_bytes) {
     Stats st;
     std::vector<BufClient> clients;
 
@@ -247,7 +265,7 @@ Stats broadcast_async(netsock::socket_t listener,
     int waited = 0;
     while (clients.size() < min_initial && waited < accept_deadline_ms) {
         if (netsock::wait_readable(listener, 100))
-            accept_pending_async(listener, clients, st, payloads, /*upto=*/0, catchup);
+            accept_pending_async(listener, clients, st, payloads, /*upto=*/0, catchup, cap_bytes);
         waited += 100;
     }
     if (clients.size() < min_initial) {
@@ -274,15 +292,24 @@ Stats broadcast_async(netsock::socket_t listener,
             for (netsock::socket_t r : readable)
                 if (r == listener) { listener_ready = true; break; }
             if (listener_ready)
-                accept_pending_async(listener, clients, st, payloads, /*upto=*/fi, catchup);
+                accept_pending_async(listener, clients, st, payloads, /*upto=*/fi, catchup,
+                                     cap_bytes);
             reap_leavers_async(clients, readable, st);  // ignores the listener entry
             flush_writable(clients, writable, st);
         }
 
+        // enqueue frame fi to every live client; a fatal send drops as before, and a client the
+        // enqueue leaves above the byte-cap is shed (layer 12 drop-slowest: counted capped + leave).
         frame.clear();
         framing::encode_frame(payloads[fi], frame);
-        for (std::size_t i = clients.size(); i-- > 0;)
-            if (!enqueue_bytes(clients[i], frame)) drop_client(clients, i, st);
+        for (std::size_t i = clients.size(); i-- > 0;) {
+            if (!enqueue_bytes(clients[i], frame)) {
+                drop_client(clients, i, st);
+            } else if (over_cap(clients[i], cap_bytes)) {
+                ++st.capped;
+                drop_client(clients, i, st);
+            }
+        }
         ++st.frames_sent;
     }
 

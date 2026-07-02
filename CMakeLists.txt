@@ -222,6 +222,14 @@ add_executable(seads_netasync_test src/net/netasync_test_main.cpp)
 target_link_libraries(seads_netasync_test PRIVATE seads_session seads_event seads_broadcast seads_framing
                       seads_socket seads_predict seads_net seads_kernel seads_replay seads_det_math seads_det_flags)
 
+# --- layer-12 byte-cap bridge: with cap_bytes set, the slowest client (pending backlog over the
+# cap) is shed — drop-slowest — while a surviving client's stream stays byte-identical, a shed
+# client's is a strict byte-prefix, and a generously-capped healthy run still reconstructs the
+# sealed session digest ---
+add_executable(seads_netcap_test src/net/netcap_test_main.cpp)
+target_link_libraries(seads_netcap_test PRIVATE seads_session seads_event seads_broadcast seads_framing
+                      seads_socket seads_predict seads_net seads_kernel seads_replay seads_det_math seads_det_flags)
+
 # --- client presentation test (globe projection + .seadsrec container + playback interp) ---
 add_executable(seads_client_test src/client/client_test_main.cpp)
 target_link_libraries(seads_client_test PRIVATE seads_client seads_net seads_det_flags)
@@ -268,5 +276,6 @@ if(SEADS_SOCKET_TESTS AND NOT CMAKE_CROSSCOMPILING)
   add_test(NAME netdyn_bridge COMMAND seads_netdyn_test)
   add_test(NAME netcatchup_bridge COMMAND seads_netcatchup_test)
   add_test(NAME netasync_bridge COMMAND seads_netasync_test)
+  add_test(NAME netcap_bridge COMMAND seads_netcap_test)
 endif()
 # Golden hash compare is run in CI (guardian.yml) across the toolchain matrix.

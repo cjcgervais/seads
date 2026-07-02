@@ -187,3 +187,59 @@ def test_sendbuffer_composes_with_framing(frames, step, data):
     stream = sendbuffer_deliver(frames, accepts)
     chunks = [stream[i:i + step] for i in range(0, len(stream), step)]
     assert fr.reassemble(chunks) == frames
+
+
+# --- layer 12: send-buffer BYTE-CAP + drop-slowest -------------------------------------------------
+def sendbuffer_deliver_capped(frames, accepts, cap):
+    """Reference layer-12 capped send-buffer model — mirrors broadcast_async's enqueue + over_cap
+    order exactly: each frame is enqueued and opportunistically flushed (the kernel accepts an
+    arbitrary byte count; 0 == EWOULDBLOCK), THEN a pending backlog exceeding cap (cap>0) drops the
+    client — delivery stops at the bytes the kernel had accepted (the pending tail is discarded
+    whole; there is no drain for a capped client). cap==0 disables the policy (layer-11 behavior).
+    Returns (delivered byte stream, capped?)."""
+    queue = b""
+    delivered = b""
+    accepts = list(accepts)
+    for f in frames:
+        queue += fr.encode_stream([f])          # enqueue_bytes: append the length-prefixed frame
+        take = min(accepts.pop(0), len(queue)) if accepts else 0
+        delivered += queue[:take]               # flush_client: kernel accepted `take` bytes
+        queue = queue[take:]
+        if cap and len(queue) > cap:            # over_cap: backlog beyond the drop threshold
+            return delivered, True
+    return delivered + queue, False             # survivor: the drain phase flushes the tail
+
+
+@given(st.lists(st.binary(min_size=0, max_size=60), min_size=1, max_size=10),
+       st.integers(min_value=0, max_value=300), st.data())
+def test_capped_delivery_is_a_byte_prefix_and_cap0_is_layer11(frames, cap, data):
+    # For ANY kernel-acceptance pattern and ANY cap, a capped client's delivered bytes are a clean
+    # byte-PREFIX of encode_stream(frames) — the cap discards the pending tail whole, it never
+    # reorders, corrupts, or skips — and an UNcapped client's delivery is the whole stream, exactly
+    # the layer-11 model (the cap decides only WHO is dropped, never WHICH bytes flow). cap=0
+    # disables the policy bit-for-bit. This is the pure form of the netcap_bridge claims (FAST
+    # byte-identical, SLOW a strict byte-prefix).
+    frames = [bytes(f) for f in frames]
+    accepts = [data.draw(st.integers(min_value=0, max_value=200)) for _ in frames]
+    whole = fr.encode_stream(frames)
+    delivered, capped = sendbuffer_deliver_capped(frames, accepts, cap)
+    assert whole.startswith(delivered)                       # always a byte-prefix
+    if not capped:
+        assert delivered == whole                            # a survivor gets everything...
+        assert delivered == sendbuffer_deliver(frames, accepts)  # ...== the layer-11 model
+    uncapped, dropped = sendbuffer_deliver_capped(frames, accepts, 0)
+    assert not dropped and uncapped == sendbuffer_deliver(frames, accepts)
+
+
+@given(st.lists(st.binary(min_size=0, max_size=60), min_size=1, max_size=10),
+       st.integers(min_value=0, max_value=300))
+def test_cap_never_bites_a_client_that_keeps_up(frames, cap):
+    # Healthy-client immunity: a client whose kernel always accepts everything offered (a reader
+    # that keeps up — its backlog returns to zero on every flush) is NEVER dropped by ANY cap, and
+    # receives the whole stream. The policy sheds only clients that are actually behind — this is
+    # the pure form of the netcap_bridge leg-2 claim (generous cap, capped == 0, sealed digest).
+    frames = [bytes(f) for f in frames]
+    greedy = [10**9] * len(frames)
+    delivered, capped = sendbuffer_deliver_capped(frames, greedy, cap)
+    assert not capped
+    assert delivered == fr.encode_stream(frames)

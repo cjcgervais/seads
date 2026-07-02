@@ -1,6 +1,62 @@
 # SEADS 2026 — Next Steps (handoff)
 
-> ## ►► CURRENT STATE (2026-07-01): **NETCODE LAYER 11 — ASYNC SINGLE-THREAD OUTPUT (PER-CLIENT SEND BUFFERS) DONE ✅** (no-seal, rides **ATM-Sphere v1.17r0**)
+> ## ►► CURRENT STATE (2026-07-01): **NETCODE LAYER 12 — SEND-BUFFER BYTE-CAP + DROP-SLOWEST DONE ✅** (no-seal, rides **ATM-Sphere v1.17r0**)
+> **Latest: the async broadcast is now safe for an open-ended live stream — a client that can't keep up is SHED at a byte-cap instead of growing server memory without bound.**
+> Layer 11's named honest boundary ("the per-client buffer is unbounded; add the byte-cap policy
+> BEFORE pointing this at an open-ended live stream") closes. **`broadcast_async` gains an opt-in
+> `cap_bytes` (final param, default 0 = unbounded = layer-11 behavior EXACTLY**, the same
+> opt-in-default pattern `catchup` used): whenever a frame enqueue (opportunistic flush included)
+> leaves a client's PENDING userspace backlog above the cap, that client is dropped —
+> **drop-slowest** — counted in a new **`Stats.capped`** (and, being live, also as a leave, like a
+> send failure). The policy is UNIFORM: a catch-up joiner tripping it during prefix replay is closed
+> before ever becoming live (capped only, not a join/leave). The cap decides only **WHO is dropped,
+> never WHICH bytes flow**: a survivor's delivered bytes are untouched, a shed client's are always a
+> clean byte-PREFIX of the encoded stream (kernel-accepted prefix; the pending tail is discarded
+> whole). `flush_client` now compacts the consumed prefix every flush ⇒ per-client memory is
+> O(pending backlog) — the quantity the cap bounds — not O(bytes ever flushed). `broadcast_select`
+> UNTOUCHED (layers 9/10 verbatim). Three pieces:
+> **(a) The policy** (`src/net/broadcast.{h,cpp}`): `cap_bytes` param + `over_cap` check beside the
+> enqueue + `Stats.capped`; drain phase needs no check (nothing enqueued there — backlogs only shrink).
+> **(b) The byte-cap BRIDGE** (`seads_netcap_test`, ctest `netcap_bridge`): **LEG 1 (drop-slowest)**
+> — ~7.5 MiB (512×15 KiB; one ENCODED frame stays under the pinned 16-KiB SO_SNDBUF, making the
+> pacing provably deadlock-free) to FAST + SLOW through cap=1 MiB. FAST is rate-coupled to the frame
+> loop via `on_frame` (frame fi waits until FAST consumed up to fi−32 ⇒ FAST's backlog provably
+> ≈507 KiB < cap/2 — never at risk, NO sleeps); SLOW reads NOTHING. Server finishes every frame
+> un-wedged, `joins=2 capped=1 leaves=1` (exactly SLOW shed); FAST byte-identical; SLOW a STRICT
+> byte-prefix. (Which frame SLOW is shed at is OS-timing — deliberately unasserted.
+> `seads_netasync_test` still gates the capless side: same shape, ~7 MiB buffered and delivered.)
+> **LEG 2 (healthy path unperturbed)** — the layer-11 sealed-session shape (EARLY + CATCHUP at J=20)
+> through `cap_bytes=8 MiB`: both receive all 41 frames byte-identically, both reconstruct the sealed
+> SESSION-SK-001 digest `24f71845…c332`, **capped=0**. 12/12 (gcc) + 8/8 (clang) stress reruns clean.
+> **(c) The demo server exposes it** (`seads_netserver [port] [num_clients] [catchup] [async]
+> [cap_bytes]`, default 0): shares the same loop the bridge gates (no untested divergence).
+> **TRANSPORT-ONLY — no `src/kernel/**`, `src/det_math/**`, `config/rails/**`, framing envelope, wire
+> scales, or goldens touched ⇒ ALL 10 GOLDENS BYTE-IDENTICAL**, no new golden, no seal. **Gates: +2
+> property tests ⇒ 145 (`tests/property/test_broadcast.py`: `sendbuffer_deliver_capped` mirrors the
+> enqueue→flush→over_cap order bit-for-bit — for ANY acceptance pattern and ANY cap a shed client's
+> delivery is a byte-PREFIX of `encode_stream(frames)`, a survivor's == the whole stream == the
+> layer-11 model, cap=0 == layer-11 bit-for-bit; healthy-client immunity — a kernel that always
+> accepts everything is never capped at any cap), ctest 16→17 (`netcap_bridge`, x64 legs), 15/15
+> receipt gates PASS, 10 goldens byte-identical.** guardian.yml: `seads_netcap_test`
+> build-only-smoked on all 5 legs (default target) + `netcap_bridge` run on the native x64 legs
+> (like the layer-7–11 bridges). Ledger: **ADR-Step-Net-Layer12-ByteCap-v1.17r0**. **Seal stays
+> v1.17r0** (Tier-2 net layer). Layer-9/10/11 regression: `netdyn_bridge` + `netcatchup_bridge` +
+> `netasync_bridge` unchanged + still green.
+> **NEXT (free pick, none blocking):** per-round hit granularity (a kernel event QUEUE — its own
+> ADR); renderer polish (guns + kill-feed in the live `--fly` path); an optional new seal
+> (component/region damage; **B5** ISA atmosphere); or further live-stream rungs (an open-ended
+> frame SOURCE feeding broadcast_async incrementally instead of a precomputed list).
+> **NOTE FOR THE NEXT AGENT:** layer 12 is code-complete + green locally (GCC+Clang, ctest 17/17,
+> 145 property tests, netcap bridge PASS + 12/12+8/8 stress, all 10 goldens byte-identical). Verify
+> guardian CI green after push. The policy is deliberately BINARY (shed at cap) — frame-skipping /
+> priority tiers would break the "delivered bytes are a prefix of the same stream" statement and is
+> a different, lossier contract (its own rung). Every existing broadcast_async caller passes
+> cap_bytes=0 ⇒ layer-11 path bit-for-bit; keep it that way for the sealed-session bridges. All
+> bridge rendezvous stay cv+`notify_all` + `on_frame` (NO sleeps, no `std::future`) — the leg-1
+> FAST pacing (enc frame < SO_SNDBUF ⇒ deadlock-free) is load-bearing; don't resize the frames
+> without rechecking that margin.
+>
+> ## ►► PRIOR STATE (2026-07-01): **NETCODE LAYER 11 — ASYNC SINGLE-THREAD OUTPUT (PER-CLIENT SEND BUFFERS) DONE ✅** (no-seal, rides **ATM-Sphere v1.17r0**)
 > **Latest: no client can back-pressure the broadcast — the last blocking send is gone from the fan-out.**
 > Layers 9/10 streamed with blocking `send_all`: one stalled reader's full kernel buffers wedged the
 > WHOLE broadcast (and the layer-10 catch-up replay was a blocking burst — its named honest boundary).
