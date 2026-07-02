@@ -61,6 +61,12 @@
 > Ledger: **ADR-Step8-FlightModel-Supercharger-v1.22r0**, SEAL_CARD v1.22r0 (header + goldens
 > table rewritten — 13 new hashes + Sphere annotated unchanged + Supercharger added; history
 > row), CLAUDE.md header/rails/roadmap current.
+> **GIT: pushed to `origin/main` (code `f8126d2` + receipt `38f2d54`,
+> `receipt-ATM-Sphere_v1.22r0-f8126d2.yml` — 15/15 gates PASS); guardian CI run
+> [28626358037](https://github.com/cjcgervais/seads/actions/runs/28626358037) GREEN** — Python
+> gates + MSVC + GCC/Clang × x64/AArch64 + the cross-toolchain hash aggregation gate all
+> reproduce **all 14 v1.22r0 goldens bit-for-bit** (13 moved + Sphere unchanged, incl. the new
+> Supercharger-001 on every leg).
 > **NEXT (free pick, none blocking):** an A6M2 engine-toughness retune (data-only seal that
 > moves EngineOut-001's story — the named next step this session); per-airframe toughness / σ /
 > crit-alt surfaced in the HUD (presentation-only); projectile σ-drag (a kernel seal moving
