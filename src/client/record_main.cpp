@@ -182,7 +182,9 @@ netsnap::Snapshot capture(const Kernel& k, const Flight& f, uint32_t tick,
             f.ac[a].id, k.lat(a), k.lon(a), k.psi(a), k.alt(a), k.phi(a), k.tas(a), k.gamma(a),
             k.hp(a), k.fire_cd(a),
             k.ammo(a),         // WEAPON-001: hp + fire-rate cooldown (v1.12r0) + magazine ammo (v1.14r0)
-            k.last_hit_by(a)));   // + attacker attribution (v1.17r0)
+            k.last_hit_by(a),  // + attacker attribution (v1.17r0)
+            k.engine_hp(a), k.wing_hp(a), k.tail_hp(a),  // + region pools + kill tally (v1.19r0)
+            k.kills(a)));
     }
     for (std::size_t i = 0; i < k.proj_count(); ++i) {  // WEAPON-001: live ballistic rounds
         snap.projectiles.push_back(netsnap::proj_from_kernel(
@@ -232,6 +234,9 @@ void write_js(const std::string& path, const client::RecordingMeta& meta, const 
         std::fprintf(fp, "],\"ammo\":[");
         for (std::size_t e = 0; e < fr.entities.size(); ++e)
             std::fprintf(fp, "%.0f%s", fr.entities[e].ammo, (e + 1 < fr.entities.size()) ? "," : "");
+        std::fprintf(fp, "],\"kills\":[");  // v1.19r0: the wire-sourced scoreboard
+        for (std::size_t e = 0; e < fr.entities.size(); ++e)
+            std::fprintf(fp, "%.0f%s", fr.entities[e].kills, (e + 1 < fr.entities.size()) ? "," : "");
         std::fprintf(fp, "],\"p\":[");
         for (std::size_t pi = 0; pi < fr.projectiles.size(); ++pi) {
             const auto& pr = fr.projectiles[pi];

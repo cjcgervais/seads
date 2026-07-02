@@ -33,9 +33,10 @@ Command own_kinematic_command_at(const AircraftSpec& a, unsigned t) {
     return Command{p.target_phi, p.target_g, p.throttle, false};
 }
 
-// Serialize the kernel's FULL world to a protocol-5 wire frame (every aircraft: GEO + KIN-002 +
-// WEAPON hp/fire_cd/ammo; every live round: GEO + damage + ttl/owner). Aircraft/projectile id = SoA
-// index (rounds are transient — a per-frame index is all the client needs to draw + count them).
+// Serialize the kernel's FULL world to a protocol-7 wire frame (every aircraft: GEO + KIN-002 +
+// WEAPON hp/fire_cd/ammo/last_hit_by/region pools/kills; every live round: GEO + damage +
+// ttl/owner). Aircraft/projectile id = SoA index (rounds are transient — a per-frame index is
+// all the client needs to draw + count them).
 std::vector<std::uint8_t> serialize_world(const Kernel& k, std::int64_t server_tick) {
     netsnap::Snapshot s;
     s.server_tick = server_tick;
@@ -43,7 +44,9 @@ std::vector<std::uint8_t> serialize_world(const Kernel& k, std::int64_t server_t
         s.entities.push_back(netsnap::from_kernel(
             static_cast<std::int64_t>(i), k.lat(i), k.lon(i), k.psi(i), k.alt(i),
             k.phi(i), k.tas(i), k.gamma(i), k.hp(i), k.fire_cd(i), k.ammo(i),
-            k.last_hit_by(i)));   // v1.17r0: attacker attribution on the wire
+            k.last_hit_by(i),     // v1.17r0: attacker attribution on the wire
+            k.engine_hp(i), k.wing_hp(i), k.tail_hp(i),  // v1.19r0: region pools + kill tally
+            k.kills(i)));
     }
     for (std::size_t j = 0; j < k.proj_count(); ++j) {
         s.projectiles.push_back(netsnap::proj_from_kernel(
@@ -104,6 +107,10 @@ std::vector<std::uint8_t> encode_client_view(std::int64_t client_tick, std::int6
             geo001::encode_i64(geo001::quantize(e.fire_cd, netsnap::FIRECD_SCALE), out);
             geo001::encode_i64(geo001::quantize(e.ammo, netsnap::AMMO_SCALE), out);  // rounds remaining (v1.14r0)
             geo001::encode_i64(geo001::quantize(e.last_hit_by, netsnap::LASTHITBY_SCALE), out);  // attacker idx (v1.17r0)
+            geo001::encode_i64(geo001::quantize(e.engine_hp, netsnap::ENGINEHP_SCALE), out);  // region pools + kills (v1.19r0)
+            geo001::encode_i64(geo001::quantize(e.wing_hp, netsnap::WINGHP_SCALE), out);
+            geo001::encode_i64(geo001::quantize(e.tail_hp, netsnap::TAILHP_SCALE), out);
+            geo001::encode_i64(geo001::quantize(e.kills, netsnap::KILLS_SCALE), out);
         }
         geo001::encode_i64(static_cast<std::int64_t>(wframe->projectiles.size()), out);
         for (const auto& p : wframe->projectiles) {

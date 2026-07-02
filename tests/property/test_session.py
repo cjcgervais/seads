@@ -113,3 +113,23 @@ def test_kill_replicates_under_extra_packet_loss(extra):
     by_id = {int(e.id): e for e in a["final_wframe"].entities}
     assert by_id[1].hp <= 0.0                               # kill still replicated
     assert by_id[0].hp > 0.0 and by_id[2].hp > 0.0
+
+
+@given(extra=st.lists(st.sampled_from([15, 25, 35, 45, 65, 75, 95, 115, 135, 165, 185]),
+                      min_size=0, max_size=6, unique=True))
+@settings(max_examples=25, deadline=None)
+def test_region_damage_and_scoreboard_replicate_under_loss(extra):
+    # v1.19r0: the region pools + kill tally ride the wire, and — like the kill itself — once
+    # the astern burst has shot the A6M2's TAIL away and credited the P-47 the state persists in
+    # every later frame, so under ANY loss pattern (we never drop them all) the client's freshest
+    # frame reconstructs the DAMAGE STATE and the SCOREBOARD exactly: AC1 tail gone (engine/wing
+    # intact), AC0 kills=1, bystanders full pools + 0 kills.
+    drops = sorted(set(sr.SESSION["drop_emit_ticks"]) | set(extra))
+    sc = _with(drop_emit_ticks=drops)
+    a = sr.run_session(sc, reconcile=True)
+    by_id = {int(e.id): e for e in a["final_wframe"].entities}
+    assert by_id[1].tail_hp <= 0.0                          # astern kill: tail pool shot away
+    assert by_id[1].engine_hp > 0.0 and by_id[1].wing_hp > 0.0
+    assert int(round(by_id[0].kills)) == 1                  # scoreboard: P-47 credited the kill
+    assert int(round(by_id[1].kills)) == 0 and int(round(by_id[2].kills)) == 0
+    assert by_id[0].tail_hp > 0.0 and by_id[2].tail_hp > 0.0  # never-hit ships keep full pools

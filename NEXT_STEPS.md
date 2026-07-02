@@ -1,6 +1,51 @@
 # SEADS 2026 — Next Steps (handoff)
 
-> ## ►► CURRENT STATE (2026-07-02): seal **ATM-Sphere v1.18r0** — **REGION DAMAGE + KILL TALLY DONE ✅**
+> ## ►► CURRENT STATE (2026-07-02): seal **ATM-Sphere v1.19r0** — **REGION POOLS + KILL TALLY ON THE WEAPON-001 WIRE DONE ✅ — REGION-DAMAGE ARC CLOSED END-TO-END**
+> **Latest (SEAL v1.19r0): the damage model now replicates — a remote client draws the DAMAGE STATE and a SCOREBOARD purely from bytes.**
+> The follow-up v1.18r0 named lands: the region sub-pools **engine_hp/wing_hp/tail_hp** (12th–14th
+> canonical f64s) + the victory tally **`kills`** (15th) join the WEAPON-001 snapshot section as
+> the **12th–15th per-aircraft wire fields** (**snapshot protocol 6→7**). Scales follow the
+> canonical precedents exactly: the pools ride **milli (1e3, like hp)** — every reachable value is
+> a quarter-integer (integer hp_start × exact-binary 0.375/0.5/0.25 fractions, drained by integer
+> damage), so milli is EXACT — and `kills` rides **unit scale (1e0, like ammo)** — a pure integer
+> counter, exact + compact. New rail fields `wire.weapon.{enginehp,winghp,tailhp}_scale=1000` +
+> `wire.weapon.kills_scale=1`; rails 280→290. **Fifth instance of the proven wire-reseal pattern**
+> (KIN-001 v1.4r0 → WEAPON-001 v1.12r0 → ammo v1.14r0 → last_hit_by v1.17r0 → this): reference
+> edited FIRST (`snapshot_ref.py` gates on `protocol>=7`; protocol-6 back-compat proven by
+> self-test + property test), C++ (`snapshot.{h,cpp}`) mirrored bit-for-bit, **4 vector headers
+> regenerated** (snapshot/weapon/session/framing — framing moves ONLY because its example payloads
+> are whole default-protocol frames; the length-prefix envelope codec is byte-unchanged), the
+> other 9 generated headers verified byte-identical (lockstep/predict untouched — the inverse
+> fingerprint of a kernel seal, exactly as expected for transport-only).
+> **TRANSPORT-ONLY: no `src/kernel/**`, `src/det_math/**`, or `data/tuning/**` touched ⇒ ALL 11
+> GOLDENS BYTE-IDENTICAL, no new golden, no new ctest target ⇒ guardian.yml UNCHANGED.**
+> Digests that legitimately move (regenerated net-layer artifacts, not goldens): **session**
+> `24f71845…c332` → `7e275f2b…49eb` (the client view + `FINAL_WEAPON` now surface the four fields
+> — the astern-killed A6M2 reads **tail_milli = 0** with engine/wing intact, the P-47 reads
+> **kills = 1**, bystanders keep full pools; the session self-test asserts all of it, i.e. the
+> DAMAGE STATE + SCOREBOARD replicate over the lossy wire). **Event digest `06629a69…` DID NOT
+> MOVE** (unlike v1.17r0 — the layer-6 `Event` record is untouched; `HitEvent.region` stays a
+> kernel-side observable with no event-wire consumer yet). Riders: `seads_record` passes the four
+> kernel accessors into the wire frames + emits a `"kills"` scoreboard array beside "hp"/"ammo".
+> **Gates: 15/15 receipt PASS, property tests 164 → 166 (+2: `test_protocol6_omits_regions`
+> back-compat; `test_region_damage_and_scoreboard_replicate_under_loss` — under ANY extra
+> packet-loss pattern the client's freshest frame reconstructs AC1 tail-out + AC0 kills=1
+> exactly), ctest 17/17 GCC + 17/17 Clang (all five socket bridges reconstruct the NEW sealed
+> session digest over real 127.0.0.1 sockets), determinism lint PASS, all 13 generated headers in
+> sync, all 11 goldens byte-identical (validate_snapshot + validate_scenarios PASS).**
+> Ledger: **ADR-Step7-Guns-WireTransport-RegionDamage-v1.19r0**, SEAL_CARD v1.19r0 (wire row +
+> history), CLAUDE.md header/rails/roadmap current.
+> **NEXT (free pick, none blocking):** renderer polish (damage state + kill-feed + scoreboard in
+> the live `--fly` path — every field now rides the wire); **B5** ISA atmosphere (a seal); an
+> open-ended live frame SOURCE feeding `broadcast_async` incrementally; or per-airframe region
+> toughness (data-only envelope scalars + a kernel consumer — its own ADR, would move goldens).
+> **NOTE FOR THE NEXT AGENT:** protocol lowering (…5/6) still produces valid, shorter frames —
+> both ends share `SNAPSHOT_PROTOCOL`; keep any new per-aircraft field INSIDE the per-aircraft
+> weapon loop and gate it on a protocol bump (a protocol-6 decoder reading extra varints would
+> misalign the projectile count that follows). The framing vectors regenerate whenever the default
+> snapshot protocol changes — that is expected, not a framing-codec change.
+>
+> ## ►► PRIOR STATE (2026-07-02): seal **ATM-Sphere v1.18r0** — **REGION DAMAGE + KILL TALLY DONE ✅**
 > **Latest (SEAL v1.18r0): airframes now break by REGION, and the kernel keeps score.** The roadmap's
 > long-deferred "component/region damage" seal lands, plus the victory tally attribution made possible.
 > **(a) Region sub-pools** (`tools/ref_kernel.py` ↔ `src/kernel/kernel.{h,cpp}`, mirrored bit-for-bit):

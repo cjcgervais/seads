@@ -45,29 +45,39 @@ E = s.EntityState
 P = s.ProjectileState
 
 
-# Weapon-bearing snapshots (protocol 6). Entity fields in DEGREES (GEO) + KIN units + WEAPON
-# units (hp/fire_cd/ammo/last_hit_by). Projectile fields in DEGREES + damage + integer ttl/owner.
+# Weapon-bearing snapshots (protocol 7). Entity fields in DEGREES (GEO) + KIN units + WEAPON
+# units (hp/fire_cd/ammo/last_hit_by/engine_hp/wing_hp/tail_hp/kills). Projectile fields in
+# DEGREES + damage + integer ttl/owner.
 # Cases exercise: the empty world (weapon section = projectile count 0), the golden start (full hp +
-# full mag, never hit = last_hit_by -1), a mixed furball (P-47 hp150/ammo337 never hit vs a
-# glass-cannon A6M2 hp70/ammo100 last hit by #1 + a DEAD hp0/Winchester(ammo0) corpse KILLED by #2,
-# so last_hit_by carries -1/1/2 incl. the ZigZag-signed -1, with rounds carrying distinct
-# damage/ttl/owner and antimeridian / ceiling extremes), and the full 8-aircraft roster with varied
-# magazines + attackers + a dense round cloud (multi-byte LEB128 in every field).
+# full mag, never hit = last_hit_by -1, full region pools, no kills), a mixed furball (P-47
+# hp150/ammo337 never hit with full quarter-fraction pools + 1 kill vs a glass-cannon A6M2
+# hp70/ammo100 last hit by #1 with its TAIL pool shot away + a DEAD hp0/Winchester(ammo0) corpse
+# KILLED by #2 with a dead engine and 2 posthumous kills — so last_hit_by carries -1/1/2 incl. the
+# ZigZag-signed -1, the pools carry exact .25/.5 milli fractions incl. 0, with rounds carrying
+# distinct damage/ttl/owner and antimeridian / ceiling extremes), and the full 8-aircraft roster
+# with varied magazines + attackers + pools + tallies + a dense round cloud (multi-byte LEB128 in
+# every field).
 def weapon_inputs():
     return [
         (0, [], []),                                                   # empty world
-        (1, [E(1, 0.0, 0.0, 45.0, 1000.0, 0.0, 250.0, 0.0, 150.0, 0.0, 340.0, -1.0)], []),  # golden start, never hit
+        (1, [E(1, 0.0, 0.0, 45.0, 1000.0, 0.0, 250.0, 0.0, 150.0, 0.0, 340.0, -1.0,
+               56.25, 75.0, 37.5, 0.0)], []),  # golden start, never hit, full pools
         (52000,
-         [E(1, 12.3456789, -98.7654321, 359.999999, 7999.999, 39.999999, 175.25, 12.5, 150.0, 3.0, 337.0, -1.0),  # never hit
-          E(2, -45.5, 180.0, 0.0, 0.0, -60.5, 0.0, -8.25, 70.0, 9.0, 100.0, 1.0),   # last hit by #1
-          E(7, 89.9999999, -179.9999999, 270.0, 8000.0, 0.000001, 305.999, 0.000001, 0.0, 0.0, 0.0, 2.0)],  # dead, killed by #2
+         [E(1, 12.3456789, -98.7654321, 359.999999, 7999.999, 39.999999, 175.25, 12.5, 150.0, 3.0, 337.0, -1.0,
+            56.25, 75.0, 37.5, 1.0),  # never hit, full pools, 1 kill
+          E(2, -45.5, 180.0, 0.0, 0.0, -60.5, 0.0, -8.25, 70.0, 9.0, 100.0, 1.0,
+            26.25, 35.0, 0.0, 0.0),   # last hit by #1, TAIL shot away
+          E(7, 89.9999999, -179.9999999, 270.0, 8000.0, 0.000001, 305.999, 0.000001, 0.0, 0.0, 0.0, 2.0,
+            0.0, 12.5, 6.25, 2.0)],  # dead, killed by #2, engine out, 2 posthumous kills
          [P(1000, 12.34, -98.76, 0.123456, 7995.5, 12.0, 248, 0),
           P(1001, -45.4, 179.999, 359.0, 50.0, 40.0, 5, 1),
           P(1002, 0.0, 0.0, 180.0, 4000.0, 30.5, 1, 4)]),
         (100000,
          [E(i, (i * 7) % 90, (i * 13) % 180 - 90, (i * 11) % 360, (i * 137) % 8000,
             (i * 17) % 80 - 40, (i * 29) % 320, (i * 19) % 60 - 30,
-            (i * 23) % 160, (i * 5) % 12, (i * 43) % 400, (i % 4) - 1)   # last_hit_by cycles -1,0,1,2
+            (i * 23) % 160, (i * 5) % 12, (i * 43) % 400, (i % 4) - 1,   # last_hit_by cycles -1,0,1,2
+            ((i * 3) % 8) * 7.5 + 0.25, ((i * 5) % 8) * 10.0 + 0.5,      # pools: exact quarter fractions
+            ((i * 7) % 8) * 5.0 + 0.75, float(i % 3))                    # kills cycles 0,1,2
           for i in range(1, 9)],
          [P(2000 + j, (j * 9) % 90 - 45, (j * 31) % 360 - 180, (j * 7) % 360, (j * 211) % 8000,
             (j * 3) % 45 + 5, (j * 53) % 250 + 1, j % 8)
@@ -84,7 +94,8 @@ def build():
          "",
          "struct WEntity { long long id; double lat_deg; double lon_deg; double bearing_deg;",
          "                 double alt_m; double phi_deg; double tas_mps; double gamma_deg;",
-         "                 double hp; double fire_cd; double ammo; double last_hit_by; };",
+         "                 double hp; double fire_cd; double ammo; double last_hit_by;",
+         "                 double engine_hp; double wing_hp; double tail_hp; double kills; };",
          "struct WProj { long long id; double lat_deg; double lon_deg; double bearing_deg;",
          "               double alt_m; double damage; long long ttl; long long owner; };",
          ""]
@@ -97,7 +108,8 @@ def build():
                 L.append(f"  {{ {i64lit(e.id)}, {hx(e.lat_deg)}, {hx(e.lon_deg)}, "
                          f"{hx(e.bearing_deg)}, {hx(e.alt_m)}, {hx(e.phi_deg)}, {hx(e.tas_mps)}, "
                          f"{hx(e.gamma_deg)}, {hx(e.hp)}, {hx(e.fire_cd)}, {hx(e.ammo)}, "
-                         f"{hx(e.last_hit_by)} }},")
+                         f"{hx(e.last_hit_by)}, {hx(e.engine_hp)}, {hx(e.wing_hp)}, "
+                         f"{hx(e.tail_hp)}, {hx(e.kills)} }},")
             L.append("};")
         if projs:
             L.append(f"constexpr WProj W{idx}_PROJS[] = {{")

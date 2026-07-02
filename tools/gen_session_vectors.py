@@ -135,13 +135,17 @@ def build():
         f"constexpr unsigned DELIVERED = {int(res['delivered'])}u;",
         "",
         "// --- replicated final weapon state on the client (id, hp_milli = round(hp*1e3), dead, "
-        "ammo = rounds remaining, last_hit_by = attacker index or -1) ---",
+        "ammo = rounds remaining, last_hit_by = attacker index or -1, engine/wing/tail_milli = "
+        "region sub-pools, kills = victory tally) ---",
         "struct WeaponFact { std::int64_t id; std::int64_t hp_milli; int dead; std::int64_t ammo;"
-        " std::int64_t last_hit_by; };",
+        " std::int64_t last_hit_by; std::int64_t engine_milli; std::int64_t wing_milli;"
+        " std::int64_t tail_milli; std::int64_t kills; };",
         "constexpr WeaponFact FINAL_WEAPON[] = {",
     ]
-    for (aid, hp_milli, dead, ammo, last_hit_by) in facts:
-        L.append(f"  {{ {aid}, {hp_milli}, {dead}, {ammo}, {last_hit_by} }},")
+    for (aid, hp_milli, dead, ammo, last_hit_by, engine_milli, wing_milli, tail_milli,
+         kills) in facts:
+        L.append(f"  {{ {aid}, {hp_milli}, {dead}, {ammo}, {last_hit_by}, {engine_milli}, "
+                 f"{wing_milli}, {tail_milli}, {kills} }},")
     L += [
         "};",
         "constexpr int FINAL_WEAPON_COUNT = sizeof(FINAL_WEAPON)/sizeof(FINAL_WEAPON[0]);",

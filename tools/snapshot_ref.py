@@ -26,12 +26,17 @@ self-delimiting (LEB128):
      gamma 1e6. Present iff protocol >= 2; gamma carried iff protocol >= 3.
   3. WEAPON section (WEAPON-001, protocol >= 4, seal v1.12r0) — the Step 7 gunnery state over
      the auxiliary rail block `wire.weapon`:
-       a) per-aircraft  n × (id, hp_q, fire_cd_q [, ammo_q] [, last_hit_by_q])   hp 1e3, fire_cd
+       a) per-aircraft  n × (id, hp_q, fire_cd_q [, ammo_q] [, last_hit_by_q]
+          [, engine_hp_q, wing_hp_q, tail_hp_q, kills_q])   hp 1e3, fire_cd
           1e3, and — for the G4 magazine (protocol >= 5, seal v1.14r0) — ammo 1e0 (a pure integer
           counter, so unit scale is exact + compact, like ttl/owner), and — for attacker
           attribution (protocol >= 6, seal v1.17r0) — last_hit_by 1e0 (the index of the aircraft
-          that last damaged me, or -1 == never hit; ZigZag carries the -1 sign). ammo carried iff
-          protocol >= 5; last_hit_by iff protocol >= 6.
+          that last damaged me, or -1 == never hit; ZigZag carries the -1 sign), and — for region
+          damage + the kill tally (protocol >= 7, seal v1.19r0) — engine_hp/wing_hp/tail_hp 1e3
+          (the ENGINE/WING/TAIL region sub-pools, milli like hp — the pools are quarter-integer
+          multiples so milli is exact) + kills 1e0 (the victory tally, a pure integer counter).
+          ammo carried iff protocol >= 5; last_hit_by iff protocol >= 6; the region pools + kills
+          iff protocol >= 7.
        b) a projectile count m, then m × (pid, GeoPoint[lat,lon,bearing,alt], damage_q, ttl,
           owner)                                          damage 1e3; ttl/owner are EXACT i64
           (kernel u32 counters, carried losslessly — not quantized).
@@ -45,8 +50,10 @@ rounds, HP bars, and kills on a remote client) instead of reading them out-of-ba
 local kernel. Carrying phi/tas was a rail reseal (v1.3r0 → v1.4r0); gamma was KIN-002 (v1.6r0);
 the weapon block is WEAPON-001 (v1.12r0, protocol 3 → 4); the per-aircraft magazine `ammo` joined
 the weapon block at v1.14r0 (protocol 4 → 5) so a remote client can show a rounds-remaining counter;
-and per-aircraft `last_hit_by` (attacker attribution) joined at v1.17r0 (protocol 5 → 6) so a remote
-client can render an ATTRIBUTED kill-feed ("P-47D downed A6M2").
+per-aircraft `last_hit_by` (attacker attribution) joined at v1.17r0 (protocol 5 → 6) so a remote
+client can render an ATTRIBUTED kill-feed ("P-47D downed A6M2"); and the v1.18r0 region sub-pools
+(engine/wing/tail) + the per-aircraft kill tally joined at v1.19r0 (protocol 6 → 7) so a remote
+client can draw DAMAGE STATE (engine out / wing out / tail out) and a SCOREBOARD.
 
 Units: the kernel stores lat/lon/psi in RADIANS. We convert to DEGREES (the GEO-001 native
 unit) before quantizing, via exact hex-float constants so C++ and Python agree to the bit. hp,
@@ -65,7 +72,7 @@ PI       = float.fromhex('0x1.921fb54442d18p+1')   # 3.141592653589793 (matches 
 RAD2DEG  = 180.0 / PI                              # one IEEE division — same double both sides
 DEG2RAD  = PI / 180.0
 
-SNAPSHOT_PROTOCOL = 6   # framing version (>=2 KIN; >=3 KIN-002 gamma; >=4 WEAPON-001 gunnery; >=5 ammo; >=6 last_hit_by)
+SNAPSHOT_PROTOCOL = 7   # framing version (>=2 KIN; >=3 KIN-002 gamma; >=4 WEAPON-001 gunnery; >=5 ammo; >=6 last_hit_by; >=7 region pools + kills)
 
 # Auxiliary KIN-002 scales (must match config/rails/atm.json wire.kin). Bank (phi) and the
 # flight-path angle (gamma) are angles in degrees, so they reuse the bearing-style 1e6
@@ -85,6 +92,12 @@ AMMO_SCALE   = 1          # 1e0  (magazine rounds remaining — a pure integer c
 LASTHITBY_SCALE = 1       # 1e0  (attacker attribution: index of the aircraft that last hit me, or -1 ==
                           #       never hit — a pure integer counter, unit scale, ZigZag carries the -1
                           #       sign; carried iff protocol >= 6, seal v1.17r0. See ADR-Step7-Guns-Attribution)
+ENGINEHP_SCALE = 1_000    # 1e3  (ENGINE region sub-pool, v1.18r0 — 0.375*hp_start; quarter-integer
+                          #       multiples, so milli is exact like hp; carried iff protocol >= 7)
+WINGHP_SCALE   = 1_000    # 1e3  (WING region sub-pool — 0.5*hp_start; carried iff protocol >= 7)
+TAILHP_SCALE   = 1_000    # 1e3  (TAIL region sub-pool — 0.25*hp_start; carried iff protocol >= 7)
+KILLS_SCALE    = 1        # 1e0  (victory tally — a pure integer counter like ammo, unit scale exact
+                          #       + compact; carried iff protocol >= 7, seal v1.19r0)
 
 
 class EntityState:
@@ -92,10 +105,12 @@ class EntityState:
     KIN units (phi/gamma degrees, tas m/s); WEAPON fields hp/fire_cd (kernel units). All of
     phi/tas/gamma/hp/fire_cd default to 0.0 for callers building lower-protocol frames."""
     __slots__ = ("id", "lat_deg", "lon_deg", "bearing_deg", "alt_m", "phi_deg", "tas_mps",
-                 "gamma_deg", "hp", "fire_cd", "ammo", "last_hit_by")
+                 "gamma_deg", "hp", "fire_cd", "ammo", "last_hit_by",
+                 "engine_hp", "wing_hp", "tail_hp", "kills")
 
     def __init__(self, id, lat_deg, lon_deg, bearing_deg, alt_m, phi_deg=0.0, tas_mps=0.0,
-                 gamma_deg=0.0, hp=0.0, fire_cd=0.0, ammo=0.0, last_hit_by=-1.0):
+                 gamma_deg=0.0, hp=0.0, fire_cd=0.0, ammo=0.0, last_hit_by=-1.0,
+                 engine_hp=0.0, wing_hp=0.0, tail_hp=0.0, kills=0.0):
         self.id = id
         self.lat_deg = lat_deg
         self.lon_deg = lon_deg
@@ -108,6 +123,10 @@ class EntityState:
         self.fire_cd = fire_cd
         self.ammo = ammo
         self.last_hit_by = last_hit_by   # v1.17r0: attacker attribution (-1 == never hit)
+        self.engine_hp = engine_hp       # v1.19r0: region sub-pools + kill tally (protocol >= 7)
+        self.wing_hp = wing_hp
+        self.tail_hp = tail_hp
+        self.kills = kills
 
     def __eq__(self, o):
         return (self.id == o.id and self.lat_deg == o.lat_deg and self.lon_deg == o.lon_deg
@@ -115,7 +134,9 @@ class EntityState:
                 and self.phi_deg == o.phi_deg and self.tas_mps == o.tas_mps
                 and self.gamma_deg == o.gamma_deg and self.hp == o.hp
                 and self.fire_cd == o.fire_cd and self.ammo == o.ammo
-                and self.last_hit_by == o.last_hit_by)
+                and self.last_hit_by == o.last_hit_by and self.engine_hp == o.engine_hp
+                and self.wing_hp == o.wing_hp and self.tail_hp == o.tail_hp
+                and self.kills == o.kills)
 
 
 class ProjectileState:
@@ -151,13 +172,16 @@ class Snapshot:
 
 
 def from_kernel(id, lat_rad, lon_rad, psi_rad, alt_m, phi_rad=0.0, tas_mps=0.0, gamma_rad=0.0,
-                hp=0.0, fire_cd=0.0, ammo=0.0, last_hit_by=-1.0):
+                hp=0.0, fire_cd=0.0, ammo=0.0, last_hit_by=-1.0,
+                engine_hp=0.0, wing_hp=0.0, tail_hp=0.0, kills=0.0):
     """Build a wire EntityState from raw kernel state (radians/metres). The kernel `psi`
     heading maps to GEO-001 `bearing`; `phi`/`gamma` (rad) -> KIN degrees; `tas` passes through
-    (m/s); `hp`/`fire_cd`/`ammo`/`last_hit_by` (WEAPON-001) pass through (kernel units). Transmits
-    state faithfully (no lon/heading normalization — that's a presentation concern for the client)."""
+    (m/s); `hp`/`fire_cd`/`ammo`/`last_hit_by`/`engine_hp`/`wing_hp`/`tail_hp`/`kills` (WEAPON-001)
+    pass through (kernel units). Transmits state faithfully (no lon/heading normalization —
+    that's a presentation concern for the client)."""
     return EntityState(id, lat_rad * RAD2DEG, lon_rad * RAD2DEG, psi_rad * RAD2DEG, alt_m,
-                       phi_rad * RAD2DEG, tas_mps, gamma_rad * RAD2DEG, hp, fire_cd, ammo, last_hit_by)
+                       phi_rad * RAD2DEG, tas_mps, gamma_rad * RAD2DEG, hp, fire_cd, ammo,
+                       last_hit_by, engine_hp, wing_hp, tail_hp, kills)
 
 
 def proj_from_kernel(id, lat_rad, lon_rad, psi_rad, alt_m, damage, ttl, owner):
@@ -181,7 +205,8 @@ def to_kernel(entity):
 #   GEO section:    n * (id, GeoPoint[lat,lon,bearing,alt])          <- GEO-001, geography-only
 #   KIN section:    n * (id, phi_q, tas_q [, gamma_q])   [iff protocol >= 2]    <- aux block
 #   WEAPON section: [iff protocol >= 4]                              <- aux block WEAPON-001
-#       n * (id, hp_q, fire_cd_q [, ammo_q] [, last_hit_by_q])   [ammo_q iff >=5; last_hit_by_q iff >=6]
+#       n * (id, hp_q, fire_cd_q [, ammo_q] [, last_hit_by_q] [, engine_hp_q, wing_hp_q,
+#            tail_hp_q, kills_q])   [ammo_q iff >=5; last_hit_by_q iff >=6; regions+kills iff >=7]
 #       m  (projectile count)
 #       m * (pid, GeoPoint[lat,lon,bearing,alt], damage_q, ttl, owner)
 # All sections are self-delimiting (LEB128); the GEO-001 codec is reused verbatim (untouched).
@@ -209,6 +234,11 @@ def encode_snapshot(snap):
                 out += g.encode_i64(g.quantize(e.ammo, AMMO_SCALE))
             if snap.protocol >= 6:                  # attacker attribution: last_hit_by (v1.17r0)
                 out += g.encode_i64(g.quantize(e.last_hit_by, LASTHITBY_SCALE))
+            if snap.protocol >= 7:                  # region pools + kill tally (v1.19r0)
+                out += g.encode_i64(g.quantize(e.engine_hp, ENGINEHP_SCALE))
+                out += g.encode_i64(g.quantize(e.wing_hp, WINGHP_SCALE))
+                out += g.encode_i64(g.quantize(e.tail_hp, TAILHP_SCALE))
+                out += g.encode_i64(g.quantize(e.kills, KILLS_SCALE))
         out += g.encode_i64(len(snap.projectiles))  # live ballistic rounds
         for p in snap.projectiles:
             out += g.encode_i64(p.id)
@@ -258,6 +288,15 @@ def decode_snapshot(data, pos=0):
             if protocol >= 6:                         # attacker attribution: last_hit_by (v1.17r0)
                 lhb_q, pos = g.decode_i64(data, pos)
                 entities[k].last_hit_by = g.dequantize(lhb_q, LASTHITBY_SCALE)
+            if protocol >= 7:                         # region pools + kill tally (v1.19r0)
+                ehp_q, pos = g.decode_i64(data, pos)
+                whp_q, pos = g.decode_i64(data, pos)
+                thp_q, pos = g.decode_i64(data, pos)
+                kls_q, pos = g.decode_i64(data, pos)
+                entities[k].engine_hp = g.dequantize(ehp_q, ENGINEHP_SCALE)
+                entities[k].wing_hp = g.dequantize(whp_q, WINGHP_SCALE)
+                entities[k].tail_hp = g.dequantize(thp_q, TAILHP_SCALE)
+                entities[k].kills = g.dequantize(kls_q, KILLS_SCALE)
         m, pos = g.decode_i64(data, pos)
         if m < 0:
             raise ValueError("snapshot: negative projectile count")
@@ -277,18 +316,22 @@ def decode_snapshot(data, pos=0):
 def _selftest():
     fails = 0
 
-    # empty snapshot round-trip (default protocol 6; empty KIN/WEAPON sections are present but
+    # empty snapshot round-trip (default protocol 7; empty KIN/WEAPON sections are present but
     # carry only the zero projectile count for the weapon block).
     s0 = Snapshot(0, [])
     d0, p0 = decode_snapshot(encode_snapshot(s0))
-    if p0 != len(encode_snapshot(s0)) or d0.protocol != 6 or d0.entities or d0.projectiles:
+    if p0 != len(encode_snapshot(s0)) or d0.protocol != 7 or d0.entities or d0.projectiles:
         print("FAIL empty snapshot"); fails += 1
 
     # multi-aircraft + live rounds round-trip within one quantum, incl. the sealed golden start.
-    # from_kernel carries phi (bank) + tas + gamma + hp + fire_cd + ammo + last_hit_by; proj = rounds.
-    ents = [from_kernel(1, 0.0, 0.0, 0.7853981633974483, 1000.0, 0.0, 250.0, 0.0, 150.0, 0.0, 340.0, -1.0),  # P-47 hp150 ammo340, never hit
-            from_kernel(2, 0.5, -1.2, 3.0, 7999.5, 0.6981317007977318, 140.0, 0.3, 70.0, 9.0, 3.0, 0.0),     # A6M2 hp70 cd9 ammo3, hit by #1
-            from_kernel(7, -0.3, 2.9, 6.2, 0.0, -1.0471975511965976, 95.5, -0.5, 0.0, 0.0, 0.0, 1.0)]         # dead (hp0), killed by #2
+    # from_kernel carries phi (bank) + tas + gamma + hp + fire_cd + ammo + last_hit_by + the
+    # v1.19r0 region sub-pools (engine/wing/tail) + kill tally; proj = rounds.
+    ents = [from_kernel(1, 0.0, 0.0, 0.7853981633974483, 1000.0, 0.0, 250.0, 0.0, 150.0, 0.0, 340.0, -1.0,
+                        56.25, 75.0, 37.5, 1.0),   # P-47 hp150 ammo340, never hit, full pools, 1 kill
+            from_kernel(2, 0.5, -1.2, 3.0, 7999.5, 0.6981317007977318, 140.0, 0.3, 70.0, 9.0, 3.0, 0.0,
+                        26.25, 35.0, 0.0, 0.0),    # A6M2 hp70 cd9 ammo3, hit by #1, TAIL shot away
+            from_kernel(7, -0.3, 2.9, 6.2, 0.0, -1.0471975511965976, 95.5, -0.5, 0.0, 0.0, 0.0, 1.0,
+                        0.0, 12.5, 6.25, 2.0)]     # dead (hp0), killed by #2, engine out, 2 kills
     projs = [proj_from_kernel(100, 0.01, 0.02, 0.7853981633974483, 1005.0, 12.0, 248, 0),       # p47 .50cal
              proj_from_kernel(101, 0.49, -1.19, 3.0, 7990.0, 40.0, 5, 1)]                        # a6m2 20mm
     snap = Snapshot(12345, ents, projs)
@@ -296,8 +339,8 @@ def _selftest():
     dec, pos = decode_snapshot(wire)
     if pos != len(wire) or dec.server_tick != 12345 or len(dec.entities) != 3:
         print("FAIL multi header/count"); fails += 1
-    if dec.protocol != 6:
-        print("FAIL protocol != 6"); fails += 1
+    if dec.protocol != 7:
+        print("FAIL protocol != 7"); fails += 1
     if len(dec.projectiles) != 2:
         print("FAIL projectile count"); fails += 1
     for a, b in zip(ents, dec.entities):
@@ -313,6 +356,10 @@ def _selftest():
         if abs(a.fire_cd - b.fire_cd) > 1.0 / FIRECD_SCALE: print("FAIL fire_cd"); fails += 1
         if abs(a.ammo - b.ammo) > 1.0 / AMMO_SCALE: print("FAIL ammo"); fails += 1
         if a.last_hit_by != b.last_hit_by: print("FAIL last_hit_by (exact int)"); fails += 1
+        if abs(a.engine_hp - b.engine_hp) > 1.0 / ENGINEHP_SCALE: print("FAIL engine_hp"); fails += 1
+        if abs(a.wing_hp - b.wing_hp) > 1.0 / WINGHP_SCALE: print("FAIL wing_hp"); fails += 1
+        if abs(a.tail_hp - b.tail_hp) > 1.0 / TAILHP_SCALE: print("FAIL tail_hp"); fails += 1
+        if a.kills != b.kills: print("FAIL kills (exact int)"); fails += 1
     for a, b in zip(projs, dec.projectiles):
         if a.id != b.id: print(f"FAIL proj id {a.id}"); fails += 1
         if abs(a.lat_deg - b.lat_deg) > 1.0 / g.LATLON_SCALE: print("FAIL proj lat"); fails += 1
@@ -344,6 +391,20 @@ def _selftest():
         print("FAIL proto5 should carry ammo"); fails += 1
     if d5.entities[0].last_hit_by != -1.0:
         print("FAIL proto5 should NOT carry last_hit_by (pre-v1.17r0)"); fails += 1
+
+    # a protocol-6 snapshot (WEAPON-001 with attribution but pre-region-damage) carries
+    # last_hit_by but NOT the region pools / kill tally (back-compat; decoded engine_hp/wing_hp/
+    # tail_hp/kills stay at the 0 defaults). v1.19r0.
+    s6 = Snapshot(8, [from_kernel(1, 0.1, 0.2, 1.0, 500.0, 0.5, 130.0, 0.4, 99.0, 2.0, 250.0, 0.0,
+                                  37.5, 50.0, 25.0, 3.0)],
+                  [proj_from_kernel(9, 0.1, 0.2, 1.0, 500.0, 25.0, 100, 0)], protocol=6)
+    d6, q6 = decode_snapshot(encode_snapshot(s6))
+    if q6 != len(encode_snapshot(s6)) or d6.protocol != 6: print("FAIL proto6 frame"); fails += 1
+    if d6.entities[0].last_hit_by != 0.0:
+        print("FAIL proto6 should carry last_hit_by"); fails += 1
+    if (d6.entities[0].engine_hp != 0.0 or d6.entities[0].wing_hp != 0.0
+            or d6.entities[0].tail_hp != 0.0 or d6.entities[0].kills != 0.0):
+        print("FAIL proto6 should NOT carry region pools / kills (pre-v1.19r0)"); fails += 1
 
     # a protocol-3 snapshot (KIN-002 shape) carries phi/tas/gamma but NOT the weapon block.
     s3 = Snapshot(8, [from_kernel(1, 0.1, 0.2, 1.0, 500.0, 0.5, 130.0, 0.4, 99.0, 2.0)],

@@ -1,8 +1,9 @@
 // SEADS WEAPON-001 snapshot-section parity test. Asserts C++ netsnap == Python reference
-// vectors for the gunnery state (WEAPON-001 sealed v1.12r0; snapshot protocol 5 since v1.14r0
-// added the G4 magazine ammo): byte-identical wire on encode of a full GEO+KIN+WEAPON frame,
-// and exact round-trip on decode — per-aircraft hp/fire_cd/ammo within one quantum, every live
-// projectile within a quantum (position/damage) with ttl/owner EXACT. Exit 0 PASS, 1 FAIL.
+// vectors for the gunnery state (WEAPON-001 sealed v1.12r0; snapshot protocol 7 since v1.19r0
+// added the region sub-pools + kill tally): byte-identical wire on encode of a full
+// GEO+KIN+WEAPON frame, and exact round-trip on decode — per-aircraft hp/fire_cd/ammo/
+// last_hit_by/engine_hp/wing_hp/tail_hp/kills within one quantum, every live projectile within
+// a quantum (position/damage) with ttl/owner EXACT. Exit 0 PASS, 1 FAIL.
 #include "snapshot.h"
 #include "weapon_vectors.h"
 
@@ -26,7 +27,8 @@ int main() {
             const auto& se = v.entities[e];
             snap.entities.push_back(netsnap::EntityState{
                 se.id, se.lat_deg, se.lon_deg, se.bearing_deg, se.alt_m, se.phi_deg, se.tas_mps,
-                se.gamma_deg, se.hp, se.fire_cd, se.ammo, se.last_hit_by});
+                se.gamma_deg, se.hp, se.fire_cd, se.ammo, se.last_hit_by,
+                se.engine_hp, se.wing_hp, se.tail_hp, se.kills});
         }
         for (int p = 0; p < v.n_projectiles; ++p) {
             const auto& sp = v.projectiles[p];
@@ -66,7 +68,15 @@ int main() {
                 geo001::quantize(b.ammo, netsnap::AMMO_SCALE)
                     != geo001::quantize(a.ammo, netsnap::AMMO_SCALE) ||
                 geo001::quantize(b.last_hit_by, netsnap::LASTHITBY_SCALE)
-                    != geo001::quantize(a.last_hit_by, netsnap::LASTHITBY_SCALE)) {
+                    != geo001::quantize(a.last_hit_by, netsnap::LASTHITBY_SCALE) ||
+                geo001::quantize(b.engine_hp, netsnap::ENGINEHP_SCALE)
+                    != geo001::quantize(a.engine_hp, netsnap::ENGINEHP_SCALE) ||
+                geo001::quantize(b.wing_hp, netsnap::WINGHP_SCALE)
+                    != geo001::quantize(a.wing_hp, netsnap::WINGHP_SCALE) ||
+                geo001::quantize(b.tail_hp, netsnap::TAILHP_SCALE)
+                    != geo001::quantize(a.tail_hp, netsnap::TAILHP_SCALE) ||
+                geo001::quantize(b.kills, netsnap::KILLS_SCALE)
+                    != geo001::quantize(a.kills, netsnap::KILLS_SCALE)) {
                 same = false;
             }
         }

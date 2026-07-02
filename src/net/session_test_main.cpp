@@ -90,8 +90,14 @@ int main() {
                 int dead = e.hp <= 0.0 ? 1 : 0;
                 std::int64_t ammo = geo001::quantize(e.ammo, netsnap::AMMO_SCALE);
                 std::int64_t last_hit_by = geo001::quantize(e.last_hit_by, netsnap::LASTHITBY_SCALE);
+                std::int64_t engine_milli = geo001::quantize(e.engine_hp, netsnap::ENGINEHP_SCALE);
+                std::int64_t wing_milli = geo001::quantize(e.wing_hp, netsnap::WINGHP_SCALE);
+                std::int64_t tail_milli = geo001::quantize(e.tail_hp, netsnap::TAILHP_SCALE);
+                std::int64_t kills = geo001::quantize(e.kills, netsnap::KILLS_SCALE);
                 if (e.id != f.id || hp_milli != f.hp_milli || dead != f.dead || ammo != f.ammo
-                    || last_hit_by != f.last_hit_by) {
+                    || last_hit_by != f.last_hit_by || engine_milli != f.engine_milli
+                    || wing_milli != f.wing_milli || tail_milli != f.tail_milli
+                    || kills != f.kills) {
                     ++fails;
                     std::printf("FAIL weapon fact id=%lld: got (hp_milli=%lld, dead=%d, ammo=%lld) "
                                 "exp (id=%lld, hp_milli=%lld, dead=%d, ammo=%lld)\n",

@@ -69,12 +69,12 @@ constexpr session::Scenario SCENARIO = {
 constexpr unsigned N_FRAMES  = 41u;
 constexpr unsigned DELIVERED = 36u;
 
-// --- replicated final weapon state on the client (id, hp_milli = round(hp*1e3), dead, ammo = rounds remaining, last_hit_by = attacker index or -1) ---
-struct WeaponFact { std::int64_t id; std::int64_t hp_milli; int dead; std::int64_t ammo; std::int64_t last_hit_by; };
+// --- replicated final weapon state on the client (id, hp_milli = round(hp*1e3), dead, ammo = rounds remaining, last_hit_by = attacker index or -1, engine/wing/tail_milli = region sub-pools, kills = victory tally) ---
+struct WeaponFact { std::int64_t id; std::int64_t hp_milli; int dead; std::int64_t ammo; std::int64_t last_hit_by; std::int64_t engine_milli; std::int64_t wing_milli; std::int64_t tail_milli; std::int64_t kills; };
 constexpr WeaponFact FINAL_WEAPON[] = {
-  { 0, 150000, 0, 333, -1 },
-  { 1, 0, 1, 100, 0 },
-  { 2, 100000, 0, 150, -1 },
+  { 0, 150000, 0, 333, -1, 56250, 75000, 37500, 1 },
+  { 1, 0, 1, 100, 0, 26250, 35000, 0, 0 },
+  { 2, 100000, 0, 150, -1, 37500, 50000, 25000, 0 },
 };
 constexpr int FINAL_WEAPON_COUNT = sizeof(FINAL_WEAPON)/sizeof(FINAL_WEAPON[0]);
 
@@ -82,13 +82,13 @@ constexpr int FINAL_WEAPON_COUNT = sizeof(FINAL_WEAPON)/sizeof(FINAL_WEAPON[0]);
 struct Checkpoint { unsigned tick; const char* hash; };
 constexpr Checkpoint CHECKPOINTS[] = {
   { 1u, "0a035ddaef51e444ec87d3c57e2f3dd72a6f47d1c2fe247e1e87d838734bede7" },
-  { 50u, "27e0d97a0cc84c316073d389326e24f41166b5ad1fd8df390e6664aaa3005f11" },
-  { 100u, "f858605d4358d9700de1aa22d7dae591cc19c3119f2ec6b40d59f6fed7a93be9" },
-  { 150u, "7c6d906381b9db929bc82a30e2420484ee3febaf3e1543e161cdbd94107aa518" },
-  { 200u, "855ced9059e4c3b55fcc4c53ff3f8ba99825ee8c87a328af115ec03564496b5d" },
+  { 50u, "79a92cf46872f259942c4dfda664157140ef787f331053d6431055150649524b" },
+  { 100u, "241535cfe0fd07e910fc7addf6f7df452c6a054ae8a32bcf6e8fd46281eecdbb" },
+  { 150u, "6aeb8800c8e3af31096ba5dc9acda7be0617839f44eed3f04d692eb74a6460d3" },
+  { 200u, "0584d73fc1b849298ec0e557e8556b18129ad43ff16679d5e673d2b571b49c37" },
 };
 constexpr int CHECKPOINT_COUNT = sizeof(CHECKPOINTS)/sizeof(CHECKPOINTS[0]);
 
-constexpr const char* SEQUENCE_DIGEST = "24f7184583bdce5623b05202d2928f223cdc23f29817550eac8180ba2fe3c332";
+constexpr const char* SEQUENCE_DIGEST = "7e275f2b163bd00ca54b3722ac9dce13be3bb913bdf9e77664269a56115149eb";
 
 }} // namespace seads::sess_vec

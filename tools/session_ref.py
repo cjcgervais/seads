@@ -4,8 +4,9 @@ session_ref.py — SEADS server<->client SESSION loop REFERENCE (netcode layer 5
 
 The layer that finally USES the wire transport between two endpoints. A SERVER runs the
 authoritative sealed kernel over a scripted multi-aircraft dogfight and, at the 20 Hz snapshot
-cadence, serializes the FULL protocol-5 world into a WEAPON-001 wire frame (GEO + KIN-002 +
-WEAPON sections, incl. the per-aircraft magazine `ammo` since v1.14r0). An in-process TRANSPORT
+cadence, serializes the FULL protocol-7 world into a WEAPON-001 wire frame (GEO + KIN-002 +
+WEAPON sections, incl. the per-aircraft magazine `ammo` since v1.14r0, attacker attribution
+`last_hit_by` since v1.17r0, and the region sub-pools + kill tally since v1.19r0). An in-process TRANSPORT
 ships those frames server->client with a fixed integer
 latency and deterministic packet loss. The CLIENT reconstructs the entire dogfight from the bytes
 it receives — tying together the four netcode layers built earlier:
@@ -158,16 +159,19 @@ def _build_server_kernel(scenario):
 
 
 def _serialize_world(k, server_tick):
-    """Serialize the kernel's FULL world to a protocol-6 wire frame: every aircraft (GEO + KIN-002
-    + WEAPON hp/fire_cd/ammo/last_hit_by) and every live round (GEO + damage + ttl/owner). Aircraft
-    id = SoA index; projectile id = SoA index (rounds are transient — a per-frame index is all the
-    client needs to draw + count them). Mirrors what seads_record's --gundemo writes, over the sealed
-    codec. v1.17r0: last_hit_by rides the wire so the client reconstructs an ATTRIBUTED kill-feed."""
+    """Serialize the kernel's FULL world to a protocol-7 wire frame: every aircraft (GEO + KIN-002
+    + WEAPON hp/fire_cd/ammo/last_hit_by/engine_hp/wing_hp/tail_hp/kills) and every live round
+    (GEO + damage + ttl/owner). Aircraft id = SoA index; projectile id = SoA index (rounds are
+    transient — a per-frame index is all the client needs to draw + count them). Mirrors what
+    seads_record's --gundemo writes, over the sealed codec. v1.17r0: last_hit_by rides the wire so
+    the client reconstructs an ATTRIBUTED kill-feed; v1.19r0: the region sub-pools + kill tally
+    ride it so the client draws DAMAGE STATE and a SCOREBOARD."""
     ents = []
     for i, ac in enumerate(k.aircraft):
         ents.append(snap.from_kernel(i, ac.lat, ac.lon, ac.psi, ac.alt,
                                      ac.phi, ac.tas, ac.gamma, ac.hp, ac.fire_cd, ac.ammo,
-                                     ac.last_hit_by))
+                                     ac.last_hit_by, ac.engine_hp, ac.wing_hp, ac.tail_hp,
+                                     ac.kills))
     projs = []
     for j, p in enumerate(k.projectiles):
         projs.append(snap.proj_from_kernel(j, p.lat, p.lon, p.psi, p.alt,
@@ -231,7 +235,8 @@ def encode_client_view(client_tick, render_tick, own_ent, remotes, wframe):
       header : client_tick, render_tick
       OWN    : predicted geometry @ now (GEO + KIN phi/tas/gamma) — always present
       REMOTES: count + per-remote (id, interpolated GEO @ render_tick), sorted by id
-      WEAPONS: count + per-aircraft (id, hp_q, dead flag, fire_cd_q, ammo_q) from the freshest frame
+      WEAPONS: count + per-aircraft (id, hp_q, dead flag, fire_cd_q, ammo_q, last_hit_by_q,
+               engine_hp_q, wing_hp_q, tail_hp_q, kills_q) from the freshest frame
       ROUNDS : count + per-round (pid, GEO, damage_q, ttl, owner) from the freshest frame
     A freshly-connected client (before any frame arrives) emits empty REMOTES/WEAPONS/ROUNDS but
     still its own predicted ship — a faithful 'I only know myself yet' state."""
@@ -263,6 +268,10 @@ def encode_client_view(client_tick, render_tick, own_ent, remotes, wframe):
             out += g.encode_i64(g.quantize(e.fire_cd, snap.FIRECD_SCALE))
             out += g.encode_i64(g.quantize(e.ammo, snap.AMMO_SCALE))  # rounds remaining (v1.14r0)
             out += g.encode_i64(g.quantize(e.last_hit_by, snap.LASTHITBY_SCALE))  # attacker idx (v1.17r0)
+            out += g.encode_i64(g.quantize(e.engine_hp, snap.ENGINEHP_SCALE))  # region pools + kills (v1.19r0)
+            out += g.encode_i64(g.quantize(e.wing_hp, snap.WINGHP_SCALE))
+            out += g.encode_i64(g.quantize(e.tail_hp, snap.TAILHP_SCALE))
+            out += g.encode_i64(g.quantize(e.kills, snap.KILLS_SCALE))
         out += g.encode_i64(len(wframe.projectiles))
         for p in wframe.projectiles:
             out += g.encode_i64(p.id)
@@ -367,15 +376,21 @@ def checkpoint_ticks(ticks):
 
 
 def final_weapon_facts(wframe):
-    """Per-aircraft (id, hp_milli, dead, ammo, last_hit_by) from the client's freshest frame — the
-    replicated combat outcome. hp_milli is the quantized hp (ints, byte-reproducible); dead = hp<=0;
-    ammo is the quantized magazine rounds remaining (v1.14r0); last_hit_by is the attacker index off
-    the wire (v1.17r0 — an ATTRIBUTED kill-feed: who downed whom, reconstructed from bytes)."""
+    """Per-aircraft (id, hp_milli, dead, ammo, last_hit_by, engine_milli, wing_milli, tail_milli,
+    kills) from the client's freshest frame — the replicated combat outcome. hp_milli is the
+    quantized hp (ints, byte-reproducible); dead = hp<=0; ammo is the quantized magazine rounds
+    remaining (v1.14r0); last_hit_by is the attacker index off the wire (v1.17r0 — an ATTRIBUTED
+    kill-feed: who downed whom); the region sub-pools + kill tally (v1.19r0 — the replicated
+    DAMAGE STATE and SCOREBOARD) are quantized milli/unit like hp/ammo."""
     facts = []
     for e in sorted(wframe.entities, key=lambda e: e.id):
         facts.append((int(e.id), g.quantize(e.hp, snap.HP_SCALE), 1 if e.hp <= 0.0 else 0,
                       g.quantize(e.ammo, snap.AMMO_SCALE),
-                      int(g.quantize(e.last_hit_by, snap.LASTHITBY_SCALE))))
+                      int(g.quantize(e.last_hit_by, snap.LASTHITBY_SCALE)),
+                      g.quantize(e.engine_hp, snap.ENGINEHP_SCALE),
+                      g.quantize(e.wing_hp, snap.WINGHP_SCALE),
+                      g.quantize(e.tail_hp, snap.TAILHP_SCALE),
+                      int(g.quantize(e.kills, snap.KILLS_SCALE))))
     return facts
 
 
@@ -411,6 +426,20 @@ def _selftest():
             print(f"FAIL kill attribution not replicated: AC1 last_hit_by={by_id[1].last_hit_by} (expected 0)"); fails += 1
         if int(round(by_id[0].last_hit_by)) != -1 or int(round(by_id[2].last_hit_by)) != -1:
             print("FAIL never-hit aircraft should report last_hit_by=-1 (AC0/AC2)"); fails += 1
+        # REGION DAMAGE + SCOREBOARD replicated (v1.19r0): the client reconstructs, purely from
+        # the wire, that the astern-shot A6M2's TAIL pool is gone (every connecting round arrived
+        # from behind) while its engine/wing pools survive, and that the P-47 (AC0) scored 1 kill;
+        # the untouched bystanders keep full pools and 0 kills.
+        if by_id[1].tail_hp > 0.0:
+            print(f"FAIL region damage not replicated: AC1 tail_hp={by_id[1].tail_hp} (expected 0, astern kill)"); fails += 1
+        if by_id[1].engine_hp <= 0.0 or by_id[1].wing_hp <= 0.0:
+            print("FAIL AC1 engine/wing pools should survive an astern kill"); fails += 1
+        if int(round(by_id[0].kills)) != 1:
+            print(f"FAIL scoreboard not replicated: AC0 kills={by_id[0].kills} (expected 1)"); fails += 1
+        if int(round(by_id[1].kills)) != 0 or int(round(by_id[2].kills)) != 0:
+            print("FAIL AC1/AC2 should report kills=0"); fails += 1
+        if by_id[0].tail_hp <= 0.0 or by_id[2].tail_hp <= 0.0:
+            print("FAIL never-hit aircraft should keep full region pools (AC0/AC2)"); fails += 1
         # server truth agrees (AC1 dead, AC0/AC2 alive at the end)
         srv = server_states[ticks]
         if not (srv[1][7] <= 0.0 and srv[0][7] > 0.0 and srv[2][7] > 0.0):

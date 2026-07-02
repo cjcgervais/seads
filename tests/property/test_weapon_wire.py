@@ -1,13 +1,15 @@
 """Round-trip / framing properties for the WEAPON-001 snapshot section (sealed v1.12r0; the G4
 magazine `ammo` joined the block at v1.14r0, protocol 5; attacker attribution `last_hit_by`
-joined at v1.17r0, protocol 6).
+joined at v1.17r0, protocol 6; the v1.18r0 region sub-pools engine_hp/wing_hp/tail_hp + the kill
+tally `kills` joined at v1.19r0, protocol 7).
 
 Byte-exact C++<->reference parity is proven by the generated-vector gate
 (src/net/weapon_test_main.cpp). Here we prove the reference framing is self-consistent: the
-gunnery state (per-aircraft hp/fire_cd/ammo/last_hit_by + the live ballistic rounds) round-trips
-within one quantum, ttl/owner are carried EXACTLY, the protocol gates the section (a protocol-3
-frame omits the weapon block entirely; a protocol-4 frame omits ammo; a protocol-5 frame omits
-last_hit_by), and the section stays self-delimiting + id-aligned."""
+gunnery state (per-aircraft hp/fire_cd/ammo/last_hit_by/region pools/kills + the live ballistic
+rounds) round-trips within one quantum, ttl/owner are carried EXACTLY, the protocol gates the
+section (a protocol-3 frame omits the weapon block entirely; a protocol-4 frame omits ammo; a
+protocol-5 frame omits last_hit_by; a protocol-6 frame omits the region pools + kills), and the
+section stays self-delimiting + id-aligned."""
 import sys
 from pathlib import Path
 
@@ -30,13 +32,15 @@ FIRECD = st.floats(min_value=0.0, max_value=30.0, allow_nan=False, allow_infinit
 DAMAGE = st.floats(min_value=0.0, max_value=60.0, allow_nan=False, allow_infinity=False)
 AMMO = st.floats(min_value=0.0, max_value=500.0, allow_nan=False, allow_infinity=False)  # magazine rounds (unit-scale quantized)
 LASTHITBY = st.integers(min_value=-1, max_value=7).map(float)  # attacker index or -1 == never hit (exact int-valued f64)
+REGIONHP = st.floats(min_value=0.0, max_value=80.0, allow_nan=False, allow_infinity=False)  # region sub-pool (clamped >= 0 in the kernel)
+KILLS = st.integers(min_value=0, max_value=7).map(float)  # victory tally (exact int-valued f64, like ammo)
 TTL = st.integers(min_value=0, max_value=250)
 OWNER = st.integers(min_value=0, max_value=7)
 ID = st.integers(min_value=0, max_value=(1 << 31) - 1)
 TICK = st.integers(min_value=0, max_value=(1 << 40))
 
 ENTITY = st.builds(s.EntityState, ID, LAT, LON, BEAR, ALT, PHI, TAS, GAMMA, HP, FIRECD, AMMO,
-                   LASTHITBY)
+                   LASTHITBY, REGIONHP, REGIONHP, REGIONHP, KILLS)
 PROJ = st.builds(s.ProjectileState, ID, LAT, LON, BEAR, ALT, DAMAGE, TTL, OWNER)
 
 
@@ -46,7 +50,7 @@ def test_weapon_roundtrip(tick, entities, projectiles):
     wire = s.encode_snapshot(snap)
     dec, pos = s.decode_snapshot(wire)
     assert pos == len(wire)
-    assert dec.protocol == s.SNAPSHOT_PROTOCOL  # 6
+    assert dec.protocol == s.SNAPSHOT_PROTOCOL  # 7
     assert dec.server_tick == tick
     assert len(dec.entities) == len(entities)
     assert len(dec.projectiles) == len(projectiles)
@@ -56,6 +60,10 @@ def test_weapon_roundtrip(tick, entities, projectiles):
         assert abs(a.fire_cd - b.fire_cd) <= 1.0 / s.FIRECD_SCALE
         assert abs(a.ammo - b.ammo) <= 1.0 / s.AMMO_SCALE
         assert a.last_hit_by == b.last_hit_by  # int-valued at unit scale -> carried EXACTLY (incl. -1)
+        assert abs(a.engine_hp - b.engine_hp) <= 1.0 / s.ENGINEHP_SCALE  # region pools (v1.19r0)
+        assert abs(a.wing_hp - b.wing_hp) <= 1.0 / s.WINGHP_SCALE
+        assert abs(a.tail_hp - b.tail_hp) <= 1.0 / s.TAILHP_SCALE
+        assert a.kills == b.kills  # int-valued at unit scale -> carried EXACTLY
     for a, b in zip(projectiles, dec.projectiles):
         assert a.id == b.id
         assert abs(a.lat_deg - b.lat_deg) <= 1.0 / g.LATLON_SCALE
@@ -115,6 +123,26 @@ def test_protocol5_omits_lasthitby(entities, projectiles):
         assert b.last_hit_by == -1.0
         assert abs(a.hp - b.hp) <= 1.0 / s.HP_SCALE
         assert abs(a.ammo - b.ammo) <= 1.0 / s.AMMO_SCALE
+
+
+@given(st.lists(ENTITY, min_size=1, max_size=4), st.lists(PROJ, max_size=4))
+def test_protocol6_omits_regions(entities, projectiles):
+    # a protocol-6 (pre-v1.19r0 WEAPON-001) frame carries hp/fire_cd/ammo/last_hit_by + rounds
+    # but NOT the region sub-pools / kill tally: it is strictly shorter than the protocol-7 wire
+    # (four extra LEB128s per aircraft) and decode leaves engine_hp/wing_hp/tail_hp/kills at
+    # their 0 defaults while hp/ammo/last_hit_by still round-trip — the older gunnery wire stays
+    # readable.
+    p6 = s.Snapshot(9, entities, projectiles, protocol=6)
+    p7 = s.Snapshot(9, entities, projectiles, protocol=7)
+    w6, w7 = s.encode_snapshot(p6), s.encode_snapshot(p7)
+    assert len(w6) < len(w7)
+    d6, pos6 = s.decode_snapshot(w6)
+    assert pos6 == len(w6) and d6.protocol == 6
+    for a, b in zip(entities, d6.entities):
+        assert b.engine_hp == 0.0 and b.wing_hp == 0.0 and b.tail_hp == 0.0 and b.kills == 0.0
+        assert abs(a.hp - b.hp) <= 1.0 / s.HP_SCALE
+        assert abs(a.ammo - b.ammo) <= 1.0 / s.AMMO_SCALE
+        assert a.last_hit_by == b.last_hit_by
 
 
 @given(st.lists(ENTITY, min_size=1, max_size=3), st.lists(PROJ, min_size=1, max_size=4))
