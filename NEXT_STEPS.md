@@ -34,7 +34,10 @@
 > + fly selfchecks green over the `--dogfight` recording, 8 s GUI smoke of BOTH modes clean, and
 > the fly own-ship SCREENSHOT-VERIFIED (readable fighter: tapered wings, tailplane + fin, canopy,
 > spinner + blades, banking with input).**
-> **GIT: pushed to `origin/main` (code `7b02417`).**
+> **GIT: pushed to `origin/main` (code `7b02417` + receipt `2797b5c`); guardian CI run
+> [28608248338](https://github.com/cjcgervais/seads/actions/runs/28608248338) GREEN** — Python gates
+> + MSVC + GCC/Clang × x64/AArch64 + the cross-toolchain hash aggregation gate all reproduce all 11
+> goldens bit-for-bit (a presentation-only change moves no golden; the client is off the gate).
 > **NEXT (free pick, none blocking):** **B5** ISA atmosphere (a seal); an open-ended live frame
 > SOURCE feeding `broadcast_async` incrementally; per-airframe region toughness (data-only envelope
 > scalars + a kernel consumer — its own ADR, would move goldens); or per-airframe mesh VARIANTS
