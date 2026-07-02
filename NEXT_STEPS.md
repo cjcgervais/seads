@@ -15,11 +15,14 @@
 > `catchup`), which is **UNTOUCHED** (layers 9/10 verbatim; their bridges keep gating it). Fast path:
 > `enqueue_bytes` flushes opportunistically, so an unclogged client never accumulates a buffer. The
 > catch-up prefix is enqueued, not burst. After the last frame, a bounded DRAIN phase (progress-bound +
-> ~30 s idle cap) flushes stragglers; still-pending at deadline ⇒ dropped as a leave (fail-not-wedge).
-> Also new: `set_sndbuf`/`set_rcvbuf` (bridge instrumentation; listener-inherited).
+> ~30 s CONSECUTIVE-idle cap — any readiness resets it, so a slowly-reading client is never dropped)
+> flushes stragglers; still-pending at deadline ⇒ dropped as a leave (fail-not-wedge).
+> Also new: `set_sndbuf` (bridge instrumentation; listener-inherited). Deliberately NO `set_rcvbuf`
+> twin: shrinking SO_RCVBUF post-handshake is a Linux TCP pathology (drops + RTO backoff) — the first
+> CI round proved it by wedging leg 1's drain on the GCC/Clang x64 legs (fixed same session).
 > **(b) The async-output BRIDGE** (`seads_netasync_test`): **LEG 1 (no back-pressure)** — a synthetic
 > **~8 MiB** stream (512×16 KiB) to a SLOW client that reads NOTHING while the server runs, through
-> pinned 16-KiB kernel buffers (a blocking server provably wedges there; the watchdog would FAIL): the
+> a pinned 16-KiB kernel SEND buffer (a blocking server provably wedges there; the watchdog would FAIL): the
 > async frame loop reached the LAST frame with SLOW at **0 bytes read** (on_frame-observed, no sleeps),
 > then SLOW drained to EOF **byte-identical**, zero leaves. **LEG 2 (sealed-session fidelity)** — the
 > exact layer-10 shape through `broadcast_async(catchup=true)`: EARLY + CATCHUP (joined at frame J=20,

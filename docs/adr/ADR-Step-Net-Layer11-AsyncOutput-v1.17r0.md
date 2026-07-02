@@ -36,9 +36,12 @@ stream carries over verbatim.
 - `select_rw(rfds, wfds, timeout, readable, writable)` — `select_readable` generalized with a
   **write set**: one `select()` watches readability (joins, leaves) AND writability (a clogged
   client's kernel buffer opened up). Winsock ignores nfds / POSIX `max(fd)+1` over both sets.
-- `set_sndbuf` / `set_rcvbuf` — pin `SO_SNDBUF`/`SO_RCVBUF` (test instrumentation: the bridge pins
-  tiny kernel buffers so a blocking send provably wedges where the async path must not; on a
-  listener, accepted sockets inherit the value).
+- `set_sndbuf` — pin `SO_SNDBUF` (test instrumentation: the bridge pins a tiny kernel send buffer
+  so a blocking send provably wedges where the async path must not; on a listener, accepted
+  sockets inherit the value). There is deliberately **no receive-side twin**: shrinking `SO_RCVBUF`
+  after the TCP window scale is negotiated is a known Linux pathology (drops + retransmission
+  backoff) — the first CI round proved it by wedging the volume leg's drain on the GCC/Clang x64
+  legs.
 
 **(b) The async broadcast loop (`src/net/broadcast.{h,cpp}` — `netbcast::broadcast_async`).**
 Same signature and contract as `broadcast_select` (incl. `on_frame` + `catchup`); `broadcast_select`
@@ -58,8 +61,9 @@ itself is **untouched** (layers 9/10 behavior verbatim, their bridges keep gatin
   `frames[0:fi]` to the joiner's buffer — closing layer 10's named boundary (a slow catch-up joiner
   back-pressured its accepting iteration).
 - After the last frame is enqueued, a **bounded DRAIN phase** flushes stragglers: progress-bound
-  (finite bytes owed) plus an idle cap (~30 s with zero writability progress) — a client still
-  pending at the deadline is dropped as a **leave** (fail-not-wedge), mirroring a send failure.
+  (finite bytes owed) plus an idle cap (~30 s of **consecutive** silent timeouts; any readiness
+  resets it, so a slowly-but-actually-reading client is never dropped) — a client still pending at
+  the deadline is dropped as a **leave** (fail-not-wedge), mirroring a send failure.
   `frames_sent` counts frames **enqueued** to the then-current set; `ok` == every frame enqueued
   (per-client shortfalls surface as `leaves`, exactly as before).
 
@@ -68,11 +72,11 @@ cv+`notify_all` (no `std::future` — MinGW `call_once` caveat) pinned by `on_fr
 
 - **LEG 1 (no back-pressure, volume):** a synthetic **~8 MiB** frame list (512 × 16 KiB,
   deterministic fill) streamed to one **SLOW** client that reads **nothing** while the server runs,
-  through pinned tiny kernel buffers (`set_sndbuf(listener, 16 KiB)` — inherited by the accepted
-  socket, disabling send autotuning; best-effort `set_rcvbuf` on the client; a never-reading
-  receiver's window holds near its initial size regardless, so kernel capacity is a few hundred KiB
-  ≪ the stream). A blocking layer-9/10 server **provably wedges** at that capacity — the watchdog
-  would fail the test. The bridge asserts the async frame loop instead reached the **last** frame
+  through a pinned tiny kernel send buffer (`set_sndbuf(listener, 16 KiB)` — inherited by the
+  accepted socket, disabling send autotuning; the never-reading receiver's window holds near its
+  initial size since receive autotuning tracks the application's read rate — so kernel capacity is
+  a few hundred KiB ≪ the stream). A blocking layer-9/10 server **provably wedges** at that
+  capacity — the watchdog would fail the test. The bridge asserts the async frame loop instead reached the **last** frame
   (the `on_frame` hook observes it) while SLOW had read **0 bytes**; SLOW then drains to EOF and
   its stream must be **byte-identical** to the encoded frame list, with **zero leaves** (the drain
   delivered, not dropped).

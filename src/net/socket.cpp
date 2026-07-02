@@ -214,17 +214,15 @@ bool select_rw(const std::vector<socket_t>& rfds_in, const std::vector<socket_t>
     return !readable.empty() || !writable.empty();
 }
 
-static bool set_bufopt(socket_t s, int opt, int bytes) {
+bool set_sndbuf(socket_t s, int bytes) {
 #ifdef _WIN32
-    return ::setsockopt(s, SOL_SOCKET, opt, reinterpret_cast<const char*>(&bytes),
+    return ::setsockopt(s, SOL_SOCKET, SO_SNDBUF, reinterpret_cast<const char*>(&bytes),
                         sizeof(bytes)) == 0;
 #else
-    return ::setsockopt(s, SOL_SOCKET, opt, static_cast<const void*>(&bytes), sizeof(bytes)) == 0;
+    return ::setsockopt(s, SOL_SOCKET, SO_SNDBUF, static_cast<const void*>(&bytes),
+                        sizeof(bytes)) == 0;
 #endif
 }
-
-bool set_sndbuf(socket_t s, int bytes) { return set_bufopt(s, SO_SNDBUF, bytes); }
-bool set_rcvbuf(socket_t s, int bytes) { return set_bufopt(s, SO_RCVBUF, bytes); }
 
 // --- shared (portable) setup helpers, using the type aliases above --------------------
 socket_t listen_loopback(std::uint16_t port, std::uint16_t& bound_port, int backlog) {

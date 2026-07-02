@@ -287,8 +287,10 @@ Stats broadcast_async(netsock::socket_t listener,
     }
 
     // --- bounded DRAIN: flush the stragglers' pending buffers. Progress-bound (finite bytes owed)
-    // plus an idle cap: ~30 s with NO writability progress at all => the still-pending clients are
-    // dropped as leaves (fail-not-wedge), mirroring a send failure. ------------------------------
+    // plus an idle cap: ~30 s of CONSECUTIVE timeouts with no readiness at all => the still-pending
+    // clients are dropped as leaves (fail-not-wedge), mirroring a send failure. Any readiness
+    // resets the cap — a slowly-reading client that is making progress is never dropped (the finite
+    // stream bounds the total work). -------------------------------------------------------------
     int idle = 0;
     while (idle < 600) {
         rfds.clear();
@@ -301,6 +303,7 @@ Stats broadcast_async(netsock::socket_t listener,
         if (netsock::select_rw(rfds, wfds, 50, readable, writable)) {
             reap_leavers_async(clients, readable, st);
             flush_writable(clients, writable, st);
+            idle = 0;  // progress observed: only an unbroken silent stretch counts against the cap
         } else {
             ++idle;
         }

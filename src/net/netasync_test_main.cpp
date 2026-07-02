@@ -10,15 +10,17 @@
 // over real 127.0.0.1 sockets and with NO sleeps / NO timing guesses, two claims:
 //
 //   LEG 1 (no back-pressure, volume): one SLOW client that reads NOTHING while the server streams
-//   a synthetic ~8 MiB payload list through deliberately TINY kernel buffers (SO_SNDBUF pinned on
-//   the listener — inherited by the accepted socket, disabling send-side autotuning — plus a
-//   best-effort SO_RCVBUF pin on the client right after connect; a never-reading receiver's window
-//   holds at its initial size either way, so combined kernel capacity is a few hundred KiB at
-//   most, ~40x under the stream). A blocking layer-9/10 server provably WEDGES at that capacity
-//   (the watchdog would fail this test). The async server's frame loop must instead complete all
-//   N frames — the on_frame hook observes it reach the LAST frame while SLOW has consumed zero
-//   bytes — and after SLOW then drains to EOF its received stream must be byte-identical to the
-//   encoded frame list.
+//   a synthetic ~8 MiB payload list through a deliberately TINY kernel send buffer (SO_SNDBUF
+//   pinned on the listener — inherited by the accepted socket, disabling send-side autotuning; and
+//   a never-reading receiver's window holds near its initial size, since receive autotuning tracks
+//   the application's read rate — so combined kernel capacity is a few hundred KiB, ~40x under the
+//   stream). The receiver's SO_RCVBUF is deliberately NOT touched: shrinking it after the window
+//   scale is negotiated is a known TCP pathology on Linux (drops + retransmission backoff — it
+//   broke this leg's drain on the CI GCC/Clang x64 legs). A blocking layer-9/10 server provably
+//   WEDGES at that capacity (the watchdog would fail this test). The async server's frame loop
+//   must instead complete all N frames — the on_frame hook observes it reach the LAST frame while
+//   SLOW has consumed zero bytes — and after SLOW then drains to EOF its received stream must be
+//   byte-identical to the encoded frame list.
 //
 //   LEG 2 (sealed-session fidelity, async + catch-up): the layer-10 shape run through the async
 //   path. EARLY (connected before frame 0, reads live) and CATCHUP (rendezvoused to join at frame
@@ -99,9 +101,10 @@ static bool collect_to_eof(netsock::socket_t s, std::vector<std::vector<std::uin
 // nothing until the server's frame loop reaches the last frame. Returns the number of failures.
 // ---------------------------------------------------------------------------------------------
 static int run_volume_leg() {
-    // 512 frames x 16 KiB ~= 8 MiB — orders of magnitude beyond the pinned kernel buffering
-    // (SO_SNDBUF 16 KiB + SO_RCVBUF 16 KiB; OSes clamp/round, but nowhere near 8 MiB), so a
-    // BLOCKING server provably wedges on the never-reading client where the async one must not.
+    // 512 frames x 16 KiB ~= 8 MiB — orders of magnitude beyond the kernel buffering (SO_SNDBUF
+    // pinned to 16 KiB server-side; the never-read receive window holds near its initial ~64-128
+    // KiB), so a BLOCKING server provably wedges on the never-reading client where the async one
+    // must not.
     const std::size_t kFrames = 512, kFrameBytes = 16 * 1024;
     const int kBufBytes = 16 * 1024;
     std::vector<std::vector<std::uint8_t>> payloads(kFrames);
@@ -165,10 +168,9 @@ static int run_volume_leg() {
         if (port == 0) { ++done; return; }
         netsock::socket_t s = netsock::connect_loopback(port);
         if (netsock::is_valid(s)) {
-            // Best-effort receive-buffer pin (the socket is born inside connect_loopback, so this
-            // lands just after the handshake). A never-reading receiver's window holds near its
-            // initial size regardless — the 8 MiB stream dwarfs any default kernel buffering.
-            netsock::set_rcvbuf(s, kBufBytes);
+            // The receive buffer is deliberately left alone (see the file header): a never-reading
+            // receiver's window holds near its initial size anyway, and shrinking SO_RCVBUF after
+            // the window scale is negotiated wedges the later drain on Linux (drops + RTO backoff).
             {
                 // Read NOTHING until the server's frame loop has reached the last frame.
                 std::unique_lock<std::mutex> lk(mtx);

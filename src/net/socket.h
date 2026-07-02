@@ -78,12 +78,12 @@ bool select_rw(const std::vector<socket_t>& rfds, const std::vector<socket_t>& w
 // send_all it NEVER blocks, so a slow client cannot back-pressure the broadcast frame loop.
 std::ptrdiff_t send_some(socket_t s, const std::uint8_t* buf, std::size_t n);
 
-// Pin a socket's kernel send/receive buffer to `bytes` (SO_SNDBUF / SO_RCVBUF; disables autotuning
-// where the OS would otherwise grow it). On a LISTENER, accepted sockets inherit the value. Test
-// instrumentation: the layer-11 bridge pins tiny kernel buffers so a blocking send provably wedges
-// where the async path must not. Returns false on error.
+// Pin a socket's kernel SEND buffer to `bytes` (SO_SNDBUF; disables send-side autotuning). On a
+// LISTENER, accepted sockets inherit the value. Test instrumentation: the layer-11 bridge pins a
+// tiny send buffer so a blocking send provably wedges where the async path must not. (There is
+// deliberately no receive-side twin: shrinking SO_RCVBUF after the TCP window scale is negotiated
+// is a known Linux pathology — drops + retransmission backoff.) Returns false on error.
 bool set_sndbuf(socket_t s, int bytes);
-bool set_rcvbuf(socket_t s, int bytes);
 
 // Send exactly `n` bytes (loops over short writes). Returns false on error/EOF before all sent.
 bool send_all(socket_t s, const std::uint8_t* buf, std::size_t n);
