@@ -35,7 +35,7 @@
 > snapshot/weapon/session/event/interp/geo001/framing vectors ALL byte-identical — the sealed session
 > digest `24f71845…c332` and event digest `06629a69…` DID NOT MOVE. `scenario_params.h` regenerated
 > (new scenario). Rails 270→280 (`weapons.region_damage` doctrine block).
-> **Gates: 15/15 receipt PASS (`receipt-ATM-Sphere_v1.18r0-<code sha>.yml`), property tests 153 → 164
+> **Gates: 15/15 receipt PASS (`receipt-ATM-Sphere_v1.18r0-5a89ef4.yml`), property tests 153 → 164
 > (+11 `tests/property/test_region_damage.py`: pool derivation / aspect-selects-region / double-booking
 > + clamp / engine-out kills thrust / wing-out halves the ceiling / tail-out strips authority / the
 > tail-out-noop STRIP property / kill-tally exactly-once / shared-kill credits the crossing shooter /
