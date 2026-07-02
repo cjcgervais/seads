@@ -43,6 +43,12 @@
 > Ledger: **ADR-Step7-Guns-ProjectileSigmaDrag-v1.24r0**, SEAL_CARD v1.24r0 (header +
 > atmosphere/weapons lines + 5 golden rows + history row), CLAUDE.md header/rails/roadmap
 > current.
+> **GIT: pushed to `origin/main` (code `6fd01eb` + receipt `8e72ae6`,
+> `receipt-ATM-Sphere_v1.24r0-6fd01eb.yml` — 15/15 gates PASS); guardian CI run
+> [28627994201](https://github.com/cjcgervais/seads/actions/runs/28627994201) GREEN** — Python
+> gates + MSVC + GCC/Clang × x64/AArch64 + the cross-toolchain hash aggregation gate all
+> reproduce **all 14 v1.24r0 goldens bit-for-bit** (4 moved + 10 unchanged incl. EngineOut +
+> Sphere, on every leg).
 > **NEXT (free pick, none blocking):** per-airframe toughness / σ / crit-alt surfaced in the
 > HUD (presentation-only — the pools already ride the wire, crit_alt/σ are static/derived);
 > a per-airframe two-speed blower schedule (deferred at v1.22r0); or more netcode (layer 15 —
