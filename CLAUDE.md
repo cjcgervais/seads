@@ -322,6 +322,9 @@ docs/{adr,annex,cards,receipts,seals}  governance ledger  .claude/{agents,skills
   to v3 type codes 4/5 and the `--dogfight` demo gains a third staggered hunter/prey pair (Yak-3
   guns down a La-7: 6 ships, 3 kills, 18 journal events) so every roster silhouette appears on
   screen. trajectory.js demo refreshed (stale protocol-4 GUNKILL → protocol-7 6-ship dogfight).
+  Rider: the recorder now seeds per-airframe `ammo_start` beside `hp_start` (matching
+  scenario_main.cpp + the net layers) ⇒ `--id` scenario replays are magazine-faithful
+  (Winchester-001 records ammo 100→0, not a 500-round default that never empties).
   Data/tooling + presentation only ⇒ all 11 goldens byte-identical.
 - next — free pick (none blocking): **B5** ISA atmosphere (a seal); an open-ended live frame SOURCE
   feeding `broadcast_async` incrementally; per-airframe region toughness (data-only envelopes + a

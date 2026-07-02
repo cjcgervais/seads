@@ -20,6 +20,13 @@
 > final round), then breaks. **6 ships, 3 kills, 18 per-round journal events** (was 4 ships / 2
 > kills / 14 events). `trajectory.js` demo data refreshed — it had been the STALE protocol-4
 > DEMO-GUNKILL since v1.12r0; now the protocol-7 6-ship dogfight incl. the `types` name array.
+> **(d) Follow-up rider (code `255eafb`): the recorder seeds per-airframe `ammo_start`** —
+> `seed()` passes `env->ammo_start` into `Kernel::add` beside `hp_start`, matching the canonical
+> scenario runner (`scenario_main.cpp`) and the net layers (session/event) instead of the
+> kernel's 500-round default. A `seads_record --id GOLDEN-SK-Winchester-001` replay is now
+> MAGAZINE-FAITHFUL (A6M2 ammo 100 → 0, gun silent — verified by selfcheck; previously it
+> recorded a 500-round magazine that never emptied). The dogfight demo's outcome is unchanged
+> (every burst ≪ any magazine).
 > **DATA/TOOLING + PRESENTATION ONLY: envtab additions are value-inert generated constants; no
 > `src/det_math/**`, `src/net/**`, `config/rails/**`, wire bytes, or tuning VALUES touched ⇒ ALL
 > 11 GOLDENS BYTE-IDENTICAL, no digest moved, no new ctest target ⇒ guardian.yml UNCHANGED. No seal.**
@@ -28,12 +35,12 @@
 > the fresh 6-ship recording echoes `types: … #4=Yak-3 #5=La-7` + the Yak-3's 4-round TAIL kill
 > (kills=1, victim lhb=4, tail=0.00 — per-airframe hp/damage provably flow from the new entries),
 > fly selfcheck green, 10 s GUI smoke of BOTH modes clean.**
-> **GIT: pushed to `origin/main` (code `223ebd5` + receipt `0232a17`,
-> `receipt-ATM-Sphere_v1.19r0-223ebd5.yml` — 15/15 gates PASS); guardian CI run
-> [28613165952](https://github.com/cjcgervais/seads/actions/runs/28613165952) GREEN** — Python
-> gates + MSVC + GCC/Clang × x64/AArch64 + the cross-toolchain hash aggregation gate all reproduce
-> all 11 goldens bit-for-bit (a data/presentation-only change moves no golden; the client is off
-> the gate).
+> **GIT: pushed to `origin/main` (envtab code `223ebd5` + receipt `0232a17` — guardian CI run
+> [28613165952](https://github.com/cjcgervais/seads/actions/runs/28613165952) GREEN; ammo rider
+> `255eafb` + receipt `receipt-ATM-Sphere_v1.19r0-255eafb.yml` 15/15 PASS — verify its guardian
+> run GREEN)** — Python gates + MSVC + GCC/Clang × x64/AArch64 + the cross-toolchain hash
+> aggregation gate all reproduce all 11 goldens bit-for-bit (data/presentation-only changes move
+> no golden; the client is off the gate).
 > **NEXT (free pick, none blocking):** **B5** ISA atmosphere (a seal); an open-ended live frame
 > SOURCE feeding `broadcast_async` incrementally; per-airframe region toughness (data-only envelope
 > scalars + a kernel consumer — its own ADR, would move goldens); or a sealed SCENARIO exercising
@@ -42,10 +49,11 @@
 > **NOTE FOR THE NEXT AGENT:** `gen_envelope_tables.py` now emits ALL tuning JSONs — dropping a
 > new JSON into `data/tuning/envelopes/` auto-adds an envtab entry on regen (keep tuning_probe
 > green over it). If a future scenario references a newly-emitted envelope, lockstep/predict
-> vectors will move — that is the scenario change, not this pattern. The demo ammo counter starts
-> at 500 for every ship (kernel `add()` default, pre-existing behavior) — per-airframe
-> `ammo_start` gates firing via envelopes in sealed scenarios; wiring demo ammo to
-> `env->ammo_start` would be a recorder-only tweak if wanted.
+> vectors will move — that is the scenario change, not this pattern. The recorder now seeds BOTH
+> `hp_start` and `ammo_start` from the envelope (rider (d)) — keep `seed()` aligned with
+> `scenario_main.cpp` if `Kernel::add` ever grows another per-airframe arg. Practical gotcha:
+> `seads_viewer --selfcheck` REQUIRES a count argument (`--selfcheck 8`); without it the viewer
+> silently enters GUI mode and hangs a headless run.
 >
 > ## ►► PRIOR STATE (2026-07-02): **PER-AIRFRAME MESH VARIANTS — ROSTER SILHOUETTES IN THE VIEWER DONE ✅** (no-seal, rides **ATM-Sphere v1.19r0**)
 > **Latest: the one-size fighter becomes eight — each aircraft now draws its ROSTER TYPE's silhouette (radial vs inline nose, wing plan, tail, size), fed by a new `.seadsrec` v3 per-aircraft type trailer. The named blocker ("the wire carries no type field") is resolved the honest way: the type is STATIC per flight, so it rides the recording META, not the sealed 20 Hz wire — no reseal, nothing kernel-side.**
