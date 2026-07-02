@@ -31,7 +31,8 @@
 > cross-process (a real `seads_netclient` reconstructed `d0e94e2e…` from the live server).
 > **TRANSPORT-ONLY: no `src/kernel/**`, `src/det_math/**`, `config/rails/**`, wire bytes, or
 > tuning touched ⇒ ALL 12 GOLDENS BYTE-IDENTICAL, no digest moved. No seal.**
-> **Gates: ctest 17→18 GCC + 17→18 Clang (`netlive_bridge`), property tests 175 → 177 (+2
+> **Gates: 15/15 receipt PASS (`receipt-ATM-Sphere_v1.20r0-0784c74.yml`), ctest 17→18 GCC +
+> 17→18 Clang (`netlive_bridge`), property tests 175 → 177 (+2
 > `test_broadcast.py` layer-13: pull-of-unknown-length delivery == batch model == encode_stream;
 > retained history after j pulls == frames[0:j] ⇒ replay+live == whole stream for any join point),
 > session vectors in sync (the build_server_frames refactor moved NOTHING).**
