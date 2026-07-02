@@ -218,6 +218,8 @@ function frame(now) {
   const ents = sample(renderTick);
   const fi = frameIndexFor(Math.max(firstTick, Math.min(lastTick, renderTick)));
   const hpNow = frames[fi].hp || maxHp;
+  const ammoNow = frames[fi].ammo || [];    // v1.14r0: rounds remaining (wire-sourced)
+  const killsNow = frames[fi].kills || [];  // v1.19r0: the wire-sourced scoreboard
   clockEl.textContent = (played / tickHz).toFixed(2) + 's';
 
   ents.forEach((e, i) => {
@@ -247,10 +249,14 @@ function frame(now) {
       const w = 10, n = Math.max(0, Math.round((hp / maxHp[i]) * w));
       return '█'.repeat(n) + '░'.repeat(w - n);
     })();
+    // ammo counter + kill tally, when the recording carries them (wire fields v1.14r0/v1.19r0).
+    const extra = (ammoNow[i] !== undefined ? `  ammo ${String(ammoNow[i]).padStart(3)}` : '') +
+                  (killsNow[i] !== undefined ? `  kills ${killsNow[i]}` : '');
     rows[i].textContent = dead
-      ? `#${e.id}  ☠ KILLED   hp ${bar} 0/${maxHp[i].toFixed(0)}`
+      ? `#${e.id}  ☠ KILLED   hp ${bar} 0/${maxHp[i].toFixed(0)}` +
+        (killsNow[i] !== undefined ? `  kills ${killsNow[i]}` : '')
       : `#${e.id}  alt ${e.alt.toFixed(0).padStart(5)}m  brg ${e.brg.toFixed(0).padStart(3)}  ` +
-        `tas ${e.tas.toFixed(0).padStart(3)}  hp ${bar} ${hp.toFixed(0)}/${maxHp[i].toFixed(0)}`;
+        `tas ${e.tas.toFixed(0).padStart(3)}  hp ${bar} ${hp.toFixed(0)}/${maxHp[i].toFixed(0)}` + extra;
   });
 
   // tracer rounds for this frame (snap to the captured frame; identity isn't tracked across frames)

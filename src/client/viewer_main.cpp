@@ -18,7 +18,10 @@
 // netcode layer 4b, running the REAL sealed kernel at a fixed 100 Hz from the wall clock. The
 // remotes keep coming from the recording on the layer-4a interpolation path (Playback), so
 // prediction (own, crisp, zero-latency) and interpolation (remote, ~100 ms in the past) are visible
-// on the same globe at once — the full 4a+4b loop.
+// on the same globe at once — the full 4a+4b loop. The remotes' WEAPON-001 gunnery state rides the
+// same decoded wire (seal v1.19r0 put every field on it): tracer rounds, per-aircraft hp + E/W/T
+// region damage bars, a kills/ammo scoreboard, and an attributed kill-feed ("#0 downed #1",
+// "#0 knocked out #1's ENGINE") derived from wire-frame transitions.
 //   seads_viewer flight.seadsrec --fly [--speed 1.0]
 //   seads_viewer --fly --selfcheck 6        (headless; no recording or GPU needed)
 //
@@ -46,6 +49,7 @@
 // no rail/golden/world_hash is touched (no seal). NOTE: there is no authoritative server in this
 // single-process viewer, so only Predictor::predict() runs here — reconcile() (snap+replay against
 // a server snapshot) is exercised by the layer-4b parity tests and engages against a real server.
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -116,6 +120,143 @@ double hp_for(const std::vector<RenderHp>& v, int64_t id, double dflt) {
     return dflt;
 }
 
+// Full WEAPON-001 reading by id; nullptr if absent (old frame / unknown id).
+const RenderHp* weap_for(const std::vector<RenderHp>& v, int64_t id) {
+    for (const auto& h : v) if (h.id == id) return &h;
+    return nullptr;
+}
+
+// ---- WEAPON-001 presentation helpers (shared by replay + fly) ----------------------------------
+// Everything below draws from the DECODED wire only (Playback::sample_weapons) — the same bytes a
+// remote client holds — so what the viewer shows is exactly what replicates (seal v1.19r0: hp,
+// ammo, last_hit_by, engine/wing/tail region pools and kills all ride the snapshot wire).
+
+const Color TRACER_C{255, 225, 74, 255};   // yellow tracer point cloud (mirrors the web viewer)
+const Color FEED_KILL{235, 90, 90, 255};   // kill-feed: an aircraft downed
+const Color FEED_RGN{255, 170, 60, 255};   // kill-feed: a region knocked out
+
+// Rolling attributed kill-feed derived from wire-frame TRANSITIONS: total hp crossing to <=0 is a
+// kill ("#A downed #B" — attribution from the victim's last_hit_by, by construction the killer);
+// a region pool crossing to <=0 on a LIVING plane is a knock-out ("#A knocked out #B's ENGINE").
+// Only downward crossings fire, so a looping replay never emits false events on the wrap.
+class KillFeed {
+public:
+    void update(const WeaponView& wv, double now) {
+        for (const auto& h : wv.hp) {
+            Prev* p = nullptr;
+            for (auto& q : prev_) if (q.id == h.id) { p = &q; break; }
+            if (!p) {
+                prev_.push_back(Prev{h.id, h.hp, h.engine_hp, h.wing_hp, h.tail_hp});
+                continue;
+            }
+            if (p->hp > 0.0 && h.hp <= 0.0) {
+                push(now, FEED_KILL, h.last_hit_by, h.id, nullptr);
+            } else if (h.hp > 0.0) {  // region knock-outs only matter on a living plane
+                if (p->engine > 0.0 && h.engine_hp <= 0.0) push(now, FEED_RGN, h.last_hit_by, h.id, "ENGINE");
+                if (p->wing > 0.0 && h.wing_hp <= 0.0) push(now, FEED_RGN, h.last_hit_by, h.id, "WING");
+                if (p->tail > 0.0 && h.tail_hp <= 0.0) push(now, FEED_RGN, h.last_hit_by, h.id, "TAIL");
+            }
+            p->hp = h.hp; p->engine = h.engine_hp; p->wing = h.wing_hp; p->tail = h.tail_hp;
+        }
+    }
+
+    // Newest at the bottom, fading out over the last 1.5 s of an 8 s life.
+    void draw(int x, int y, double now) const {
+        for (const auto& it : items_) {
+            double age = now - it.born;
+            if (age > TTL_S) continue;
+            float a = (age < TTL_S - 1.5) ? 1.0f : static_cast<float>((TTL_S - age) / 1.5);
+            DrawText(it.text, x, y, 16, Fade(it.color, a));
+            y += 20;
+        }
+    }
+
+    void reset() { prev_.clear(); items_.clear(); }
+
+private:
+    static constexpr double TTL_S = 8.0;
+    struct Prev { int64_t id; double hp, engine, wing, tail; };
+    struct Item { char text[64]; double born; Color color; };
+
+    void push(double now, Color c, int64_t attacker, int64_t victim, const char* region) {
+        Item it{};
+        if (region)
+            std::snprintf(it.text, sizeof(it.text), "#%lld knocked out #%lld's %s",
+                          static_cast<long long>(attacker), static_cast<long long>(victim), region);
+        else if (attacker >= 0)
+            std::snprintf(it.text, sizeof(it.text), "#%lld downed #%lld",
+                          static_cast<long long>(attacker), static_cast<long long>(victim));
+        else  // never-hit death shouldn't happen, but a pre-attribution frame decodes to -1
+            std::snprintf(it.text, sizeof(it.text), "#%lld destroyed",
+                          static_cast<long long>(victim));
+        it.born = now;
+        it.color = c;
+        items_.push_back(it);
+        if (items_.size() > 6) items_.erase(items_.begin());
+    }
+
+    std::vector<Prev> prev_;
+    std::vector<Item> items_;
+};
+
+// Screen-projected damage state for one aircraft: the total-hp bar plus the three E/W/T region
+// segments underneath (a knocked-out region fills dark red and its letter lights up). `base` is
+// the same aircraft's first-frame reading (full pools); a recording that predates the region
+// fields (all-zero baseline pools) draws the hp bar only.
+void draw_damage_bars(Vector2 sp, const RenderHp& w, const RenderHp& base) {
+    const int bw = 46, bh = 5;
+    int bx = static_cast<int>(sp.x) - bw / 2, by = static_cast<int>(sp.y) - 26;
+    double mh = (base.hp > 0.0) ? base.hp : 100.0;
+    bool dead = w.hp <= 0.0;
+    double frac = w.hp / mh;
+    if (frac < 0) frac = 0; if (frac > 1) frac = 1;
+    DrawRectangle(bx, by, bw, bh, Color{30, 30, 36, 200});
+    Color fill = dead ? Color{120, 120, 120, 255}
+                      : (frac > 0.5 ? GREEN : (frac > 0.25 ? ORANGE : RED));
+    DrawRectangle(bx, by, static_cast<int>(bw * frac), bh, fill);
+    DrawRectangleLines(bx, by, bw, bh, Fade(BLACK, 0.5f));
+    if (dead) { DrawText("KILLED", bx - 2, by - 13, 12, FEED_KILL); return; }
+    if (base.engine_hp <= 0.0 && base.wing_hp <= 0.0 && base.tail_hp <= 0.0) return;
+    struct Seg { double v, v0; const char* tag; } segs[3] = {
+        {w.engine_hp, base.engine_hp, "E"},
+        {w.wing_hp, base.wing_hp, "W"},
+        {w.tail_hp, base.tail_hp, "T"}};
+    int sw = (bw - 4) / 3;
+    for (int i = 0; i < 3; ++i) {
+        int sx = bx + i * (sw + 2), sy = by + bh + 2;
+        double f = (segs[i].v0 > 0.0) ? segs[i].v / segs[i].v0 : 0.0;
+        if (f < 0) f = 0; if (f > 1) f = 1;
+        bool out = segs[i].v <= 0.0;
+        DrawRectangle(sx, sy, sw, 3, out ? Color{110, 35, 35, 230} : Color{30, 30, 36, 200});
+        DrawRectangle(sx, sy, static_cast<int>(sw * f), 3, Color{120, 200, 140, 255});
+        DrawText(segs[i].tag, sx + sw / 2 - 2, sy + 5, 10,
+                 out ? FEED_KILL : Color{110, 120, 130, 255});
+    }
+}
+
+// Top-right scoreboard from the decoded wire: kills / ammo / status per aircraft, kills-desc.
+void draw_scoreboard(const std::vector<RenderHp>& hp, int screen_w) {
+    if (hp.empty()) return;
+    std::vector<const RenderHp*> rows;
+    rows.reserve(hp.size());
+    for (const auto& h : hp) rows.push_back(&h);
+    std::sort(rows.begin(), rows.end(), [](const RenderHp* a, const RenderHp* b) {
+        if (a->kills != b->kills) return a->kills > b->kills;
+        return a->id < b->id;
+    });
+    int x = screen_w - 280, y = 40;
+    DrawText("SCORE      kills   ammo", x, y, 16, RAYWHITE);
+    y += 20;
+    char line[96];
+    for (const RenderHp* h : rows) {
+        std::snprintf(line, sizeof(line), "#%-6lld     %3lld   %4.0f%s",
+                      static_cast<long long>(h->id), static_cast<long long>(h->kills), h->ammo,
+                      h->hp <= 0.0 ? "   KIA" : (h->ammo <= 0.0 ? "   WINCHESTER" : ""));
+        DrawText(line, x, y, 16, h->hp <= 0.0 ? GRAY : SKYBLUE);
+        y += 20;
+    }
+}
+
 // Draw a banking/pitching aircraft marker (definition below, shared by replay + fly). Forward-
 // declared so run_gui can draw remotes with the same attitude-aware shape the fly own-ship uses.
 void draw_aircraft(Vector3 od, double lat, double lon, double psi, double phi, double pitch, Color c,
@@ -134,10 +275,15 @@ int run_selfcheck(const Playback& pb, int n) {
         WeaponView wv = pb.sample_weapons(rt);  // WEAPON-001 gunnery state (hp + live rounds)
         std::printf("  t=%.1f:", rt);
         for (const auto& e : ents) {
-            std::printf(" [#%lld lat=%.3f lon=%.3f alt=%.0f brg=%.1f hp=%.0f%s]",
+            const RenderHp* w = weap_for(wv.hp, e.id);
+            std::printf(" [#%lld lat=%.3f lon=%.3f alt=%.0f brg=%.1f hp=%.0f ammo=%.0f "
+                        "e/w/t=%.2f/%.2f/%.2f kills=%lld lhb=%lld%s]",
                         static_cast<long long>(e.id), e.lat_deg, e.lon_deg, e.alt_m, e.bearing_deg,
-                        hp_for(wv.hp, e.id, -1.0),
-                        hp_for(wv.hp, e.id, 100.0) <= 0.0 ? " KILLED" : "");
+                        w ? w->hp : -1.0, w ? w->ammo : -1.0, w ? w->engine_hp : -1.0,
+                        w ? w->wing_hp : -1.0, w ? w->tail_hp : -1.0,
+                        static_cast<long long>(w ? w->kills : 0),
+                        static_cast<long long>(w ? w->last_hit_by : -1),
+                        (w && w->hp <= 0.0) ? " KILLED" : "");
         }
         std::printf("  rounds=%zu\n", wv.rounds.size());
     }
@@ -157,21 +303,34 @@ void draw_hud(const Playback& pb, double render_tick, const std::vector<RenderEn
     int y = 70;
     for (const auto& e : ents) {
         double mh = hp_for(maxhp, e.id, 100.0);
-        double hp = hp_for(wv.hp, e.id, mh);
+        const RenderHp* w = weap_for(wv.hp, e.id);
+        double hp = w ? w->hp : mh;
         bool dead = hp <= 0.0;
         char bar[12];
         int n = (mh > 0.0) ? static_cast<int>(std::lround(hp / mh * 10.0)) : 0;
         if (n < 0) n = 0; if (n > 10) n = 10;
         for (int k = 0; k < 10; ++k) bar[k] = (k < n) ? '#' : '.';
         bar[10] = '\0';
+        // Region status letters: a knocked-out region's letter goes '-' (E W T = intact).
+        char rgn[4] = "???";
+        if (w) {
+            rgn[0] = w->engine_hp > 0.0 ? 'E' : '-';
+            rgn[1] = w->wing_hp > 0.0 ? 'W' : '-';
+            rgn[2] = w->tail_hp > 0.0 ? 'T' : '-';
+        }
         if (dead)
-            std::snprintf(line, sizeof(line), "#%lld  *** KILLED ***   hp [%s] 0/%.0f",
-                          static_cast<long long>(e.id), bar, mh);
+            std::snprintf(line, sizeof(line),
+                          "#%lld  *** KILLED by #%lld ***   hp [%s] 0/%.0f   kills %lld",
+                          static_cast<long long>(e.id),
+                          static_cast<long long>(w ? w->last_hit_by : -1), bar, mh,
+                          static_cast<long long>(w ? w->kills : 0));
         else
             std::snprintf(line, sizeof(line),
-                          "#%lld  alt %5.0fm  brg %5.1f  bank %+5.1f  tas %5.1f   hp [%s] %.0f/%.0f",
+                          "#%lld  alt %5.0fm  brg %5.1f  bank %+5.1f  tas %5.1f   hp [%s] %.0f/%.0f"
+                          "   rgn %s   ammo %4.0f   kills %lld",
                           static_cast<long long>(e.id), e.alt_m, e.bearing_deg, e.phi_deg,
-                          e.tas_mps, bar, hp, mh);
+                          e.tas_mps, bar, hp, mh, rgn, w ? w->ammo : 0.0,
+                          static_cast<long long>(w ? w->kills : 0));
         DrawText(line, 12, y, 16, dead ? GRAY : SKYBLUE);
         y += 22;
     }
@@ -196,9 +355,9 @@ int run_gui(Playback& pb, double speed) {
     const double span = (t1 - t0);
     // Per-aircraft trails (display-space points), keyed by slot order.
     std::vector<std::vector<Vector3>> trails;
-    // WEAPON-001 (seal v1.12r0): starting hp per aircraft (full HP bars) + the tracer round colour.
+    // WEAPON-001 (seal v1.12r0): starting hp + region pools per aircraft (full bars baseline).
     const std::vector<RenderHp> maxhp = pb.sample_weapons(t0).hp;
-    const Color TRACER{255, 225, 74, 255};  // yellow point cloud, mirrors the web viewer
+    KillFeed feed;  // attributed kill/knock-out feed, derived from wire-frame transitions
     bool paused = false;
     double sim_clock = 0.0;     // seconds of playback elapsed
     double last_wall = GetTime();
@@ -208,7 +367,7 @@ int run_gui(Playback& pb, double speed) {
         double dt = now - last_wall;
         last_wall = now;
         if (IsKeyPressed(KEY_SPACE)) paused = !paused;
-        if (IsKeyPressed(KEY_R)) { sim_clock = 0.0; trails.clear(); }
+        if (IsKeyPressed(KEY_R)) { sim_clock = 0.0; trails.clear(); feed.reset(); }
         if (!paused) sim_clock += dt * speed;
 
         UpdateCamera(&cam, CAMERA_THIRD_PERSON);
@@ -221,6 +380,7 @@ int run_gui(Playback& pb, double speed) {
 
         std::vector<RenderEntity> ents = pb.sample(render_tick);
         WeaponView wv = pb.sample_weapons(render_tick);  // hp + live rounds (WEAPON-001 wire)
+        if (!paused) feed.update(wv, now);
         if (trails.size() < ents.size()) trails.resize(ents.size());
         for (size_t i = 0; i < ents.size(); ++i) {
             Vector3 d = to_display(ents[i].pos, pb.radius_m());
@@ -252,27 +412,21 @@ int run_gui(Playback& pb, double speed) {
         }
         // WEAPON-001 tracer rounds: a yellow point cloud at each live round (from the decoded wire).
         for (const auto& r : wv.rounds)
-            DrawSphere(to_display(r.pos, pb.radius_m()), 0.045f, TRACER);
+            DrawSphere(to_display(r.pos, pb.radius_m()), 0.045f, TRACER_C);
         EndMode3D();
-        // Per-aircraft HP bars, projected to screen above each marker (always faces the camera).
+        // Per-aircraft damage state (hp bar + E/W/T region segments), projected above each marker.
         for (size_t i = 0; i < ents.size(); ++i) {
             Vector2 sp = GetWorldToScreen(to_display(ents[i].pos, pb.radius_m()), cam);
             if (sp.x < -50 || sp.x > GetScreenWidth() + 50 || sp.y < -50 ||
                 sp.y > GetScreenHeight() + 50)
                 continue;
-            double mh = hp_for(maxhp, ents[i].id, 100.0);
-            double hp = hp_for(wv.hp, ents[i].id, mh);
-            bool dead = hp <= 0.0;
-            double frac = (mh > 0.0) ? hp / mh : 0.0;
-            if (frac < 0) frac = 0; if (frac > 1) frac = 1;
-            int bw = 46, bh = 5, bx = static_cast<int>(sp.x) - bw / 2, by = static_cast<int>(sp.y) - 26;
-            DrawRectangle(bx, by, bw, bh, Color{30, 30, 36, 200});
-            Color fill = dead ? Color{120, 120, 120, 255}
-                              : (frac > 0.5 ? GREEN : (frac > 0.25 ? ORANGE : RED));
-            DrawRectangle(bx, by, static_cast<int>(bw * frac), bh, fill);
-            DrawRectangleLines(bx, by, bw, bh, Fade(BLACK, 0.5f));
-            if (dead) DrawText("KILLED", bx - 2, by - 13, 12, Color{230, 90, 90, 255});
+            const RenderHp* w = weap_for(wv.hp, ents[i].id);
+            const RenderHp* base = weap_for(maxhp, ents[i].id);
+            RenderHp fallback; fallback.id = ents[i].id; fallback.hp = 100.0;
+            draw_damage_bars(sp, w ? *w : fallback, base ? *base : fallback);
         }
+        draw_scoreboard(wv.hp, GetScreenWidth());
+        feed.draw(12, GetScreenHeight() - 190, now);
         draw_hud(pb, render_tick, ents, wv, maxhp);
         EndDrawing();
     }
@@ -361,8 +515,8 @@ void draw_aircraft(Vector3 od, double lat, double lon, double psi, double phi, d
     DrawLine3D(od, P(b_up, 0.4f * scale), Fade(c, 0.7f));               // canopy up
 }
 
-void draw_fly_hud(const predict::Predictor& pred, uint32_t tick, size_t n_remote, bool paused,
-                  bool freelook, const Command& cmd) {
+void draw_fly_hud(const predict::Predictor& pred, uint32_t tick, size_t n_remote, size_t n_rounds,
+                  bool paused, bool freelook, const Command& cmd) {
     DrawText("SEADS — FLY  (own = predicted / layer-4b   remotes = interpolated / layer-4a)", 12,
              12, 20, RAYWHITE);
     const Kernel& k = pred.kernel();
@@ -376,8 +530,8 @@ void draw_fly_hud(const predict::Predictor& pred, uint32_t tick, size_t n_remote
                   k.phi(0) * RAD2DEG_V, k.gamma(0) * RAD2DEG_V, k.tas(0),
                   paused ? "   [PAUSED]" : "");
     DrawText(line, 12, 40, 16, Color{255, 120, 120, 255});
-    std::snprintf(line, sizeof(line), "remotes (interp): %zu    mode: %s", n_remote,
-                  freelook ? "FREE-LOOK (keyboard fly)" : "MOUSE-AIM");
+    std::snprintf(line, sizeof(line), "remotes (interp): %zu    rounds airborne: %zu    mode: %s",
+                  n_remote, n_rounds, freelook ? "FREE-LOOK (keyboard fly)" : "MOUSE-AIM");
     DrawText(line, 12, 62, 16, freelook ? GOLD : SKYBLUE);
     std::snprintf(line, sizeof(line), "INPUT  bank %+5.1f deg   g %+4.2f   throttle %3.0f%%",
                   cmd.target_phi * RAD2DEG_V, cmd.target_g, cmd.throttle * 100.0);
@@ -432,6 +586,10 @@ int run_fly(Playback& pb, double speed) {
     bool paused = false;
     double last_wall = GetTime();
 
+    // WEAPON-001 baseline (full hp + region pools at the first frame) + the attributed kill-feed.
+    const std::vector<RenderHp> maxhp = pb.sample_weapons(t0).hp;
+    KillFeed feed;
+
     // Chase camera that rides behind/above the own ship. Free-look (hold SPACE) adds an azimuth/
     // elevation offset driven by the mouse; on release it lerps back to the stable behind view.
     double chase_dist = CHASE_DIST_DEF;     // zoom (display units behind the plane)
@@ -458,7 +616,7 @@ int run_fly(Playback& pb, double speed) {
         if (IsKeyPressed(KEY_R)) {
             pred = predict::Predictor(rails, &kFlyEnv, start);
             own_tick = 0; accumulator = 0.0; sim_clock = 0.0;
-            own_trail.clear(); rem_trails.clear();
+            own_trail.clear(); rem_trails.clear(); feed.reset();
         }
 
         // Mode: hold SPACE for free-look. Lock/hide the cursor in free-look so mouse delta is
@@ -574,6 +732,11 @@ int run_fly(Playback& pb, double speed) {
         double render_tick = t0 + loop - pb.delay_ticks();
         if (render_tick < t0) render_tick = t0;
         std::vector<RenderEntity> rem = pb.sample(render_tick);
+        // WEAPON-001 gunnery state at the same render time: hp / regions / ammo / kills + live
+        // rounds, all from the decoded wire (the remotes' fight replicates; the own ship carries
+        // no weapons in this single-process loop — there is no server to adjudicate its fire).
+        WeaponView wv = pb.sample_weapons(render_tick);
+        if (!paused) feed.update(wv, now);
 
         Vector3 od = od_cam;  // own-ship display position (already computed for the chase cam)
         if (!paused) {
@@ -594,7 +757,8 @@ int run_fly(Playback& pb, double speed) {
         DrawSphereWires(Vector3{0, 0, 0}, DISPLAY_R, 18, 24, Color{40, 70, 110, 255});
         const Color pal[4] = {GOLD, LIME, ORANGE, VIOLET};
         for (size_t i = 0; i < rem.size(); ++i) {
-            Color c = pal[i % 4];
+            double hp = hp_for(wv.hp, rem[i].id, hp_for(maxhp, rem[i].id, 100.0));
+            Color c = (hp <= 0.0) ? Color{90, 90, 96, 255} : pal[i % 4];  // kills grey out
             for (size_t k = 1; k < rem_trails[i].size(); ++k)
                 DrawLine3D(rem_trails[i][k - 1], rem_trails[i][k], Fade(c, 0.5f));
             Vector3 d = to_display(rem[i].pos, pb.radius_m());
@@ -604,6 +768,9 @@ int run_fly(Playback& pb, double speed) {
                           rem[i].bearing_deg * DEG2RAD_V, rem[i].phi_deg * DEG2RAD_V,
                           rem[i].gamma_deg * DEG2RAD_V, c, 1.0f);
         }
+        // WEAPON-001 tracer rounds — the remotes' gunfire, from the decoded wire.
+        for (const auto& r : wv.rounds)
+            DrawSphere(to_display(r.pos, pb.radius_m()), 0.045f, TRACER_C);
         // Own ship: hot, larger, with a longer trail. The marker rolls with bank, tilts with pitch.
         for (size_t k = 1; k < own_trail.size(); ++k)
             DrawLine3D(own_trail[k - 1], own_trail[k], Fade(RED, 0.8f));
@@ -626,7 +793,20 @@ int run_fly(Playback& pb, double speed) {
             DrawLine(static_cast<int>(ax), static_cast<int>(ay) - 16, static_cast<int>(ax),
                      static_cast<int>(ay) + 16, Fade(GREEN, 0.8f));
         }
-        draw_fly_hud(pred, own_tick, rem.size(), paused, freelook, cmd);
+        // Per-remote damage state (hp bar + E/W/T region segments), projected above each marker.
+        for (size_t i = 0; i < rem.size(); ++i) {
+            Vector2 sp = GetWorldToScreen(to_display(rem[i].pos, pb.radius_m()), cam);
+            if (sp.x < -50 || sp.x > GetScreenWidth() + 50 || sp.y < -50 ||
+                sp.y > GetScreenHeight() + 50)
+                continue;
+            const RenderHp* w = weap_for(wv.hp, rem[i].id);
+            const RenderHp* base = weap_for(maxhp, rem[i].id);
+            RenderHp fallback; fallback.id = rem[i].id; fallback.hp = 100.0;
+            draw_damage_bars(sp, w ? *w : fallback, base ? *base : fallback);
+        }
+        draw_scoreboard(wv.hp, GetScreenWidth());
+        feed.draw(12, GetScreenHeight() - 190, now);
+        draw_fly_hud(pred, own_tick, rem.size(), wv.rounds.size(), paused, freelook, cmd);
         EndDrawing();
     }
     CloseWindow();

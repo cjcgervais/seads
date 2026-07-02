@@ -1,6 +1,8 @@
 // SEADS recording playback — see playback.h.
 #include "playback.h"
 
+#include <cmath>
+
 namespace seads {
 namespace client {
 
@@ -67,7 +69,19 @@ WeaponView Playback::sample_weapons(double render_tick) const {
     const netsnap::Snapshot* fr = nearest_frame(render_tick);
     if (!fr) return wv;
     wv.hp.reserve(fr->entities.size());
-    for (const auto& e : fr->entities) wv.hp.push_back(RenderHp{e.id, e.hp});
+    for (const auto& e : fr->entities) {
+        RenderHp h;
+        h.id = e.id;
+        h.hp = e.hp;
+        h.ammo = e.ammo;
+        // last_hit_by / kills are integer-valued on the wire (unit scale); round, don't truncate.
+        h.last_hit_by = static_cast<int64_t>(std::llround(e.last_hit_by));
+        h.engine_hp = e.engine_hp;
+        h.wing_hp = e.wing_hp;
+        h.tail_hp = e.tail_hp;
+        h.kills = static_cast<int64_t>(std::llround(e.kills));
+        wv.hp.push_back(h);
+    }
     wv.rounds.reserve(fr->projectiles.size());
     for (const auto& p : fr->projectiles) {
         RenderRound r;

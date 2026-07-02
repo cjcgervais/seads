@@ -30,7 +30,14 @@ struct RenderEntity {
 // snapshot section (seal v1.12r0). Unlike RenderEntity these are NOT interpolated — hitpoints are
 // discrete and rounds are transient, so they are read from the nearest received frame (a freeze of
 // the latest snapshot the client holds), mirroring how the web viewer snaps tracers to a frame.
-struct RenderHp { int64_t id = 0; double hp = 0; };
+struct RenderHp {
+    int64_t id = 0;
+    double hp = 0;
+    double ammo = 0;                                  // magazine rounds remaining (protocol >= 5)
+    int64_t last_hit_by = -1;                         // attacker index, -1 = never hit (protocol >= 6)
+    double engine_hp = 0, wing_hp = 0, tail_hp = 0;   // region sub-pools (protocol >= 7)
+    int64_t kills = 0;                                // victory tally (protocol >= 7)
+};
 struct RenderRound {
     Vec3 pos;             // world-space position (metres), globe frame
     double lat_deg = 0, lon_deg = 0, alt_m = 0;

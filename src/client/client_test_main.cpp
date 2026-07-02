@@ -149,13 +149,17 @@ static void test_recording_and_playback() {
 // Playback::sample_weapons — the path the native raylib viewer draws HP bars / tracers / kills from.
 static void test_weapon_playback() {
     netsnap::Snapshot s0, s1;
-    s0.protocol = netsnap::SNAPSHOT_PROTOCOL;       // protocol 4 carries the WEAPON section
+    s0.protocol = netsnap::SNAPSHOT_PROTOCOL;       // protocol 7 carries the full WEAPON section
     s0.server_tick = 0;
-    s0.entities.push_back(netsnap::EntityState{7, 0, 0, 45, 2000, 0, 170, 0, 100.0, 0.0});  // full hp
+    // Full hp, full magazine, never hit, full region pools (0.375/0.5/0.25 x hp_start), no kills.
+    s0.entities.push_back(
+        netsnap::EntityState{7, 0, 0, 45, 2000, 0, 170, 0, 100.0, 0.0, 220.0, -1.0, 37.5, 50.0, 25.0, 0.0});
     s0.projectiles.push_back(netsnap::ProjectileState{0, 0.01, 0.02, 45, 2005, 12.0, 200, 7});
     s1.protocol = netsnap::SNAPSHOT_PROTOCOL;
     s1.server_tick = 10;
-    s1.entities.push_back(netsnap::EntityState{7, 0, 0, 45, 2000, 0, 170, 0, 0.0, 5.0});     // dead
+    // Dead: shot down from astern by #3 (tail pool drained to 0), 40 rounds spent, 2 kills of its own.
+    s1.entities.push_back(
+        netsnap::EntityState{7, 0, 0, 45, 2000, 0, 170, 0, 0.0, 5.0, 180.0, 3.0, 37.5, 50.0, 0.0, 2.0});
     s1.projectiles.push_back(netsnap::ProjectileState{0, 0.03, 0.04, 45, 2010, 12.0, 190, 7});
     s1.projectiles.push_back(netsnap::ProjectileState{1, 0.05, 0.06, 45, 2010, 12.0, 195, 7});
 
@@ -179,10 +183,23 @@ static void test_weapon_playback() {
     check(a.hp.size() == 1 && a.hp[0].id == 7 && close(a.hp[0].hp, 100.0, 1e-9),
           "weapon hp @ frame0 = full 100");
     check(a.rounds.size() == 1 && a.rounds[0].owner == 7, "one round @ frame0, owner carried");
+    // The full v1.19r0 WEAPON-001 state flows through: ammo, attribution, region pools, kills.
+    check(close(a.hp[0].ammo, 220.0, 1e-9), "weapon ammo @ frame0 = full magazine");
+    check(a.hp[0].last_hit_by == -1, "never hit @ frame0 (last_hit_by = -1)");
+    check(close(a.hp[0].engine_hp, 37.5, 1e-9) && close(a.hp[0].wing_hp, 50.0, 1e-9) &&
+              close(a.hp[0].tail_hp, 25.0, 1e-9),
+          "region pools @ frame0 = full (0.375/0.5/0.25 x hp_start)");
+    check(a.hp[0].kills == 0, "kills @ frame0 = 0");
     check(pb.sample_weapons(9.99).hp[0].hp > 50.0, "holds nearest PAST frame (no interpolation)");
     WeaponView c = pb.sample_weapons(10.0);
     check(c.hp.size() == 1 && c.hp[0].hp <= 0.0, "weapon hp @ frame1 = dead (hp<=0)");
     check(c.rounds.size() == 2, "two rounds @ frame1");
+    check(close(c.hp[0].ammo, 180.0, 1e-9), "weapon ammo @ frame1 = 180 (rounds spent)");
+    check(c.hp[0].last_hit_by == 3, "attribution @ frame1 = killed by #3");
+    check(c.hp[0].tail_hp <= 0.0 && close(c.hp[0].engine_hp, 37.5, 1e-9) &&
+              close(c.hp[0].wing_hp, 50.0, 1e-9),
+          "region pools @ frame1 = tail shot away, engine/wing intact");
+    check(c.hp[0].kills == 2, "kills @ frame1 = 2 (scoreboard field flows through)");
     netsnap::Snapshot d1;
     std::size_t p = 0;
     netsnap::decode_snapshot(w1.data(), w1.size(), p, d1);
