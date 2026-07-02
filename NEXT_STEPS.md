@@ -47,7 +47,8 @@
 > all three demo kills are tail-kills and no tail fraction moved). Rails 290→300
 > (`weapons.region_damage` doctrine text now states the per-airframe + 1/8 contract).
 > **guardian.yml UNCHANGED** (no new golden, no new ctest target).
-> **Gates: ctest 17/17 GCC + 17/17 Clang, property tests 169 → 175 (+6
+> **Gates: 15/15 receipt PASS (`receipt-ATM-Sphere_v1.20r0-711b90a.yml`), ctest 17/17 GCC +
+> 17/17 Clang, property tests 169 → 175 (+6
 > `tests/property/test_region_toughness.py`: dyadic-eighth roster validation / envelope-driven
 > pool sizing / sealed-baseline defaults / per-airframe non-degeneracy + radial-vs-inline flavor
 > guard incl. the pinned A6M2 engine / toughness-binds-through-the-kernel (same 30-dmg head-on
