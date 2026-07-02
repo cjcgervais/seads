@@ -84,7 +84,7 @@ EventResult run_events(const Rails& rails, const session::Scenario& sc,
     const std::int64_t* drop_set = drops != nullptr ? drops : sc.drop_emit_ticks;
     const unsigned n_drop = drops != nullptr ? n_drops : sc.n_drops;
 
-    // --- server: drive the authoritative kernel; DERIVE events by observing hp deltas -----------
+    // --- server: drive the authoritative kernel; read its PER-ROUND hit queue -------------------
     Kernel server(rails);
     for (unsigned i = 0; i < sc.n_aircraft; ++i) {
         const session::AircraftSpec& a = sc.aircraft[i];
@@ -99,9 +99,6 @@ EventResult run_events(const Rails& rails, const session::Scenario& sc,
     windows.emplace_back(0, encode_window(events, 0));   // tick-0 frame (empty window)
 
     for (unsigned t = 1; t <= ticks; ++t) {
-        std::vector<double> hp_before(sc.n_aircraft);
-        for (unsigned i = 0; i < sc.n_aircraft; ++i) hp_before[i] = server.hp(i);
-
         std::vector<Command> cmds;
         std::vector<const Envelope*> envs;
         cmds.reserve(sc.n_aircraft);
@@ -112,23 +109,18 @@ EventResult run_events(const Rails& rails, const session::Scenario& sc,
         }
         server.step(cmds, envs);
 
-        // OBSERVE hp deltas -> events (array order = ascending target index; deterministic)
-        for (unsigned i = 0; i < sc.n_aircraft; ++i) {
-            const double before = hp_before[i];
-            const double after = server.hp(i);
-            if (after < before) {
-                std::int64_t d_milli = geo001::quantize(before, netsnap::HP_SCALE)
-                                     - geo001::quantize(after, netsnap::HP_SCALE);
-                std::int64_t killed = (before > 0.0 && after <= 0.0) ? 1 : 0;
-                // v1.17r0: the kernel set last_hit_by(i) to the striking round's owner THIS tick ->
-                // the attacker for this observed hp delta (an attributed hit/kill event). last_hit_by
-                // is always an exact integer-valued double (an index, or -1), so the cast is exact.
-                std::int64_t attacker = static_cast<std::int64_t>(server.last_hit_by(i));
-                events.push_back(Event{static_cast<std::int64_t>(events.size()),
-                                       static_cast<std::int64_t>(t),
-                                       static_cast<std::int64_t>(i), d_milli,
-                                       geo001::quantize(after, netsnap::HP_SCALE), killed, attacker});
-            }
+        // PER-ROUND events off the kernel's hit queue (this step's hits only; projectile array
+        // order = deterministic). attacker comes straight from the striking round's owner — no
+        // last-writer field read. damage_milli = the round's effective (post-clamp) hp removal.
+        // Mirrors event_ref.run_event_server bit-for-bit.
+        for (const HitEvent& h : server.hit_events()) {
+            std::int64_t d_milli = geo001::quantize(h.hp_before, netsnap::HP_SCALE)
+                                 - geo001::quantize(h.hp_after, netsnap::HP_SCALE);
+            events.push_back(Event{static_cast<std::int64_t>(events.size()),
+                                   static_cast<std::int64_t>(t),
+                                   h.target, d_milli,
+                                   geo001::quantize(h.hp_after, netsnap::HP_SCALE),
+                                   h.killed, h.attacker});
         }
         if (t % sc.snap_every == 0) windows.emplace_back(t, encode_window(events, t));
     }

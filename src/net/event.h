@@ -4,8 +4,10 @@
 // is IDEMPOTENT, so a dropped frame is healed by the next. But a HIT or a KILL is a transient EVENT
 // (a discrete moment), not idempotent: reading it off the nearest STATE frame smears the exact tick,
 // lumps aggregate hp, and loses the moment if that frame drops. Layer 6 adds a RELIABLE EVENT
-// CHANNEL: the server DERIVES events by OBSERVING the authoritative kernel's hp deltas (the kernel
-// is NOT modified — pure observation, so all goldens stay byte-identical), and ships them with
+// CHANNEL: the server reads the authoritative kernel's PER-ROUND hit queue (Kernel::hit_events() —
+// one record per connecting round, appended at hit time; observable output that is never hashed, so
+// all goldens stay byte-identical; two rounds striking one target on one tick are two distinct
+// events, which the pre-hit-queue hp-delta observation lumped), and ships them with
 // REDUNDANCY (each 20 Hz frame re-sends the last EVENT_WINDOW_K events). The client applies them by
 // monotonic seq (a de-duped, append-only journal) and so reconstructs the EXACT event sequence —
 // every hit + the kill, each at its precise tick — even though the transport drops frames.

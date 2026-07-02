@@ -141,12 +141,82 @@ int main() {
                     blk.applied.size(), res.applied.size());
     }
 
+    // 6) PER-ROUND GRANULARITY (EVENT-MULTIHIT-001, cross-impl): twin shooters land both rounds of
+    //    every volley on the SAME tick -> two attributed events per volley (the pre-hit-queue
+    //    hp-delta derivation lumped them into one, credited to the last writer); the kill volley
+    //    shows the overkill clamp (effective loss < carried damage). Events + digest must match the
+    //    Python reference bit-for-bit, and the structural per-round claims must hold.
+    const event::EventResult mh = event::run_events(rails, event_vec::MH_SCENARIO);
+    if (static_cast<int>(mh.events.size()) != event_vec::MH_EXPECTED_EVENT_COUNT) {
+        ++fails;
+        std::printf("FAIL multihit derived %zu events, expected %d\n",
+                    mh.events.size(), event_vec::MH_EXPECTED_EVENT_COUNT);
+    } else {
+        for (int i = 0; i < event_vec::MH_EXPECTED_EVENT_COUNT; ++i) {
+            if (!eq_event(mh.events[i], event_vec::MH_EXPECTED_EVENTS[i])) {
+                ++fails;
+                const auto& a = mh.events[i];
+                std::printf("FAIL multihit event %d: got (seq=%lld tick=%lld tgt=%lld dmg=%lld "
+                            "hp=%lld kill=%lld atk=%lld)\n", i,
+                            (long long)a.seq, (long long)a.tick, (long long)a.target,
+                            (long long)a.damage_milli, (long long)a.hp_after_milli,
+                            (long long)a.killed, (long long)a.attacker);
+            }
+        }
+        // structural per-round claims: every tick carries TWO events on the one target, attributed
+        // to the two DIFFERENT shooters (0 then 1, projectile array order) — except the corpse
+        // half of the kill volley never lands ("a dead aircraft can't be hit" keeps pairs whole
+        // here because the kill IS the volley's second round).
+        for (std::size_t i = 0; i + 1 < mh.events.size(); i += 2) {
+            const auto& a = mh.events[i];
+            const auto& b = mh.events[i + 1];
+            if (!(a.tick == b.tick && a.target == 2 && b.target == 2 &&
+                  a.attacker == 0 && b.attacker == 1)) {
+                ++fails;
+                std::printf("FAIL multihit volley at events %zu/%zu: want same tick, target 2, "
+                            "attackers 0 then 1\n", i, i + 1);
+            }
+        }
+        const auto& kill = mh.events.back();
+        const auto& prev = mh.events[mh.events.size() - 2];
+        if (!(kill.killed == 1 && kill.attacker == 1 && kill.hp_after_milli == 0 &&
+              kill.damage_milli == prev.hp_after_milli && kill.damage_milli < 12000)) {
+            ++fails;
+            std::printf("FAIL multihit kill: want shooter 1's overkill round clamped to the "
+                        "remaining hp\n");
+        }
+        std::int64_t total = 0;
+        for (const auto& e : mh.events) total += e.damage_milli;
+        if (total != 70000) {   // the A6M2's full hp, walked exactly to 0
+            ++fails;
+            std::printf("FAIL multihit damage sum %lld != 70000\n", (long long)total);
+        }
+    }
+    if (mh.applied.size() != mh.events.size()) {
+        ++fails;
+        std::printf("FAIL multihit applied %zu != server %zu (should fully reconstruct)\n",
+                    mh.applied.size(), mh.events.size());
+    }
+    if (mh.digest != event_vec::MH_EVENT_DIGEST) {
+        ++fails;
+        std::printf("FAIL multihit digest mismatch:\n  got %s\n  exp %s\n",
+                    mh.digest.c_str(), event_vec::MH_EVENT_DIGEST);
+    }
+    if (mh.n_windows != event_vec::MH_N_WINDOWS || mh.delivered != event_vec::MH_DELIVERED) {
+        ++fails;
+        std::printf("FAIL multihit accounting: %u/%u windows, expected %u/%u\n",
+                    mh.delivered, mh.n_windows, event_vec::MH_DELIVERED, event_vec::MH_N_WINDOWS);
+    }
+
     if (fails == 0) {
         std::printf("PASS: event channel reconstructs %d events bit-for-bit (5 hits + 1 kill); "
                     "digest matches; full recovery under isolated drops; K=%d blackout loses %zu "
-                    "aged-out hits then resyncs (kill delivered); %u/%u windows delivered\n",
+                    "aged-out hits then resyncs (kill delivered); %u/%u windows delivered; "
+                    "multihit granularity: %d per-round events (2 per volley, distinct attackers, "
+                    "overkill clamped) reconstructed bit-for-bit\n",
                     event_vec::EXPECTED_EVENT_COUNT, event::EVENT_WINDOW_K,
-                    res.applied.size() - blk.applied.size(), res.delivered, res.n_windows);
+                    res.applied.size() - blk.applied.size(), res.delivered, res.n_windows,
+                    event_vec::MH_EXPECTED_EVENT_COUNT);
         return 0;
     }
     std::printf("RESULT: event FAIL (%d mismatches)\n", fails);

@@ -47,18 +47,22 @@ recover; a K-consecutive blackout loses exactly the events that aged out during 
 
 Why it is deterministic (bit-exactly gateable) even though the transport is LOSSY
 ---------------------------------------------------------------------------------
-Event derivation OBSERVES authoritative hp deltas — the kernel is det_math (bit-exact cross-toolchain
-by the golden promise) — and quantizes them to integers (the sealed 1e3). Window selection, the
-transport's integer lag/drop, and the client's seq dedup are pure integer logic. So the reconstructed
-event log serializes to identical bytes on MSVC/GCC/Clang x64/AArch64, and its whole-run SHA-256
-EVENT_DIGEST is the cross-impl parity artifact the C++ mirror (src/net/event.{h,cpp}) reproduces
-BIT-FOR-BIT — same construction as geo001 / snapshot / session.
+Event derivation reads the kernel's PER-ROUND hit queue (ref_kernel.HitEvent — appended at hit time
+in projectile array order, deterministic; the kernel is det_math, bit-exact cross-toolchain by the
+golden promise) and quantizes hp to integers (the sealed 1e3). Window selection, the transport's
+integer lag/drop, and the client's seq dedup are pure integer logic. So the reconstructed event log
+serializes to identical bytes on MSVC/GCC/Clang x64/AArch64, and its whole-run SHA-256 EVENT_DIGEST
+is the cross-impl parity artifact the C++ mirror (src/net/event.{h,cpp}) reproduces BIT-FOR-BIT —
+same construction as geo001 / snapshot / session.
 
-Boundaries (doctrine): net code stays OUTSIDE the kernel. Events are DERIVED by observing the
-authoritative kernel's hp between steps — the kernel is NOT modified (no event buffer, no new state),
-so all 9 goldens stay byte-identical. Attacker attribution (a per-round "who shot" field) would need
-a kernel-side event hook and is deliberately deferred (see ADR-Step6-Events). No rail / golden / wire
-change — this composes the EXISTING protocol-4 session, riding seal v1.12r0 (a Tier-2 net layer).
+Boundaries (doctrine): the hit queue is the ONE piece that must live kernel-side — only the kernel
+knows WHICH round resolved a hit (the hp-delta view this layer used through v1.17r0 lumps same-tick
+multi-round damage and reads attribution off the last-writer field). It is observable OUTPUT, not
+canonical state: cleared each step, appended on hit, NEVER serialized into snapshot() -> the
+world_hash and ALL 10 goldens are byte-identical (verified). Wherever no tick lands two rounds on
+one target (true of SESSION-SK-001) the per-round stream reduces bit-for-bit to the old hp-delta
+stream, so the sealed EVENT_DIGEST is unchanged. No rail / golden / wire change — still composes the
+EXISTING session, riding seal v1.17r0 (see ADR-Step7-Guns-HitQueue-v1.17r0).
 
 Usage:  python tools/event_ref.py    # self-test: derivation + full reconstruction + kill + bound
 """
@@ -84,6 +88,54 @@ _RAILS = sr._RAILS
 EVENT_WINDOW_K = 4
 
 HP_SCALE = snap.HP_SCALE   # sealed 1e3 quantum shared with the snapshot weapon section
+
+# ---------------------------------------------------------------------------------------
+# EVENT-MULTIHIT-001 — the per-round GRANULARITY scenario (cross-impl vector). Twin P-47Ds fly
+# symmetric about the equator (lat ±0.2 deg ≈ ±52 m — inside the 60 m hit radius of a target ON the
+# equator, outside it of each other at ~105 m) with an A6M2 dead ahead on the equator. Both fire a
+# 3-volley burst (rof = 3 ticks); by symmetry each volley's two rounds strike the target on the SAME
+# tick. This is exactly the case the pre-hit-queue hp-delta derivation could not represent: it lumped
+# each volley into ONE 24-damage event credited (via the last-writer last_hit_by) to whichever round
+# applied second — shooter 0's credit was provably lost. Per-round events give each round its own
+# attributed event; the kill volley additionally shows the overkill clamp (the A6M2 dies at 22 hp to
+# 12+12: shooter 0's round 22->10, shooter 1's round 10->0 with EFFECTIVE loss 10) and "a corpse
+# can't be hit" (any later round flies past). Timeline: rounds close ~393 m at ~9 m/tick => hits
+# land around tick ~45, well inside ticks=120 minus the lag. One isolated drop (emit 50) keeps the
+# redundancy machinery exercised; full reconstruction is still expected.
+# ---------------------------------------------------------------------------------------
+MULTIHIT = {
+    "id": "EVENT-MULTIHIT-001",
+    "ticks": 120,
+    "snap_every": 5,
+    "lag_ticks": 10,
+    "render_delay": 15,
+    "drop_emit_ticks": [50],
+    "aircraft": [
+        # AC0 — shooter A (P-47D), north of the equator line of fire.
+        {"envelope": "p47d",
+         "start": {"lat_deg": 0.2, "lon_deg": 0.0, "psi_deg": 90.0,
+                   "phi_deg": 0.0, "alt_m": 3000.0, "tas_mps": 200.0},
+         "schedule": [
+             {"start_tick": 0, "bank_deg": 0.0, "g_cmd": 1.0, "throttle": 0.85, "fire": True},
+             {"start_tick": 9, "bank_deg": 0.0, "g_cmd": 1.0, "throttle": 0.85, "fire": False},
+         ]},
+        # AC1 — shooter B (P-47D), the mirror image south of it.
+        {"envelope": "p47d",
+         "start": {"lat_deg": -0.2, "lon_deg": 0.0, "psi_deg": 90.0,
+                   "phi_deg": 0.0, "alt_m": 3000.0, "tas_mps": 200.0},
+         "schedule": [
+             {"start_tick": 0, "bank_deg": 0.0, "g_cmd": 1.0, "throttle": 0.85, "fire": True},
+             {"start_tick": 9, "bank_deg": 0.0, "g_cmd": 1.0, "throttle": 0.85, "fire": False},
+         ]},
+        # AC2 — target (A6M2) on the equator, straight and level, ~393 m ahead.
+        {"envelope": "a6m2",
+         "start": {"lat_deg": 0.0, "lon_deg": 1.5, "psi_deg": 90.0,
+                   "phi_deg": 0.0, "alt_m": 3000.0, "tas_mps": 150.0},
+         "schedule": [
+             {"start_tick": 0, "bank_deg": 0.0, "g_cmd": 1.0, "throttle": 0.7, "fire": False},
+         ]},
+    ],
+}
 
 
 # ---------------------------------------------------------------------------------------
@@ -120,10 +172,14 @@ def run_event_server(scenario=sr.SESSION):
       windows  : dict emit_tick -> event-window bytes (last K events with tick <= emit_tick),
                  emitted at the SAME 20 Hz cadence + tick-0 frame as the snapshot frames.
       ticks    : the scenario tick count (echoed for convenience).
-    An event is emitted for every aircraft whose hp STRICTLY DECREASED this tick: damage_milli is the
-    (quantized) hp drop, hp_after_milli the (quantized) post hp, killed=1 iff hp crossed >0 -> <=0.
-    Per-tick multi-round damage on one target lumps into a single 'took D this tick' event (the
-    authoritative, attribution-free view hp deltas give — see module docstring)."""
+    PER-ROUND granularity (rides v1.17r0): events are read off the kernel's per-round hit queue
+    (k.hit_events — one HitEvent per CONNECTING ROUND, appended at hit time in projectile array
+    order), not inferred from per-tick hp deltas. Two rounds striking one target on one tick are two
+    distinct events (the old hp-delta observation lumped them into one); killed=1 marks the exact
+    round that crossed hp >0 -> <=0. damage_milli is the round's EFFECTIVE loss (quantized hp_before
+    - hp_after, post-clamp — an overkill round reports what it actually removed), so per-tick sums
+    equal the old lumped deltas and, whenever no tick lands two rounds on one target (true of
+    SESSION-SK-001), the event stream — and the sealed EVENT_DIGEST — is bit-for-bit unchanged."""
     ticks = int(scenario["ticks"])
     snap_every = int(scenario["snap_every"])
     k, scheds, envs = sr._build_server_kernel(scenario)
@@ -149,20 +205,15 @@ def run_event_server(scenario=sr.SESSION):
 
     windows = {0: encode_window(window_at(0))}   # tick-0 frame (no events yet -> empty window)
     for t in range(1, ticks + 1):
-        hp_before = [ac.hp for ac in k.aircraft]
         cmds = [sr.server_command_at(sched, t - 1) for sched in scheds]
         k.step_scenario(cmds, envs)
-        # OBSERVE hp deltas -> events (array order = ascending target index; deterministic)
-        for i, ac in enumerate(k.aircraft):
-            before, after = hp_before[i], ac.hp
-            if after < before:
-                d_milli = g.quantize(before, HP_SCALE) - g.quantize(after, HP_SCALE)
-                killed = 1 if (before > 0.0 and after <= 0.0) else 0
-                # v1.17r0: the kernel set ac.last_hit_by to the striking round's owner THIS tick, so
-                # it is the attacker for this observed hp delta -> an attributed hit/kill event.
-                attacker = int(round(ac.last_hit_by))
-                events.append(Event(len(events), t, i, d_milli,
-                                    g.quantize(after, HP_SCALE), killed, attacker))
+        # PER-ROUND events off the kernel's hit queue (this step's hits only; projectile array
+        # order = deterministic). attacker comes straight from the striking round's owner — no
+        # last-writer field read. damage_milli = the round's effective (post-clamp) hp removal.
+        for h in k.hit_events:
+            d_milli = g.quantize(h.hp_before, HP_SCALE) - g.quantize(h.hp_after, HP_SCALE)
+            events.append(Event(len(events), t, h.target, d_milli,
+                                g.quantize(h.hp_after, HP_SCALE), h.killed, h.attacker))
         if t % snap_every == 0:
             windows[t] = encode_window(window_at(t))
     return events, windows, ticks
@@ -301,6 +352,34 @@ def _selftest():
     #      (b) a K-consecutive blackout of an event's whole window-lifetime PERMANENTLY loses exactly
     #          that event, and the channel RESYNCS (a later event still lands).
     fails += _bound_test()
+
+    # 5) PER-ROUND GRANULARITY (EVENT-MULTIHIT-001): twin shooters land both rounds of every volley
+    #    on the SAME tick -> each volley is TWO events with DISTINCT attackers (the hp-delta view
+    #    lumped them into one, credited to the last writer); the kill volley shows the overkill
+    #    clamp (effective loss < the round's carried damage); reconstruction is still complete.
+    mh = run_events(MULTIHIT)
+    mev, mapp = mh["events"], mh["applied"]
+    by_tick = {}
+    for e in mev:
+        by_tick.setdefault(e.tick, []).append(e)
+    if len(mev) != 6 or len(by_tick) != 3:
+        print(f"FAIL multihit: expected 6 events over 3 ticks, got {len(mev)} over {len(by_tick)}")
+        fails += 1
+    else:
+        for t, tev in by_tick.items():
+            if len(tev) != 2 or {e.attacker for e in tev} != {0, 1} or any(e.target != 2 for e in tev):
+                print(f"FAIL multihit tick {t}: want 2 events on target 2 from attackers {{0,1}}")
+                fails += 1
+        mkill = mev[-1]
+        pre_kill_hp = mev[-2].hp_after_milli
+        if not (mkill.killed == 1 and mkill.attacker == 1 and mkill.hp_after_milli == 0
+                and mkill.damage_milli == pre_kill_hp < 12000):
+            print("FAIL multihit kill: want shooter 1's overkill round clamped to the remaining hp")
+            fails += 1
+        if sum(e.damage_milli for e in mev) != 70000:   # a6m2 hp_start walked exactly to 0
+            print("FAIL multihit: effective damage must sum to the target's full hp"); fails += 1
+        if event_digest(mapp) != event_digest(mev):
+            print("FAIL multihit: not fully reconstructed under the isolated drop"); fails += 1
 
     if fails == 0:
         seqs = [e.seq for e in events]

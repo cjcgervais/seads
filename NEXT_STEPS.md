@@ -1,6 +1,54 @@
 # SEADS 2026 — Next Steps (handoff)
 
-> ## ►► CURRENT STATE (2026-07-01): **NETCODE LAYER 12 — SEND-BUFFER BYTE-CAP + DROP-SLOWEST DONE ✅** (no-seal, rides **ATM-Sphere v1.17r0**)
+> ## ►► CURRENT STATE (2026-07-02): **PER-ROUND HIT GRANULARITY — THE KERNEL HIT EVENT QUEUE DONE ✅** (no-seal, rides **ATM-Sphere v1.17r0**)
+> **Latest: combat events are now exact to the ROUND — the kernel records every connecting round as its own attributed event, and the reliable event channel ships it.**
+> The gap every handoff since G2 deferred closes: the layer-6 event channel DERIVED hit/kill events
+> by observing per-tick hp deltas, which LUMPS two rounds landing on one tick into one event and
+> reads attribution off the last-writer `last_hit_by` (the earlier shooter's credit lost, the
+> crossing round unknowable). Three pieces:
+> **(a) The kernel hit event queue** (`tools/ref_kernel.py` ↔ `src/kernel/kernel.{h,cpp}`,
+> mirrored): `Kernel.hit_events` — one `HitEvent{target, attacker, damage, hp_before, hp_after,
+> killed}` **per connecting round**, appended at hit time (projectile array order ⇒ deterministic),
+> **cleared at the top of every step**. `attacker` comes straight off the striking round's `owner`;
+> `hp_before/hp_after` are post-clamp (an overkill round's EFFECTIVE loss = hp_before − hp_after;
+> `damage` keeps the as-fired value); `killed`=1 on exactly the round that crossed hp>0→≤0.
+> **OBSERVABLE OUTPUT, NOT CANONICAL STATE:** never serialized into `snapshot()` ⇒ the world_hash
+> can't see it ⇒ **ALL 10 GOLDENS BYTE-IDENTICAL** (Sphere `f2db95bd…` re-validated) ⇒ **no seal**.
+> The hit-branch float ops are untouched; **zero new det_math** (the guns arc's streak holds).
+> `last_hit_by` (canonical, on-wire) unchanged.
+> **(b) The layer-6 event channel now sources the queue** (`tools/event_ref.py` ↔
+> `src/net/event.{h,cpp}`) instead of re-deriving from hp deltas. The `Event` record/wire is
+> UNCHANGED (same 7 integer fields, window K=4, journal dedup): `damage_milli` = quantized effective
+> loss, so per-tick sums equal the old lumped deltas and — whenever no tick lands two rounds on one
+> target (true of SESSION-SK-001) — the stream is bit-for-bit the old one: **the sealed
+> EVENT_DIGEST `06629a69…` DID NOT MOVE** (`event_vectors.h` sealed digests untouched; session/
+> lockstep/predict all byte-identical). What changed is what the channel CAN carry.
+> **(c) The granularity vector EVENT-MULTIHIT-001** (cross-impl, in `gen_event_vectors.py` →
+> `event_vectors.h` → `seads_event_test`): twin P-47Ds symmetric about the equator (lat ±0.2° ≈
+> ±52 m — inside the target's 60 m hit sphere, outside each other's at ~105 m) fire a 3-volley burst
+> (rof 3) at one A6M2 ⇒ by symmetry each volley's two rounds land the SAME tick ⇒ **6 events over 3
+> ticks (44/47/50): every tick TWO events on one target from two DIFFERENT attackers**
+> (unrepresentable pre-queue), and the kill volley shows the overkill clamp (A6M2 dies at 22 hp to
+> 12+12: shooter 0's round 22→10, shooter 1's 10→0, effective 10, killed=1, attacker=1). C++ ==
+> Python bit-for-bit (digest `8a071bb0…`, GCC+Clang), structural claims asserted directly.
+> **Gates: 15/15 receipt PASS, property tests 145 → 153 (`tests/property/test_hit_queue.py` — queue
+> lifecycle / multi-hit SPLIT vs last-writer / killed-marks-the-crossing-round + overkill clamp +
+> corpse-unhittable / queue-not-hashed (snapshot size exact) / per-round REDUCES to hp-delta when
+> single-hit / determinism), ctest 17/17 GCC+Clang (the event test gains the MULTIHIT leg — no new
+> ctest target ⇒ guardian.yml UNCHANGED), all 14 generated headers --check in sync, 10 goldens
+> byte-identical.** Ledger: **ADR-Step7-Guns-HitQueue-v1.17r0**. **Seal stays v1.17r0.**
+> **NEXT (free pick, none blocking):** renderer polish (guns + kill-feed in the live `--fly` path —
+> per-round impact sparks / split damage numbers now have exact data); component/region damage (a
+> seal — the natural consumer of per-round events); **B5** ISA atmosphere (a seal); or an open-ended
+> live frame SOURCE feeding `broadcast_async` incrementally.
+> **NOTE FOR THE NEXT AGENT:** the queue is deliberately NOT on any wire section — the layer-6
+> session message is the transport (the wire is a sealed rail; putting HitEvent fields on the
+> snapshot wire would be a reseal for no consumer). The old hp-delta derivation survives as a gated
+> INVARIANT (test_per_round_reduces_to_hp_delta_when_single_hit), not a mechanism — don't
+> reintroduce it in event.cpp. `hit_events` must stay cleared-per-step + unserialized; if a future
+> seal wants persistent event history, that's new canonical state (its own ADR + seal).
+>
+> ## ►► PRIOR STATE (2026-07-01): **NETCODE LAYER 12 — SEND-BUFFER BYTE-CAP + DROP-SLOWEST DONE ✅** (no-seal, rides **ATM-Sphere v1.17r0**)
 > **Latest: the async broadcast is now safe for an open-ended live stream — a client that can't keep up is SHED at a byte-cap instead of growing server memory without bound.**
 > Layer 11's named honest boundary ("the per-client buffer is unbounded; add the byte-cap policy
 > BEFORE pointing this at an open-ended live stream") closes. **`broadcast_async` gains an opt-in

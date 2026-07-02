@@ -39,4 +39,43 @@ constexpr std::int64_t BLACKOUT_APPLIED_SEQS[] = { 2, 3, 4, 5 };
 constexpr int BLACKOUT_APPLIED_COUNT = 4;
 constexpr const char* BLACKOUT_DIGEST = "90d6e67c7275876a6af5e95fe5f7ce1b69da603b36aa52d8ea7bb31adeda3b38";
 
+// --- EVENT-MULTIHIT-001: the per-round GRANULARITY scenario (twin shooters, one target;
+//     every volley = two rounds on the SAME tick -> two attributed events; the kill volley
+//     shows the overkill clamp). Envelopes reused from sess_vec (identical bake). ---
+constexpr session::Phase MH_SCHED_0[] = {
+  {0u, 0x0.0p+0, 0x1.0000000000000p+0, 0x1.b333333333333p-1, true},
+  {9u, 0x0.0p+0, 0x1.0000000000000p+0, 0x1.b333333333333p-1, false},
+};
+constexpr session::Phase MH_SCHED_1[] = {
+  {0u, 0x0.0p+0, 0x1.0000000000000p+0, 0x1.b333333333333p-1, true},
+  {9u, 0x0.0p+0, 0x1.0000000000000p+0, 0x1.b333333333333p-1, false},
+};
+constexpr session::Phase MH_SCHED_2[] = {
+  {0u, 0x0.0p+0, 0x1.0000000000000p+0, 0x1.6666666666666p-1, false},
+};
+constexpr session::AircraftSpec MH_AIRCRAFT[] = {
+  { &sess_vec::ENV_P47D, 0x1.c987103b761f5p-9, 0x0.0p+0, 0x1.921fb54442d18p+0, 0x0.0p+0, 0x1.7700000000000p+11, 0x1.9000000000000p+7, MH_SCHED_0, 2u },
+  { &sess_vec::ENV_P47D, -0x1.c987103b761f5p-9, 0x0.0p+0, 0x1.921fb54442d18p+0, 0x0.0p+0, 0x1.7700000000000p+11, 0x1.9000000000000p+7, MH_SCHED_1, 2u },
+  { &sess_vec::ENV_A6M2, 0x0.0p+0, 0x1.acee9f37bebd6p-6, 0x1.921fb54442d18p+0, 0x0.0p+0, 0x1.7700000000000p+11, 0x1.2c00000000000p+7, MH_SCHED_2, 1u },
+};
+constexpr std::int64_t MH_DROP_EMIT_TICKS[] = { 50 };
+constexpr session::Scenario MH_SCENARIO = {
+  MH_AIRCRAFT, 3u, 120u, 5u, 10u, 15u,
+  MH_DROP_EMIT_TICKS, 1u
+};
+
+constexpr ExpectEvent MH_EXPECTED_EVENTS[] = {
+  { 0, 44, 2, 12000, 58000, 0, 0 },
+  { 1, 44, 2, 12000, 46000, 0, 1 },
+  { 2, 47, 2, 12000, 34000, 0, 0 },
+  { 3, 47, 2, 12000, 22000, 0, 1 },
+  { 4, 50, 2, 12000, 10000, 0, 0 },
+  { 5, 50, 2, 10000, 0, 1, 1 },
+};
+constexpr int MH_EXPECTED_EVENT_COUNT = sizeof(MH_EXPECTED_EVENTS)/sizeof(MH_EXPECTED_EVENTS[0]);
+constexpr int MH_KILL_INDEX = 5;
+constexpr unsigned MH_N_WINDOWS = 25u;
+constexpr unsigned MH_DELIVERED = 22u;
+constexpr const char* MH_EVENT_DIGEST = "8a071bb032f99e48f4256e4830d714465fb537618d97c4589b8f8e3097409920";
+
 }} // namespace seads::event_vec

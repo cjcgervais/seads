@@ -30,6 +30,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import event_ref as ev
 import session_ref as sr
+import ref_kernel as rk
+from gen_session_vectors import hx   # hex-float emission (single source with session vectors)
 
 ROOT = Path(__file__).resolve().parent.parent
 HEADER = ROOT / "src" / "net" / "event_vectors.h"
@@ -106,9 +108,73 @@ def build():
         f"constexpr int BLACKOUT_APPLIED_COUNT = {len(blackout_seqs)};",
         f'constexpr const char* BLACKOUT_DIGEST = "{blackout_digest}";',
         "",
+    ]
+    L += _build_multihit()
+    L += [
         "}} // namespace seads::event_vec",
     ]
     return "\n".join(L) + "\n"
+
+
+def _build_multihit():
+    """Emit the EVENT-MULTIHIT-001 per-round GRANULARITY vector (see event_ref.MULTIHIT): twin
+    P-47Ds land both rounds of every volley on the same tick against one A6M2 -> each volley is TWO
+    attributed events (the pre-hit-queue hp-delta derivation lumped them into one, credited to the
+    last writer), and the kill volley shows the overkill clamp. Reuses the sess_vec envelope
+    constants (same envmod source, baked identically)."""
+    sc = ev.MULTIHIT
+    res = ev.run_events(sc)
+    events = res["events"]
+    applied = res["applied"]
+    assert [e.seq for e in applied] == [e.seq for e in events], "multihit not fully reconstructed"
+    digest = ev.event_digest(applied)
+    kill_index = next(i for i, e in enumerate(events) if e.killed)
+
+    env_ref = {"p47d": "sess_vec::ENV_P47D", "a6m2": "sess_vec::ENV_A6M2"}
+    L = [
+        "// --- EVENT-MULTIHIT-001: the per-round GRANULARITY scenario (twin shooters, one target;",
+        "//     every volley = two rounds on the SAME tick -> two attributed events; the kill volley",
+        "//     shows the overkill clamp). Envelopes reused from sess_vec (identical bake). ---",
+    ]
+    for i, ac in enumerate(sc["aircraft"]):
+        L.append(f"constexpr session::Phase MH_SCHED_{i}[] = {{")
+        for ph in ac["schedule"]:
+            L.append(f"  {{{int(ph['start_tick'])}u, {hx(rk.deg2rad(ph['bank_deg']))}, "
+                     f"{hx(ph['g_cmd'])}, {hx(ph.get('throttle', 0.0))}, "
+                     f"{'true' if ph.get('fire', False) else 'false'}}},")
+        L.append("};")
+    L.append("constexpr session::AircraftSpec MH_AIRCRAFT[] = {")
+    for i, ac in enumerate(sc["aircraft"]):
+        s = ac["start"]
+        L.append(
+            f"  {{ &{env_ref[ac['envelope']]}, {hx(rk.deg2rad(s['lat_deg']))}, "
+            f"{hx(rk.deg2rad(s['lon_deg']))}, {hx(rk.deg2rad(s['psi_deg']))}, "
+            f"{hx(rk.deg2rad(s['phi_deg']))}, {hx(s['alt_m'])}, {hx(s['tas_mps'])}, "
+            f"MH_SCHED_{i}, {len(ac['schedule'])}u }},")
+    drops = ", ".join(str(int(d)) for d in sc["drop_emit_ticks"])
+    L += [
+        "};",
+        f"constexpr std::int64_t MH_DROP_EMIT_TICKS[] = {{ {drops} }};",
+        "constexpr session::Scenario MH_SCENARIO = {",
+        f"  MH_AIRCRAFT, {len(sc['aircraft'])}u, {int(sc['ticks'])}u, {int(sc['snap_every'])}u, "
+        f"{int(sc['lag_ticks'])}u, {int(sc['render_delay'])}u,",
+        f"  MH_DROP_EMIT_TICKS, {len(sc['drop_emit_ticks'])}u",
+        "};",
+        "",
+        "constexpr ExpectEvent MH_EXPECTED_EVENTS[] = {",
+    ]
+    L += _emit_event_rows(events)
+    L += [
+        "};",
+        "constexpr int MH_EXPECTED_EVENT_COUNT = "
+        "sizeof(MH_EXPECTED_EVENTS)/sizeof(MH_EXPECTED_EVENTS[0]);",
+        f"constexpr int MH_KILL_INDEX = {kill_index};",
+        f"constexpr unsigned MH_N_WINDOWS = {int(res['n_windows'])}u;",
+        f"constexpr unsigned MH_DELIVERED = {int(res['delivered'])}u;",
+        f'constexpr const char* MH_EVENT_DIGEST = "{digest}";',
+        "",
+    ]
+    return L
 
 
 def main():

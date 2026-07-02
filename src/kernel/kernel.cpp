@@ -173,11 +173,20 @@ void Kernel::advance_projectiles_() {
         p_tas_[i] = Vnew; p_gamma_[i] = ngamma; p_ttl_[i] = nttl;
         std::ptrdiff_t hit_ac = projectile_hit_(i);     // G2: first alive enemy struck, else -1
         if (hit_ac >= 0) {
-            double nhp = hp_[static_cast<std::size_t>(hit_ac)] - p_damage_[i];  // G3: carried damage
+            double before = hp_[static_cast<std::size_t>(hit_ac)];
+            double nhp = before - p_damage_[i];         // G3: carried damage
             if (nhp < 0.0) nhp = 0.0;
             hp_[static_cast<std::size_t>(hit_ac)] = nhp;
             last_hit_by_[static_cast<std::size_t>(hit_ac)] =
                 static_cast<double>(p_owner_[i]);   // v1.16r0: attribute the hit to the firing aircraft
+            // Per-round hit queue: one event PER CONNECTING ROUND (projectile array order).
+            // Observable output only — never hashed (see HitEvent in kernel.h). Mirrors
+            // ref_kernel._advance_projectiles.
+            hit_events_.push_back(HitEvent{
+                static_cast<std::int64_t>(hit_ac),
+                static_cast<std::int64_t>(p_owner_[i]),
+                p_damage_[i], before, nhp,
+                (before > 0.0 && nhp <= 0.0) ? std::int64_t{1} : std::int64_t{0}});
         }
         if (nttl > 0u && !hit_ground && hit_ac < 0) {   // survivor: write compacted into slot w
             p_lat_[w] = p_lat_[i]; p_lon_[w] = p_lon_[i]; p_psi_[w] = p_psi_[i];
@@ -204,6 +213,7 @@ void Kernel::spawn_projectile_(std::size_t owner, const Envelope& e) {
 }
 
 void Kernel::step() {                       // straight golden: req=0, phi unchanged -> byte-identical
+    hit_events_.clear();                    // queue holds the CURRENT step's hits only (none: no guns)
     for (std::size_t i = 0; i < lat_.size(); ++i) advance_(i, 0.0);
 }
 
@@ -217,6 +227,7 @@ void Kernel::step(const std::vector<Command>& cmd, const std::vector<const Envel
     // Strictly generalizes B1: wings level n=1 gamma=0 -> level; n=1/cos(phi) gamma=0 -> the old
     // coordinated-turn law psi_dot=g0*tan(phi)/V. cos(gamma)->0 (vertical) is a documented
     // singularity in psi_dot (scenarios/viewer stay well inside +/-90 deg). See ADR-Step8-B2.
+    hit_events_.clear();   // per-round hit queue: this step's hits only (see HitEvent in kernel.h)
     const double dt = rails_.dt, g0 = rails_.g0;
     const double R = rails_.R, atm_top = rails_.atm_top, soft = rails_.soft;
     for (std::size_t i = 0; i < lat_.size(); ++i) {

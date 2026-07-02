@@ -182,6 +182,23 @@ class Projectile:
         self.damage, self.ttl, self.owner = damage, ttl, owner
 
 
+class HitEvent:
+    # Per-round hit granularity (rides v1.17r0): ONE record per round that connects, appended at hit
+    # time in _advance_projectiles (projectile array order within a tick = deterministic). This is
+    # OBSERVABLE OUTPUT, not canonical state: the queue holds only the CURRENT step's hits (cleared
+    # at the top of every step) and is NEVER serialized into snapshot() -> the world_hash and all
+    # goldens are untouched. It upgrades the last-writer `last_hit_by` field to a full per-round
+    # journal: two rounds striking one target on one tick are two distinct events (the hp-delta view
+    # downstream layers used to infer lumps them). All fields are exact integer-valued or existing
+    # det_math products — NO new det_math. hp_before/hp_after are post-clamp reality (an overkill
+    # round's effective loss is hp_before - hp_after, not its carried damage).
+    __slots__ = ("target", "attacker", "damage", "hp_before", "hp_after", "killed")
+
+    def __init__(self, target, attacker, damage, hp_before, hp_after, killed):
+        self.target, self.attacker, self.damage = target, attacker, damage
+        self.hp_before, self.hp_after, self.killed = hp_before, hp_after, killed
+
+
 class Kernel:
     def __init__(self, rails):
         r = rails["rails"]
@@ -192,6 +209,7 @@ class Kernel:
         self.soft = float(r["atm_soft_band_m"])
         self.aircraft = []
         self.projectiles = []
+        self.hit_events = []   # per-round hit queue for the CURRENT step (see HitEvent)
 
     def _advance(self, ac, req):
         """Kinematic tail for one aircraft: coordinated-turn + great-circle + ceiling-clamped
@@ -253,10 +271,18 @@ class Kernel:
             hit_ac = self._projectile_hit(p)
             if hit_ac >= 0:
                 ac = self.aircraft[hit_ac]
+                before = ac.hp
                 ac.hp = ac.hp - p.damage              # G3: per-round damage carried from the firer's gun
                 if ac.hp < 0.0:
                     ac.hp = 0.0
                 ac.last_hit_by = float(p.owner)       # v1.16r0: attribute the hit to the firing aircraft
+                # Per-round hit queue: one event PER CONNECTING ROUND (projectile array order).
+                # Observable output only — never hashed (see HitEvent). killed marks the exact
+                # round that crossed hp>0 -> <=0 (before>0 always holds: dead aircraft can't be hit).
+                self.hit_events.append(HitEvent(
+                    target=hit_ac, attacker=p.owner, damage=p.damage,
+                    hp_before=before, hp_after=ac.hp,
+                    killed=1 if (before > 0.0 and ac.hp <= 0.0) else 0))
             if p.ttl > 0 and not hit_ground and hit_ac < 0:
                 survivors.append(p)
         self.projectiles = survivors
@@ -297,6 +323,7 @@ class Kernel:
             damage=env["damage_per_round"], ttl=PROJ_TTL_TICKS, owner=owner_idx))
 
     def step(self, climb_inputs=None):
+        self.hit_events = []           # queue holds the CURRENT step's hits only (none here: no guns)
         for i, ac in enumerate(self.aircraft):
             req = 0.0 if climb_inputs is None else climb_inputs[i]
             self._advance(ac, req)
@@ -321,6 +348,7 @@ class Kernel:
         OLD gamma, position uses the NEW gamma. cos(gamma)->0 (vertical) is a documented singularity
         in psi_dot; scenarios/viewer stay well inside +/-90 deg (real loop/vertical handling is post-B3).
         See ADR-Step8-FlightModel-B2."""
+        self.hit_events = []           # per-round hit queue: this step's hits only (see HitEvent)
         dt, g0 = self.dt, self.g0
         R, atm_top, soft = self.R, self.atm_top, self.soft
         for i, ac in enumerate(self.aircraft):

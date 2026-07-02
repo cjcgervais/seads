@@ -16,6 +16,23 @@ struct Rails {
     double soft = 100.0;
 };
 
+// Per-round hit granularity (rides v1.17r0): ONE record per round that connects, appended at hit
+// time in advance_projectiles_ (projectile array order within a tick = deterministic). Mirrors
+// ref_kernel.HitEvent. OBSERVABLE OUTPUT, not canonical state: the queue holds only the CURRENT
+// step's hits (cleared at the top of every step overload) and is NEVER serialized into snapshot()
+// -> the world_hash and all goldens are untouched. Upgrades the last-writer last_hit_by field to a
+// full per-round journal: two rounds striking one target on one tick are two distinct events.
+// hp_before/hp_after are post-clamp reality (an overkill round's effective loss is
+// hp_before - hp_after, not its carried damage). NO new det_math.
+struct HitEvent {
+    std::int64_t target;     // aircraft index struck
+    std::int64_t attacker;   // owner of the striking round (the firer's aircraft index)
+    double damage;           // the round's carried damage (as fired; may exceed the hp removed)
+    double hp_before;        // target hp before this round applied
+    double hp_after;         // target hp after this round applied (clamped at 0)
+    std::int64_t killed;     // 1 iff THIS round crossed the target hp >0 -> <=0
+};
+
 class Kernel {
 public:
     explicit Kernel(const Rails& r) : rails_(r) {}
@@ -62,6 +79,10 @@ public:
     std::uint32_t proj_ttl(std::size_t i) const { return p_ttl_[i]; }
     std::uint32_t proj_owner(std::size_t i) const { return p_owner_[i]; }
 
+    // Per-round hit queue for the CURRENT step (cleared each step; see HitEvent above). Read-only:
+    // the net event layer + tests consume it. Mirrors ref_kernel.Kernel.hit_events.
+    const std::vector<HitEvent>& hit_events() const { return hit_events_; }
+
 private:
     // Kinematic tail for aircraft i (coordinated-turn + great-circle + ceiling-clamped vertical).
     // phi_[i] must already be final for this tick. Verbatim ops shared by both step() overloads.
@@ -82,6 +103,8 @@ private:
     // projectile SoA: kinematic 6-tuple + carried damage (G3) + integer ttl + owner aircraft index
     std::vector<double> p_lat_, p_lon_, p_psi_, p_alt_, p_tas_, p_gamma_, p_damage_;
     std::vector<std::uint32_t> p_ttl_, p_owner_;
+    // per-round hit queue for the CURRENT step (observable output — never hashed; see HitEvent)
+    std::vector<HitEvent> hit_events_;
 };
 
 }  // namespace seads
