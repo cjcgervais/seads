@@ -1,0 +1,98 @@
+{
+  "header": {
+    "id": "GOLDEN-SK-Supercharger-001",
+    "version": 320,
+    "seal": "ATM-Sphere v1.22r0",
+    "description": "Two-ship supercharger-critical-altitude scenario for v1.22r0: a Yak-3 (crit_alt_m 3000, the roster's LOWEST) and a P-51 (crit_alt_m 7500, the two-stage Merlin) fly the IDENTICAL 5-phase schedule from the same start (2700 m, TAS 140) so the per-airframe crit_alt_m data is what splits their thrust behavior. They can never interact (no fire phases -> no projectiles; opposite great-circle arcs, lon 0 psi 90 vs lon 90 psi 270). Schedule: phase 0 (t=0) full-throttle 1 g level acceleration at 2700 m -- BOTH ships sit BELOW their critical altitude, so BOTH run at RATED power (lapse = 1, the comparison's false branch; by t=600 Yak ~146.8, P-51 ~145.3); phase 1 (t=600) a g 1.5 pull rotates the nose up (gamma to ~10.4/10.6 deg); phase 2 (t=1100) coasts the earned climb at 1 g -- the Yak-3 crosses ITS OWN critical altitude (3000 m) UPWARD at t~2063: the sealed comparison FLIPS in flight and its lapse becomes sigma(alt)/sigma(3000) < 1 with the numerator INTERPOLATED between the 3000/3500 LUT nodes, while the P-51 crosses the SAME 3000 m sigma-LUT node at t~2073 with NO flip (7500 m critical -> rated power its entire flight) -- the golden thereby distinguishes a sigma-node segment switch from a critical-altitude branch flip in the same bytes; phase 3 (t=2400) a g 0.5 push-over levels off; phase 4 (t=2550) 1 g full-throttle level acceleration to the end ~3195 m, the Yak-3 now permanently in the lapse<1 branch (lapse down to ~0.980 at 3199 m) and the P-51 still at rated power. Final: Yak 139.6 m/s @ 3199 m, P-51 133.7 m/s @ 3192 m. No guns: hp/regions full, ammo untouched, kills 0, last_hit_by -1 -- this golden pins the v1.22r0 supercharger thrust lapse (both branches, the in-flight flip, and the interpolated-numerator divide) in C++ <-> Python lockstep. Exercises: the lapse comparison on both sides of a per-airframe critical altitude, the exact-node sigma(crit_alt_m) denominator (3000 and 7500 are sealed LUT nodes), lapse-scaled thrust under level acceleration AND climb, and a sigma-node crossing without a crit flip on the second ship.",
+    "introduced": "NEW golden for the supercharger critical altitude (seal v1.22r0): the first scenario in which an airframe crosses its OWN crit_alt_m in flight, pinning the thrust-lapse branch flip end-to-end in C++ <-> Python lockstep. See ADR-Step8-FlightModel-Supercharger-v1.22r0."
+  },
+  "ticks": 3000,
+  "aircraft": [
+    {
+      "envelope": "yak3",
+      "start": {
+        "lat_deg": 0.0,
+        "lon_deg": 0.0,
+        "psi_deg": 90.0,
+        "phi_deg": 0.0,
+        "alt_m": 2700.0,
+        "tas_mps": 140.0
+      },
+      "schedule": [
+        {
+          "start_tick": 0,
+          "bank_deg": 0.0,
+          "g_cmd": 1.0,
+          "throttle": 1.0
+        },
+        {
+          "start_tick": 600,
+          "bank_deg": 0.0,
+          "g_cmd": 1.5,
+          "throttle": 1.0
+        },
+        {
+          "start_tick": 1100,
+          "bank_deg": 0.0,
+          "g_cmd": 1.0,
+          "throttle": 1.0
+        },
+        {
+          "start_tick": 2400,
+          "bank_deg": 0.0,
+          "g_cmd": 0.5,
+          "throttle": 1.0
+        },
+        {
+          "start_tick": 2550,
+          "bank_deg": 0.0,
+          "g_cmd": 1.0,
+          "throttle": 1.0
+        }
+      ]
+    },
+    {
+      "envelope": "p51",
+      "start": {
+        "lat_deg": 0.0,
+        "lon_deg": 90.0,
+        "psi_deg": 270.0,
+        "phi_deg": 0.0,
+        "alt_m": 2700.0,
+        "tas_mps": 140.0
+      },
+      "schedule": [
+        {
+          "start_tick": 0,
+          "bank_deg": 0.0,
+          "g_cmd": 1.0,
+          "throttle": 1.0
+        },
+        {
+          "start_tick": 600,
+          "bank_deg": 0.0,
+          "g_cmd": 1.5,
+          "throttle": 1.0
+        },
+        {
+          "start_tick": 1100,
+          "bank_deg": 0.0,
+          "g_cmd": 1.0,
+          "throttle": 1.0
+        },
+        {
+          "start_tick": 2400,
+          "bank_deg": 0.0,
+          "g_cmd": 0.5,
+          "throttle": 1.0
+        },
+        {
+          "start_tick": 2550,
+          "bank_deg": 0.0,
+          "g_cmd": 1.0,
+          "throttle": 1.0
+        }
+      ]
+    }
+  ]
+}

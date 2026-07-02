@@ -539,10 +539,19 @@ class Kernel:
             Di = e["induced_k"] * CL * CL * qS            # induced drag (rises with n -> g bleeds speed)
             D = Dp + Di
             thr = clamp(commands[i][2] if len(commands[i]) > 2 else 0.0, 0.0, 1.0)
-            # B5 (v1.21r0): engine power scales with density too (sea-level power is NOT held to
-            # altitude) — so top TAS stays near the sealed B4 historical values everywhere in the
-            # band while climb/turn genuinely degrade aloft. Supercharger modeling deferred.
-            T = thr * e["thrust_static_n"] * (1.0 - V / e["v_max_mps"]) * sigma
+            # Supercharger critical altitude (v1.22r0): below crit_alt_m the supercharger holds
+            # RATED power (lapse = 1); above it power falls with the density ratio
+            # (lapse = sigma/sigma_crit < 1). One comparison + one divide — no new det_math.
+            # sigma is monotone-decreasing, so sigma < sigma_crit <=> alt > crit_alt_m; with
+            # crit_alt_m = 0, sigma_crit = 1.0 and this reproduces the B5 T *= sigma bit-for-bit.
+            # thrust_static_n/v_max_mps are re-anchored to this model (top speed at the CRITICAL
+            # altitude, sea-level best climb — tools/supercharger_retune.py); top TAS now RISES
+            # with altitude to the historical value at crit_alt_m, then falls (B5 was flat).
+            sig_c = air_sigma(e["crit_alt_m"])            # exact LUT node (crit is a 500 m multiple)
+            lapse = sigma / sig_c
+            if lapse > 1.0:
+                lapse = 1.0
+            T = thr * e["thrust_static_n"] * (1.0 - V / e["v_max_mps"]) * lapse
             if T < 0.0:
                 T = 0.0
             if ac.engine_hp <= 0.0:

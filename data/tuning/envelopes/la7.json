@@ -1,9 +1,9 @@
 {
   "header": {
     "id": "TUNE-La-7",
-    "version": 210,
-    "seal": "ATM-Sphere v1.11r0",
-    "adr": "docs/adr/ADR-Step7-Guns-G3-Roster-v1.11r0.md"
+    "version": 220,
+    "seal": "ATM-Sphere v1.22r0",
+    "adr": "docs/adr/ADR-Step8-FlightModel-Supercharger-v1.22r0.md"
   },
   "aircraft": "La-7",
   "tuning": {
@@ -101,8 +101,8 @@
     "wing_area_m2": 17.6,
     "cd0": 0.023,
     "induced_k": 0.058,
-    "thrust_static_n": 11960.0,
-    "v_max_mps": 645.0,
+    "thrust_static_n": 15420.0,
+    "v_max_mps": 290.0,
     "cl_max": 1.624,
     "n_max_struct": 8,
     "n_min_struct": -3.5,
@@ -114,6 +114,7 @@
     "convergence_m": 200,
     "engine_frac": 0.5,
     "wing_frac": 0.375,
-    "tail_frac": 0.25
+    "tail_frac": 0.25,
+    "crit_alt_m": 4500.0
   }
 }

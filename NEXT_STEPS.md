@@ -1,6 +1,81 @@
 # SEADS 2026 — Next Steps (handoff)
 
-> ## ►► CURRENT STATE (2026-07-02): **NETCODE LAYER 14 — BOUNDED/WINDOWED CATCH-UP DONE ✅** (no-seal, rides **ATM-Sphere v1.21r0**)
+> ## ►► CURRENT STATE (2026-07-02): seal **ATM-Sphere v1.22r0** — **SUPERCHARGER CRITICAL ALTITUDE DONE ✅** (B5's named follow-up — the roster gains its altitude personalities)
+> **Latest (SEAL v1.22r0): engines finally hold power to altitude — each envelope carries
+> `crit_alt_m` (19th AERO field) and the B5 thrust scaling `T ×= σ` becomes `T ×= lapse` with
+> `lapse = min(1, σ(alt)/σ(crit_alt_m))` — ONE comparison + ONE divide, ZERO new det_math (tenth
+> consecutive zero-transcendental seal).** Below its critical altitude an engine holds RATED
+> power; above it power falls with the density ratio. **Exactness contract
+> (`tuning_probe.validate_supercharger`): crit_alt_m is a multiple of 500 m inside [0, 8000]** —
+> a breakpoint of the sealed 17-node σ LUT, so the divide's denominator is a SEALED NODE
+> CONSTANT (never an interpolant); **crit_alt_m = 0 reproduces the B5 thrust bit-for-bit**
+> (σ(0)=1.0 exactly; guarded by test_supercharger). Sealed roster (WWII rated heights on the
+> grid): **P-47D 8000** (turbo R-2800 — rated past the band top) · **P-51 7500** (two-stage
+> Merlin) · **Bf 109 F-4 / Spitfire Mk V 6000** · **La-7 / A6M2 4500** · **Ki-61 4000** ·
+> **Yak-3 3000** (the deck brawler). **The two B4 speed knobs were RE-ANCHORED**
+> (`tools/supercharger_retune.py`, the B4 solver with ONE change: Eq1 anchors top speed AT the
+> critical altitude with σ_crit drag — un-re-anchored rated power tops ~965 km/h on the flat B4
+> curve; Eq2 keeps the B4 sea-level climb): **top TAS now RISES with altitude to exactly the B4
+> historical target at crit_alt_m then falls**, no airframe exceeds its historical top speed
+> anywhere, and the emergent SEA-LEVEL tops land on history for free (P-51 576 km/h ~583 hist ·
+> P-47D 549 ~550 · La-7 585 ~580 · A6M2 457 ~437); `v_max_mps` drops 610–700 → **250–360**
+> (steeper, more physical — softens B4's documented wart); turn orderings preserved (perf_probe:
+> A6M2 27.7°/s best sustained, P-47D 16.7 worst; instantaneous untouched by construction).
+> **A genuine MODEL seal: all 13 scenario goldens move, Sphere byte-identical
+> (`6914a994…2b13eb20`).** Every sealed story RE-VERIFIED (instrumented reference runs): Hit's
+> 6-connect kill (ticks 39–53), Winchester's tick-891 depletion, EngineOut's 26.25→14.25→2.25→0
+> drain + hp-22 glider (~136.8 m/s), Gunfire's 9 live rounds, Climb's 7998 m asymptote, Stall's
+> BOTH binds (ki61 collapse to n_aero ~0.40; p47d structural 8.5 binds on 240/360 pull ticks).
+> **Altitude-001's story INVERTS (schedule unchanged, description re-written):** the high
+> Spitfire (6900 m, above its 6000 crit) now OUT-ACCELERATES the low one (+7.0 m/s at t=2000 —
+> near-rated power at half the drag; the B5 divergence reversed — exactly the effect the model
+> exists to produce); σ-node crossings + clamped-vs-unclamped g-6 pull survive. **YakLa-001
+> re-measured, minimally re-tuned:** rated power below crit un-bled the La-7 tail (min TAS 87.9 —
+> the 85 crossing degenerated) ⇒ the two float/fire phases stiffen **g 0.6 → 1.6** (fire
+> throttle untouched); all crossings restored (160 up t~1067 / down t~1918; 125 up t~1092 /
+> down t~2447; 85 down t~2912), structural bind [9.45, 9.72] > 8 measured, γ max +77°, bursts
+> unchanged (ammo 140→111 / 170→136, 63 live rounds); BONUS: the profile now straddles BOTH
+> lapse branches (Yak-3 just above its 3000 crit at ~0.95, La-7 below its 4500 at rated). **NEW
+> GOLDEN-SK-Supercharger-001** (the seal's golden): Yak-3 (crit 3000) + P-51 (crit 7500) fly
+> IDENTICAL 5-phase schedules from 2700 m — the Yak-3 crosses ITS OWN critical altitude upward
+> at t~2063 (**the sealed comparison FLIPS in flight**, numerator interpolated between the
+> 3000/3500 nodes) while the P-51 crosses the same 3000 m σ-node at t~2073 with NO flip (rated
+> its whole flight) ⇒ a σ-node segment switch and a crit branch flip distinguished in the same
+> bytes ⇒ **14 goldens**, guardian.yml +1 in all THREE lists.
+> **No wire change** (protocol stays 7 — the lapse derives from `alt` + static tuning data).
+> Fingerprint: 8 envelope JSONs (crit_alt_m + re-anchored T0/v_max, headers → v1.22r0),
+> envelope_tables/lockstep/predict/scenario_params regenerated; **session digest
+> `21aaab49…` → `ccc2f504…`** (envelope literals + checkpoints; **FINAL_WEAPON facts
+> byte-identical** — the astern kill lands on the same ticks); **event digest BYTE-IDENTICAL**
+> (`--check` verified); golden_params/snapshot/weapon/framing/geo001/interp/detmath/coeffs all
+> in sync untouched. trajectory.js dogfight regenerated (same 3 kills / 18 events). Rails
+> 310→320 (`atmosphere_density` gains the lapse text + `supercharger_crit_alt_grid_m`/
+> `supercharger_lapse`).
+> **Gates: ctest 19/19 GCC + 19/19 Clang, Sphere + all 13 scenario goldens C++ ≡ Python
+> bit-for-bit on GCC AND Clang locally (validated hash-by-hash), property tests 184 → 190
+> (+6 `test_supercharger.py`: roster contract + flavor ordering / one-tick BIT-EXACT branch
+> replication through the kernel on both sides of crit / crit-0 ≡ B5 bit-for-bit / acceleration
+> IMPROVES below crit (P-47D/P-51) / degrades above crit (the 6 low-crit airframes) / golden
+> non-degeneracy guard; test_isa's altitude-degrades test recalibrated to above-crit pairs),
+> det_math oracle + tuning/spec/ceiling probes + determinism lint PASS.**
+> Ledger: **ADR-Step8-FlightModel-Supercharger-v1.22r0**, SEAL_CARD v1.22r0 (header + goldens
+> table rewritten — 13 new hashes + Sphere annotated unchanged + Supercharger added; history
+> row), CLAUDE.md header/rails/roadmap current.
+> **NEXT (free pick, none blocking):** an A6M2 engine-toughness retune (data-only seal that
+> moves EngineOut-001's story — the named next step this session); per-airframe toughness / σ /
+> crit-alt surfaced in the HUD (presentation-only); projectile σ-drag (a kernel seal moving
+> every firing golden, deliberately deferred); or a two-speed blower schedule (deferred at
+> v1.22r0 — doubles the data surface for a second-order kink).
+> **NOTE FOR THE NEXT AGENT:** crit_alt_m is SEALED byte-spec — retuning it (or T0/v_max) moves
+> every golden containing that airframe; keep the 500 m grid contract (tuning_probe fails
+> otherwise, and the divide's denominator must stay a sealed node). The lapse is computed from
+> the SAME pre-step σ the q uses — inserting a second air_sigma(alt) evaluation is a model
+> change. If you retune any speed knob, re-run `tools/supercharger_retune.py` (it prints the
+> emergent SL + at-crit table) and re-measure YakLa-001/Supercharger-001 (their crossing ticks
+> are description claims). test_supercharger's SEALED_CRIT pin must move WITH any deliberate
+> crit retune.
+>
+> ## ►► PRIOR STATE (2026-07-02): **NETCODE LAYER 14 — BOUNDED/WINDOWED CATCH-UP DONE ✅** (no-seal, rides **ATM-Sphere v1.21r0**)
 > **Latest: layer 13's named honest boundary closes — catch-up no longer needs O(stream) server
 > memory. `broadcast_live` gains an opt-in `catchup_window` (0 = retain all = layer-13 behavior
 > EXACTLY): with a window W only the LAST W produced payloads are retained (the oldest evicted as

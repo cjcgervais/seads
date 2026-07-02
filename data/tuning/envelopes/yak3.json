@@ -1,9 +1,9 @@
 {
   "header": {
     "id": "TUNE-Yak-3",
-    "version": 210,
-    "seal": "ATM-Sphere v1.11r0",
-    "adr": "docs/adr/ADR-Step7-Guns-G3-Roster-v1.11r0.md"
+    "version": 220,
+    "seal": "ATM-Sphere v1.22r0",
+    "adr": "docs/adr/ADR-Step8-FlightModel-Supercharger-v1.22r0.md"
   },
   "aircraft": "Yak-3",
   "tuning": {
@@ -101,8 +101,8 @@
     "wing_area_m2": 14.9,
     "cd0": 0.022,
     "induced_k": 0.062,
-    "thrust_static_n": 9240.0,
-    "v_max_mps": 685.0,
+    "thrust_static_n": 11280.0,
+    "v_max_mps": 335.0,
     "cl_max": 1.78,
     "n_max_struct": 8,
     "n_min_struct": -3.5,
@@ -114,6 +114,7 @@
     "convergence_m": 180,
     "engine_frac": 0.25,
     "wing_frac": 0.375,
-    "tail_frac": 0.25
+    "tail_frac": 0.25,
+    "crit_alt_m": 3000.0
   }
 }

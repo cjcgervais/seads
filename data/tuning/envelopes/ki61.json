@@ -1,9 +1,9 @@
 {
   "header": {
     "id": "TUNE-Ki-61",
-    "version": 210,
-    "seal": "ATM-Sphere v1.11r0",
-    "adr": "docs/adr/ADR-Step7-Guns-G3-Roster-v1.11r0.md"
+    "version": 220,
+    "seal": "ATM-Sphere v1.22r0",
+    "adr": "docs/adr/ADR-Step8-FlightModel-Supercharger-v1.22r0.md"
   },
   "aircraft": "Ki-61 Hien",
   "tuning": {
@@ -101,8 +101,8 @@
     "wing_area_m2": 20.0,
     "cd0": 0.024,
     "induced_k": 0.058,
-    "thrust_static_n": 10540.0,
-    "v_max_mps": 700.0,
+    "thrust_static_n": 10100.0,
+    "v_max_mps": 360.0,
     "cl_max": 1.551,
     "n_max_struct": 7.5,
     "n_min_struct": -3.5,
@@ -114,6 +114,7 @@
     "convergence_m": 230,
     "engine_frac": 0.25,
     "wing_frac": 0.5,
-    "tail_frac": 0.25
+    "tail_frac": 0.25,
+    "crit_alt_m": 4000.0
   }
 }

@@ -123,6 +123,27 @@ def validate_envelope(doc):
         errs.append("stall/v_ne non-numeric")
     errs += validate_b3_limits(e)
     errs += validate_region_toughness(e)
+    errs += validate_supercharger(e)
+    return errs
+
+
+def validate_supercharger(e):
+    """Supercharger critical altitude (v1.22r0): crit_alt_m is the altitude up to which the
+    engine holds rated power (kernel lapse = min(1, sigma(alt)/sigma(crit_alt_m))). It MUST be a
+    multiple of 500 inside [0, 8000] so sigma(crit_alt_m) is EXACTLY a sealed ISA-LUT node (the
+    17-node table has 500 m spacing over the ATM band; lut_eval returns the node value with t=0
+    at a breakpoint, so the divide's denominator is a sealed constant, not an interpolant)."""
+    if "crit_alt_m" not in e:
+        return ["missing crit_alt_m"]
+    try:
+        v = float(e["crit_alt_m"])
+    except Exception:
+        return ["crit_alt_m non-numeric"]
+    errs = []
+    if not (0.0 <= v <= 8000.0):
+        errs.append(f"crit_alt_m out of the ATM band: {v} (expect 0 <= crit <= 8000)")
+    if v / 500.0 != round(v / 500.0):
+        errs.append(f"crit_alt_m not a multiple of 500: {v} (sigma(crit) must be a sealed LUT node)")
     return errs
 
 

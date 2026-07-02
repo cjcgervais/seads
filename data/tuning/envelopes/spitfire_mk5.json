@@ -1,9 +1,9 @@
 {
   "header": {
     "id": "TUNE-Spitfire-Mk-V",
-    "version": 210,
-    "seal": "ATM-Sphere v1.11r0",
-    "adr": "docs/adr/ADR-Step7-Guns-G3-Roster-v1.11r0.md"
+    "version": 220,
+    "seal": "ATM-Sphere v1.22r0",
+    "adr": "docs/adr/ADR-Step8-FlightModel-Supercharger-v1.22r0.md"
   },
   "aircraft": "Spitfire Mk V",
   "tuning": {
@@ -101,8 +101,8 @@
     "wing_area_m2": 22.5,
     "cd0": 0.021,
     "induced_k": 0.054,
-    "thrust_static_n": 10750.0,
-    "v_max_mps": 700.0,
+    "thrust_static_n": 11230.0,
+    "v_max_mps": 280.0,
     "cl_max": 1.29,
     "n_max_struct": 8,
     "n_min_struct": -3.5,
@@ -114,6 +114,7 @@
     "convergence_m": 230,
     "engine_frac": 0.25,
     "wing_frac": 0.5,
-    "tail_frac": 0.25
+    "tail_frac": 0.25,
+    "crit_alt_m": 6000.0
   }
 }

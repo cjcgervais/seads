@@ -72,12 +72,18 @@ def _fly_level_full_throttle(envname, alt0, ticks=2000, tas0=120.0):
 
 @given(env=st.sampled_from(ROSTER))
 @settings(max_examples=len(ROSTER), deadline=None)
-def test_altitude_degrades_acceleration(env):
-    # The SAME airframe under the SAME full-throttle level command accelerates measurably slower
-    # at 7000 m (sigma ~0.48) than at 1000 m (sigma ~0.91): engine power scales with density.
-    low = _fly_level_full_throttle(env, 1000.0)
-    high = _fly_level_full_throttle(env, 7000.0)
-    assert low.tas > high.tas + 4.0
+def test_altitude_degrades_acceleration_above_crit(env):
+    # v1.22r0 recalibration: engine power now falls with density only ABOVE the per-airframe
+    # supercharger critical altitude (below it the engine holds rated power and thinner air
+    # HELPS — see test_supercharger.py). The SAME airframe under the SAME full-throttle level
+    # command accelerates measurably slower well above its critical altitude than just past it.
+    e = envmod.load_envelope(env)
+    crit = e["crit_alt_m"]
+    if crit > 6000.0:
+        return  # rated to (nearly) the band top — no meaningful above-crit pair exists
+    low = _fly_level_full_throttle(env, crit + 500.0)
+    high = _fly_level_full_throttle(env, 8000.0)
+    assert low.tas > high.tas + 0.5
 
 
 @given(env=st.sampled_from(ROSTER))

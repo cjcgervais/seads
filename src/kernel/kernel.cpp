@@ -394,10 +394,14 @@ void Kernel::step(const std::vector<Command>& cmd, const std::vector<const Envel
         double Di = e.induced_k * CL * CL * qS;         // induced drag (rises with n -> g bleeds speed)
         double D = Dp + Di;
         double thr = clampd(cmd[i].throttle, 0.0, 1.0);
-        // B5 (v1.21r0): engine power scales with density too (sea-level power is NOT held to
-        // altitude) — top TAS stays near the sealed B4 values everywhere in the band while
-        // climb/turn genuinely degrade aloft. Supercharger modeling deferred.
-        double T = thr * e.thrust_static_n * (1.0 - V / e.v_max_mps) * sigma;
+        // Supercharger critical altitude (v1.22r0): below crit_alt_m the supercharger holds RATED
+        // power (lapse = 1); above it power falls with the density ratio (sigma/sigma_crit). One
+        // comparison + one divide — no new det_math. crit_alt_m = 0 gives sigma_crit = 1.0 and
+        // reproduces the B5 T *= sigma bit-for-bit. MUST mirror ref_kernel.step_scenario op-for-op.
+        double sig_c = air_sigma(e.crit_alt_m);         // exact LUT node (crit is a 500 m multiple)
+        double lapse = sigma / sig_c;
+        if (lapse > 1.0) lapse = 1.0;
+        double T = thr * e.thrust_static_n * (1.0 - V / e.v_max_mps) * lapse;
         if (T < 0.0) T = 0.0;
         if (engine_hp_[i] <= 0.0) T = 0.0;              // v1.18r0: engine out — no thrust at any throttle
         // --- speed: gravity now acts along the flight path (uses OLD gamma) ---

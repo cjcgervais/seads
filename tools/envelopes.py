@@ -62,7 +62,16 @@ AERO_FIELDS = ("mass_kg", "wing_area_m2", "cd0", "induced_k", "thrust_static_n",
                # on the WEAPON-001 wire (1000/8 = 125 clears the denominator for integer hp_start,
                # and integer per-round damage preserves the granularity as pools drain). See
                # ADR-Step7-Guns-RegionToughness-v1.20r0.
-               "engine_frac", "wing_frac", "tail_frac")
+               "engine_frac", "wing_frac", "tail_frac",
+               # Supercharger critical altitude (flight model, seal v1.22r0): the altitude (m) up
+               # to which the engine holds RATED power. The kernel thrust lapse is
+               # min(1, sigma(alt)/sigma(crit_alt_m)) — one comparison + one divide, no new
+               # det_math. MUST be a multiple of 500 inside [0, 8000] (tuning_probe-enforced) so
+               # sigma(crit) is EXACTLY a sealed ISA-LUT node; 0 means "no supercharger" and
+               # reproduces the B5 thrust (T *= sigma) bit-for-bit. thrust_static_n/v_max_mps were
+               # re-anchored with it (top speed at the CRITICAL altitude, sea-level climb) by
+               # tools/supercharger_retune.py. See ADR-Step8-FlightModel-Supercharger-v1.22r0.
+               "crit_alt_m")
 
 
 def deg2rad(d):

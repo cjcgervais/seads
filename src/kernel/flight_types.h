@@ -31,13 +31,19 @@ struct Lut5 { double x[5]; double y[5]; };
 // introduced the pools with global 0.375/0.5/0.25 constants; those survive as the envelope-less
 // defaults). Each is a positive multiple of 1/8 and <= 1 (tuning_probe enforces it) so every pool
 // value is exact in f64 and milli-exact on the WEAPON-001 wire.
+// The supercharger block (seal v1.22r0) adds crit_alt_m: the altitude (m) up to which the engine
+// holds RATED power — the kernel thrust lapse is min(1, sigma(alt)/sigma(crit_alt_m)), one
+// comparison + one divide. A multiple of 500 inside [0, 8000] (tuning_probe enforces it) so
+// sigma(crit) is exactly a sealed ISA-LUT node; 0 = "no supercharger" = the B5 T *= sigma
+// bit-for-bit. thrust_static_n/v_max_mps were re-anchored with it (tools/supercharger_retune.py).
 // Scalar field order MUST match tools/envelopes.py AERO_FIELDS (the single source of truth).
 struct Envelope { Lut5 phi_max, roll_rate, climb_max, climb_min;
                   double mass_kg, wing_area_m2, cd0, induced_k, thrust_static_n, v_max_mps,
                          cl_max, n_max_struct, n_min_struct,
                          hp_start, muzzle_v_mps, damage_per_round, rof_interval_ticks,
                          ammo_start, convergence_m,
-                         engine_frac, wing_frac, tail_frac; };
+                         engine_frac, wing_frac, tail_frac,
+                         crit_alt_m; };
 
 // Per-tick command: target bank (rad), commanded load factor n (target_g, dimensionless; B2 —
 // replaces the B1 climb rate), throttle [0,1] (B1), and the gun trigger fire (G1, v1.9r0). n=1

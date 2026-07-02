@@ -1,8 +1,8 @@
 {
   "header": {
     "id": "SEADS-RAILS",
-    "version": 310,
-    "seal": "ATM-Sphere v1.21r0",
+    "version": 320,
+    "seal": "ATM-Sphere v1.22r0",
     "note": "Data-driven immutable rails. Any change here REQUIRES a new seal (ADR + Forge audit card + Chronicle receipt). See CLAUDE.md > Change-Control Law."
   },
   "rails": {
@@ -19,12 +19,14 @@
     "atm_soft_band_m": 100,
     "atmosphere": "still_air",
     "atmosphere_density": {
-      "model": "B5 ISA density-vs-altitude (v1.21r0): the air THINS with altitude. sigma(alt) = rho(alt)/rho0 is a sealed 17-node LUT (500 m spacing over the whole ATM realm [0, 8000 m], hex-float node values shared bit-for-bit between kernel.cpp and ref_kernel.py) interpolated by the SAME deterministic lut_eval as the envelope tables — pure +,-,*,/ at runtime, ZERO new det_math (the det_exp/det_pow the original B5 plan feared are never needed: the ICAO power law sigma(h) = ((T0 - L*h)/T0)^(g0/(Rs*L) - 1), T0=288.15 K, L=0.0065 K/m, Rs=287.05287, g0=the gravity rail, runs OFFLINE in tools/gen_isa_lut.py; the sealed spec is the table itself). sigma scales BOTH aero forces (q = 0.5*rho0*sigma(alt)*V^2 in the envelope-driven step — drag falls aloft AND the n_aero stall ceiling drops: mushier turns, higher stall/corner TAS, worse sustained-g) AND engine power (T *= sigma — sea-level power is NOT held to altitude, so no airframe exceeds its sealed B4 historical top speed anywhere in the band; per-airframe supercharger critical-altitude modeling is a deferred data-driven phase). Deliberately UNTOUCHED: 'still air' (no wind/weather — unchanged), gravity (constant rail), the no-arg kinematic path (the Sphere golden's pure great-circle tail has no aero at all), and the projectile advance (PROJ_DRAG_K stays a lumped GLOBAL constant — a bullet is a bullet; ISA scaling of round drag is deferred and would be its own kernel seal). See ADR-Step8-FlightModel-B5-v1.21r0.",
+      "model": "B5 ISA density-vs-altitude (v1.21r0): the air THINS with altitude. sigma(alt) = rho(alt)/rho0 is a sealed 17-node LUT (500 m spacing over the whole ATM realm [0, 8000 m], hex-float node values shared bit-for-bit between kernel.cpp and ref_kernel.py) interpolated by the SAME deterministic lut_eval as the envelope tables — pure +,-,*,/ at runtime, ZERO new det_math (the det_exp/det_pow the original B5 plan feared are never needed: the ICAO power law sigma(h) = ((T0 - L*h)/T0)^(g0/(Rs*L) - 1), T0=288.15 K, L=0.0065 K/m, Rs=287.05287, g0=the gravity rail, runs OFFLINE in tools/gen_isa_lut.py; the sealed spec is the table itself). sigma scales BOTH aero forces (q = 0.5*rho0*sigma(alt)*V^2 in the envelope-driven step — drag falls aloft AND the n_aero stall ceiling drops: mushier turns, higher stall/corner TAS, worse sustained-g) AND engine power — v1.22r0 (supercharger critical altitude): the B5 raw T *= sigma became T *= lapse with lapse = min(1, sigma(alt)/sigma(crit_alt_m)), crit_alt_m a per-airframe envelope scalar (a multiple of 500 m inside [0, 8000] so sigma(crit) is EXACTLY a sealed LUT node; 0 = no supercharger = the B5 thrust bit-for-bit). Below its critical altitude an engine holds RATED power; above, power falls with the density ratio. thrust_static_n/v_max_mps were re-anchored per airframe (top speed at the CRITICAL altitude = the B4 historical target, sea-level best climb preserved — tools/supercharger_retune.py), so top TAS now RISES with altitude to the historical value at crit_alt_m then falls, and no airframe exceeds its historical top speed anywhere in the band. Deliberately UNTOUCHED: 'still air' (no wind/weather — unchanged), gravity (constant rail), the no-arg kinematic path (the Sphere golden's pure great-circle tail has no aero at all), and the projectile advance (PROJ_DRAG_K stays a lumped GLOBAL constant — a bullet is a bullet; ISA scaling of round drag is deferred and would be its own kernel seal). See ADR-Step8-FlightModel-B5-v1.21r0 and ADR-Step8-FlightModel-Supercharger-v1.22r0.",
       "sigma_lut_nodes": 17,
       "sigma_lut_spacing_m": 500,
       "isa_T0_K": 288.15,
       "isa_lapse_K_per_m": 0.0065,
-      "isa_Rs_J_per_kgK": 287.05287
+      "isa_Rs_J_per_kgK": 287.05287,
+      "supercharger_crit_alt_grid_m": 500,
+      "supercharger_lapse": "min(1, sigma(alt)/sigma(crit_alt_m)) applied to thrust in the envelope-driven step (v1.22r0)"
     },
     "kinematics": {
       "model": "intrinsic_S2",
