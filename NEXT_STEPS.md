@@ -1,6 +1,78 @@
 # SEADS 2026 — Next Steps (handoff)
 
-> ## ►► CURRENT STATE (2026-07-02): **NETCODE LAYER 13 — OPEN-ENDED LIVE FRAME SOURCE DONE ✅** (no-seal, rides **ATM-Sphere v1.20r0**)
+> ## ►► CURRENT STATE (2026-07-02): seal **ATM-Sphere v1.21r0** — **FLIGHT MODEL B5: ISA ATMOSPHERE DONE ✅ — ARC B1→B5 COMPLETE**
+> **Latest (SEAL v1.21r0): the air finally THINS with altitude — the long-deferred B5 lands as
+> the ninth consecutive zero-new-det_math seal.** The original plan feared B5 "forces
+> det_exp/det_pow" (§8.5 below); the envelope-LUT machinery built since v1.3r0 makes that fear
+> obsolete: **σ(alt) = ρ/ρ₀ is a sealed 17-node LUT** (500 m spacing over the whole ATM band
+> [0, 8000 m]; ICAO ISA troposphere power law runs OFFLINE in the new provenance tool
+> `tools/gen_isa_lut.py`; hex-float nodes shared bit-for-bit `ref_kernel.py` ↔ `kernel.cpp`;
+> runtime = the existing deterministic `lut_eval`, generalized 5-node → n-node with an IDENTICAL
+> op sequence for any given input). Two application points in the envelope-driven step:
+> **(a) `q = ½ρ₀σ(alt)V²`** — drag (parasitic AND induced) falls aloft and the **B3 n_aero
+> ceiling becomes altitude-dependent** (stall/corner TAS rise up high, sustained turns bleed
+> harder — induced drag at fixed n carries 1/σ);
+> **(b) `T ×= σ`** — engine power scales with density (sea-level power NOT held to altitude ⇒ no
+> airframe exceeds its sealed B4 historical top speed anywhere in the band; the conservative
+> choice — per-airframe supercharger critical-altitude modeling is the named data-driven
+> follow-up, its own seal). DELIBERATELY untouched: the no-arg kinematic path (⇒ **Sphere golden
+> byte-identical** — the seal's anchor), the projectile advance (lumped global PROJ_DRAG_K — "a
+> bullet is a bullet"), gravity, still-air, and the wire (**no protocol change** — σ derives
+> from `alt`, already on GEO-001).
+> **A genuine MODEL seal (B2-class, not value-only): all 12 scenario goldens move** (every
+> scenario flies at 800–7800 m where σ<1). Every sealed story RE-VERIFIED under B5: Hit-001's
+> tail-chase kill (hp 0, tail 0, lhb 0, kills 1), Winchester-001's tick-891 depletion
+> (fire-schedule-driven, σ-independent), EngineOut-001's engine-kill-survivor (same 4-round
+> connect + 26.25→0 drain values; the thrustless glider now decelerates to ~137 not ~131 m/s —
+> thinner air). **GOLDEN-SK-YakLa-001 RE-DESIGNED** (the honest fix): under B5 its breakpoint
+> crossings DEGENERATED (Yak-3 peaked 157.1 < 160; La-7 peaked 122.6 < 125, pull aero-limited at
+> n_aero ≤ 5.99) — the new schedules use DIVE phases (gravity is σ-independent) measured against
+> B5 dynamics: 160 crossed up t~1330 / down t~1687; 125 up t~1311 / down t~2369 + 85 down t~2898
+> (three La-7 segments), the 1 s g-8 pull binds the STRUCTURAL limit throughout (n_aero
+> [8.70, 9.00] > 8, measured), γ max +46.8° (inside the documented ±90°), closing bursts
+> unchanged (ammo 140→111 / 170→136, **63 live rounds sealed**). **NEW GOLDEN-SK-Altitude-001**
+> (the B5 golden): two Spitfire Mk Vs, IDENTICAL 4-phase schedules, **altitude the only
+> independent variable** (800 m σ~0.92 vs 6900 m σ~0.49; no guns ⇒ provably non-interacting) —
+> full-throttle acceleration diverges ~10.7 m/s by t=2000, the SAME g-6 pull is delivered
+> un-clamped low (n_aero [11.17, 11.67] > 6) but AERO-CLAMPED high (n_aero [4.90, 5.25] < 6),
+> and both zooms cross a σ-LUT node (800→1142 m crosses 1000; 6900→7158 crosses 7000 ⇒
+> interpolation AND segment switching sealed). **13 goldens**; guardian.yml gains Altitude-001
+> in all three lists.
+> **Fingerprint:** scenario_params/lockstep/predict/session vectors regenerated (**session
+> digest `d0e94e2e…` → `21aaab49…`**, checkpoints 1/50 byte-identical, FINAL_WEAPON facts
+> identical — the astern kill lands on the same ticks); **event digest BYTE-IDENTICAL**
+> (`--check` verified — the per-round journal's ticks/deltas did not move); all codec vectors
+> (snapshot/weapon/framing/geo001/interp/detmath/envelope) in sync untouched. trajectory.js
+> dogfight demo regenerated (same 3 kills / 18 events). `test_stall.py` +
+> `test_region_toughness.py` made σ-aware (helpers carry the kernel's σ; glider window 300→500
+> ticks). Rails 300→310 (`atmosphere_density` block + flight_model text).
+> **Gates: 15/15 receipt PASS (`receipt-ATM-Sphere_v1.21r0-a88d422.yml`), Sphere + all 12
+> scenario goldens C++ ≡ Python bit-for-bit on GCC AND Clang locally, ctest 18/18 GCC + 18/18
+> Clang, property tests 177 → 182 (+5 `test_isa.py`: nodes ≡ power law bit-for-bit, LUT tracks
+> the law < 2.5e-4, end-clamping, altitude degrades acceleration on all 8 airframes, aero
+> ceiling scales EXACTLY with σ through the kernel), determinism lint PASS, all 13 generated
+> headers in sync, build-client (raylib viewer) builds clean.**
+> Ledger: **ADR-Step8-FlightModel-B5-v1.21r0**, SEAL_CARD v1.21r0 (header + goldens table
+> rewritten — 12 new hashes + Sphere annotated unchanged + Altitude added; history row),
+> CLAUDE.md header/rails/roadmap current.
+> **GIT: code `a88d422` committed; receipt + this banner follow; push + guardian CI pending
+> (update this line with the run id when GREEN).**
+> **NEXT (free pick, none blocking):** per-airframe **supercharger critical altitude** (B5's
+> named follow-up — a thrust-lapse envelope scalar, data-driven, its own seal);
+> bounded/windowed catch-up for open-ended live streams (layer 13's named boundary); an A6M2
+> engine-toughness retune (data-only seal that moves EngineOut-001's story); or per-airframe
+> toughness / σ surfaced in the HUD (presentation-only).
+> **NOTE FOR THE NEXT AGENT:** the σ LUT is SEALED byte-spec — retuning it (nodes or spacing)
+> moves every scenario golden; regenerate via `tools/gen_isa_lut.py` and re-seal honestly.
+> `lut_eval` in kernel.cpp now takes a node count — envelope call sites pass 5; keep any new LUT
+> on the same helper (op order is the sealed byte spec). σ is evaluated ONCE per aircraft per
+> tick from the PRE-step alt — inserting a second evaluation (e.g. post-integration) would be a
+> model change, not a refactor. The projectile advance stays σ-free BY DESIGN (scaling
+> PROJ_DRAG_K by σ(alt) is a deliberate deferral — doing it moves every firing golden and is its
+> own kernel seal). test_stall/test_isa helpers carry σ explicitly — if you add altitude-varying
+> tests, use `rk.air_sigma(ac.alt)` at the aircraft's ACTUAL altitude, not a constant.
+>
+> ## ►► PRIOR STATE (2026-07-02): **NETCODE LAYER 13 — OPEN-ENDED LIVE FRAME SOURCE DONE ✅** (no-seal, rides **ATM-Sphere v1.20r0**)
 > **Latest: the broadcast server is finally LIVE — the sealed kernel is stepped INSIDE the
 > broadcast loop, one 20 Hz frame per pull, instead of precomputing the whole stream. The named
 > free pick ("an open-ended live frame SOURCE feeding `broadcast_async` incrementally") lands as
