@@ -1,0 +1,36 @@
+seal: ATM-Sphere v1.17r0
+realm: ATM-only
+geometry:
+  radius_m: 15000
+  flattening: 0
+tick_dt_s: 0.01
+gravity_mps2: 9.80665
+ceiling:
+  atm_top_m: 8000
+  soft_band_m: 100
+wire_hash: GEO-001+KIN-002
+change_summary: "v1.17r0: last_hit_by on the WEAPON-001 wire (snapshot protocol 5->6, lasthitby_scale=1) + layer-6 Event.attacker. Transport-only: all 10 goldens byte-identical; session+event digests regenerated."
+rail_change: true
+gates:
+  spec_monotone_check: PASS
+  det_math_oracle: PASS
+  tuning_probe: PASS
+  atm_top_probe: PASS
+  geo001_codec: PASS
+  snapshot_codec: PASS
+  weapon_codec: PASS
+  lockstep: PASS
+  interp: PASS
+  predict: PASS
+  session: PASS
+  event: PASS
+  validate_snapshot: PASS
+  validate_scenarios: PASS
+  property_tests: PASS
+golden_id: GOLDEN-SK-Sphere-001
+golden_sha256: "f2db95bd0fa2e3caccc4cb785f6725602a61663d1dfea3e0729838cac185f29c"
+commit_sha: "f9ee33e645fc31f7a142f35a7dcb05ffefe66091"
+toolchain_matrix: [python-ref, MSVC2022, Clang18, GCC13, x64, AArch64]
+date: "2026-07-01"
+overall: PASS
+signoff: "Forge"
