@@ -36,6 +36,10 @@
 > window=0 == the layer-13 model bit-for-bit).**
 > Ledger: **ADR-Step-Net-Layer14-BoundedCatchup-v1.21r0**; guardian.yml gains the layer-14
 > bridge step (native x64 legs, like layers 7–13).
+> **GIT: pushed to `origin/main` (code `e9ab865` + receipt `e57c2fd`); guardian CI run
+> [28624181506](https://github.com/cjcgervais/seads/actions/runs/28624181506) GREEN** — Python
+> gates + MSVC + GCC/Clang × x64/AArch64 reproduce all 13 goldens bit-for-bit AND the new
+> layer-14 bounded-catch-up bridge passes on every native-x64 leg.
 > **NEXT (free pick, none blocking):** per-airframe **supercharger critical altitude** (B5's
 > named data-driven follow-up — a thrust-lapse envelope scalar, its own seal); an A6M2
 > engine-toughness retune (data-only seal that moves EngineOut-001's story); per-airframe
