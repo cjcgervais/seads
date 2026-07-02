@@ -37,6 +37,10 @@
 > single-hit / determinism), ctest 17/17 GCC+Clang (the event test gains the MULTIHIT leg — no new
 > ctest target ⇒ guardian.yml UNCHANGED), all 14 generated headers --check in sync, 10 goldens
 > byte-identical.** Ledger: **ADR-Step7-Guns-HitQueue-v1.17r0**. **Seal stays v1.17r0.**
+> **GIT: pushed to `origin/main` (code `e21efda` + receipt `9e92c22`); guardian CI run
+> [28573440275](https://github.com/cjcgervais/seads/actions/runs/28573440275) GREEN** — Python gates
+> + MSVC + GCC/Clang × x64/AArch64 reproduce the 10 goldens bit-for-bit AND run the extended
+> `seads_event_test` (the EVENT-MULTIHIT-001 leg) on every ctest leg.
 > **NEXT (free pick, none blocking):** renderer polish (guns + kill-feed in the live `--fly` path —
 > per-round impact sparks / split damage numbers now have exact data); component/region damage (a
 > seal — the natural consumer of per-round events); **B5** ISA atmosphere (a seal); or an open-ended
