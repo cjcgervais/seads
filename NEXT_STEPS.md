@@ -45,6 +45,10 @@
 > list + the cross-toolchain aggregation list (first golden-list change since v1.13r0).
 > Ledger: **ADR-Step7-Guns-RegionDamage-v1.18r0**, SEAL_CARD v1.18r0 (goldens table rewritten — 11
 > entries, all new hashes), CLAUDE.md header/roadmap current.
+> **GIT: pushed to `origin/main` (code `5a89ef4` + receipt `3a9e76a`); guardian CI run
+> [28576545155](https://github.com/cjcgervais/seads/actions/runs/28576545155) GREEN** — Python gates
+> + MSVC + GCC/Clang × x64/AArch64 + the cross-toolchain hash aggregation gate all reproduce **all 11
+> v1.18r0 goldens bit-for-bit** (10 moved + the new EngineOut) on every leg.
 > **NEXT (free pick, none blocking):** put region pools + kills on the WEAPON-001 wire (a
 > transport-only reseal, the proven ammo→v1.14r0 / last_hit_by→v1.17r0 pattern ⇒ a remote client
 > draws damage state + a scoreboard; protocol 6→7, 4 new unit-or-milli-scale fields); renderer
