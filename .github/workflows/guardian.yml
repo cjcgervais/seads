@@ -68,7 +68,7 @@ jobs:
             --candidate /tmp/ref.bin
       - name: Reference scenario goldens match seal
         run: |
-          for ID in GOLDEN-SK-Turn-001 GOLDEN-SK-Climb-001 GOLDEN-SK-TurnClimb-001 GOLDEN-SK-Accel-001 GOLDEN-SK-Pitch-001 GOLDEN-SK-Stall-001 GOLDEN-SK-Gunfire-001 GOLDEN-SK-Hit-001 GOLDEN-SK-Winchester-001; do
+          for ID in GOLDEN-SK-Turn-001 GOLDEN-SK-Climb-001 GOLDEN-SK-TurnClimb-001 GOLDEN-SK-Accel-001 GOLDEN-SK-Pitch-001 GOLDEN-SK-Stall-001 GOLDEN-SK-Gunfire-001 GOLDEN-SK-Hit-001 GOLDEN-SK-Winchester-001 GOLDEN-SK-EngineOut-001; do
             python tools/ref_kernel.py --scenario "config/scenarios/$ID.json" --out "/tmp/$ID.bin"
             python tools/validate_snapshot.py \
               --golden "tests/golden/$ID/expected.world_hash" --candidate "/tmp/$ID.bin"
@@ -284,6 +284,7 @@ jobs:
           run_one GOLDEN-SK-Gunfire-001   "${{ steps.bin.outputs.scenario }}" --id GOLDEN-SK-Gunfire-001
           run_one GOLDEN-SK-Hit-001       "${{ steps.bin.outputs.scenario }}" --id GOLDEN-SK-Hit-001
           run_one GOLDEN-SK-Winchester-001 "${{ steps.bin.outputs.scenario }}" --id GOLDEN-SK-Winchester-001
+          run_one GOLDEN-SK-EngineOut-001 "${{ steps.bin.outputs.scenario }}" --id GOLDEN-SK-EngineOut-001
 
       - name: Upload hash artifacts
         uses: actions/upload-artifact@v4
@@ -305,7 +306,7 @@ jobs:
           # Per golden: every toolchain's hash must equal that golden's seal.
           # Strip ALL whitespace (incl. CR) — seal files / Windows-written hashes can carry CRLF.
           fail=0
-          for ID in GOLDEN-SK-Sphere-001 GOLDEN-SK-Turn-001 GOLDEN-SK-Climb-001 GOLDEN-SK-TurnClimb-001 GOLDEN-SK-Accel-001 GOLDEN-SK-Pitch-001 GOLDEN-SK-Stall-001 GOLDEN-SK-Gunfire-001 GOLDEN-SK-Hit-001 GOLDEN-SK-Winchester-001; do
+          for ID in GOLDEN-SK-Sphere-001 GOLDEN-SK-Turn-001 GOLDEN-SK-Climb-001 GOLDEN-SK-TurnClimb-001 GOLDEN-SK-Accel-001 GOLDEN-SK-Pitch-001 GOLDEN-SK-Stall-001 GOLDEN-SK-Gunfire-001 GOLDEN-SK-Hit-001 GOLDEN-SK-Winchester-001 GOLDEN-SK-EngineOut-001; do
             SEAL=$(tr -d '[:space:]' < "tests/golden/$ID/expected.world_hash")
             echo "=== $ID sealed: $SEAL ==="
             count=0

@@ -1,0 +1,27 @@
+{
+  "header": {
+    "id": "GOLDEN-SK-EngineOut-001",
+    "version": 280,
+    "seal": "ATM-Sphere v1.18r0",
+    "description": "Two-ship head-on engine-kill scenario pinning region damage + the region effects (Step 7 guns, seal v1.18r0). AC0 (P-47D) and AC1 (A6M2) meet head-on, co-altitude along the equator: AC0 flies due east (psi 90) from lon 0 at 200 m/s, AC1 due west (psi 270) from lon 1.5 (~393 m ahead) at 150 m/s. AC0 fires a 4-round burst at ticks 0/3/6/9 (rof_interval 3, fire window [0,12)); the rounds (muzzle ~1050 m/s east) and the target (150 m/s west) close at ~1200 m/s, so all 4 connect head-on at ticks 29/31/33/35. Head-on approach aspect (|wrap_pi(round psi - target psi)| = pi > 3pi/4) assigns every round to the ENGINE region: the A6M2's engine sub-pool (0.375 x 70 = 26.25) drains 26.25 -> 14.25 -> 2.25 -> 0 (clamped) on the 3rd round, while total hp only reaches 70 - 48 = 22 -- the aircraft is ALIVE with a dead engine. From tick 35 on the engine-out effect forces thrust to 0 at any throttle: the A6M2 (throttle 0.7) becomes a decelerating glider, bleeding ~19 m/s by tick 700 (150 -> ~131 m/s) while holding level 1-g flight; wing and tail pools stay full (35 / 17.5), so no other effect engages. AC0 flies on east untouched (hp 150, kills 0 -- the target survives, so the tally correctly stays 0; the KILL tally is pinned by GOLDEN-SK-Hit-001, whose P-47D ends kills=1). At tick 700 all 4 rounds are long since despawned-on-hit (0 in flight), AC0 ammo = 336. Exercises: approach-aspect region assignment (ENGINE cone), region sub-pool drain + clamp, the engine-out thrust cut on a LIVING aircraft, and damage double-booking (hp AND region). NEW golden for v1.18r0.",
+    "introduced": "first golden with a region kill on a surviving aircraft; the 10 prior goldens move at v1.18r0 only because engine_hp/wing_hp/tail_hp/kills (the 12th-15th per-aircraft f64s) are appended to every aircraft in the snapshot (strip them and each v1.17r0 hash reproduces byte-for-byte)."
+  },
+  "ticks": 700,
+  "aircraft": [
+    {
+      "envelope": "p47d",
+      "start": { "lat_deg": 0.0, "lon_deg": 0.0, "psi_deg": 90.0, "phi_deg": 0.0, "alt_m": 4000.0, "tas_mps": 200.0 },
+      "schedule": [
+        { "start_tick": 0,  "bank_deg": 0.0, "g_cmd": 1.0, "throttle": 0.85, "fire": true  },
+        { "start_tick": 12, "bank_deg": 0.0, "g_cmd": 1.0, "throttle": 0.85, "fire": false }
+      ]
+    },
+    {
+      "envelope": "a6m2",
+      "start": { "lat_deg": 0.0, "lon_deg": 1.5, "psi_deg": 270.0, "phi_deg": 0.0, "alt_m": 4000.0, "tas_mps": 150.0 },
+      "schedule": [
+        { "start_tick": 0, "bank_deg": 0.0, "g_cmd": 1.0, "throttle": 0.7, "fire": false }
+      ]
+    }
+  ]
+}

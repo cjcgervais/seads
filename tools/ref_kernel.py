@@ -14,10 +14,13 @@ Canonical snapshot format (little-endian), so C++ and Python produce identical b
   offset 16 : f64  R_m
   offset 24 : u32  n_aircraft
   offset 28 : u32  pad (0)
-  offset 32 : per aircraft, 10 x f64 = [lat, lon, psi, phi, alt, tas, gamma, hp, fire_cd, ammo]
+  offset 32 : per aircraft, 15 x f64 = [lat, lon, psi, phi, alt, tas, gamma, hp, fire_cd, ammo,
+              last_hit_by, engine_hp, wing_hp, tail_hp, kills]
               (radians / meters / m s^-1 / radians / hitpoints / cooldown ticks / rounds)  -- gamma
               added in B2 (v1.6r0); hp added in G2 (v1.10r0, hp<=0 == dead); fire_cd added in G3
-              (v1.11r0); ammo added in G4 (v1.13r0, firing gated on ammo>0, one round consumed/shot)
+              (v1.11r0); ammo added in G4 (v1.13r0, firing gated on ammo>0, one round consumed/shot);
+              last_hit_by added in v1.16r0 (attacker attribution, -1 == never hit); engine_hp/
+              wing_hp/tail_hp (region sub-pools) + kills (victory tally) added in v1.18r0
   then      : u32 n_projectiles, u32 pad            -- G1 (Step 7 guns, v1.9r0)
   then      : per projectile, 7 x f64 [lat, lon, psi, alt, tas, gamma, damage] + u32 ttl + u32 owner
               (damage added in G3 v1.11r0; the projectile block is ALWAYS present, n=0 for gun-less
@@ -101,6 +104,28 @@ START_AMMO = float.fromhex('0x1.f400000000000p+8')   # 500.0 default magazine (n
 # stored as an f64 in the snapshot -> NO new det_math. Exact hex-float shared bit-for-bit with
 # kernel.cpp. See ADR-Step7-Guns-Attribution-v1.16r0.
 NO_ATTACKER = float.fromhex('-0x1.0000000000000p+0')  # -1.0 sentinel: "never hit"
+# --- Region damage + kill tally (Step 7 guns, ATM-Sphere v1.18r0) ------------------------
+# Each airframe carries three functional REGION sub-pools alongside the total hp: ENGINE, WING,
+# TAIL, sized as fixed global fractions of hp_start (independent thresholds, NOT a partition —
+# damage books into the total hp AND the struck region). A connecting round is assigned a region
+# purely from its APPROACH ASPECT: rel = wrap_pi(round.psi - target.psi); |rel| < pi/4 == fired
+# from astern -> TAIL, |rel| > 3pi/4 == head-on -> ENGINE, else beam -> WING (exact pi/4 lands in
+# WING). wrap_pi + compares + *,- only => NO new det_math. A dead region degrades a LIVING plane:
+# engine out -> thrust forced 0 (a glider); wing out -> n_aero halved (half the lifting surface);
+# tail out -> control authority lost (commanded bank -> 0, g -> 1: a straight 1-g mush). All
+# fractions/cones are exact hex-floats shared bit-for-bit with kernel.cpp. `kills` is the
+# per-aircraft victory tally: +1 on the ATTACKER exactly when its round crosses the target
+# hp > 0 -> <= 0 (the HitEvent.killed round; persists through the attacker's own death). All four
+# are integer-or-exact-valued f64 state (like fire_cd/ammo/last_hit_by), appended as the 12th-15th
+# per-aircraft snapshot f64s. See ADR-Step7-Guns-RegionDamage-v1.18r0.
+REGION_ENGINE = 0
+REGION_WING = 1
+REGION_TAIL = 2
+ENGINE_FRAC = float.fromhex('0x1.8000000000000p-2')     # 0.375: engine pool = 0.375 * hp_start
+WING_FRAC = float.fromhex('0x1.0000000000000p-1')       # 0.5:   wing pool   = 0.5   * hp_start
+TAIL_FRAC = float.fromhex('0x1.0000000000000p-2')       # 0.25:  tail pool   = 0.25  * hp_start
+QUARTER_PI = float.fromhex('0x1.921fb54442d18p-1')      # pi/4: astern cone half-angle (TAIL)
+THREE_QUARTER_PI = float.fromhex('0x1.2d97c7f3321d2p+1')  # 3pi/4: head-on cone edge (ENGINE)
 HIT_RADIUS_M = float.fromhex('0x1.e000000000000p+5')  # 60.0 m horizontal hit radius (validation/doc)
 HIT_ALT_GATE_M = float.fromhex('0x1.e000000000000p+5')  # 60.0 m vertical hit gate
 COS_HIT_ANGLE = float.fromhex('0x1.fffef3909d697p-1')  # cos(HIT_RADIUS_M/R) via det_cos; the binding test
@@ -157,8 +182,13 @@ class Aircraft:
     # one, or -1 == never hit) is a stored state — the kernel-side event hook for "who fired the
     # killing round". Set on hit (see _advance_projectiles); persists through death (a corpse keeps its
     # killer). Pure integer-valued counter (like fire_cd), NO new det_math. Defaults to NO_ATTACKER.
+    # Region damage + kills (v1.18r0): engine_hp/wing_hp/tail_hp are the functional region sub-pools
+    # (derived from the hp passed in via the exact global fractions — a caller that overrides hp
+    # after construction must re-derive them, mirroring Kernel::add); kills is the victory tally
+    # (+1 on the attacker per HitEvent.killed round). All four are canonical hashed state, the
+    # 12th-15th per-aircraft snapshot f64s.
     __slots__ = ("lat", "lon", "psi", "phi", "alt", "tas", "gamma", "hp", "fire_cd", "ammo",
-                 "last_hit_by")
+                 "last_hit_by", "engine_hp", "wing_hp", "tail_hp", "kills")
 
     def __init__(self, lat, lon, psi, phi, alt, tas, gamma=0.0, hp=START_HP, fire_cd=0.0,
                  ammo=START_AMMO, last_hit_by=NO_ATTACKER):
@@ -168,6 +198,10 @@ class Aircraft:
         self.fire_cd = fire_cd
         self.ammo = ammo
         self.last_hit_by = last_hit_by
+        self.engine_hp = ENGINE_FRAC * hp     # v1.18r0: region sub-pools sized from starting hp
+        self.wing_hp = WING_FRAC * hp
+        self.tail_hp = TAIL_FRAC * hp
+        self.kills = 0.0                      # v1.18r0: victory tally (integer-valued f64)
 
 
 class Projectile:
@@ -191,12 +225,14 @@ class HitEvent:
     # journal: two rounds striking one target on one tick are two distinct events (the hp-delta view
     # downstream layers used to infer lumps them). All fields are exact integer-valued or existing
     # det_math products — NO new det_math. hp_before/hp_after are post-clamp reality (an overkill
-    # round's effective loss is hp_before - hp_after, not its carried damage).
-    __slots__ = ("target", "attacker", "damage", "hp_before", "hp_after", "killed")
+    # round's effective loss is hp_before - hp_after, not its carried damage). region (v1.18r0) is
+    # the airframe region the round struck (REGION_ENGINE/WING/TAIL, from the approach aspect).
+    __slots__ = ("target", "attacker", "damage", "hp_before", "hp_after", "killed", "region")
 
-    def __init__(self, target, attacker, damage, hp_before, hp_after, killed):
+    def __init__(self, target, attacker, damage, hp_before, hp_after, killed, region):
         self.target, self.attacker, self.damage = target, attacker, damage
         self.hp_before, self.hp_after, self.killed = hp_before, hp_after, killed
+        self.region = region
 
 
 class Kernel:
@@ -276,13 +312,42 @@ class Kernel:
                 if ac.hp < 0.0:
                     ac.hp = 0.0
                 ac.last_hit_by = float(p.owner)       # v1.16r0: attribute the hit to the firing aircraft
+                # Region damage (v1.18r0): assign the round to an airframe region from its APPROACH
+                # ASPECT — the angle between the round's flight direction and the target's heading.
+                # Astern (< pi/4) -> TAIL, head-on (> 3pi/4) -> ENGINE, beam (incl. exactly pi/4)
+                # -> WING. The struck region's sub-pool drains (clamped at 0, like hp; damage still
+                # books into the total hp above). wrap_pi + compares only — NO new det_math.
+                rel = dm.wrap_pi(p.psi - ac.psi)
+                if rel < 0.0:
+                    rel = -rel
+                if rel < QUARTER_PI:
+                    region = REGION_TAIL
+                    ac.tail_hp = ac.tail_hp - p.damage
+                    if ac.tail_hp < 0.0:
+                        ac.tail_hp = 0.0
+                elif rel > THREE_QUARTER_PI:
+                    region = REGION_ENGINE
+                    ac.engine_hp = ac.engine_hp - p.damage
+                    if ac.engine_hp < 0.0:
+                        ac.engine_hp = 0.0
+                else:
+                    region = REGION_WING
+                    ac.wing_hp = ac.wing_hp - p.damage
+                    if ac.wing_hp < 0.0:
+                        ac.wing_hp = 0.0
                 # Per-round hit queue: one event PER CONNECTING ROUND (projectile array order).
                 # Observable output only — never hashed (see HitEvent). killed marks the exact
                 # round that crossed hp>0 -> <=0 (before>0 always holds: dead aircraft can't be hit).
+                killed = 1 if (before > 0.0 and ac.hp <= 0.0) else 0
+                if killed:
+                    # v1.18r0 kill tally: credit the ATTACKER on exactly the crossing round (a
+                    # posthumous kill still counts — the tally, like last_hit_by, survives death).
+                    owner_ac = self.aircraft[p.owner]
+                    owner_ac.kills = owner_ac.kills + 1.0
                 self.hit_events.append(HitEvent(
                     target=hit_ac, attacker=p.owner, damage=p.damage,
                     hp_before=before, hp_after=ac.hp,
-                    killed=1 if (before > 0.0 and ac.hp <= 0.0) else 0))
+                    killed=killed, region=region))
             if p.ttl > 0 and not hit_ground and hit_ac < 0:
                 survivors.append(p)
         self.projectiles = survivors
@@ -356,10 +421,18 @@ class Kernel:
                 continue
             V = ac.tas
             e = envelopes[i]
+            # --- region-damage effects (v1.18r0): a dead TAIL region strips control authority —
+            # the commanded bank/load-factor are overridden to a straight 1-g mush (0.0, 1.0).
+            # Throttle is untouched (that is the ENGINE region's failure, below). ---
+            cmd_phi = commands[i][0]
+            cmd_g = commands[i][1]
+            if ac.tail_hp <= 0.0:
+                cmd_phi = 0.0
+                cmd_g = 1.0
             # --- bank dynamics (unchanged from B1): slew toward clamped target at roll_rate(V) ---
             phimax = dm.lut_eval(e["phi_max"][0], e["phi_max"][1], V)
             rollrate = dm.lut_eval(e["roll_rate"][0], e["roll_rate"][1], V)
-            cmdphi = clamp(commands[i][0], -phimax, phimax)
+            cmdphi = clamp(cmd_phi, -phimax, phimax)
             step_max = rollrate * dt
             delta = cmdphi - ac.phi
             delta = clamp(delta, -step_max, step_max)
@@ -372,6 +445,8 @@ class Kernel:
             # n_aero = most |n| the wing can lift at this q; below the corner speed it is the
             # binding limit and the turn collapses (accelerated stall). Retires the B2 [-3,9].
             n_aero = e["cl_max"] * qS / (e["mass_kg"] * g0)
+            if ac.wing_hp <= 0.0:
+                n_aero = 0.5 * n_aero      # v1.18r0: wing out — half the lifting surface remains
             n_hi = e["n_max_struct"]
             if n_aero < n_hi:
                 n_hi = n_aero
@@ -379,7 +454,7 @@ class Kernel:
             neg_aero = -n_aero
             if neg_aero > n_lo:
                 n_lo = neg_aero
-            n = clamp(commands[i][1], n_lo, n_hi)
+            n = clamp(cmd_g, n_lo, n_hi)
             # --- trig of NEW phi and OLD gamma (single eval, fixed order) ---
             cphi = dm.det_cos(ac.phi)
             sphi = dm.det_sin(ac.phi)
@@ -395,6 +470,8 @@ class Kernel:
             T = thr * e["thrust_static_n"] * (1.0 - V / e["v_max_mps"])
             if T < 0.0:
                 T = 0.0
+            if ac.engine_hp <= 0.0:
+                T = 0.0                    # v1.18r0: engine out — no thrust at any throttle
             # --- speed: gravity now acts along the flight path (uses OLD gamma) ---
             Vdot = (T - D) / e["mass_kg"] - g0 * sg
             Vnew = V + Vdot * dt
@@ -444,12 +521,14 @@ class Kernel:
         for ac in self.aircraft:
             # G2 (v1.10r0): hp is the 8th per-aircraft f64 (after gamma). G3 (v1.11r0): fire_cd (the
             # fire-rate cooldown) is the 9th. G4 (v1.13r0): ammo (the magazine) is the 10th. v1.16r0:
-            # last_hit_by (attacker attribution) is the 11th. Appending each grows every snapshot ->
-            # all prior goldens move (trajectory/hp/fire_cd/ammo/last_hit_by identical for the
-            # unchanged scenarios; last_hit_by stays NO_ATTACKER where nothing is ever hit), as gamma
-            # did in B2. See ADR-Step7-Guns-Attribution-v1.16r0.
-            buf += struct.pack("<11d", ac.lat, ac.lon, ac.psi, ac.phi, ac.alt, ac.tas, ac.gamma,
-                               ac.hp, ac.fire_cd, ac.ammo, ac.last_hit_by)
+            # last_hit_by (attacker attribution) is the 11th. v1.18r0: engine_hp/wing_hp/tail_hp
+            # (region sub-pools) + kills (victory tally) are the 12th-15th. Appending each grows
+            # every snapshot -> all prior goldens move (trajectory/hp/... identical for the
+            # unchanged scenarios; region pools stay full and kills stays 0 where nothing is ever
+            # hit), as gamma did in B2. See ADR-Step7-Guns-RegionDamage-v1.18r0.
+            buf += struct.pack("<15d", ac.lat, ac.lon, ac.psi, ac.phi, ac.alt, ac.tas, ac.gamma,
+                               ac.hp, ac.fire_cd, ac.ammo, ac.last_hit_by,
+                               ac.engine_hp, ac.wing_hp, ac.tail_hp, ac.kills)
         # G1 (v1.9r0): projectile block appended after the aircraft block. n_projectiles (u32) + pad,
         # then per round 7 x f64 [lat, lon, psi, alt, tas, gamma, damage] + ttl (u32) + owner (u32);
         # damage was added in G3 (v1.11r0). The block is always present (n=0 for gun-less scenarios),
@@ -494,6 +573,9 @@ def build_scenario(rails, scenario):
             alt=float(s["alt_m"]), tas=float(s["tas_mps"]),
         )
         a.hp = env["hp_start"]                 # G3 (v1.11r0): per-airframe starting hitpoints
+        a.engine_hp = ENGINE_FRAC * a.hp       # v1.18r0: re-derive the region sub-pools from the
+        a.wing_hp = WING_FRAC * a.hp           # per-airframe hp (the ctor sized them from the
+        a.tail_hp = TAIL_FRAC * a.hp           # default); mirrors Kernel::add in kernel.cpp
         a.ammo = env["ammo_start"]             # G4 (v1.13r0): per-airframe magazine size
         k.aircraft.append(a)
         schedules.append(ac["schedule"])

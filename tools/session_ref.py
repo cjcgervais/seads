@@ -147,6 +147,9 @@ def _build_server_kernel(scenario):
                         psi=rk.deg2rad(s["psi_deg"]), phi=rk.deg2rad(s["phi_deg"]),
                         alt=float(s["alt_m"]), tas=float(s["tas_mps"]))
         a.hp = env["hp_start"]          # G3: per-airframe starting hitpoints (matches build_scenario)
+        a.engine_hp = rk.ENGINE_FRAC * a.hp   # v1.18r0: re-derive region sub-pools from the
+        a.wing_hp = rk.WING_FRAC * a.hp       # per-airframe hp (matches build_scenario)
+        a.tail_hp = rk.TAIL_FRAC * a.hp
         a.ammo = env["ammo_start"]      # G4: per-airframe magazine (matches build_scenario)
         k.aircraft.append(a)
         scheds.append(ac["schedule"])

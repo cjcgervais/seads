@@ -1,8 +1,8 @@
 {
   "id": "GOLDEN-SK-Gunfire-001",
-  "seal": "ATM-Sphere v1.16r0",
+  "seal": "ATM-Sphere v1.18r0",
   "ticks": 300,
-  "world_hash": "0e648539fd53ea80bf21acc31505cb31dd6ccd8bd0997ca95bb645eccd611192",
+  "world_hash": "1c6f8417afc6ccbf5d53cd915fa1e00730bf75fc753c96ce88167700fdf11d9e",
   "snapshot_format": "see ref_kernel.py docstring",
   "generated_by": "tools/ref_kernel.py (Python det_math reference)"
 }

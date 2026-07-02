@@ -44,6 +44,23 @@ static constexpr double START_AMMO       = 0x1.f400000000000p+8;   // 500.0 defa
 // at hp<=0 it is the KILLER. A pure integer-valued state (like fire_cd/ammo) ⇒ NO new det_math. Shared
 // hex-float with tools/ref_kernel.py. See ADR-Step7-Guns-Attribution-v1.16r0.
 static constexpr double NO_ATTACKER      = -0x1.0000000000000p+0;  // -1.0 sentinel: never hit
+// Region damage + kill tally (Step 7 guns, ATM-Sphere v1.18r0). Each airframe carries ENGINE/WING/
+// TAIL sub-pools (fixed global fractions of starting hp — independent thresholds, NOT a partition;
+// damage books into the total hp AND the struck region). A connecting round's region comes purely
+// from its APPROACH ASPECT: rel = wrap_pi(round psi - target psi); |rel| < pi/4 == astern -> TAIL,
+// |rel| > 3pi/4 == head-on -> ENGINE, else beam -> WING. wrap_pi + compares + *,- only => NO new
+// det_math. A dead region degrades a LIVING plane: engine out -> thrust forced 0; wing out ->
+// n_aero halved; tail out -> commanded (bank, g) forced to (0, 1) — a straight 1-g mush. kills is
+// the per-aircraft victory tally (+1 on the attacker per killing round; survives death). Exact
+// hex-floats shared bit-for-bit with tools/ref_kernel.py. See ADR-Step7-Guns-RegionDamage-v1.18r0.
+static constexpr std::int64_t REGION_ENGINE = 0;
+static constexpr std::int64_t REGION_WING   = 1;
+static constexpr std::int64_t REGION_TAIL   = 2;
+static constexpr double ENGINE_FRAC      = 0x1.8000000000000p-2;    // 0.375 * hp_start
+static constexpr double WING_FRAC        = 0x1.0000000000000p-1;    // 0.5   * hp_start
+static constexpr double TAIL_FRAC        = 0x1.0000000000000p-2;    // 0.25  * hp_start
+static constexpr double QUARTER_PI       = 0x1.921fb54442d18p-1;    // pi/4: astern cone (TAIL)
+static constexpr double THREE_QUARTER_PI = 0x1.2d97c7f3321d2p+1;    // 3pi/4: head-on edge (ENGINE)
 static constexpr double HIT_ALT_GATE_M   = 0x1.e000000000000p+5;   // 60.0 m vertical hit gate
 static constexpr double COS_HIT_ANGLE    = 0x1.fffef3909d697p-1;   // cos(HIT_RADIUS/R); horizontal hit test
 
@@ -104,6 +121,10 @@ std::size_t Kernel::add(double lat, double lon, double psi, double phi, double a
     fire_cd_.push_back(0.0);                     // G3 (v1.11r0): fire-rate cooldown starts ready
     ammo_.push_back(ammo);                       // G4 (v1.13r0): magazine (per-airframe ammo_start)
     last_hit_by_.push_back(NO_ATTACKER);         // v1.16r0: never hit yet
+    engine_hp_.push_back(ENGINE_FRAC * hp);      // v1.18r0: region sub-pools sized from starting hp
+    wing_hp_.push_back(WING_FRAC * hp);          // (mirrors ref_kernel.Aircraft.__init__ /
+    tail_hp_.push_back(TAIL_FRAC * hp);          //  build_scenario's re-derivation)
+    kills_.push_back(0.0);                       // v1.18r0: victory tally (integer-valued f64)
     return lat_.size() - 1;
 }
 
@@ -173,20 +194,47 @@ void Kernel::advance_projectiles_() {
         p_tas_[i] = Vnew; p_gamma_[i] = ngamma; p_ttl_[i] = nttl;
         std::ptrdiff_t hit_ac = projectile_hit_(i);     // G2: first alive enemy struck, else -1
         if (hit_ac >= 0) {
-            double before = hp_[static_cast<std::size_t>(hit_ac)];
+            const std::size_t t = static_cast<std::size_t>(hit_ac);
+            double before = hp_[t];
             double nhp = before - p_damage_[i];         // G3: carried damage
             if (nhp < 0.0) nhp = 0.0;
-            hp_[static_cast<std::size_t>(hit_ac)] = nhp;
-            last_hit_by_[static_cast<std::size_t>(hit_ac)] =
+            hp_[t] = nhp;
+            last_hit_by_[t] =
                 static_cast<double>(p_owner_[i]);   // v1.16r0: attribute the hit to the firing aircraft
+            // Region damage (v1.18r0): assign the round to an airframe region from its APPROACH
+            // ASPECT — astern (< pi/4) -> TAIL, head-on (> 3pi/4) -> ENGINE, beam (incl. exactly
+            // pi/4) -> WING; drain the struck region's sub-pool (clamped at 0, like hp). Mirrors
+            // ref_kernel._advance_projectiles op-for-op.
+            double rel = wrap_pi(p_psi_[i] - psi_[t]);
+            if (rel < 0.0) rel = -rel;
+            std::int64_t region;
+            if (rel < QUARTER_PI) {
+                region = REGION_TAIL;
+                tail_hp_[t] = tail_hp_[t] - p_damage_[i];
+                if (tail_hp_[t] < 0.0) tail_hp_[t] = 0.0;
+            } else if (rel > THREE_QUARTER_PI) {
+                region = REGION_ENGINE;
+                engine_hp_[t] = engine_hp_[t] - p_damage_[i];
+                if (engine_hp_[t] < 0.0) engine_hp_[t] = 0.0;
+            } else {
+                region = REGION_WING;
+                wing_hp_[t] = wing_hp_[t] - p_damage_[i];
+                if (wing_hp_[t] < 0.0) wing_hp_[t] = 0.0;
+            }
             // Per-round hit queue: one event PER CONNECTING ROUND (projectile array order).
             // Observable output only — never hashed (see HitEvent in kernel.h). Mirrors
             // ref_kernel._advance_projectiles.
+            const std::int64_t killed =
+                (before > 0.0 && nhp <= 0.0) ? std::int64_t{1} : std::int64_t{0};
+            if (killed) {
+                // v1.18r0 kill tally: credit the ATTACKER on exactly the crossing round (a
+                // posthumous kill still counts — the tally, like last_hit_by, survives death).
+                kills_[p_owner_[i]] = kills_[p_owner_[i]] + 1.0;
+            }
             hit_events_.push_back(HitEvent{
                 static_cast<std::int64_t>(hit_ac),
                 static_cast<std::int64_t>(p_owner_[i]),
-                p_damage_[i], before, nhp,
-                (before > 0.0 && nhp <= 0.0) ? std::int64_t{1} : std::int64_t{0}});
+                p_damage_[i], before, nhp, killed, region});
         }
         if (nttl > 0u && !hit_ground && hit_ac < 0) {   // survivor: write compacted into slot w
             p_lat_[w] = p_lat_[i]; p_lon_[w] = p_lon_[i]; p_psi_[w] = p_psi_[i];
@@ -234,10 +282,19 @@ void Kernel::step(const std::vector<Command>& cmd, const std::vector<const Envel
         if (hp_[i] <= 0.0) continue;            // G2 (v1.10r0): a DEAD aircraft freezes (no integration)
         double V = tas_[i];
         const Envelope& e = *env[i];
+        // --- region-damage effects (v1.18r0): a dead TAIL region strips control authority —
+        // the commanded bank/load-factor are overridden to a straight 1-g mush (0.0, 1.0).
+        // Throttle is untouched (that is the ENGINE region's failure, below). ---
+        double cmd_phi = cmd[i].target_phi;
+        double cmd_g = cmd[i].target_g;
+        if (tail_hp_[i] <= 0.0) {
+            cmd_phi = 0.0;
+            cmd_g = 1.0;
+        }
         // --- bank dynamics (unchanged from B1): slew toward commanded bank at roll_rate(V) ---
         double phimax = lut_eval(e.phi_max.x, e.phi_max.y, V);
         double rollrate = lut_eval(e.roll_rate.x, e.roll_rate.y, V);
-        double cmdphi = clampd(cmd[i].target_phi, -phimax, phimax);
+        double cmdphi = clampd(cmd_phi, -phimax, phimax);
         double step_max = rollrate * dt;
         double delta = cmdphi - phi_[i];
         delta = clampd(delta, -step_max, step_max);
@@ -250,12 +307,13 @@ void Kernel::step(const std::vector<Command>& cmd, const std::vector<const Envel
         // n_aero = most |n| the wing can lift at this q; below the corner speed it is the binding
         // limit and the turn collapses (accelerated stall). Retires the B2 [-3,9] placeholder.
         double n_aero = e.cl_max * qS / (e.mass_kg * g0);
+        if (wing_hp_[i] <= 0.0) n_aero = 0.5 * n_aero;  // v1.18r0: wing out — half the surface remains
         double n_hi = e.n_max_struct;
         if (n_aero < n_hi) n_hi = n_aero;
         double n_lo = e.n_min_struct;
         double neg_aero = -n_aero;
         if (neg_aero > n_lo) n_lo = neg_aero;
-        double n = clampd(cmd[i].target_g, n_lo, n_hi);
+        double n = clampd(cmd_g, n_lo, n_hi);
         // --- trig of NEW phi and OLD gamma (single eval, fixed order) ---
         double cphi = det_cos(phi_[i]);
         double sphi = det_sin(phi_[i]);
@@ -270,6 +328,7 @@ void Kernel::step(const std::vector<Command>& cmd, const std::vector<const Envel
         double thr = clampd(cmd[i].throttle, 0.0, 1.0);
         double T = thr * e.thrust_static_n * (1.0 - V / e.v_max_mps);
         if (T < 0.0) T = 0.0;
+        if (engine_hp_[i] <= 0.0) T = 0.0;              // v1.18r0: engine out — no thrust at any throttle
         // --- speed: gravity now acts along the flight path (uses OLD gamma) ---
         double Vdot = (T - D) / e.mass_kg - g0 * sg;
         double Vnew = V + Vdot * dt;
@@ -328,7 +387,7 @@ static void put_f64(std::vector<std::uint8_t>& b, double d) {
 
 std::vector<std::uint8_t> Kernel::snapshot(std::uint32_t tick_count) const {
     std::vector<std::uint8_t> b;
-    b.reserve(32 + 88 * lat_.size() + 8 + 64 * p_lat_.size());   // hdr + 11f64/ac + projblock(7f64+2u32)
+    b.reserve(32 + 120 * lat_.size() + 8 + 64 * p_lat_.size());  // hdr + 15f64/ac + projblock(7f64+2u32)
     put_u16(b, 1);                 // mode = ATM
     put_u16(b, 0);                 // pad
     put_u32(b, tick_count);        // tick_count
@@ -343,6 +402,10 @@ std::vector<std::uint8_t> Kernel::snapshot(std::uint32_t tick_count) const {
         put_f64(b, fire_cd_[i]);                     // G3 (v1.11r0): 9th per-aircraft f64 (fire cooldown)
         put_f64(b, ammo_[i]);                        // G4 (v1.13r0): 10th per-aircraft f64 (magazine)
         put_f64(b, last_hit_by_[i]);                 // v1.16r0: 11th per-aircraft f64 (attacker attribution)
+        put_f64(b, engine_hp_[i]);                   // v1.18r0: 12th-14th per-aircraft f64s (region
+        put_f64(b, wing_hp_[i]);                     //   sub-pools: engine / wing / tail)
+        put_f64(b, tail_hp_[i]);
+        put_f64(b, kills_[i]);                       // v1.18r0: 15th per-aircraft f64 (victory tally)
     }
     // G1 (v1.9r0): projectile block — u32 n_projectiles, u32 pad, then per round 7 x f64
     // [lat, lon, psi, alt, tas, gamma, damage] + u32 ttl + u32 owner (damage added in G3 v1.11r0).

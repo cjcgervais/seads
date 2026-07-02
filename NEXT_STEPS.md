@@ -1,6 +1,64 @@
 # SEADS 2026 — Next Steps (handoff)
 
-> ## ►► CURRENT STATE (2026-07-02): **PER-ROUND HIT GRANULARITY — THE KERNEL HIT EVENT QUEUE DONE ✅** (no-seal, rides **ATM-Sphere v1.17r0**)
+> ## ►► CURRENT STATE (2026-07-02): seal **ATM-Sphere v1.18r0** — **REGION DAMAGE + KILL TALLY DONE ✅**
+> **Latest (SEAL v1.18r0): airframes now break by REGION, and the kernel keeps score.** The roadmap's
+> long-deferred "component/region damage" seal lands, plus the victory tally attribution made possible.
+> **(a) Region sub-pools** (`tools/ref_kernel.py` ↔ `src/kernel/kernel.{h,cpp}`, mirrored bit-for-bit):
+> each airframe carries **ENGINE (0.375×hp_start), WING (0.5×), TAIL (0.25×)** sub-pools beside the
+> total hp — global exact-binary fractions (every roster hp_start is an integer ⇒ every pool exact in
+> f64), independent thresholds, NOT a partition (a connecting round's damage books into the total hp,
+> unchanged op order, AND the struck region, clamped at 0; pass-through once dead). The region is pure
+> **approach aspect**: `rel = wrap_pi(round.psi − target.psi)` — |rel| < π/4 == fired from astern →
+> TAIL, |rel| > 3π/4 == head-on → ENGINE, else beam → WING (exactly π/4 lands in WING). **wrap_pi +
+> compares only ⇒ ZERO new det_math** (the guns arc's streak holds through its SEVENTH seal).
+> **(b) Region effects — a dead region degrades a LIVING plane** (hp≤0 death unchanged, dominates):
+> **engine out → thrust forced 0** at any throttle (a decelerating glider); **wing out → n_aero
+> HALVED** (half the lifting surface — binds below the corner speed exactly like the B3 accelerated
+> stall); **tail out → control authority lost** (commanded bank/g overridden to **(0.0, 1.0)** — a
+> straight 1-g mush; throttle untouched). The tail-out override was CHOSEN so a target already flying
+> straight-and-level at 1 g is bit-identical through it — every sealed victim (Hit-001's and
+> SESSION-SK-001's astern-shot A6M2s) is exactly that, which makes the reseal provably additive.
+> **(c) Kill tally:** per-aircraft **`kills`** — +1 on the ATTACKER exactly on the round that crossed
+> the target hp>0→≤0 (the HitEvent `killed` round ⇒ shared kills credit exactly the crossing round's
+> owner, exact via the per-round queue); persists through the attacker's own death (posthumous kills
+> count). GOLDEN-SK-Hit-001's p47d now reads **kills = 1** on a byte-identical trajectory.
+> **State/snapshot:** engine_hp/wing_hp/tail_hp/kills = the **12th–15th per-aircraft snapshot f64s**
+> ⇒ **ALL 10 PRIOR GOLDENS MOVE — PROVEN ADDITIVE** (pre-reseal dry strip-diff: removing the 4 new
+> f64s from each v1.18r0 snapshot reproduces its v1.17r0 hash byte-for-byte, 10/10 PASS — Sphere now
+> `6914a994…2b13eb20`). `HitEvent` gains **`region`** (0/1/2; observable output, still never hashed).
+> **NEW GOLDEN-SK-EngineOut-001** (700 ticks): P-47D and A6M2 meet HEAD-ON; a 4-round burst connects
+> at ticks 29/31/33/35, every round → ENGINE (|rel| = π), the engine pool drains 26.25→14.25→2.25→0
+> (clamped, 3rd round) while total hp only reaches 22 ⇒ a LIVING aircraft with a dead engine that
+> decelerates thrustless 150→~131 m/s in level 1-g flight — `e9617633…fc3ba078`, C++ ≡ Python
+> bit-for-bit GCC+Clang. **OFF-WIRE this seal** (deferred exactly as ammo at G4 / last_hit_by at
+> v1.16r0): only `lockstep_vectors.h` + `predict_vectors.h` regenerated (they hash `snapshot()`);
+> snapshot/weapon/session/event/interp/geo001/framing vectors ALL byte-identical — the sealed session
+> digest `24f71845…c332` and event digest `06629a69…` DID NOT MOVE. `scenario_params.h` regenerated
+> (new scenario). Rails 270→280 (`weapons.region_damage` doctrine block).
+> **Gates: 15/15 receipt PASS (`receipt-ATM-Sphere_v1.18r0-<code sha>.yml`), property tests 153 → 164
+> (+11 `tests/property/test_region_damage.py`: pool derivation / aspect-selects-region / double-booking
+> + clamp / engine-out kills thrust / wing-out halves the ceiling / tail-out strips authority / the
+> tail-out-noop STRIP property / kill-tally exactly-once / shared-kill credits the crossing shooter /
+> snapshot fields 12–15 / determinism; `test_hit_queue.py` size gate → 15-f64 record), ctest 17/17
+> GCC+Clang, all 11 goldens C++≡Python bit-for-bit both toolchains, generated headers in sync.**
+> guardian.yml: GOLDEN-SK-EngineOut-001 joins the python-gates loop + the build-matrix `run_one`
+> list + the cross-toolchain aggregation list (first golden-list change since v1.13r0).
+> Ledger: **ADR-Step7-Guns-RegionDamage-v1.18r0**, SEAL_CARD v1.18r0 (goldens table rewritten — 11
+> entries, all new hashes), CLAUDE.md header/roadmap current.
+> **NEXT (free pick, none blocking):** put region pools + kills on the WEAPON-001 wire (a
+> transport-only reseal, the proven ammo→v1.14r0 / last_hit_by→v1.17r0 pattern ⇒ a remote client
+> draws damage state + a scoreboard; protocol 6→7, 4 new unit-or-milli-scale fields); renderer
+> polish (guns + kill-feed + damage in the live `--fly` path); **B5** ISA atmosphere (a seal); or an
+> open-ended live frame SOURCE feeding `broadcast_async` incrementally.
+> **NOTE FOR THE NEXT AGENT:** the region fractions/cones are GLOBAL kernel hex-constants (like
+> HIT_RADIUS) — per-airframe region toughness would be a data-only envelope follow-up. The v1.16r0
+> GOTCHA held again: a new per-aircraft canonical f64 moves ONLY lockstep+predict vectors. Python
+> callers that override `a.hp` after constructing an Aircraft MUST re-derive the three pools (see
+> build_scenario / session_ref._build_server_kernel; C++ `add()` derives them from its hp arg).
+> The tail-out (0,1g) override, wing-out 0.5 factor, and aspect cone edges are SEALED byte-spec now —
+> changing any of them moves goldens ⇒ new seal.
+>
+> ## ►► PRIOR STATE (2026-07-02): **PER-ROUND HIT GRANULARITY — THE KERNEL HIT EVENT QUEUE DONE ✅** (no-seal, rides **ATM-Sphere v1.17r0**)
 > **Latest: combat events are now exact to the ROUND — the kernel records every connecting round as its own attributed event, and the reliable event channel ships it.**
 > The gap every handoff since G2 deferred closes: the layer-6 event channel DERIVED hit/kill events
 > by observing per-tick hp deltas, which LUMPS two rounds landing on one tick into one event and

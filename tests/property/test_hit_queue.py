@@ -129,18 +129,19 @@ def test_killed_marks_the_crossing_round_and_overkill_is_clamped():
 
 
 def test_queue_is_not_hashed_state():
-    # The canonical snapshot's size is exactly header + 11 f64/aircraft + projectile block — the
-    # queue contributes NOTHING (so the world_hash, and every golden, cannot see it).
+    # The canonical snapshot's size is exactly header + 15 f64/aircraft (v1.18r0) + projectile
+    # block — the queue contributes NOTHING (so the world_hash, and every golden, cannot see it).
     k, env = _two_ship()
     _inject_round(k, k.aircraft[1], damage=10.0)
     k.step_scenario(_quiet_cmds(2), env)
     assert len(k.hit_events) == 1
     snap = k.snapshot(1)
     n_ac, n_pr = len(k.aircraft), len(k.projectiles)
-    assert len(snap) == 32 + 88 * n_ac + 8 + 64 * n_pr
-    # and the aircraft block still ends at last_hit_by (11 doubles), nothing appended
-    fields = struct.unpack_from("<11d", snap, 32 + 88)
+    assert len(snap) == 32 + 120 * n_ac + 8 + 64 * n_pr
+    # and the aircraft block ends at kills (15 doubles), nothing appended for the queue
+    fields = struct.unpack_from("<15d", snap, 32 + 120)
     assert fields[10] == k.aircraft[1].last_hit_by
+    assert fields[14] == k.aircraft[1].kills
 
 
 def test_per_round_reduces_to_hp_delta_when_single_hit():
