@@ -34,7 +34,10 @@
 > incl. signed `hp_after` + distinct same-tick attackers, v1 back-compat, truncation reject),
 > property tests 166 (unchanged — no reference/wire change), selfcheck over the fresh `--dogfight`
 > recording prints all 14 events with exact ticks/regions/kills, 8 s GUI smoke of BOTH modes clean.**
-> **GIT: code `f68c09d` + receipt committed on `main`.**
+> **GIT: pushed to `origin/main` (code `f68c09d` + receipt `463177e`); guardian CI run
+> [28606846227](https://github.com/cjcgervais/seads/actions/runs/28606846227) GREEN** — Python gates
+> + MSVC + GCC/Clang × x64/AArch64 + the cross-toolchain hash aggregation gate all reproduce all 11
+> goldens bit-for-bit (a presentation-only change moves no golden; the client is off the gate).
 > **NEXT (free pick, none blocking):** **B5** ISA atmosphere (a seal); an open-ended live frame
 > SOURCE feeding `broadcast_async` incrementally; per-airframe region toughness (data-only envelope
 > scalars + a kernel consumer — its own ADR, would move goldens); or aircraft meshes (the remaining
