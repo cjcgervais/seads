@@ -54,6 +54,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -199,6 +200,107 @@ private:
     std::vector<Item> items_;
 };
 
+// ---- Journal-driven combat feed (layer-6 event journal, per-round @ 100 Hz) --------------------
+// When a recording carries the event journal (`Playback::events()`, v2), the feed is driven by the
+// EXACT per-round hit/kill records — one per connecting round, at its precise 100 Hz tick — instead
+// of inferring kills from 20 Hz wire-state transitions. This gives per-hit floating damage numbers
+// (region-coloured), exact attribution on every kill ("#0 downed #1"), and distinct events when two
+// shooters land on the same tick — none of which the snapshot-transition path can recover. Replay
+// is cursor-based (no downward-crossing heuristic): on a loop wrap the cursor repositions cleanly.
+const Color RGN_COL[3] = {{235, 90, 90, 255},    // ENGINE — red
+                          {255, 165, 60, 255},   // WING — orange
+                          {245, 215, 70, 255}};   // TAIL — gold
+const char* const RGN_NAME[3] = {"ENGINE", "WING", "TAIL"};
+
+class CombatFeed {
+public:
+    void load(const std::vector<RecEvent>* ev) { ev_ = ev; reset(); }
+    bool active() const { return ev_ && !ev_->empty(); }
+
+    // Advance to render_tick, spawning feed lines + floating numbers for events newly crossed.
+    // `screen_of(id, out)` fills the aircraft's current screen position and returns whether it is
+    // on-screen (an off-screen hit's number is simply skipped). now = wall time for fade timing.
+    void update(double render_tick, double now,
+                const std::function<bool(int64_t, Vector2&)>& screen_of) {
+        if (!active()) return;
+        const auto& ev = *ev_;
+        if (render_tick + 0.5 < last_tick_) {  // loop wrap: reposition WITHOUT emitting the history
+            cursor_ = 0;
+            while (cursor_ < ev.size() && static_cast<double>(ev[cursor_].tick) <= render_tick)
+                ++cursor_;
+        }
+        while (cursor_ < ev.size() && static_cast<double>(ev[cursor_].tick) <= render_tick) {
+            emit(ev[cursor_], now, screen_of);
+            ++cursor_;
+        }
+        last_tick_ = render_tick;
+    }
+
+    void draw(int feed_x, int feed_y, double now) const {
+        for (const auto& l : lines_) {
+            double age = now - l.born;
+            if (age > LINE_TTL) continue;
+            float a = (age < LINE_TTL - 1.5) ? 1.0f : static_cast<float>((LINE_TTL - age) / 1.5);
+            DrawText(l.text, feed_x, feed_y, 16, Fade(l.color, a));
+            feed_y += 20;
+        }
+        for (const auto& f : floats_) {
+            double age = now - f.born;
+            if (age > FLOAT_TTL) continue;
+            float a = static_cast<float>(1.0 - age / FLOAT_TTL);
+            int y = static_cast<int>(f.y - age * 34.0);  // rises as it fades
+            DrawText(f.text, static_cast<int>(f.x), y, 18, Fade(f.color, a));
+        }
+    }
+
+    void reset() { cursor_ = 0; last_tick_ = -1e18; lines_.clear(); floats_.clear(); }
+
+private:
+    static constexpr double LINE_TTL = 8.0;
+    static constexpr double FLOAT_TTL = 1.2;
+    struct Line { char text[64]; double born; Color color; };
+    struct Float { float x, y; char text[24]; double born; Color color; };
+
+    void emit(const RecEvent& e, double now,
+              const std::function<bool(int64_t, Vector2&)>& screen_of) {
+        int rgn = (e.region >= 0 && e.region < 3) ? static_cast<int>(e.region) : 1;
+        if (e.killed) {
+            Line l{};
+            if (e.attacker >= 0)
+                std::snprintf(l.text, sizeof(l.text), "#%lld downed #%lld  (%s)",
+                              static_cast<long long>(e.attacker), static_cast<long long>(e.target),
+                              RGN_NAME[rgn]);
+            else
+                std::snprintf(l.text, sizeof(l.text), "#%lld destroyed",
+                              static_cast<long long>(e.target));
+            l.born = now; l.color = FEED_KILL;
+            lines_.push_back(l);
+            if (lines_.size() > 6) lines_.erase(lines_.begin());
+        }
+        // A floating per-round damage number at the struck aircraft (region-coloured), kill or not.
+        Vector2 sp{};
+        if (screen_of(e.target, sp)) {
+            Float f{};
+            f.x = sp.x + jitter(e.tick);   // spread stacked same-tick numbers so both read
+            f.y = sp.y - 34.0f;
+            double dmg = static_cast<double>(e.damage_milli) / 1000.0;
+            std::snprintf(f.text, sizeof(f.text), "-%.0f", dmg);
+            f.born = now; f.color = RGN_COL[rgn];
+            floats_.push_back(f);
+            if (floats_.size() > 32) floats_.erase(floats_.begin());
+        }
+    }
+
+    // Deterministic small horizontal offset so two numbers on one tick don't overprint (no RNG).
+    static float jitter(int64_t tick) { return static_cast<float>((tick % 5 - 2) * 12); }
+
+    const std::vector<RecEvent>* ev_ = nullptr;
+    size_t cursor_ = 0;
+    double last_tick_ = -1e18;
+    std::vector<Line> lines_;
+    std::vector<Float> floats_;
+};
+
 // Screen-projected damage state for one aircraft: the total-hp bar plus the three E/W/T region
 // segments underneath (a knocked-out region fills dark red and its letter lights up). `base` is
 // the same aircraft's first-frame reading (full pools); a recording that predates the region
@@ -266,8 +368,16 @@ void draw_aircraft(Vector3 od, double lat, double lon, double psi, double phi, d
 int run_selfcheck(const Playback& pb, int n) {
     double t0 = static_cast<double>(pb.first_tick());
     double t1 = static_cast<double>(pb.last_tick());
-    std::printf("selfcheck: span ticks [%.0f, %.0f], delay=%.1f ticks, %d Hz snaps\n", t0, t1,
-                pb.delay_ticks(), pb.snap_hz());
+    std::printf("selfcheck: span ticks [%.0f, %.0f], delay=%.1f ticks, %d Hz snaps, %zu journal events\n",
+                t0, t1, pb.delay_ticks(), pb.snap_hz(), pb.events().size());
+    // Echo the combat journal (per-round hits + kills, at the full 100 Hz tick) so the data path is
+    // provable headless — this is what the GUI feed draws as floating damage numbers + kill lines.
+    for (const auto& e : pb.events())
+        std::printf("  event t=%lld  #%lld -> #%lld  dmg %.0f  hp_after %.0f  region %lld%s\n",
+                    static_cast<long long>(e.tick), static_cast<long long>(e.attacker),
+                    static_cast<long long>(e.target), e.damage_milli / 1000.0,
+                    e.hp_after_milli / 1000.0, static_cast<long long>(e.region),
+                    e.killed ? "  *** KILL ***" : "");
     for (int i = 0; i < n; ++i) {
         double a = (n > 1) ? static_cast<double>(i) / (n - 1) : 0.0;
         double rt = t0 + a * (t1 - t0);
@@ -357,7 +467,10 @@ int run_gui(Playback& pb, double speed) {
     std::vector<std::vector<Vector3>> trails;
     // WEAPON-001 (seal v1.12r0): starting hp + region pools per aircraft (full bars baseline).
     const std::vector<RenderHp> maxhp = pb.sample_weapons(t0).hp;
-    KillFeed feed;  // attributed kill/knock-out feed, derived from wire-frame transitions
+    // Journal-driven combat feed (per-round @ 100 Hz) when the recording carries the event journal;
+    // otherwise fall back to the wire-state transition feed (v1 recordings have no journal).
+    CombatFeed cfeed; cfeed.load(&pb.events());
+    KillFeed feed;  // fallback: attributed kill/knock-out feed derived from wire-frame transitions
     bool paused = false;
     double sim_clock = 0.0;     // seconds of playback elapsed
     double last_wall = GetTime();
@@ -367,7 +480,7 @@ int run_gui(Playback& pb, double speed) {
         double dt = now - last_wall;
         last_wall = now;
         if (IsKeyPressed(KEY_SPACE)) paused = !paused;
-        if (IsKeyPressed(KEY_R)) { sim_clock = 0.0; trails.clear(); feed.reset(); }
+        if (IsKeyPressed(KEY_R)) { sim_clock = 0.0; trails.clear(); feed.reset(); cfeed.reset(); }
         if (!paused) sim_clock += dt * speed;
 
         UpdateCamera(&cam, CAMERA_THIRD_PERSON);
@@ -380,7 +493,7 @@ int run_gui(Playback& pb, double speed) {
 
         std::vector<RenderEntity> ents = pb.sample(render_tick);
         WeaponView wv = pb.sample_weapons(render_tick);  // hp + live rounds (WEAPON-001 wire)
-        if (!paused) feed.update(wv, now);
+        if (!paused && !cfeed.active()) feed.update(wv, now);  // journal feed updates in the 2D pass
         if (trails.size() < ents.size()) trails.resize(ents.size());
         for (size_t i = 0; i < ents.size(); ++i) {
             Vector3 d = to_display(ents[i].pos, pb.radius_m());
@@ -426,7 +539,23 @@ int run_gui(Playback& pb, double speed) {
             draw_damage_bars(sp, w ? *w : fallback, base ? *base : fallback);
         }
         draw_scoreboard(wv.hp, GetScreenWidth());
-        feed.draw(12, GetScreenHeight() - 190, now);
+        // Combat feed: journal-driven per-round events (numbers pinned to on-screen targets), or the
+        // transition fallback for a v1 recording.
+        if (cfeed.active()) {
+            auto screen_of = [&](int64_t id, Vector2& out) -> bool {
+                for (const auto& e : ents)
+                    if (e.id == id) {
+                        out = GetWorldToScreen(to_display(e.pos, pb.radius_m()), cam);
+                        return out.x >= -50 && out.x <= GetScreenWidth() + 50 && out.y >= -50 &&
+                               out.y <= GetScreenHeight() + 50;
+                    }
+                return false;
+            };
+            if (!paused) cfeed.update(render_tick, now, screen_of);
+            cfeed.draw(12, GetScreenHeight() - 190, now);
+        } else {
+            feed.draw(12, GetScreenHeight() - 190, now);
+        }
         draw_hud(pb, render_tick, ents, wv, maxhp);
         EndDrawing();
     }
@@ -586,8 +715,10 @@ int run_fly(Playback& pb, double speed) {
     bool paused = false;
     double last_wall = GetTime();
 
-    // WEAPON-001 baseline (full hp + region pools at the first frame) + the attributed kill-feed.
+    // WEAPON-001 baseline (full hp + region pools at the first frame) + the combat feed (journal-
+    // driven per-round when the recording has the event journal, transition fallback otherwise).
     const std::vector<RenderHp> maxhp = pb.sample_weapons(t0).hp;
+    CombatFeed cfeed; cfeed.load(&pb.events());
     KillFeed feed;
 
     // Chase camera that rides behind/above the own ship. Free-look (hold SPACE) adds an azimuth/
@@ -616,7 +747,7 @@ int run_fly(Playback& pb, double speed) {
         if (IsKeyPressed(KEY_R)) {
             pred = predict::Predictor(rails, &kFlyEnv, start);
             own_tick = 0; accumulator = 0.0; sim_clock = 0.0;
-            own_trail.clear(); rem_trails.clear(); feed.reset();
+            own_trail.clear(); rem_trails.clear(); feed.reset(); cfeed.reset();
         }
 
         // Mode: hold SPACE for free-look. Lock/hide the cursor in free-look so mouse delta is
@@ -736,7 +867,7 @@ int run_fly(Playback& pb, double speed) {
         // rounds, all from the decoded wire (the remotes' fight replicates; the own ship carries
         // no weapons in this single-process loop — there is no server to adjudicate its fire).
         WeaponView wv = pb.sample_weapons(render_tick);
-        if (!paused) feed.update(wv, now);
+        if (!paused && !cfeed.active()) feed.update(wv, now);  // journal feed updates in the 2D pass
 
         Vector3 od = od_cam;  // own-ship display position (already computed for the chase cam)
         if (!paused) {
@@ -805,7 +936,21 @@ int run_fly(Playback& pb, double speed) {
             draw_damage_bars(sp, w ? *w : fallback, base ? *base : fallback);
         }
         draw_scoreboard(wv.hp, GetScreenWidth());
-        feed.draw(12, GetScreenHeight() - 190, now);
+        if (cfeed.active()) {
+            auto screen_of = [&](int64_t id, Vector2& out) -> bool {
+                for (const auto& e : rem)
+                    if (e.id == id) {
+                        out = GetWorldToScreen(to_display(e.pos, pb.radius_m()), cam);
+                        return out.x >= -50 && out.x <= GetScreenWidth() + 50 && out.y >= -50 &&
+                               out.y <= GetScreenHeight() + 50;
+                    }
+                return false;
+            };
+            if (!paused) cfeed.update(render_tick, now, screen_of);
+            cfeed.draw(12, GetScreenHeight() - 190, now);
+        } else {
+            feed.draw(12, GetScreenHeight() - 190, now);
+        }
         draw_fly_hud(pred, own_tick, rem.size(), wv.rounds.size(), paused, freelook, cmd);
         EndDrawing();
     }

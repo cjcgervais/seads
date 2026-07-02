@@ -74,12 +74,17 @@ public:
     // These ride the decoded snapshot wire — no interpolation (hp is discrete, rounds transient).
     WeaponView sample_weapons(double render_tick) const;
 
+    // The layer-6 combat event journal (empty for a v1 recording): one record per connecting round
+    // at the FULL 100 Hz physics tick, for a precise-tick, per-round kill-feed / damage numbers.
+    const std::vector<RecEvent>& events() const { return events_; }
+
 private:
     // Newest received frame with server_tick <= render_tick (else the first). The non-interpolated
     // sample seam shared by sample_weapons (hp/rounds) and sample's attitude fill (phi/tas/gamma).
     const netsnap::Snapshot* nearest_frame(double render_tick) const;
 
     interp::SnapshotBuffer buffer_;
+    std::vector<RecEvent> events_;
     double radius_m_ = 15000.0;
     int tick_hz_ = 100;
     int snap_hz_ = 20;

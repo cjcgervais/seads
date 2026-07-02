@@ -14,6 +14,7 @@
 // Usage:
 //   seads_record --demo                       [--out flight.seadsrec] [--js trajectory.js] [--snap-every 5]
 //   seads_record --id GOLDEN-SK-TurnClimb-001  [--out ...] [--js ...] [--snap-every 5]
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <string>
@@ -299,6 +300,7 @@ int main(int argc, char** argv) {
 
     std::vector<std::vector<uint8_t>> wire_frames;
     std::vector<netsnap::Snapshot> decoded_frames;
+    std::vector<client::RecEvent> events;  // layer-6 journal, captured at the full 100 Hz rate
     std::vector<Command> cmd(flight.ac.size());
 
     auto grab = [&](uint32_t tick) {
@@ -312,6 +314,14 @@ int main(int argc, char** argv) {
         command_at(flight, t, deg, cmd);
         k.step(cmd, env);
         unsigned elapsed = t + 1;
+        // Layer-6 combat events: one record per connecting round from the kernel's per-round hit
+        // queue (this step's hits, projectile order). Quantized to milli-hp exactly as the reliable
+        // event channel does (event.cpp): damage = post-clamp effective loss, hp = post-clamp hp.
+        for (const HitEvent& h : k.hit_events())
+            events.push_back(client::RecEvent{
+                static_cast<int64_t>(elapsed), h.target, h.attacker,
+                std::llround(h.hp_before * 1000.0) - std::llround(h.hp_after * 1000.0),
+                std::llround(h.hp_after * 1000.0), h.killed, h.region});
         if (elapsed % snap_every == 0) grab(elapsed);
     }
     if (flight.ticks % snap_every != 0) grab(flight.ticks);  // ensure the tail is captured
@@ -330,10 +340,11 @@ int main(int argc, char** argv) {
     for (std::size_t a = 0; a < flight.ac.size(); ++a)
         std::printf("  aircraft %zu: hp %.0f%s\n", a, k.hp(a), k.hp(a) <= 0.0 ? "  *** KILLED ***" : "");
     std::printf("  rounds airborne at end: %zu\n", k.proj_count());
+    std::printf("  combat events (per-round journal): %zu\n", events.size());
 
     if (out_path) {
         std::vector<uint8_t> blob;
-        client::write_recording(meta, wire_frames, blob);
+        client::write_recording(meta, wire_frames, events, blob);
         std::FILE* fp = std::fopen(out_path, "wb");
         if (!fp) { std::fprintf(stderr, "cannot open %s\n", out_path); return 2; }
         std::fwrite(blob.data(), 1, blob.size(), fp);

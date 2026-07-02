@@ -210,10 +210,62 @@ static void test_weapon_playback() {
           "round world position matches globe projection");
 }
 
+// The v2 combat event journal: a recording carries a per-round hit/kill log; the container round-
+// trips it byte-for-byte, Playback exposes it, and a v1 (no-journal) recording is still accepted.
+static void test_event_journal() {
+    netsnap::Snapshot s0;
+    s0.protocol = netsnap::SNAPSHOT_PROTOCOL;
+    s0.server_tick = 0;
+    s0.entities.push_back(netsnap::EntityState{7, 0, 0, 45, 2000, 0, 170, 0, 100.0});
+    std::vector<uint8_t> w0;
+    netsnap::encode_snapshot(s0, w0);
+    RecordingMeta meta;
+    meta.radius_m = 15000.0; meta.tick_hz = 100; meta.snap_hz = 20;
+    std::vector<std::vector<uint8_t>> wires = {w0};
+
+    // Two rounds land on tick 44 (distinct attackers — the granularity the transition path lumps),
+    // then attacker 1's round on tick 47 crosses the target to dead (killed=1), region TAIL.
+    std::vector<RecEvent> ev = {
+        RecEvent{44, 1, 0, 12000, 10000, 0, 2},
+        RecEvent{44, 1, 2, 12000, -2000, 0, 2},   // negative hp_after must survive the i64 round-trip
+        RecEvent{47, 1, 1, 12000, 0, 1, 2},
+    };
+    std::vector<uint8_t> blob;
+    write_recording(meta, wires, ev, blob);
+
+    Recording rec;
+    check(read_recording(blob.data(), blob.size(), rec), "v2 recording with journal parses");
+    check(rec.meta.version == 2, "version stamped v2");
+    check(rec.events.size() == 3, "three journal events round-tripped");
+    check(rec.events[0].tick == 44 && rec.events[0].attacker == 0 && rec.events[0].region == 2 &&
+              rec.events[0].damage_milli == 12000,
+          "event[0] fields exact");
+    check(rec.events[1].attacker == 2 && rec.events[1].hp_after_milli == -2000,
+          "event[1] distinct attacker + signed hp round-trips");
+    check(rec.events[2].killed == 1 && rec.events[2].attacker == 1,
+          "kill event carries the crossing round's attacker");
+
+    Playback pb;
+    check(pb.load(rec), "playback loads a journal recording");
+    check(pb.events().size() == 3 && pb.events()[2].killed == 1, "Playback exposes the journal");
+
+    // A v1-shaped recording (no journal) is still valid and yields an empty event list.
+    std::vector<uint8_t> blob1;
+    write_recording(meta, wires, blob1);  // 3-arg overload = empty journal
+    Recording rec1;
+    check(read_recording(blob1.data(), blob1.size(), rec1), "no-journal recording parses");
+    check(rec1.events.empty(), "no-journal recording has an empty event list");
+
+    // A truncated journal trailer is rejected (no out-of-bounds read).
+    Recording bad;
+    check(!read_recording(blob.data(), blob.size() - 1, bad), "truncated journal rejected");
+}
+
 int main() {
     test_globe();
     test_recording_and_playback();
     test_weapon_playback();
+    test_event_journal();
     if (g_fail) { std::printf("seads_client_test: FAILED\n"); return 1; }
     std::printf("seads_client_test: all checks passed\n");
     return 0;

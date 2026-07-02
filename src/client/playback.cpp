@@ -12,6 +12,7 @@ bool Playback::load(const Recording& rec) {
     snap_hz_ = static_cast<int>(rec.meta.snap_hz ? rec.meta.snap_hz : 20);
     if (rec.frames.empty()) return false;
     for (const auto& f : rec.frames) buffer_.add(f);
+    events_ = rec.events;  // layer-6 journal (empty for a v1 recording)
     first_tick_ = rec.frames.front().server_tick;
     last_tick_ = rec.frames.back().server_tick;
     // ~1.5 snapshot intervals of delay so two received frames always bracket the render time.
