@@ -55,8 +55,11 @@
 > Ledger: **ADR-Step8-FlightModel-B5-v1.21r0**, SEAL_CARD v1.21r0 (header + goldens table
 > rewritten — 12 new hashes + Sphere annotated unchanged + Altitude added; history row),
 > CLAUDE.md header/rails/roadmap current.
-> **GIT: code `a88d422` committed; receipt + this banner follow; push + guardian CI pending
-> (update this line with the run id when GREEN).**
+> **GIT: pushed to `origin/main` (code `a88d422` + receipt `44009f1`); guardian CI run
+> [28623274035](https://github.com/cjcgervais/seads/actions/runs/28623274035) GREEN** — Python
+> gates + MSVC + GCC/Clang × x64/AArch64 + the cross-toolchain hash aggregation gate all
+> reproduce **all 13 v1.21r0 goldens bit-for-bit** (12 moved + Sphere unchanged, incl. the new
+> Altitude-001 on every leg).
 > **NEXT (free pick, none blocking):** per-airframe **supercharger critical altitude** (B5's
 > named follow-up — a thrust-lapse envelope scalar, data-driven, its own seal);
 > bounded/windowed catch-up for open-ended live streams (layer 13's named boundary); an A6M2
