@@ -143,7 +143,8 @@ ServerFrames build_server_frames(const Rails& rails, const Scenario& sc) {
     Kernel server(rails);
     for (unsigned i = 0; i < sc.n_aircraft; ++i) {
         const AircraftSpec& a = sc.aircraft[i];
-        server.add(a.lat, a.lon, a.psi, a.phi, a.alt, a.tas, 0.0, a.env->hp_start, a.env->ammo_start);
+        server.add(a.lat, a.lon, a.psi, a.phi, a.alt, a.tas, 0.0, a.env->hp_start, a.env->ammo_start,
+                   a.env->engine_frac, a.env->wing_frac, a.env->tail_frac);
     }
     // frames as (emit_tick, bytes) ascending — emits are snap_every apart, so a small vector.
     ServerFrames frames;

@@ -45,20 +45,20 @@ static constexpr double START_AMMO       = 0x1.f400000000000p+8;   // 500.0 defa
 // hex-float with tools/ref_kernel.py. See ADR-Step7-Guns-Attribution-v1.16r0.
 static constexpr double NO_ATTACKER      = -0x1.0000000000000p+0;  // -1.0 sentinel: never hit
 // Region damage + kill tally (Step 7 guns, ATM-Sphere v1.18r0). Each airframe carries ENGINE/WING/
-// TAIL sub-pools (fixed global fractions of starting hp — independent thresholds, NOT a partition;
-// damage books into the total hp AND the struck region). A connecting round's region comes purely
-// from its APPROACH ASPECT: rel = wrap_pi(round psi - target psi); |rel| < pi/4 == astern -> TAIL,
-// |rel| > 3pi/4 == head-on -> ENGINE, else beam -> WING. wrap_pi + compares + *,- only => NO new
-// det_math. A dead region degrades a LIVING plane: engine out -> thrust forced 0; wing out ->
-// n_aero halved; tail out -> commanded (bank, g) forced to (0, 1) — a straight 1-g mush. kills is
-// the per-aircraft victory tally (+1 on the attacker per killing round; survives death). Exact
-// hex-floats shared bit-for-bit with tools/ref_kernel.py. See ADR-Step7-Guns-RegionDamage-v1.18r0.
+// TAIL sub-pools (PER-AIRFRAME fractions of starting hp since v1.20r0 — the envelope's
+// engine_frac/wing_frac/tail_frac, passed into add(); the v1.18r0 global values survive as add()'s
+// defaults for envelope-less callers. Independent thresholds, NOT a partition; damage books into
+// the total hp AND the struck region). A connecting round's region comes purely from its APPROACH
+// ASPECT: rel = wrap_pi(round psi - target psi); |rel| < pi/4 == astern -> TAIL, |rel| > 3pi/4 ==
+// head-on -> ENGINE, else beam -> WING. wrap_pi + compares + *,- only => NO new det_math. A dead
+// region degrades a LIVING plane: engine out -> thrust forced 0; wing out -> n_aero halved; tail
+// out -> commanded (bank, g) forced to (0, 1) — a straight 1-g mush. kills is the per-aircraft
+// victory tally (+1 on the attacker per killing round; survives death). Cone edges are exact
+// hex-floats shared bit-for-bit with tools/ref_kernel.py.
+// See ADR-Step7-Guns-RegionDamage-v1.18r0 + ADR-Step7-Guns-RegionToughness-v1.20r0.
 static constexpr std::int64_t REGION_ENGINE = 0;
 static constexpr std::int64_t REGION_WING   = 1;
 static constexpr std::int64_t REGION_TAIL   = 2;
-static constexpr double ENGINE_FRAC      = 0x1.8000000000000p-2;    // 0.375 * hp_start
-static constexpr double WING_FRAC        = 0x1.0000000000000p-1;    // 0.5   * hp_start
-static constexpr double TAIL_FRAC        = 0x1.0000000000000p-2;    // 0.25  * hp_start
 static constexpr double QUARTER_PI       = 0x1.921fb54442d18p-1;    // pi/4: astern cone (TAIL)
 static constexpr double THREE_QUARTER_PI = 0x1.2d97c7f3321d2p+1;    // 3pi/4: head-on edge (ENGINE)
 static constexpr double HIT_ALT_GATE_M   = 0x1.e000000000000p+5;   // 60.0 m vertical hit gate
@@ -114,16 +114,17 @@ static inline double lut_eval(const double* xs, const double* ys, double x) {
 }
 
 std::size_t Kernel::add(double lat, double lon, double psi, double phi, double alt, double tas,
-                        double gamma, double hp, double ammo) {
+                        double gamma, double hp, double ammo,
+                        double engine_frac, double wing_frac, double tail_frac) {
     lat_.push_back(lat); lon_.push_back(lon); psi_.push_back(psi);
     phi_.push_back(phi); alt_.push_back(alt); tas_.push_back(tas); gamma_.push_back(gamma);
     hp_.push_back(hp);                           // G2 hitpoints (G3: per-airframe hp_start passed in)
     fire_cd_.push_back(0.0);                     // G3 (v1.11r0): fire-rate cooldown starts ready
     ammo_.push_back(ammo);                       // G4 (v1.13r0): magazine (per-airframe ammo_start)
     last_hit_by_.push_back(NO_ATTACKER);         // v1.16r0: never hit yet
-    engine_hp_.push_back(ENGINE_FRAC * hp);      // v1.18r0: region sub-pools sized from starting hp
-    wing_hp_.push_back(WING_FRAC * hp);          // (mirrors ref_kernel.Aircraft.__init__ /
-    tail_hp_.push_back(TAIL_FRAC * hp);          //  build_scenario's re-derivation)
+    engine_hp_.push_back(engine_frac * hp);      // v1.18r0: region sub-pools sized from starting hp
+    wing_hp_.push_back(wing_frac * hp);          // (v1.20r0: per-airframe fractions; mirrors
+    tail_hp_.push_back(tail_frac * hp);          //  ref_kernel.Aircraft / build_scenario)
     kills_.push_back(0.0);                       // v1.18r0: victory tally (integer-valued f64)
     return lat_.size() - 1;
 }

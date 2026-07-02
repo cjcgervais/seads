@@ -53,7 +53,16 @@ AERO_FIELDS = ("mass_kg", "wing_area_m2", "cd0", "induced_k", "thrust_static_n",
                # flat-fire drop-compensation angle (0.5*g0*convergence_m / v^2, v = firer TAS +
                # muzzle_v) so its trajectory crosses the aim (sight) line at convergence_m. Pure
                # +-*/ (no new det_math). See ADR-Step7-Guns-Convergence.
-               "convergence_m")
+               "convergence_m",
+               # Region toughness (Step 7 guns, seal v1.20r0): per-airframe fractions of hp_start
+               # sizing the ENGINE/WING/TAIL region sub-pools (v1.18r0 made them global 0.375/0.5/
+               # 0.25 hex-constants; those values survive as the envelope-less DEFAULTS, e.g. the
+               # no-arg Sphere golden). Each MUST be a positive multiple of 1/8 and <= 1 (enforced
+               # by tuning_probe): eighth-granularity keeps every pool exact in f64 AND milli-exact
+               # on the WEAPON-001 wire (1000/8 = 125 clears the denominator for integer hp_start,
+               # and integer per-round damage preserves the granularity as pools drain). See
+               # ADR-Step7-Guns-RegionToughness-v1.20r0.
+               "engine_frac", "wing_frac", "tail_frac")
 
 
 def deg2rad(d):

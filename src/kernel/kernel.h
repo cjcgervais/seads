@@ -42,8 +42,13 @@ public:
     // hp (G2 hitpoints) defaults to 100.0 == START_HP (scenarios pass the per-airframe hp_start);
     // ammo (G4 magazine, rounds) defaults to 500.0 == START_AMMO (scenarios pass the per-airframe
     // ammo_start). The no-arg Sphere golden never fires, so its ammo stays at the default.
+    // Region toughness (v1.20r0): engine_frac/wing_frac/tail_frac size the region sub-pools as
+    // fractions of hp (scenarios pass the envelope's per-airframe values); the defaults are the
+    // sealed v1.18r0 global fractions, so every envelope-less caller (no-arg Sphere golden,
+    // lockstep/predict paths) builds a bit-identical aircraft. Mirrors ref_kernel.Aircraft.
     std::size_t add(double lat, double lon, double psi, double phi, double alt, double tas,
-                    double gamma = 0.0, double hp = 100.0, double ammo = 500.0);
+                    double gamma = 0.0, double hp = 100.0, double ammo = 500.0,
+                    double engine_frac = 0.375, double wing_frac = 0.5, double tail_frac = 0.25);
 
     void step();                  // straight golden: pure kinematic tail, phi/gamma unchanged
     // envelope-driven step (B2): cmd[i] = per-aircraft (target_phi, target_g, throttle); env[i] =

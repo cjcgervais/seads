@@ -111,6 +111,9 @@
     "damage_per_round": 30,
     "rof_interval_ticks": 6,
     "ammo_start": 170,
-    "convergence_m": 200
+    "convergence_m": 200,
+    "engine_frac": 0.5,
+    "wing_frac": 0.375,
+    "tail_frac": 0.25
   }
 }

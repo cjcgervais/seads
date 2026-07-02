@@ -88,7 +88,8 @@ EventResult run_events(const Rails& rails, const session::Scenario& sc,
     Kernel server(rails);
     for (unsigned i = 0; i < sc.n_aircraft; ++i) {
         const session::AircraftSpec& a = sc.aircraft[i];
-        server.add(a.lat, a.lon, a.psi, a.phi, a.alt, a.tas, 0.0, a.env->hp_start, a.env->ammo_start);
+        server.add(a.lat, a.lon, a.psi, a.phi, a.alt, a.tas, 0.0, a.env->hp_start, a.env->ammo_start,
+                   a.env->engine_frac, a.env->wing_frac, a.env->tail_frac);
     }
 
     EventResult res;

@@ -45,7 +45,8 @@ int main(int argc, char** argv) {
         // AcSpec angles are already radians (pre-converted at generation time). G3 (v1.11r0): seed
         // the aircraft with its per-airframe starting hitpoints; G4 (v1.13r0): and its magazine
         // (gamma defaults to 0).
-        k.add(ac.lat, ac.lon, ac.psi, ac.phi, ac.alt, ac.tas, 0.0, ac.env->hp_start, ac.env->ammo_start);
+        k.add(ac.lat, ac.lon, ac.psi, ac.phi, ac.alt, ac.tas, 0.0, ac.env->hp_start, ac.env->ammo_start,
+              ac.env->engine_frac, ac.env->wing_frac, ac.env->tail_frac);
     }
 
     std::vector<Command> cmd(S->n_ac);

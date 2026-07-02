@@ -122,6 +122,38 @@ def validate_envelope(doc):
     except Exception:
         errs.append("stall/v_ne non-numeric")
     errs += validate_b3_limits(e)
+    errs += validate_region_toughness(e)
+    return errs
+
+
+def validate_region_toughness(e):
+    """Region toughness (v1.20r0): per-airframe engine_frac/wing_frac/tail_frac size the
+    ENGINE/WING/TAIL sub-pools as fractions of hp_start. Each must be a positive multiple of 1/8
+    and <= 1 — eighth-granularity keeps every pool value exact in f64 AND milli-exact on the
+    WEAPON-001 wire (1000/8 = 125 clears the denominator for any integer hp_start, and integer
+    per-round damage preserves the granularity as pools drain)."""
+    errs = []
+    for k in ("engine_frac", "wing_frac", "tail_frac"):
+        if k not in e:
+            errs.append(f"missing {k}")
+    if errs:
+        return errs
+    for k in ("engine_frac", "wing_frac", "tail_frac"):
+        try:
+            v = float(e[k])
+        except Exception:
+            errs.append(f"{k} non-numeric")
+            continue
+        if not (0.0 < v <= 1.0):
+            errs.append(f"{k} out of bounds: {v} (expect 0 < frac <= 1)")
+        if v * 8.0 != round(v * 8.0):
+            errs.append(f"{k} not a multiple of 1/8: {v} (pools must stay f64- and milli-exact)")
+    try:
+        hp = float(e["hp_start"])
+        if hp != round(hp):
+            errs.append(f"hp_start must be an integer for exact region pools, got {hp}")
+    except Exception:
+        errs.append("hp_start missing/non-numeric (region pools derive from it)")
     return errs
 
 

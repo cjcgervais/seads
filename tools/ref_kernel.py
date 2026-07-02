@@ -106,24 +106,28 @@ START_AMMO = float.fromhex('0x1.f400000000000p+8')   # 500.0 default magazine (n
 NO_ATTACKER = float.fromhex('-0x1.0000000000000p+0')  # -1.0 sentinel: "never hit"
 # --- Region damage + kill tally (Step 7 guns, ATM-Sphere v1.18r0) ------------------------
 # Each airframe carries three functional REGION sub-pools alongside the total hp: ENGINE, WING,
-# TAIL, sized as fixed global fractions of hp_start (independent thresholds, NOT a partition —
-# damage books into the total hp AND the struck region). A connecting round is assigned a region
-# purely from its APPROACH ASPECT: rel = wrap_pi(round.psi - target.psi); |rel| < pi/4 == fired
-# from astern -> TAIL, |rel| > 3pi/4 == head-on -> ENGINE, else beam -> WING (exact pi/4 lands in
-# WING). wrap_pi + compares + *,- only => NO new det_math. A dead region degrades a LIVING plane:
-# engine out -> thrust forced 0 (a glider); wing out -> n_aero halved (half the lifting surface);
-# tail out -> control authority lost (commanded bank -> 0, g -> 1: a straight 1-g mush). All
-# fractions/cones are exact hex-floats shared bit-for-bit with kernel.cpp. `kills` is the
-# per-aircraft victory tally: +1 on the ATTACKER exactly when its round crosses the target
-# hp > 0 -> <= 0 (the HitEvent.killed round; persists through the attacker's own death). All four
-# are integer-or-exact-valued f64 state (like fire_cd/ammo/last_hit_by), appended as the 12th-15th
-# per-aircraft snapshot f64s. See ADR-Step7-Guns-RegionDamage-v1.18r0.
+# TAIL, sized as PER-AIRFRAME fractions of hp_start (region toughness, v1.20r0 — the envelope's
+# engine_frac/wing_frac/tail_frac; v1.18r0 introduced them as global constants, and those values
+# survive below as the envelope-less DEFAULTS so the no-arg/Sphere path is unchanged). Independent
+# thresholds, NOT a partition — damage books into the total hp AND the struck region. A connecting
+# round is assigned a region purely from its APPROACH ASPECT: rel = wrap_pi(round.psi -
+# target.psi); |rel| < pi/4 == fired from astern -> TAIL, |rel| > 3pi/4 == head-on -> ENGINE, else
+# beam -> WING (exact pi/4 lands in WING). wrap_pi + compares + *,- only => NO new det_math. A
+# dead region degrades a LIVING plane: engine out -> thrust forced 0 (a glider); wing out ->
+# n_aero halved (half the lifting surface); tail out -> control authority lost (commanded bank ->
+# 0, g -> 1: a straight 1-g mush). Fractions are dyadic multiples of 1/8 (tuning_probe enforces
+# it) so every pool is exact in f64 and milli-exact on the wire; the cone edges are exact
+# hex-floats shared bit-for-bit with kernel.cpp. `kills` is the per-aircraft victory tally: +1 on
+# the ATTACKER exactly when its round crosses the target hp > 0 -> <= 0 (the HitEvent.killed
+# round; persists through the attacker's own death). All four are integer-or-exact-valued f64
+# state (like fire_cd/ammo/last_hit_by), appended as the 12th-15th per-aircraft snapshot f64s.
+# See ADR-Step7-Guns-RegionDamage-v1.18r0 + ADR-Step7-Guns-RegionToughness-v1.20r0.
 REGION_ENGINE = 0
 REGION_WING = 1
 REGION_TAIL = 2
-ENGINE_FRAC = float.fromhex('0x1.8000000000000p-2')     # 0.375: engine pool = 0.375 * hp_start
-WING_FRAC = float.fromhex('0x1.0000000000000p-1')       # 0.5:   wing pool   = 0.5   * hp_start
-TAIL_FRAC = float.fromhex('0x1.0000000000000p-2')       # 0.25:  tail pool   = 0.25  * hp_start
+ENGINE_FRAC = float.fromhex('0x1.8000000000000p-2')     # 0.375: DEFAULT engine pool fraction
+WING_FRAC = float.fromhex('0x1.0000000000000p-1')       # 0.5:   DEFAULT wing pool fraction
+TAIL_FRAC = float.fromhex('0x1.0000000000000p-2')       # 0.25:  DEFAULT tail pool fraction
 QUARTER_PI = float.fromhex('0x1.921fb54442d18p-1')      # pi/4: astern cone half-angle (TAIL)
 THREE_QUARTER_PI = float.fromhex('0x1.2d97c7f3321d2p+1')  # 3pi/4: head-on cone edge (ENGINE)
 HIT_RADIUS_M = float.fromhex('0x1.e000000000000p+5')  # 60.0 m horizontal hit radius (validation/doc)
@@ -183,24 +187,29 @@ class Aircraft:
     # killing round". Set on hit (see _advance_projectiles); persists through death (a corpse keeps its
     # killer). Pure integer-valued counter (like fire_cd), NO new det_math. Defaults to NO_ATTACKER.
     # Region damage + kills (v1.18r0): engine_hp/wing_hp/tail_hp are the functional region sub-pools
-    # (derived from the hp passed in via the exact global fractions — a caller that overrides hp
-    # after construction must re-derive them, mirroring Kernel::add); kills is the victory tally
-    # (+1 on the attacker per HitEvent.killed round). All four are canonical hashed state, the
-    # 12th-15th per-aircraft snapshot f64s.
+    # (derived from the hp passed in — a caller that overrides hp after construction must
+    # re-derive them, mirroring Kernel::add); kills is the victory tally (+1 on the attacker per
+    # HitEvent.killed round). All four are canonical hashed state, the 12th-15th per-aircraft
+    # snapshot f64s.
+    # Region toughness (v1.20r0): the pool fractions are per-airframe ctor params (the envelope's
+    # engine_frac/wing_frac/tail_frac; build_scenario passes them). Defaults are the sealed
+    # v1.18r0 global values, so every envelope-less caller (no-arg Sphere golden, lockstep/predict
+    # vectors) builds a bit-identical aircraft.
     __slots__ = ("lat", "lon", "psi", "phi", "alt", "tas", "gamma", "hp", "fire_cd", "ammo",
                  "last_hit_by", "engine_hp", "wing_hp", "tail_hp", "kills")
 
     def __init__(self, lat, lon, psi, phi, alt, tas, gamma=0.0, hp=START_HP, fire_cd=0.0,
-                 ammo=START_AMMO, last_hit_by=NO_ATTACKER):
+                 ammo=START_AMMO, last_hit_by=NO_ATTACKER,
+                 engine_frac=ENGINE_FRAC, wing_frac=WING_FRAC, tail_frac=TAIL_FRAC):
         self.lat, self.lon, self.psi, self.phi, self.alt, self.tas = lat, lon, psi, phi, alt, tas
         self.gamma = gamma
         self.hp = hp
         self.fire_cd = fire_cd
         self.ammo = ammo
         self.last_hit_by = last_hit_by
-        self.engine_hp = ENGINE_FRAC * hp     # v1.18r0: region sub-pools sized from starting hp
-        self.wing_hp = WING_FRAC * hp
-        self.tail_hp = TAIL_FRAC * hp
+        self.engine_hp = engine_frac * hp     # v1.18r0: region sub-pools sized from starting hp
+        self.wing_hp = wing_frac * hp         # (v1.20r0: per-airframe fractions)
+        self.tail_hp = tail_frac * hp
         self.kills = 0.0                      # v1.18r0: victory tally (integer-valued f64)
 
 
@@ -573,9 +582,10 @@ def build_scenario(rails, scenario):
             alt=float(s["alt_m"]), tas=float(s["tas_mps"]),
         )
         a.hp = env["hp_start"]                 # G3 (v1.11r0): per-airframe starting hitpoints
-        a.engine_hp = ENGINE_FRAC * a.hp       # v1.18r0: re-derive the region sub-pools from the
-        a.wing_hp = WING_FRAC * a.hp           # per-airframe hp (the ctor sized them from the
-        a.tail_hp = TAIL_FRAC * a.hp           # default); mirrors Kernel::add in kernel.cpp
+        a.engine_hp = env["engine_frac"] * a.hp  # v1.18r0: re-derive the region sub-pools from
+        a.wing_hp = env["wing_frac"] * a.hp      # the per-airframe hp; v1.20r0: sized by the
+        a.tail_hp = env["tail_frac"] * a.hp      # envelope's region-toughness fractions. Mirrors
+                                                 # Kernel::add in kernel.cpp.
         a.ammo = env["ammo_start"]             # G4 (v1.13r0): per-airframe magazine size
         k.aircraft.append(a)
         schedules.append(ac["schedule"])

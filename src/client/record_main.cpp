@@ -180,11 +180,14 @@ void seed(Kernel& k, const Flight& f, bool deg, std::vector<const Envelope*>& en
                                           // canonical scenario runner (scenario_main.cpp) and the
                                           // net layers, so a --id replay of e.g. Winchester-001
                                           // records the sealed fight, not a 500-round default
+        double ef = a.env->engine_frac;   // v1.20r0: per-airframe region toughness — same
+        double wf = a.env->wing_frac;     // alignment rule (keep seed() matching scenario_main
+        double tf = a.env->tail_frac;     // if Kernel::add grows another per-airframe arg)
         if (deg)
             k.add(a.lat_deg * DEG2RAD, a.lon_deg * DEG2RAD, a.psi_deg * DEG2RAD,
-                  a.phi_deg * DEG2RAD, a.alt_m, a.tas_mps, 0.0, hp, ammo);
+                  a.phi_deg * DEG2RAD, a.alt_m, a.tas_mps, 0.0, hp, ammo, ef, wf, tf);
         else
-            k.add(a.lat_deg, a.lon_deg, a.psi_deg, a.phi_deg, a.alt_m, a.tas_mps, 0.0, hp, ammo);
+            k.add(a.lat_deg, a.lon_deg, a.psi_deg, a.phi_deg, a.alt_m, a.tas_mps, 0.0, hp, ammo, ef, wf, tf);
         env.push_back(a.env);
     }
 }
