@@ -298,6 +298,14 @@ docs/{adr,annex,cards,receipts,seals}  governance ledger  .claude/{agents,skills
   for per-round floating damage numbers (region-coloured) + exact-tick attributed kill lines, instead
   of inferring kills from 20 Hz wire-state transitions. Presentation-only ⇒ all 11 goldens
   byte-identical (the hit queue is observable output, never hashed).
+- **Aircraft meshes (no-seal, rides v1.19r0):** the sphere+lines marker becomes a procedural
+  low-poly WWII fighter — `aircraft_mesh.{h,cpp}` builds pure vertex data (octagonal-ring lofts +
+  convex slabs, derived winding, baked body-frame key light; headless lib, no raylib types/assets)
+  split into the wire's ENGINE/WING/TAIL region parts + BODY hull, so a knocked-out region's part
+  tints dark straight from the decoded WEAPON-001 pools and the prop (engine part spun about the
+  nose axis) freezes on a dead engine. Both replay + fly paths; line-marker headless fallback;
+  `test_aircraft_mesh` gates the structure. Presentation-only ⇒ all 11 goldens byte-identical.
 - next — free pick (none blocking): **B5** ISA atmosphere (a seal); an open-ended live frame SOURCE
   feeding `broadcast_async` incrementally; per-airframe region toughness (data-only envelopes + a
-  kernel consumer — its own ADR); or aircraft meshes (the remaining renderer cosmetic).
+  kernel consumer — its own ADR); or per-airframe mesh variants (needs an aircraft-type field on
+  the wire/.seadsrec meta — none exists today).

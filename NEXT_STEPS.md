@@ -1,6 +1,53 @@
 # SEADS 2026 — Next Steps (handoff)
 
-> ## ►► CURRENT STATE (2026-07-02): **EVENT-JOURNAL KILL-FEED — PER-ROUND COMBAT EVENTS AT 100 Hz IN THE VIEWER DONE ✅** (no-seal, rides **ATM-Sphere v1.19r0**)
+> ## ►► CURRENT STATE (2026-07-02): **AIRCRAFT MESHES — PROCEDURAL LOW-POLY FIGHTER, REGION-DAMAGE TINTED, IN THE VIEWER DONE ✅** (no-seal, rides **ATM-Sphere v1.19r0**)
+> **Latest: the last renderer cosmetic lands — the sphere+lines marker is now a real low-poly WWII prop fighter, and the airframe itself shows the v1.18r0 damage state: a knocked-out region's part tints dark straight from the decoded WEAPON-001 pools, and the prop stops on a dead engine.**
+> Four pieces, ALL `src/client` (downstream-only presentation):
+> **(a) `aircraft_mesh.{h,cpp}` — a pure vertex-data builder** (new files, in the headless
+> `seads_client` lib; NO raylib types, NO GPU, NO asset files): a generic WWII fighter from two
+> primitives — octagonal-ring LOFTS (tapered fuselage + cowl + spinner/tail fans) and convex
+> 8-corner SLABS (wings, stabilizers, fin, canopy, two crossed prop blades). Face winding is
+> DERIVED, not hand-authored (every face wound to agree with an outward hint: radial for lofts,
+> centroid-out for slabs), and a fixed body-frame key light is BAKED into per-vertex shade so the
+> low-poly form reads without a lighting shader. Body frame +X nose / +Y canopy / +Z starboard.
+> **(b) The model is split into the wire's REGION parts** — ENGINE / WING / TAIL (v1.18r0 order)
+> + the BODY hull — so `draw_aircraft` tints a knocked-out region's part dark (`REGION_OUT_C`)
+> straight from the decoded pools (same all-zero-baseline back-compat guard as the bars), and the
+> ENGINE part alone spins about the nose axis (the cowl is a solid of revolution ⇒ only the blades
+> visibly turn) — **frozen when the engine pool is out or the plane is dead** (the "engine out →
+> thrust 0" seal state is visible on the airframe). Own fly ship: no wire weapons ⇒ plain colour,
+> prop always spinning.
+> **(c) `FighterModel` uploads the four parts post-InitWindow** (`viewer_main.cpp`): baked shade
+> rides the vertex colours (default shader multiplies them by the material tint); the transform is
+> a rigid re-orthogonalized frame (X = pitched nose, Z = rolled wingspan, Y = their cross — the
+> old sheared b_up is NOT used). BOTH the replay GUI (remotes @1.2 scale) and fly (remotes @1.0,
+> own @1.6) draw it; the original line marker survives as the `!ready` headless/pre-init fallback.
+> **(d) Headless structural gates** (`seads_client_test` gains `test_aircraft_mesh`): array
+> shapes, stored-normal == winding-recomputed normal per triangle, unit normals, no degenerate
+> tris, bilateral z-mirror symmetry (set-based), region-part LAYOUT (engine reaches the nose +
+> stays forward, tail reaches the tip + stays aft, nothing out-spans the wings), shade band.
+> **PRESENTATION-ONLY: no `src/kernel/**`, `src/det_math/**`, `src/net/**`, `config/rails/**`,
+> `data/tuning/**`, or wire bytes touched ⇒ ALL 11 GOLDENS BYTE-IDENTICAL, no digest moved, no new
+> ctest target ⇒ guardian.yml UNCHANGED. No seal.**
+> **Gates: 15/15 receipt PASS (`receipt-ATM-Sphere_v1.19r0-7b02417.yml`), determinism lint PASS,
+> ctest 17/17 GCC + 17/17 Clang, property tests 166 (unchanged — no reference/wire change), replay
+> + fly selfchecks green over the `--dogfight` recording, 8 s GUI smoke of BOTH modes clean, and
+> the fly own-ship SCREENSHOT-VERIFIED (readable fighter: tapered wings, tailplane + fin, canopy,
+> spinner + blades, banking with input).**
+> **GIT: pushed to `origin/main` (code `7b02417`).**
+> **NEXT (free pick, none blocking):** **B5** ISA atmosphere (a seal); an open-ended live frame
+> SOURCE feeding `broadcast_async` incrementally; per-airframe region toughness (data-only envelope
+> scalars + a kernel consumer — its own ADR, would move goldens); or per-airframe mesh VARIANTS
+> (needs an aircraft-type field on the wire or in the .seadsrec meta — the wire carries none today,
+> which is why this model is deliberately generic).
+> **NOTE FOR THE NEXT AGENT:** the mesh builder is deliberately in the HEADLESS lib (pure float
+> arrays) — keep GPU types out of `aircraft_mesh.{h,cpp}` so `test_aircraft_mesh` stays runnable
+> everywhere. The engine/wing/tail part split is index-aligned with the wire region order 0/1/2 —
+> keep that alignment if you add parts. `FighterModel::init()` must run after `InitWindow` (GL
+> context); headless paths never touch it. Prop spin reads the wall clock (presentation-only, like
+> the feed fades) and deliberately keeps spinning while paused.
+>
+> ## ►► PRIOR STATE (2026-07-02): **EVENT-JOURNAL KILL-FEED — PER-ROUND COMBAT EVENTS AT 100 Hz IN THE VIEWER DONE ✅** (no-seal, rides **ATM-Sphere v1.19r0**)
 > **Latest: the viewer's kill-feed is now driven by the layer-6 per-round hit journal at the full 100 Hz physics rate — exact-tick attributed kills + per-round floating damage numbers — instead of inferring kills from 20 Hz wire-state transitions.**
 > The follow-up the last renderer handoff named ("wire the layer-6 event.h journal into the viewer
 > for per-round granularity") lands. The kernel's per-round hit queue (`Kernel::hit_events()` — one
