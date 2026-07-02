@@ -29,8 +29,13 @@
 > cross-toolchain aggregation — first golden-list change since v1.18r0) + 3 non-degeneracy property
 > tests (`tests/property/test_yakla_golden.py`: start TAS strictly inside a LUT segment, commanded
 > banks exceed phi_max everywhere, lut_eval strictly interpolates between differing nodes) ⇒ **169**.
-> **Gates: ctest 17/17 GCC + 17/17 Clang, 169 property tests PASS, spec-monotone + tuning probes
-> PASS, all 12 goldens validate against the reference, scenario_params --check in sync.**
+> **Gates: 15/15 receipt PASS (`receipt-ATM-Sphere_v1.19r0-bdd1533.yml`), ctest 17/17 GCC + 17/17
+> Clang, 169 property tests PASS, spec-monotone + tuning probes PASS, all 12 goldens validate
+> against the reference, scenario_params --check in sync.**
+> **GIT: pushed to `origin/main` (code `bdd1533` + receipt `198c64b`); guardian CI run
+> [28615880501](https://github.com/cjcgervais/seads/actions/runs/28615880501) GREEN** — Python
+> gates + MSVC + GCC/Clang × x64/AArch64 + the cross-toolchain hash aggregation gate all reproduce
+> **all 12 goldens bit-for-bit** (11 prior unchanged + the new YakLa on every leg).
 > **NEXT (free pick, none blocking):** **B5** ISA atmosphere (a seal); an open-ended live frame
 > SOURCE feeding `broadcast_async` incrementally; or per-airframe region toughness (data-only
 > envelope scalars + a kernel consumer — its own ADR, would move goldens).
