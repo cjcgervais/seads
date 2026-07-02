@@ -129,7 +129,8 @@ target_link_libraries(seads_broadcast PUBLIC seads_framing seads_socket seads_de
 # (layer 4a) for display. It NEVER feeds the sim: it links seads_net but NOT the kernel/det_math,
 # lives OUTSIDE the world_hash, and is free to use libm trig (globe projection) — the determinism
 # lint scopes to kernel/det_math/replay only. No seal (rides v1.4r0).
-add_library(seads_client STATIC src/client/seadsrec.cpp src/client/playback.cpp)
+add_library(seads_client STATIC src/client/seadsrec.cpp src/client/playback.cpp
+            src/client/aircraft_mesh.cpp)
 target_include_directories(seads_client PUBLIC src/client)
 target_link_libraries(seads_client PUBLIC seads_net seads_det_flags)
 

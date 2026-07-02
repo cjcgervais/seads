@@ -7,6 +7,7 @@
 #include <cstdio>
 #include <vector>
 
+#include "aircraft_mesh.h"
 #include "globe.h"
 #include "interp.h"
 #include "playback.h"
@@ -261,11 +262,93 @@ static void test_event_journal() {
     check(!read_recording(blob.data(), blob.size() - 1, bad), "truncated journal rejected");
 }
 
+// The procedural fighter mesh (renderer cosmetic): pure vertex data, so every structural claim is
+// checkable without a GPU — array shapes, winding/normal agreement, bilateral symmetry, and the
+// region-part layout the viewer's damage tinting relies on (engine forward, tail aft, wings widest).
+static void test_aircraft_mesh() {
+    FighterMesh fm = build_fighter_mesh();
+    const MeshPart* parts[4] = {&fm.engine, &fm.wing, &fm.tail, &fm.body};
+    const char* names[4] = {"engine", "wing", "tail", "body"};
+
+    // Whole-model vertex list for the symmetry + extent checks.
+    std::vector<float> all;
+    for (const MeshPart* p : parts) all.insert(all.end(), p->vertices.begin(), p->vertices.end());
+
+    for (int i = 0; i < 4; ++i) {
+        const MeshPart& p = *parts[i];
+        check(p.tri_count() > 0, "mesh part is non-empty");
+        check(p.vertices.size() % 9 == 0, "vertices are whole triangles");
+        check(p.normals.size() == p.vertices.size(), "one normal per vertex");
+        check(p.shade.size() == p.vertices.size() / 3, "one shade per vertex");
+        for (float s : p.shade) check(s >= 0.5f && s <= 1.0f, "baked shade in the key-light band");
+
+        for (size_t t = 0; t + 8 < p.vertices.size(); t += 9) {
+            const float* v = &p.vertices[t];
+            const float* n = &p.normals[t];
+            // Face normal recomputed from the winding must equal the stored normal (unit, outward-
+            // consistent winding — the invariant the hint-based builder promises).
+            double ux = v[3] - v[0], uy = v[4] - v[1], uz = v[5] - v[2];
+            double wx = v[6] - v[0], wy = v[7] - v[1], wz = v[8] - v[2];
+            double cx = uy * wz - uz * wy, cy = uz * wx - ux * wz, cz = ux * wy - uy * wx;
+            double len = std::sqrt(cx * cx + cy * cy + cz * cz);
+            check(len > 1e-9, "no degenerate triangles");
+            cx /= len; cy /= len; cz /= len;
+            check(close(cx, n[0], 1e-4) && close(cy, n[1], 1e-4) && close(cz, n[2], 1e-4),
+                  "stored normal matches the winding");
+            check(close(std::sqrt(double(n[0]) * n[0] + double(n[1]) * n[1] + double(n[2]) * n[2]),
+                        1.0, 1e-4),
+                  "normals are unit length");
+        }
+
+        // Bilateral symmetry: every vertex's z-mirror exists somewhere in the model.
+        for (size_t k = 0; k + 2 < p.vertices.size(); k += 3) {
+            bool found = false;
+            for (size_t m = 0; m + 2 < all.size() && !found; m += 3)
+                found = close(p.vertices[k], all[m], 1e-5) &&
+                        close(p.vertices[k + 1], all[m + 1], 1e-5) &&
+                        close(p.vertices[k + 2], -all[m + 2], 1e-5);
+            if (!found) {
+                std::printf("FAIL: %s part vertex has no z-mirror\n", names[i]);
+                g_fail = 1;
+                break;
+            }
+        }
+    }
+
+    // Part layout (body frame: +X nose, +Z starboard) — what the region tinting shows must sit
+    // where the aspect-cone damage model books it: engine forward, tail aft, wings the widest.
+    auto extent = [](const MeshPart& p, int axis, bool max_abs) {
+        double best = max_abs ? 0.0 : p.vertices[axis];
+        for (size_t k = axis; k < p.vertices.size(); k += 3) {
+            double v = p.vertices[k];
+            if (max_abs) { if (std::fabs(v) > best) best = std::fabs(v); }
+            else { if (v > best) best = v; }
+        }
+        return best;
+    };
+    auto min_x = [](const MeshPart& p) {
+        double best = p.vertices[0];
+        for (size_t k = 0; k < p.vertices.size(); k += 3)
+            if (p.vertices[k] < best) best = p.vertices[k];
+        return best;
+    };
+    check(extent(fm.engine, 0, false) > 0.5, "engine part reaches the nose");
+    check(min_x(fm.engine) > 0.25, "engine part stays forward of the body");
+    check(min_x(fm.tail) < -0.5, "tail part reaches the tail tip");
+    check(extent(fm.tail, 0, false) < -0.1, "tail part stays aft of the body");
+    check(extent(fm.wing, 2, true) > 0.4, "wings span the widest");
+    check(extent(fm.wing, 2, true) > extent(fm.body, 2, true) &&
+              extent(fm.wing, 2, true) > extent(fm.engine, 2, true) &&
+              extent(fm.wing, 2, true) > extent(fm.tail, 2, true),
+          "no other part out-spans the wings");
+}
+
 int main() {
     test_globe();
     test_recording_and_playback();
     test_weapon_playback();
     test_event_journal();
+    test_aircraft_mesh();
     if (g_fail) { std::printf("seads_client_test: FAILED\n"); return 1; }
     std::printf("seads_client_test: all checks passed\n");
     return 0;

@@ -54,10 +54,12 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <functional>
 #include <string>
 #include <vector>
 
+#include "aircraft_mesh.h"
 #include "playback.h"
 #include "seadsrec.h"
 #include "predict.h"          // seads::predict::Predictor (netcode layer 4b)
@@ -359,10 +361,60 @@ void draw_scoreboard(const std::vector<RenderHp>& hp, int screen_w) {
     }
 }
 
-// Draw a banking/pitching aircraft marker (definition below, shared by replay + fly). Forward-
-// declared so run_gui can draw remotes with the same attitude-aware shape the fly own-ship uses.
-void draw_aircraft(Vector3 od, double lat, double lon, double psi, double phi, double pitch, Color c,
-                   float scale);
+// ---- Fighter model (procedural mesh, renderer cosmetic) ----------------------------------------
+// The pure vertex data comes from build_fighter_mesh() (seads_client, headlessly tested); this
+// wrapper uploads it as four GPU meshes — ENGINE / WING / TAIL in the wire's region order, plus
+// the BODY hull — so a knocked-out region can be tinted straight from the decoded WEAPON-001
+// pools: the aircraft itself becomes the damage display, beside the bars.
+
+constexpr double PROP_SPIN_RAD_S = 24.0;      // visual prop spin; freezes when the engine is out
+const Color REGION_OUT_C{110, 45, 45, 255};   // tint for a knocked-out region's part
+
+struct FighterModel {
+    Mesh mesh[4]{};    // 0=ENGINE 1=WING 2=TAIL (wire region order) 3=BODY
+    Material mat{};
+    bool ready = false;
+
+    // Upload needs the GL context — call after InitWindow. Headless paths never call it, and
+    // draw_aircraft falls back to the original line marker while !ready.
+    void init() {
+        FighterMesh fmesh = build_fighter_mesh();
+        const MeshPart* parts[4] = {&fmesh.engine, &fmesh.wing, &fmesh.tail, &fmesh.body};
+        for (int i = 0; i < 4; ++i) {
+            const MeshPart& p = *parts[i];
+            Mesh& m = mesh[i];
+            m.vertexCount = p.tri_count() * 3;
+            m.triangleCount = p.tri_count();
+            size_t nb = static_cast<size_t>(m.vertexCount) * 3 * sizeof(float);
+            m.vertices = static_cast<float*>(MemAlloc(static_cast<unsigned int>(nb)));
+            std::memcpy(m.vertices, p.vertices.data(), nb);
+            m.normals = static_cast<float*>(MemAlloc(static_cast<unsigned int>(nb)));
+            std::memcpy(m.normals, p.normals.data(), nb);
+            // Baked body-frame key light rides the vertex colours (the default shader multiplies
+            // them by the material tint) so the low-poly form reads without a lighting shader.
+            m.colors = static_cast<unsigned char*>(
+                MemAlloc(static_cast<unsigned int>(m.vertexCount) * 4));
+            for (int v = 0; v < m.vertexCount; ++v) {
+                unsigned char g = static_cast<unsigned char>(p.shade[v] * 255.0f + 0.5f);
+                m.colors[4 * v + 0] = g;
+                m.colors[4 * v + 1] = g;
+                m.colors[4 * v + 2] = g;
+                m.colors[4 * v + 3] = 255;
+            }
+            UploadMesh(&m, false);
+        }
+        mat = LoadMaterialDefault();
+        ready = true;
+    }
+};
+
+// Draw a banking/pitching aircraft (definition below, shared by replay + fly): the fighter mesh
+// oriented by heading/bank/pitch, region parts tinted from the decoded wire (w = current reading,
+// base = first-frame full pools; either may be null — regions then draw in the aircraft colour),
+// prop spun by spin_rad (frozen automatically when dead or engine-out).
+void draw_aircraft(FighterModel& fm, Vector3 od, double lat, double lon, double psi, double phi,
+                   double pitch, Color c, float scale, const RenderHp* w, const RenderHp* base,
+                   double spin_rad);
 
 // Headless data-path proof: advance render_tick across the recording, print sampled positions.
 int run_selfcheck(const Playback& pb, int n) {
@@ -452,6 +504,8 @@ int run_gui(Playback& pb, double speed) {
     const int W = 1280, H = 720;
     InitWindow(W, H, "SEADS globe viewer");
     SetTargetFPS(60);
+    FighterModel model;
+    model.init();
 
     Camera3D cam{};
     cam.position = Vector3{0, DISPLAY_R * 1.4f, DISPLAY_R * 2.6f};
@@ -517,11 +571,13 @@ int run_gui(Playback& pb, double speed) {
             for (size_t k = 1; k < trails[i].size(); ++k)
                 DrawLine3D(trails[i][k - 1], trails[i][k], Fade(c, 0.6f));
             Vector3 d = to_display(ents[i].pos, pb.radius_m());
-            // Attitude-aware marker (same shape as fly): wings roll with bank (phi), nose tilts with
-            // the flight-path angle (gamma). phi/gamma ride the KIN wire, snapped per Playback::sample.
-            draw_aircraft(d, ents[i].lat_deg * DEG2RAD_V, ents[i].lon_deg * DEG2RAD_V,
+            // Attitude-aware fighter mesh (same model as fly): wings roll with bank (phi), nose
+            // tilts with the flight-path angle (gamma) — both ride the KIN wire, snapped per
+            // Playback::sample. Region parts tint from the wire pools; the prop spin is visual.
+            draw_aircraft(model, d, ents[i].lat_deg * DEG2RAD_V, ents[i].lon_deg * DEG2RAD_V,
                           ents[i].bearing_deg * DEG2RAD_V, ents[i].phi_deg * DEG2RAD_V,
-                          ents[i].gamma_deg * DEG2RAD_V, c, 1.2f);
+                          ents[i].gamma_deg * DEG2RAD_V, c, 1.2f, weap_for(wv.hp, ents[i].id),
+                          weap_for(maxhp, ents[i].id), now * PROP_SPIN_RAD_S);
         }
         // WEAPON-001 tracer rounds: a yellow point cloud at each live round (from the decoded wire).
         for (const auto& r : wv.rounds)
@@ -621,11 +677,12 @@ void local_basis(double lat, double lon, Vec3& up, Vec3& north, Vec3& east) {
     east  = Vec3{-so, 0.0, -co};
 }
 
-// Draw an aircraft marker that visibly BANKS (rolls about its heading axis) and PITCHES (nose
-// up/down) so control input reads instantly, even though the motion itself is gradual on a real
-// sphere. od = display position; lat/lon/psi/phi/pitch in radians; scale ~ marker size.
-void draw_aircraft(Vector3 od, double lat, double lon, double psi, double phi, double pitch, Color c,
-                   float scale) {
+// Draw an aircraft that visibly BANKS (rolls about its heading axis) and PITCHES (nose up/down)
+// so control input reads instantly, even though the motion itself is gradual on a real sphere.
+// od = display position; lat/lon/psi/phi/pitch in radians; scale ~ model size (body units).
+void draw_aircraft(FighterModel& fm, Vector3 od, double lat, double lon, double psi, double phi,
+                   double pitch, Color c, float scale, const RenderHp* w, const RenderHp* base,
+                   double spin_rad) {
     Vec3 up_h, north_h, east_h;
     local_basis(lat, lon, up_h, north_h, east_h);
     Vec3 fwd = normalize(north_h * std::cos(psi) + east_h * std::sin(psi));
@@ -634,14 +691,64 @@ void draw_aircraft(Vector3 od, double lat, double lon, double psi, double phi, d
     Vec3 wing  = right * std::cos(phi) - up2 * std::sin(phi);   // wingspan, rolled by the bank angle
     Vec3 b_up  = up2 * std::cos(phi) + right * std::sin(phi);   // canopy "up", rolled with it
     Vec3 nose  = normalize(fwd * std::cos(pitch) + b_up * std::sin(pitch));  // heading, pitched
-    auto P = [&](Vec3 d, float len) {
-        return Vector3{od.x + static_cast<float>(d.x) * len, od.y + static_cast<float>(d.y) * len,
-                       od.z + static_cast<float>(d.z) * len};
+    if (!fm.ready) {  // headless / pre-init fallback: the original line marker
+        auto P = [&](Vec3 d, float len) {
+            return Vector3{od.x + static_cast<float>(d.x) * len,
+                           od.y + static_cast<float>(d.y) * len,
+                           od.z + static_cast<float>(d.z) * len};
+        };
+        DrawSphere(od, 0.06f * scale, c);
+        DrawLine3D(P(wing, -0.5f * scale), P(wing, 0.5f * scale), c);
+        DrawLine3D(od, P(nose, 0.7f * scale), YELLOW);
+        DrawLine3D(od, P(b_up, 0.4f * scale), Fade(c, 0.7f));
+        return;
+    }
+    // Rigid body frame: X = pitched nose, Z = rolled wingspan (⟂ nose by construction),
+    // Y = their cross — b_up itself is NOT ⟂ the pitched nose, so re-derive.
+    Vec3 up_body = normalize(cross(wing, nose));
+
+    // Region tinting from the decoded wire. A pre-protocol-7 recording decodes all-zero baseline
+    // pools — regions then draw in the aircraft colour (same back-compat guard as the bars).
+    bool dead = w && w->hp <= 0.0;
+    bool regions_valid = w && base &&
+                         (base->engine_hp > 0.0 || base->wing_hp > 0.0 || base->tail_hp > 0.0);
+    Color pc[4] = {c, c, c, c};
+    if (!dead && regions_valid) {
+        if (w->engine_hp <= 0.0) pc[0] = REGION_OUT_C;
+        if (w->wing_hp <= 0.0) pc[1] = REGION_OUT_C;
+        if (w->tail_hp <= 0.0) pc[2] = REGION_OUT_C;
+    }
+    // Prop freezes on a dead engine (or a dead plane) — the v1.18r0 "engine out -> thrust 0"
+    // state is visible on the airframe itself, not just in the bars.
+    double sp = (dead || (regions_valid && w->engine_hp <= 0.0)) ? 0.0 : spin_rad;
+
+    auto xf_of = [&](Vec3 X, Vec3 Y, Vec3 Z) {
+        Matrix m{};
+        m.m0 = static_cast<float>(X.x) * scale;
+        m.m1 = static_cast<float>(X.y) * scale;
+        m.m2 = static_cast<float>(X.z) * scale;
+        m.m4 = static_cast<float>(Y.x) * scale;
+        m.m5 = static_cast<float>(Y.y) * scale;
+        m.m6 = static_cast<float>(Y.z) * scale;
+        m.m8 = static_cast<float>(Z.x) * scale;
+        m.m9 = static_cast<float>(Z.y) * scale;
+        m.m10 = static_cast<float>(Z.z) * scale;
+        m.m12 = od.x;
+        m.m13 = od.y;
+        m.m14 = od.z;
+        m.m15 = 1.0f;
+        return m;
     };
-    DrawSphere(od, 0.06f * scale, c);
-    DrawLine3D(P(wing, -0.5f * scale), P(wing, 0.5f * scale), c);        // wings (visibly bank)
-    DrawLine3D(od, P(nose, 0.7f * scale), YELLOW);                       // nose (heading + pitch)
-    DrawLine3D(od, P(b_up, 0.4f * scale), Fade(c, 0.7f));               // canopy up
+    Matrix xf = xf_of(nose, up_body, wing);
+    // The engine part alone spins about the nose axis (the cowl is a solid of revolution, so only
+    // the blades visibly turn).
+    Vec3 wing_s = wing * std::cos(sp) + up_body * std::sin(sp);
+    Vec3 up_s = up_body * std::cos(sp) - wing * std::sin(sp);
+    Matrix xf_eng = xf_of(nose, up_s, wing_s);
+    for (int i = 0; i < 4; ++i) {
+        fm.mat.maps[MATERIAL_MAP_DIFFUSE].color = pc[i];
+        DrawMesh(fm.mesh[i], fm.mat, i == 0 ? xf_eng : xf);
+    }
 }
 
 void draw_fly_hud(const predict::Predictor& pred, uint32_t tick, size_t n_remote, size_t n_rounds,
@@ -699,6 +806,8 @@ int run_fly(Playback& pb, double speed) {
     const int W = 1280, H = 720;
     InitWindow(W, H, "SEADS fly — predict own / interp remotes");
     SetTargetFPS(60);
+    FighterModel model;
+    model.init();
 
     Rails rails = fly_rails();
     const predict::OwnState start = fly_start();
@@ -895,9 +1004,10 @@ int run_fly(Playback& pb, double speed) {
             Vector3 d = to_display(rem[i].pos, pb.radius_m());
             // Remotes now tilt with their true flight-path angle (gamma rides the KIN wire) instead
             // of the old flat pitch=0 — a climbing/diving bandit reads correctly on the globe.
-            draw_aircraft(d, rem[i].lat_deg * DEG2RAD_V, rem[i].lon_deg * DEG2RAD_V,
+            draw_aircraft(model, d, rem[i].lat_deg * DEG2RAD_V, rem[i].lon_deg * DEG2RAD_V,
                           rem[i].bearing_deg * DEG2RAD_V, rem[i].phi_deg * DEG2RAD_V,
-                          rem[i].gamma_deg * DEG2RAD_V, c, 1.0f);
+                          rem[i].gamma_deg * DEG2RAD_V, c, 1.0f, weap_for(wv.hp, rem[i].id),
+                          weap_for(maxhp, rem[i].id), now * PROP_SPIN_RAD_S);
         }
         // WEAPON-001 tracer rounds — the remotes' gunfire, from the decoded wire.
         for (const auto& r : wv.rounds)
@@ -908,8 +1018,11 @@ int run_fly(Playback& pb, double speed) {
         // B2 (seal v1.6r0): pitch is REAL — tilt the marker by the kernel's true flight-path angle
         // gamma. The old presentation-only exaggeration band-aid is gone.
         double own_pitch = pred.kernel().gamma(0);
-        draw_aircraft(od, pred.kernel().lat(0), pred.kernel().lon(0), pred.kernel().psi(0),
-                      pred.kernel().phi(0), own_pitch, RED, 1.6f);
+        // Own ship carries no wire weapon state in this single-process loop (no server) — regions
+        // draw in the ship colour, prop always spinning.
+        draw_aircraft(model, od, pred.kernel().lat(0), pred.kernel().lon(0), pred.kernel().psi(0),
+                      pred.kernel().phi(0), own_pitch, RED, 1.6f, nullptr, nullptr,
+                      now * PROP_SPIN_RAD_S);
         EndMode3D();
         // Mouse-aim reticle (2D overlay, only when not in free-look).
         if (!freelook) {
