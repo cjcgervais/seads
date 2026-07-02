@@ -35,7 +35,12 @@
 > `6914a994…2b13eb20` unchanged, all scenario goldens validate, 197 property tests, det_math
 > oracle + tuning/spec/ceiling probes PASS; `seads_viewer` rebuilt clean (GCC build-client) and
 > both selfchecks verified.**
-> **GIT: code `3f258b9`.**
+> **GIT: pushed to `origin/main` (code `3f258b9` + receipt `d37100d`,
+> `receipt-ATM-Sphere_v1.24r0-3f258b9.yml` — 15/15 gates PASS); guardian CI run
+> [28628792142](https://github.com/cjcgervais/seads/actions/runs/28628792142) GREEN** — Python
+> gates + MSVC + GCC/Clang × x64/AArch64 + the cross-toolchain hash aggregation gate all
+> reproduce **all 14 v1.24r0 goldens bit-for-bit** (presentation-only change — nothing moved,
+> as designed).
 > **NEXT (free pick, none blocking):** a per-airframe two-speed blower schedule (deferred at
 > v1.22r0 — doubles the data surface for a second-order kink); more netcode (layer 15 — e.g. a
 > heartbeat/timeout LEAVE for silently-dead clients, or input upstreaming); or more renderer
