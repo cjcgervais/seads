@@ -28,8 +28,12 @@
 > the fresh 6-ship recording echoes `types: … #4=Yak-3 #5=La-7` + the Yak-3's 4-round TAIL kill
 > (kills=1, victim lhb=4, tail=0.00 — per-airframe hp/damage provably flow from the new entries),
 > fly selfcheck green, 10 s GUI smoke of BOTH modes clean.**
-> **GIT: code `223ebd5` + receipt on `main`; guardian CI pending at commit time (verify GREEN —
-> a data/presentation-only change moves no golden; the client is off the gate).**
+> **GIT: pushed to `origin/main` (code `223ebd5` + receipt `0232a17`,
+> `receipt-ATM-Sphere_v1.19r0-223ebd5.yml` — 15/15 gates PASS); guardian CI run
+> [28613165952](https://github.com/cjcgervais/seads/actions/runs/28613165952) GREEN** — Python
+> gates + MSVC + GCC/Clang × x64/AArch64 + the cross-toolchain hash aggregation gate all reproduce
+> all 11 goldens bit-for-bit (a data/presentation-only change moves no golden; the client is off
+> the gate).
 > **NEXT (free pick, none blocking):** **B5** ISA atmosphere (a seal); an open-ended live frame
 > SOURCE feeding `broadcast_async` incrementally; per-airframe region toughness (data-only envelope
 > scalars + a kernel consumer — its own ADR, would move goldens); or a sealed SCENARIO exercising
