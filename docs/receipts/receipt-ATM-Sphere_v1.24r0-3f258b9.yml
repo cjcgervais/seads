@@ -1,0 +1,36 @@
+seal: ATM-Sphere v1.24r0
+realm: ATM-only
+geometry:
+  radius_m: 15000
+  flattening: 0
+tick_dt_s: 0.01
+gravity_mps2: 9.80665
+ceiling:
+  atm_top_m: 8000
+  soft_band_m: 100
+wire_hash: GEO-001+KIN-002
+change_summary: "HUD atmosphere + airframe data (presentation-only rider on v1.24r0): sigma(alt) + supercharger pwr in the HUD rows (native replay/fly + web), toughness eighths + crit alt on the scoreboard; selfchecks echo the fields headless. No kernel/wire/tuning touch; all 14 goldens byte-identical."
+rail_change: false
+gates:
+  spec_monotone_check: PASS
+  det_math_oracle: PASS
+  tuning_probe: PASS
+  atm_top_probe: PASS
+  geo001_codec: PASS
+  snapshot_codec: PASS
+  weapon_codec: PASS
+  lockstep: PASS
+  interp: PASS
+  predict: PASS
+  session: PASS
+  event: PASS
+  validate_snapshot: PASS
+  validate_scenarios: PASS
+  property_tests: PASS
+golden_id: GOLDEN-SK-Sphere-001
+golden_sha256: "6914a99492897dd98af77bb4e4e1a32a71215d3ed380c658aa17ab842b13eb20"
+commit_sha: "3f258b9b4df0a4e9a3a5b58fc241236c633516f9"
+toolchain_matrix: [python-ref, MSVC2022, Clang18, GCC13, x64, AArch64]
+date: "2026-07-02"
+overall: PASS
+signoff: "SEADS Forge"

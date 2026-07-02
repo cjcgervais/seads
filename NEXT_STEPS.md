@@ -1,6 +1,53 @@
 # SEADS 2026 — Next Steps (handoff)
 
-> ## ►► CURRENT STATE (2026-07-02): seal **ATM-Sphere v1.24r0** — **PROJECTILE σ-DRAG DONE ✅** (B5's last deferral closed — a bullet finally flies in thin air)
+> ## ►► CURRENT STATE (2026-07-02): **HUD ATMOSPHERE + AIRFRAME DATA DONE ✅** (no-seal, rides **ATM-Sphere v1.24r0**)
+> **Latest: the named presentation-only free pick lands — per-airframe toughness / σ / crit-alt
+> are finally VISIBLE. Both native HUDs (replay + fly) and the web viewer surface the flight
+> model's atmosphere, and the scoreboard carries the static airframe data.** Four readouts, all
+> computed presentation-side from data the client already holds (`src/client` only):
+> **(a) `sig` — σ(alt)** on every HUD row (native `draw_hud` + web `viewer.js` `isaSigma`): the
+> ICAO ISA troposphere power law — the SAME provenance the sealed 17-node LUT was generated from
+> (`tools/gen_isa_lut.py`); it tracks the sealed table to < 2.5e-4, far below the 2-decimal
+> display. The sealed LUT itself stays PRIVATE to kernel.cpp — deliberately not exported for a
+> HUD (the viewer is downstream-only, so libm `pow` is fine there).
+> **(b) `pwr` — the engine power state**: the v1.22r0 supercharger lapse
+> `min(1, σ(alt)/σ(crit))` — RATED 100% below the airframe's critical altitude, falling above
+> it. Needs `crit_alt_m`, so it rides the `.seadsrec` v3 type trailer via a new
+> **`envelope_for_code()`** (the inverse of record_main's envelope-pointer → code map, sealed
+> roster order 0–7, nullptr for GENERIC/absent ⇒ pre-v3 recordings degrade to σ-only).
+> **(c) Scoreboard toughness column — region E-W-T in EIGHTHS** (`toughness_eighths`): recovered
+> from the WIRE's first-frame pools (pool = frac·hp_start; the v1.20r0 dyadic 1/8 contract makes
+> the `lround` exact) ⇒ works on ANY protocol-7 recording, type trailer or not.
+> **(d) Scoreboard crit-alt column + a fly-mode ATMOS line** (own-ship σ / pwr / crit for the
+> Ki-61 fly envelope; the line goes GOLD when flying above crit).
+> **Headless proof (both selfchecks echo the new fields):** the `--dogfight` demo reads the
+> sealed roster back exactly — P-47D 5-4-3/8 crit 8000 m · A6M2 4-3-2 (the v1.23r0 Sakae 4/8
+> visible) · P-51 2-4-3 crit 7500 · Ki-61 2-4-2 crit 4000 · Yak-3 2-3-2 crit 3000 · La-7 4-3-2
+> crit 4500 — and the Yak-3 at 3200→3400 m is the ONLY ship below pwr 100% (98%→96% in flight:
+> the v1.22r0 lapse, visible on a HUD for the first time). `--fly --selfcheck` shows the Ki-61
+> at ~2500 m: sig 0.78, pwr 100% (below its 4000 m crit).
+> **PRESENTATION-ONLY: no `src/kernel/**`, `src/det_math/**`, `config/rails/**`, wire bytes, or
+> tuning touched ⇒ ALL 14 GOLDENS BYTE-IDENTICAL, no digest moved. No seal.** Diff:
+> `viewer_main.cpp` (+ helpers `hud_sigma`/`hud_power`/`envelope_for_code`/`toughness_eighths`,
+> HUD/scoreboard/fly-HUD/selfcheck extensions) + `web/viewer.js` (+`isaSigma`, σ per HUD row) +
+> `src/client/README.md`. No new ctest target; guardian.yml unchanged.
+> **Gates: 15/15 receipt PASS (`receipt-ATM-Sphere_v1.24r0-3f258b9.yml`) — Sphere golden
+> `6914a994…2b13eb20` unchanged, all scenario goldens validate, 197 property tests, det_math
+> oracle + tuning/spec/ceiling probes PASS; `seads_viewer` rebuilt clean (GCC build-client) and
+> both selfchecks verified.**
+> **GIT: code `3f258b9`.**
+> **NEXT (free pick, none blocking):** a per-airframe two-speed blower schedule (deferred at
+> v1.22r0 — doubles the data surface for a second-order kink); more netcode (layer 15 — e.g. a
+> heartbeat/timeout LEAVE for silently-dead clients, or input upstreaming); or more renderer
+> polish (e.g. a σ/pwr tape beside the fly reticle, or per-airframe HUD tints).
+> **NOTE FOR THE NEXT AGENT:** the HUD σ is the ICAO LAW, not the sealed LUT — if you ever need
+> the LUT's exact bits client-side, export it properly (a generated header both sides consume),
+> don't fork the nodes. `envelope_for_code` must track the AircraftType enum (STABLE codes 0–7,
+> never renumber) and `record_main type_code_of` — a new roster variant touches all three.
+> `toughness_eighths` deliberately reads the WIRE baseline, not the envelope (it must agree with
+> what replicates); keep it that way.
+>
+> ## ►► PRIOR STATE (2026-07-02): seal **ATM-Sphere v1.24r0** — **PROJECTILE σ-DRAG DONE ✅** (B5's last deferral closed — a bullet finally flies in thin air)
 > **Latest (SEAL v1.24r0): the projectile advance scales its lumped `PROJ_DRAG_K` by the sealed
 > ISA density ratio at the round's PRE-step altitude — `Vdot = -k·σ(alt)·V² - g₀·sinγ`, one
 > `air_sigma` per round per tick (the aircraft step's pre-step convention), op-for-op mirrored
