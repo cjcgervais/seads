@@ -37,8 +37,9 @@
 > fly selfcheck green, 10 s GUI smoke of BOTH modes clean.**
 > **GIT: pushed to `origin/main` (envtab code `223ebd5` + receipt `0232a17` — guardian CI run
 > [28613165952](https://github.com/cjcgervais/seads/actions/runs/28613165952) GREEN; ammo rider
-> `255eafb` + receipt `receipt-ATM-Sphere_v1.19r0-255eafb.yml` 15/15 PASS — verify its guardian
-> run GREEN)** — Python gates + MSVC + GCC/Clang × x64/AArch64 + the cross-toolchain hash
+> `255eafb` + receipt `receipt-ATM-Sphere_v1.19r0-255eafb.yml` 15/15 PASS — guardian CI run
+> [28614577682](https://github.com/cjcgervais/seads/actions/runs/28614577682) GREEN)** — Python
+> gates + MSVC + GCC/Clang × x64/AArch64 + the cross-toolchain hash
 > aggregation gate all reproduce all 11 goldens bit-for-bit (data/presentation-only changes move
 > no golden; the client is off the gate).
 > **NEXT (free pick, none blocking):** **B5** ISA atmosphere (a seal); an open-ended live frame
