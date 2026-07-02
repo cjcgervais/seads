@@ -34,8 +34,15 @@
 > (component/region damage; **B5** ISA atmosphere).
 > **NOTE FOR THE NEXT AGENT:** the prior session died on an API error AFTER the v1.17r0 code was
 > complete and green but BEFORE tests/ledger/commit; this session added the +2 property tests, wrote
-> the ledger, and committed. Also: **v1.16r0 was committed but never pushed** — this push ships BOTH
-> seals; guardian CI must reproduce the 10 v1.16r0-moved goldens AND the v1.17r0 net-layer parity legs.
+> the ledger, and committed. **v1.16r0 had also never been pushed** — one push (`a53c211..571885b`)
+> shipped BOTH seals (v1.16r0 code `731dbe0` + receipt `bdfdd82`; v1.17r0 code `f9ee33e` + receipt
+> `571885b`).
+> **GIT: merged + PUSHED to `origin/main`; guardian CI run
+> [28557986304](https://github.com/cjcgervais/seads/actions/runs/28557986304) GREEN** — Python gates +
+> MSVC + GCC/Clang × x64/AArch64 + the cross-toolchain hash aggregation gate all reproduce: the 10
+> v1.16r0-moved goldens bit-for-bit AND the v1.17r0 geo001/snapshot/weapon/lockstep/interp/predict/
+> session/event parity legs (new session + event digests bit-identical cross-toolchain). **Both seals
+> fully landed.**
 >
 > ## ►► PRIOR STATE (2026-07-01): seal **ATM-Sphere v1.16r0** — **ATTACKER ATTRIBUTION (last_hit_by / "who fired the killing round") DONE ✅**
 > **Latest (SEAL v1.16r0): the kernel now records WHO killed whom.** The guns/netcode arc could model a
@@ -69,8 +76,9 @@
 > **GOTCHA confirmed for the next agent:** a new per-aircraft canonical f64 moves ONLY `lockstep`+`predict`
 > vectors (they hash the world_hash); wire-based vectors stay frozen while the field is off-wire. Regenerate
 > those two (not all 13) and rebuild — `make_receipt` catches it if you miss one.
-> **GIT: committed locally; push + guardian CI is the final gate (expected GREEN — MSVC + GCC/Clang ×
-> x64/AArch64 reproduce all 10 moved goldens + the off-wire parity legs).**
+> **GIT: pushed with v1.17r0 (`a53c211..571885b`); guardian CI run
+> [28557986304](https://github.com/cjcgervais/seads/actions/runs/28557986304) GREEN — MSVC + GCC/Clang ×
+> x64/AArch64 reproduce all 10 moved goldens + the parity legs.**
 >
 > ## ►► PRIOR STATE (2026-06-30): seal **ATM-Sphere v1.15r0** — **GUN CONVERGENCE (BORESIGHT HARMONIZATION) DONE ✅**
 > **Latest (SEAL v1.15r0): the guns are now harmonized — rounds are boresight-zeroed to a per-airframe range.**
