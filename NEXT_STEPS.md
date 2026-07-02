@@ -1,6 +1,52 @@
 # SEADS 2026 — Next Steps (handoff)
 
-> ## ►► CURRENT STATE (2026-07-02): **RENDERER POLISH — DAMAGE STATE + KILL-FEED + SCOREBOARD IN THE LIVE `--fly` PATH DONE ✅** (no-seal, rides **ATM-Sphere v1.19r0**)
+> ## ►► CURRENT STATE (2026-07-02): **EVENT-JOURNAL KILL-FEED — PER-ROUND COMBAT EVENTS AT 100 Hz IN THE VIEWER DONE ✅** (no-seal, rides **ATM-Sphere v1.19r0**)
+> **Latest: the viewer's kill-feed is now driven by the layer-6 per-round hit journal at the full 100 Hz physics rate — exact-tick attributed kills + per-round floating damage numbers — instead of inferring kills from 20 Hz wire-state transitions.**
+> The follow-up the last renderer handoff named ("wire the layer-6 event.h journal into the viewer
+> for per-round granularity") lands. The kernel's per-round hit queue (`Kernel::hit_events()` — one
+> `HitEvent` per connecting round, observable output, never hashed) is the SAME source the reliable
+> event channel consumes; the recorder, which already drives the sealed kernel at 100 Hz, now
+> captures it every tick. Four pieces, ALL `src/client` (downstream-only presentation):
+> **(a) The `.seadsrec` container carries the journal** (`seadsrec.{h,cpp}`, `SEADSREC_VERSION 1→2`):
+> a new trailing section after the frames — `u32 n_events` then per event
+> `{tick, target, attacker, damage_milli, hp_after_milli, killed, region}` (each i64 LE). Quantized
+> to milli-hp EXACTLY as `src/net/event.cpp` (`damage_milli` = post-clamp effective loss). A v2
+> reader parses it; **a v1 file still loads with an empty journal** (the 3-arg `write_recording`
+> delegates to the new 4-arg form with an empty list); a truncated trailer is rejected.
+> **(b) The recorder captures it** (`record_main.cpp`): in the 100 Hz step loop, after `k.step`, it
+> appends one `RecEvent` per `k.hit_events()` record at the exact physics tick. The dogfight demo
+> yields **14 exact per-round events** (two 6/8-round bursts, each ending in a KILL; every round on
+> its own tick 194/197/200/… — the granularity the 20 Hz path smears).
+> **(c) `Playback` exposes `events()`** and **a new `CombatFeed`** replays them cursor-based (NO
+> downward-crossing wrap heuristic — the cursor repositions cleanly on a replay loop): **floating
+> per-round damage numbers** pinned to the struck aircraft's screen position, **region-coloured**
+> (ENGINE red / WING orange / TAIL gold), plus **exact-tick attributed kill lines** ("#0 downed #1
+> (TAIL)"). Two shooters landing on the SAME tick render as two distinct numbers (the transition
+> path lumps them). Used in BOTH `run_gui` and `run_fly`; the v1.19r0 transition `KillFeed` stays as
+> the fallback for a journal-less recording. `--selfcheck` echoes the whole journal (headless proof).
+> **(d)** The damage-state BARS (wire region pools) still show current damage state; the journal
+> feed shows the per-round HITS as they land — a coherent split (state vs. events).
+> **PRESENTATION-ONLY: the hit queue is observable kernel output, never hashed; no `src/kernel/**`,
+> `src/det_math/**`, `src/net/**`, `config/rails/**`, `data/tuning/**`, or wire bytes touched ⇒ ALL
+> 11 GOLDENS BYTE-IDENTICAL, no digest moved, no new ctest target ⇒ guardian.yml UNCHANGED. No seal.**
+> **Gates: 15/15 receipt PASS (`receipt-ATM-Sphere_v1.19r0-f68c09d.yml`), determinism lint PASS,
+> ctest 17/17 GCC + 17/17 Clang (`seads_client_test` gains `test_event_journal` — v2 round-trip
+> incl. signed `hp_after` + distinct same-tick attackers, v1 back-compat, truncation reject),
+> property tests 166 (unchanged — no reference/wire change), selfcheck over the fresh `--dogfight`
+> recording prints all 14 events with exact ticks/regions/kills, 8 s GUI smoke of BOTH modes clean.**
+> **GIT: code `f68c09d` + receipt committed on `main`.**
+> **NEXT (free pick, none blocking):** **B5** ISA atmosphere (a seal); an open-ended live frame
+> SOURCE feeding `broadcast_async` incrementally; per-airframe region toughness (data-only envelope
+> scalars + a kernel consumer — its own ADR, would move goldens); or aircraft meshes (the remaining
+> renderer cosmetic).
+> **NOTE FOR THE NEXT AGENT:** the journal is captured at 100 Hz but the demo bursts happen to land
+> one round per few ticks; a denser rof would show multiple numbers stacking (handled — `jitter()`
+> spreads same-tick numbers deterministically, no RNG). The `.seadsrec` v2 trailer is append-only
+> after the frames, so a v1 reader that stops at `n_frames` is unaffected and a v2 reader tolerates a
+> v1 file. Keep the hit queue OFF any wire — it is a presentation capture from the recorder's own
+> kernel, not a sealed transport (putting it on the snapshot wire would be a reseal for no gain).
+>
+> ## ►► PRIOR STATE (2026-07-02): **RENDERER POLISH — DAMAGE STATE + KILL-FEED + SCOREBOARD IN THE LIVE `--fly` PATH DONE ✅** (no-seal, rides **ATM-Sphere v1.19r0**)
 > **Latest: the viewer finally SHOWS the fight the wire has carried since v1.19r0 — damage state, an attributed kill-feed, and a scoreboard, in both the live `--fly` path and the replay GUI, all drawn purely from decoded WEAPON-001 bytes.**
 > The v1.19r0 handoff's named free pick lands. Four pieces, ALL `src/client` + web (downstream-only
 > presentation — outside the determinism gate by construction):

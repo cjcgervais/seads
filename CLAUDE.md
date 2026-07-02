@@ -292,6 +292,12 @@ docs/{adr,annex,cards,receipts,seals}  governance ledger  .claude/{agents,skills
   WEAPON-001 state (ammo/last_hit_by/region pools/kills); fly mode draws tracer rounds, hp + E/W/T
   region bars, a kills/ammo scoreboard, and a loop-safe transition-derived attributed kill-feed.
   Pure `src/client`/web presentation ⇒ all 11 goldens byte-identical, no digest moved.
+- **Event-journal kill-feed (no-seal, rides v1.19r0):** the `.seadsrec` container gains a v2 trailer
+  carrying the layer-6 per-round hit journal (`Kernel::hit_events()`, captured at 100 Hz by the
+  recorder, quantized to milli-hp like `event.cpp`); the viewer's `CombatFeed` replays it cursor-based
+  for per-round floating damage numbers (region-coloured) + exact-tick attributed kill lines, instead
+  of inferring kills from 20 Hz wire-state transitions. Presentation-only ⇒ all 11 goldens
+  byte-identical (the hit queue is observable output, never hashed).
 - next — free pick (none blocking): **B5** ISA atmosphere (a seal); an open-ended live frame SOURCE
   feeding `broadcast_async` incrementally; per-airframe region toughness (data-only envelopes + a
   kernel consumer — its own ADR); or aircraft meshes (the remaining renderer cosmetic).
