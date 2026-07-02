@@ -287,7 +287,11 @@ docs/{adr,annex,cards,receipts,seals}  governance ledger  .claude/{agents,skills
   v1.17r0 — the Event record is untouched). +2 property tests (`test_protocol6_omits_regions`,
   region+scoreboard-replicate-under-loss) ⇒ 166. **Region-damage arc closed end-to-end.**
   See ADR-Step7-Guns-WireTransport-RegionDamage-v1.19r0.
-- next — free pick (none blocking): renderer polish (meshes; damage state + kill-feed + scoreboard
-  in the live `--fly` path — every field now rides the wire); **B5** ISA atmosphere (a seal); an
-  open-ended live frame SOURCE feeding `broadcast_async` incrementally; or per-airframe region
-  toughness (data-only envelopes + a kernel consumer — its own ADR).
+- **Renderer polish (no-seal, rides v1.19r0):** damage state + kill-feed + scoreboard in the live
+  `--fly` path (and the replay GUI + web HUD) — `Playback::sample_weapons` surfaces the FULL decoded
+  WEAPON-001 state (ammo/last_hit_by/region pools/kills); fly mode draws tracer rounds, hp + E/W/T
+  region bars, a kills/ammo scoreboard, and a loop-safe transition-derived attributed kill-feed.
+  Pure `src/client`/web presentation ⇒ all 11 goldens byte-identical, no digest moved.
+- next — free pick (none blocking): **B5** ISA atmosphere (a seal); an open-ended live frame SOURCE
+  feeding `broadcast_async` incrementally; per-airframe region toughness (data-only envelopes + a
+  kernel consumer — its own ADR); or aircraft meshes (the remaining renderer cosmetic).

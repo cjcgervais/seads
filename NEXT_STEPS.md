@@ -1,6 +1,54 @@
 # SEADS 2026 — Next Steps (handoff)
 
-> ## ►► CURRENT STATE (2026-07-02): seal **ATM-Sphere v1.19r0** — **REGION POOLS + KILL TALLY ON THE WEAPON-001 WIRE DONE ✅ — REGION-DAMAGE ARC CLOSED END-TO-END**
+> ## ►► CURRENT STATE (2026-07-02): **RENDERER POLISH — DAMAGE STATE + KILL-FEED + SCOREBOARD IN THE LIVE `--fly` PATH DONE ✅** (no-seal, rides **ATM-Sphere v1.19r0**)
+> **Latest: the viewer finally SHOWS the fight the wire has carried since v1.19r0 — damage state, an attributed kill-feed, and a scoreboard, in both the live `--fly` path and the replay GUI, all drawn purely from decoded WEAPON-001 bytes.**
+> The v1.19r0 handoff's named free pick lands. Four pieces, ALL `src/client` + web (downstream-only
+> presentation — outside the determinism gate by construction):
+> **(a) `Playback::sample_weapons` surfaces the FULL wire** (`src/client/playback.{h,cpp}`):
+> `RenderHp` grows `ammo`, `last_hit_by` (i64, -1 = never hit), `engine_hp/wing_hp/tail_hp`, `kills`
+> (i64) — every field was already DECODED (protocol 7) and then dropped at this exact seam; now it
+> flows through. Integer-valued wire fields (`last_hit_by`/`kills`) are `llround`ed, not truncated.
+> **(b) The `--fly` path draws the fight** (`viewer_main.cpp run_fly`): WEAPON-001 tracer rounds
+> (previously NOT drawn at all in fly mode — the remotes' gunfire was invisible), dead remotes grey
+> out (matching the replay GUI), per-remote screen-projected **hp bar + E/W/T region segments** (a
+> knocked-out region fills dark red, its letter lights up; a pre-protocol-7 recording with all-zero
+> baseline pools draws the hp bar only — back-compat), a top-right **kills/ammo SCOREBOARD**
+> (kills-desc; KIA / WINCHESTER status tags), and a rolling **attributed KILL-FEED** ("#0 downed #1",
+> "#2 knocked out #3's TAIL", 8 s fade). The fly HUD line gains a rounds-airborne count.
+> **(c) The feed is TRANSITION-derived, loop-safe** (`KillFeed`, shared): total hp crossing >0→≤0 ⇒
+> a kill (attribution = the victim's `last_hit_by`, by construction the killer); a region pool
+> crossing >0→≤0 on a LIVING plane ⇒ a knock-out (region events are suppressed on the death frame
+> itself; dead planes are pass-through in the kernel so pools can't move after death). ONLY downward
+> crossings fire ⇒ the looping replay/fly timeline never emits false events on the wrap; `R` resets.
+> The replay GUI (`run_gui`) shares all three helpers (`draw_damage_bars` / `draw_scoreboard` /
+> `KillFeed`), its text HUD rows gain `rgn EWT` / ammo / kills + "KILLED by #N" attribution, and
+> `--selfcheck` prints every field (headless proof of the whole data path).
+> **(d) The web viewer HUD reads what trajectory.js already emits** (`web/viewer.js`): the per-frame
+> `ammo`/`kills` arrays (`seads_record` has emitted them since v1.14r0/v1.19r0) now render as ammo +
+> kills per craft row, guarded for old recordings.
+> **PRESENTATION-ONLY: no `src/kernel/**`, `src/det_math/**`, `src/net/**`, `config/rails/**`,
+> `data/tuning/**`, or wire bytes touched ⇒ ALL 11 GOLDENS BYTE-IDENTICAL, no digest moved, no new
+> ctest target ⇒ guardian.yml UNCHANGED. No seal.**
+> **Gates: 15/15 receipt PASS (`receipt-ATM-Sphere_v1.19r0-52a38a4.yml`), determinism lint PASS,
+> ctest 17/17 GCC + 17/17 Clang (`seads_client_test` gains 8 checks — the full v1.19r0 field set
+> flows through `sample_weapons`: ammo/attribution/region-pools/kills at full + after a tail-kill),
+> property tests 166 (unchanged — no reference/wire change), replay selfcheck over a fresh
+> `--dogfight` recording shows the whole arc (ammo 500→406, victims tail=0.00 lhb=0/2, killers
+> kills=1), fly selfcheck green, 8 s GUI smoke runs of BOTH modes clean.**
+> **GIT: code `52a38a4` + receipt committed on `main`.**
+> **NEXT (free pick, none blocking):** **B5** ISA atmosphere (a seal); an open-ended live frame
+> SOURCE feeding `broadcast_async` incrementally; per-airframe region toughness (data-only envelope
+> scalars + a kernel consumer — its own ADR, would move goldens); or further renderer cosmetics
+> (aircraft meshes — the one renderer item deliberately left).
+> **NOTE FOR THE NEXT AGENT:** `seads_viewer` builds only with `-DSEADS_CLIENT=ON` (the
+> `build-client/` Ninja+gcc tree on this machine has raylib 5.5 fetched; `build-gcc`/`build-clang`
+> cover the headless `seads_client_test`). The kill-feed is deliberately STATE-derived (wire-frame
+> transitions), not event-channel-derived — `src/net/event.h` still has no client consumer; wiring
+> the layer-6 journal into the viewer would give per-round granularity at 100 Hz instead of 20 Hz
+> transitions and is a natural follow-up if wanted. Keep everything here downstream-only: nothing in
+> `src/client`/web may feed bits back into the kernel or the wire.
+>
+> ## ►► PRIOR STATE (2026-07-02): seal **ATM-Sphere v1.19r0** — **REGION POOLS + KILL TALLY ON THE WEAPON-001 WIRE DONE ✅ — REGION-DAMAGE ARC CLOSED END-TO-END**
 > **Latest (SEAL v1.19r0): the damage model now replicates — a remote client draws the DAMAGE STATE and a SCOREBOARD purely from bytes.**
 > The follow-up v1.18r0 named lands: the region sub-pools **engine_hp/wing_hp/tail_hp** (12th–14th
 > canonical f64s) + the victory tally **`kills`** (15th) join the WEAPON-001 snapshot section as
