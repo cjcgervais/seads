@@ -57,6 +57,10 @@
 > goldens validated.**
 > Ledger: **ADR-Step7-Guns-RegionToughness-v1.20r0**, SEAL_CARD v1.20r0 (goldens table rewritten —
 > 11 new hashes + Sphere annotated unchanged; history row), CLAUDE.md header/roadmap current.
+> **GIT: pushed to `origin/main` (code `711b90a` + receipt `e86594c`); guardian CI run
+> [28617952142](https://github.com/cjcgervais/seads/actions/runs/28617952142) GREEN** — Python
+> gates + MSVC + GCC/Clang × x64/AArch64 + the cross-toolchain hash aggregation gate all
+> reproduce **all 12 v1.20r0 goldens bit-for-bit** (11 moved + Sphere unchanged) on every leg.
 > **NEXT (free pick, none blocking):** **B5** ISA atmosphere (a seal); an open-ended live frame
 > SOURCE feeding `broadcast_async` incrementally; or toughness follow-ups (an A6M2 engine retune —
 > its own data-only seal that MOVES EngineOut-001's story; or surfacing per-airframe toughness in
