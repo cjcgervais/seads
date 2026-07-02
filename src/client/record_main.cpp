@@ -175,12 +175,16 @@ uint32_t type_code_of(const Envelope* e) {
 // are already radians (sealed scenario replay). Returns the per-aircraft envelope list.
 void seed(Kernel& k, const Flight& f, bool deg, std::vector<const Envelope*>& env) {
     for (const auto& a : f.ac) {
-        double hp = a.env->hp_start;          // G3 (v1.11r0): per-airframe starting hitpoints
+        double hp = a.env->hp_start;      // G3 (v1.11r0): per-airframe starting hitpoints
+        double ammo = a.env->ammo_start;  // G4 (v1.13r0): per-airframe magazine — matches the
+                                          // canonical scenario runner (scenario_main.cpp) and the
+                                          // net layers, so a --id replay of e.g. Winchester-001
+                                          // records the sealed fight, not a 500-round default
         if (deg)
             k.add(a.lat_deg * DEG2RAD, a.lon_deg * DEG2RAD, a.psi_deg * DEG2RAD,
-                  a.phi_deg * DEG2RAD, a.alt_m, a.tas_mps, 0.0, hp);
+                  a.phi_deg * DEG2RAD, a.alt_m, a.tas_mps, 0.0, hp, ammo);
         else
-            k.add(a.lat_deg, a.lon_deg, a.psi_deg, a.phi_deg, a.alt_m, a.tas_mps, 0.0, hp);
+            k.add(a.lat_deg, a.lon_deg, a.psi_deg, a.phi_deg, a.alt_m, a.tas_mps, 0.0, hp, ammo);
         env.push_back(a.env);
     }
 }
