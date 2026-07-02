@@ -38,6 +38,10 @@
 > session vectors in sync (the build_server_frames refactor moved NOTHING).**
 > Ledger: **ADR-Step-Net-Layer13-LiveSource-v1.20r0**; guardian.yml gains the layer-13 bridge step
 > (native x64 legs, like layers 7–12).
+> **GIT: pushed to `origin/main` (code `0784c74` + receipt `8bef85f`); guardian CI run
+> [28619427063](https://github.com/cjcgervais/seads/actions/runs/28619427063) GREEN** — Python
+> gates + MSVC + GCC/Clang × x64/AArch64 reproduce all 12 goldens bit-for-bit AND the new
+> layer-13 live-frame-source bridge passes on every native-x64 leg.
 > **NEXT (free pick, none blocking):** **B5** ISA atmosphere (a seal); bounded/windowed catch-up
 > for open-ended live streams (layer 13's named boundary); an A6M2 engine-toughness retune (its
 > own data-only seal that MOVES EngineOut-001's story); or per-airframe toughness surfaced in the
