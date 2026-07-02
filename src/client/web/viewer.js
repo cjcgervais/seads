@@ -66,6 +66,15 @@ function sample(rt) {
   });
 }
 
+// ISA density ratio sigma(alt) for the HUD rows — the ICAO troposphere power law, the same
+// provenance the kernel's sealed 17-node LUT was generated from (tools/gen_isa_lut.py); it tracks
+// the sealed table to < 2.5e-4, far below the 2-decimal display. Presentation-only.
+function isaSigma(altM) {
+  const h = Math.min(8000, Math.max(0, altM));
+  const T0 = 288.15, L = 0.0065, RS = 287.05287, G0 = 9.80665;
+  return Math.pow((T0 - L * h) / T0, G0 / (RS * L) - 1);
+}
+
 // ---- geometry helpers (match globe.h) -------------------------------------------------------
 function geoToVec(latDeg, lonDeg, altM) {
   const la = latDeg * DEG, lo = lonDeg * DEG;
@@ -258,7 +267,8 @@ function frame(now) {
       ? `${who}  ☠ KILLED   hp ${bar} 0/${maxHp[i].toFixed(0)}` +
         (killsNow[i] !== undefined ? `  kills ${killsNow[i]}` : '')
       : `${who}  alt ${e.alt.toFixed(0).padStart(5)}m  brg ${e.brg.toFixed(0).padStart(3)}  ` +
-        `tas ${e.tas.toFixed(0).padStart(3)}  hp ${bar} ${hp.toFixed(0)}/${maxHp[i].toFixed(0)}` + extra;
+        `tas ${e.tas.toFixed(0).padStart(3)}  hp ${bar} ${hp.toFixed(0)}/${maxHp[i].toFixed(0)}` +
+        extra + `  σ ${isaSigma(e.alt).toFixed(2)}`;
   });
 
   // tracer rounds for this frame (snap to the captured frame; identity isn't tracked across frames)

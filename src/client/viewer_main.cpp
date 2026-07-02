@@ -21,7 +21,11 @@
 // on the same globe at once — the full 4a+4b loop. The remotes' WEAPON-001 gunnery state rides the
 // same decoded wire (seal v1.19r0 put every field on it): tracer rounds, per-aircraft hp + E/W/T
 // region damage bars, a kills/ammo scoreboard, and an attributed kill-feed ("#0 downed #1",
-// "#0 knocked out #1's ENGINE") derived from wire-frame transitions.
+// "#0 knocked out #1's ENGINE") derived from wire-frame transitions. Both HUDs also surface the
+// flight-model atmosphere (presentation-side): sigma(alt) (v1.21r0 ISA density ratio) and the
+// engine power state pwr = min(1, sigma/sigma_crit) (v1.22r0 supercharger lapse), plus static
+// airframe data on the scoreboard — region toughness in eighths (v1.20r0, recovered from the
+// wire's first-frame pools) and the critical altitude (from the v3 type trailer's envelope).
 //   seads_viewer flight.seadsrec --fly [--speed 1.0]
 //   seads_viewer --fly --selfcheck 6        (headless; no recording or GPU needed)
 //
@@ -134,6 +138,55 @@ const RenderHp* weap_for(const std::vector<RenderHp>& v, int64_t id) {
 const char* type_name_for(const Playback& pb, int64_t id) {
     if (pb.types().empty()) return nullptr;
     return aircraft_type_name(aircraft_type_from_code(pb.type_code_of(id)));
+}
+
+// ---- Atmosphere / airframe HUD data (presentation-only) -----------------------------------------
+// sigma(alt) for the HUD: the ICAO ISA troposphere power law — the SAME provenance the kernel's
+// sealed 17-node LUT was generated from (tools/gen_isa_lut.py). The sealed table itself stays
+// private to kernel.cpp; the law tracks it to < 2.5e-4, far below the 2-decimal HUD display, and
+// the viewer is downstream-only so libm pow is fine here (det_math is a kernel rule).
+double hud_sigma(double alt_m) {
+    if (alt_m < 0.0) alt_m = 0.0;
+    if (alt_m > golden::ATM_TOP_M) alt_m = golden::ATM_TOP_M;
+    const double T0 = 288.15, L = 0.0065, RS = 287.05287;  // ICAO ISA troposphere constants
+    return std::pow((T0 - L * alt_m) / T0, golden::G0 / (RS * L) - 1.0);
+}
+
+// Engine power fraction at alt: the v1.22r0 supercharger lapse min(1, sigma(alt)/sigma(crit)) —
+// RATED (1.0) below the airframe's critical altitude, falling with the density ratio above it.
+double hud_power(double alt_m, double crit_alt_m) {
+    double lapse = hud_sigma(alt_m) / hud_sigma(crit_alt_m);
+    return lapse > 1.0 ? 1.0 : lapse;
+}
+
+// .seadsrec v3 type code -> the airframe's tuning envelope (crit_alt_m for the power readout);
+// nullptr for GENERIC / absent trailer. The inverse of record_main's envelope-pointer -> code map,
+// in sealed roster order (the STABLE presentation codes 0-7).
+const Envelope* envelope_for_code(uint32_t code) {
+    switch (static_cast<AircraftType>(code)) {
+        case AircraftType::P47D: return &envtab::P47D;
+        case AircraftType::BF109F4: return &envtab::BF109F4;
+        case AircraftType::KI61: return &envtab::KI61;
+        case AircraftType::A6M2: return &envtab::A6M2;
+        case AircraftType::YAK3: return &envtab::YAK3;
+        case AircraftType::LA7: return &envtab::LA7;
+        case AircraftType::SPITFIRE_MK5: return &envtab::SPITFIRE_MK5;
+        case AircraftType::P51: return &envtab::P51;
+        default: return nullptr;
+    }
+}
+
+// Region-toughness eighths recovered from the wire's first-frame pools (pool = frac * hp_start,
+// and every sealed fraction is a multiple of 1/8 — the v1.20r0 dyadic contract — so the rounding
+// is exact). Wire-derived on purpose: it works on any protocol-7 recording, type trailer or not.
+// False when the baseline predates the region fields (pre-protocol-7 all-zero pools).
+bool toughness_eighths(const RenderHp& base, int out[3]) {
+    if (base.hp <= 0.0) return false;
+    if (base.engine_hp <= 0.0 && base.wing_hp <= 0.0 && base.tail_hp <= 0.0) return false;
+    out[0] = static_cast<int>(std::lround(base.engine_hp / base.hp * 8.0));
+    out[1] = static_cast<int>(std::lround(base.wing_hp / base.hp * 8.0));
+    out[2] = static_cast<int>(std::lround(base.tail_hp / base.hp * 8.0));
+    return true;
 }
 
 // ---- WEAPON-001 presentation helpers (shared by replay + fly) ----------------------------------
@@ -346,8 +399,12 @@ void draw_damage_bars(Vector2 sp, const RenderHp& w, const RenderHp& base) {
 }
 
 // Top-right scoreboard from the decoded wire: kills / ammo / status per aircraft, kills-desc.
-// Rows carry the airframe name when the recording has the v3 type trailer.
-void draw_scoreboard(const Playback& pb, const std::vector<RenderHp>& hp, int screen_w) {
+// Rows carry the airframe name when the recording has the v3 type trailer, plus the STATIC
+// airframe data the HUD arc surfaces: region toughness E-W-T in eighths (wire-derived from the
+// first-frame pools — v1.20r0 dyadic contract) and the supercharger critical altitude
+// (v1.22r0 crit_alt_m, from the type trailer's envelope; blank when either is unavailable).
+void draw_scoreboard(const Playback& pb, const std::vector<RenderHp>& hp,
+                     const std::vector<RenderHp>& maxhp, int screen_w) {
     if (hp.empty()) return;
     std::vector<const RenderHp*> rows;
     rows.reserve(hp.size());
@@ -356,16 +413,25 @@ void draw_scoreboard(const Playback& pb, const std::vector<RenderHp>& hp, int sc
         if (a->kills != b->kills) return a->kills > b->kills;
         return a->id < b->id;
     });
-    int x = screen_w - 340, y = 40;
-    DrawText("SCORE                 kills   ammo", x, y, 16, RAYWHITE);
+    int x = screen_w - 470, y = 40;
+    DrawText("SCORE                 kills   ammo   tough    crit", x, y, 16, RAYWHITE);
     y += 20;
-    char line[96];
+    char line[112];
     for (const RenderHp* h : rows) {
         const char* tn = type_name_for(pb, h->id);
         char who[24];
         std::snprintf(who, sizeof(who), "#%lld %s", static_cast<long long>(h->id), tn ? tn : "");
-        std::snprintf(line, sizeof(line), "%-17s %3lld   %4.0f%s", who,
-                      static_cast<long long>(h->kills), h->ammo,
+        char tough[8] = "  -  ";
+        int e8[3];
+        const RenderHp* base = weap_for(maxhp, h->id);
+        if (base && toughness_eighths(*base, e8))
+            std::snprintf(tough, sizeof(tough), "%d-%d-%d", e8[0], e8[1], e8[2]);
+        char crit[8] = "   --";
+        const Envelope* env = pb.types().empty() ? nullptr
+                                                 : envelope_for_code(pb.type_code_of(h->id));
+        if (env) std::snprintf(crit, sizeof(crit), "%4.0fm", env->crit_alt_m);
+        std::snprintf(line, sizeof(line), "%-17s %3lld   %4.0f   %s   %s%s", who,
+                      static_cast<long long>(h->kills), h->ammo, tough, crit,
                       h->hp <= 0.0 ? "   KIA" : (h->ammo <= 0.0 ? "   WINCHESTER" : ""));
         DrawText(line, x, y, 16, h->hp <= 0.0 ? GRAY : SKYBLUE);
         y += 20;
@@ -459,6 +525,19 @@ int run_selfcheck(const Playback& pb, int n) {
                         aircraft_type_name(aircraft_type_from_code(pb.types()[i])));
         std::printf("\n");
     }
+    // Echo the static airframe HUD data (region toughness in eighths recovered from the wire's
+    // first-frame pools + supercharger crit alt from the type trailer's envelope) — headless
+    // proof of the scoreboard's toughness/crit data path.
+    for (const auto& b : pb.sample_weapons(t0).hp) {
+        int e8[3];
+        bool ok = toughness_eighths(b, e8);
+        const Envelope* env = pb.types().empty() ? nullptr : envelope_for_code(pb.type_code_of(b.id));
+        std::printf("  airframe #%lld:  tough E/W/T = ", static_cast<long long>(b.id));
+        if (ok) std::printf("%d/%d/%d /8", e8[0], e8[1], e8[2]);
+        else std::printf("(no region pools)");
+        if (env) std::printf("   crit_alt %.0fm", env->crit_alt_m);
+        std::printf("\n");
+    }
     // Echo the combat journal (per-round hits + kills, at the full 100 Hz tick) so the data path is
     // provable headless — this is what the GUI feed draws as floating damage numbers + kill lines.
     for (const auto& e : pb.events())
@@ -475,13 +554,23 @@ int run_selfcheck(const Playback& pb, int n) {
         std::printf("  t=%.1f:", rt);
         for (const auto& e : ents) {
             const RenderHp* w = weap_for(wv.hp, e.id);
+            // sigma at the aircraft's altitude + supercharger power state — the same values the
+            // GUI HUD rows draw (pwr needs crit_alt_m, so it appears only with a type trailer).
+            char atmos[24];
+            const Envelope* env =
+                pb.types().empty() ? nullptr : envelope_for_code(pb.type_code_of(e.id));
+            if (env)
+                std::snprintf(atmos, sizeof(atmos), " sig=%.2f pwr=%.0f%%", hud_sigma(e.alt_m),
+                              hud_power(e.alt_m, env->crit_alt_m) * 100.0);
+            else
+                std::snprintf(atmos, sizeof(atmos), " sig=%.2f", hud_sigma(e.alt_m));
             std::printf(" [#%lld lat=%.3f lon=%.3f alt=%.0f brg=%.1f hp=%.0f ammo=%.0f "
-                        "e/w/t=%.2f/%.2f/%.2f kills=%lld lhb=%lld%s]",
+                        "e/w/t=%.2f/%.2f/%.2f kills=%lld lhb=%lld%s%s]",
                         static_cast<long long>(e.id), e.lat_deg, e.lon_deg, e.alt_m, e.bearing_deg,
                         w ? w->hp : -1.0, w ? w->ammo : -1.0, w ? w->engine_hp : -1.0,
                         w ? w->wing_hp : -1.0, w ? w->tail_hp : -1.0,
                         static_cast<long long>(w ? w->kills : 0),
-                        static_cast<long long>(w ? w->last_hit_by : -1),
+                        static_cast<long long>(w ? w->last_hit_by : -1), atmos,
                         (w && w->hp <= 0.0) ? " KILLED" : "");
         }
         std::printf("  rounds=%zu\n", wv.rounds.size());
@@ -522,6 +611,20 @@ void draw_hud(const Playback& pb, double render_tick, const std::vector<RenderEn
         char who[32];
         std::snprintf(who, sizeof(who), "#%lld%s%s", static_cast<long long>(e.id), tn ? " " : "",
                       tn ? tn : "");
+        // ISA density ratio at the aircraft's altitude + supercharger power state (v1.21r0 sigma /
+        // v1.22r0 lapse, drawn presentation-side): "pwr 100%" = RATED below crit, falling above.
+        // The power readout needs crit_alt_m, so it appears only with the v3 type trailer.
+        char atmos[32] = "";
+        {
+            double sig = hud_sigma(e.alt_m);
+            const Envelope* env =
+                pb.types().empty() ? nullptr : envelope_for_code(pb.type_code_of(e.id));
+            if (env)
+                std::snprintf(atmos, sizeof(atmos), "   sig %.2f  pwr %3.0f%%", sig,
+                              hud_power(e.alt_m, env->crit_alt_m) * 100.0);
+            else
+                std::snprintf(atmos, sizeof(atmos), "   sig %.2f", sig);
+        }
         if (dead)
             std::snprintf(line, sizeof(line),
                           "%s  *** KILLED by #%lld ***   hp [%s] 0/%.0f   kills %lld", who,
@@ -530,10 +633,10 @@ void draw_hud(const Playback& pb, double render_tick, const std::vector<RenderEn
         else
             std::snprintf(line, sizeof(line),
                           "%s  alt %5.0fm  brg %5.1f  bank %+5.1f  tas %5.1f   hp [%s] %.0f/%.0f"
-                          "   rgn %s   ammo %4.0f   kills %lld",
+                          "   rgn %s   ammo %4.0f   kills %lld%s",
                           who, e.alt_m, e.bearing_deg, e.phi_deg,
                           e.tas_mps, bar, hp, mh, rgn, w ? w->ammo : 0.0,
-                          static_cast<long long>(w ? w->kills : 0));
+                          static_cast<long long>(w ? w->kills : 0), atmos);
         DrawText(line, 12, y, 16, dead ? GRAY : SKYBLUE);
         y += 22;
     }
@@ -637,7 +740,7 @@ int run_gui(Playback& pb, double speed) {
             RenderHp fallback; fallback.id = ents[i].id; fallback.hp = 100.0;
             draw_damage_bars(sp, w ? *w : fallback, base ? *base : fallback);
         }
-        draw_scoreboard(pb, wv.hp, GetScreenWidth());
+        draw_scoreboard(pb, wv.hp, maxhp, GetScreenWidth());
         // Combat feed: journal-driven per-round events (numbers pinned to on-screen targets), or the
         // transition fallback for a v1 recording.
         if (cfeed.active()) {
@@ -815,6 +918,15 @@ void draw_fly_hud(const predict::Predictor& pred, uint32_t tick, size_t n_remote
     std::snprintf(line, sizeof(line), "INPUT  bank %+5.1f deg   g %+4.2f   throttle %3.0f%%",
                   cmd.target_phi * RAD2DEG_V, cmd.target_g, cmd.throttle * 100.0);
     DrawText(line, 12, 84, 16, GREEN);
+    // Atmosphere + engine state (v1.21r0 sigma / v1.22r0 supercharger lapse, presentation-side):
+    // the air the own ship is flying in, and whether its engine still makes RATED power.
+    double alt = k.alt(0);
+    bool rated = alt <= kFlyEnv.crit_alt_m;
+    std::snprintf(line, sizeof(line),
+                  "ATMOS  sigma %.2f   engine pwr %3.0f%%   crit alt %.0fm  [%s]",
+                  hud_sigma(alt), hud_power(alt, kFlyEnv.crit_alt_m) * 100.0, kFlyEnv.crit_alt_m,
+                  rated ? "RATED" : "ABOVE CRIT");
+    DrawText(line, 12, 106, 16, rated ? LIGHTGRAY : GOLD);
     DrawText("A/D bank  W/S pull/push g  Q/E yaw  Shift/Ctrl throttle   |   mouse: fine aim   hold "
              "SPACE: free-look (keys only)   wheel: zoom   P: pause   R: reset", 12,
              GetScreenHeight() - 28, 16, GRAY);
@@ -828,18 +940,22 @@ int run_fly_selfcheck(int n) {
     predict::Predictor pred(rails, &kFlyEnv, fly_start());
     const Command cmd{MAX_BANK_RAD * 0.6, 1.5, 0.8};  // banked + pulling 1.5 g, near-full throttle
     const uint32_t TICKS = 600;
-    std::printf("fly selfcheck: %u ticks @ %d Hz, input target_phi=%.4frad g=%.2f\n", TICKS,
-                static_cast<int>(1.0 / rails.dt), cmd.target_phi, cmd.target_g);
+    std::printf("fly selfcheck: %u ticks @ %d Hz, input target_phi=%.4frad g=%.2f  "
+                "(env crit_alt %.0fm)\n", TICKS,
+                static_cast<int>(1.0 / rails.dt), cmd.target_phi, cmd.target_g,
+                kFlyEnv.crit_alt_m);
     const uint32_t every = (TICKS / static_cast<uint32_t>(n)) ? (TICKS / static_cast<uint32_t>(n)) : 1;
     for (uint32_t t = 1; t <= TICKS; ++t) {
         pred.predict(t, cmd);
         if (t % every == 0 || t == TICKS) {
             const Kernel& k = pred.kernel();
             double brg = k.psi(0) * RAD2DEG_V; if (brg < 0) brg += 360.0;
+            // sig/pwr: the fly HUD's ATMOS readout (presentation-side sigma + supercharger lapse).
             std::printf("  t=%4u  lat=%+8.4f lon=%+8.4f alt=%7.1f hdg=%6.1f bank=%+6.2f tas=%6.1f "
-                        "gamma=%+6.2f\n",
+                        "gamma=%+6.2f sig=%.2f pwr=%3.0f%%\n",
                         t, k.lat(0) * RAD2DEG_V, k.lon(0) * RAD2DEG_V, k.alt(0), brg,
-                        k.phi(0) * RAD2DEG_V, k.tas(0), k.gamma(0) * RAD2DEG_V);
+                        k.phi(0) * RAD2DEG_V, k.tas(0), k.gamma(0) * RAD2DEG_V,
+                        hud_sigma(k.alt(0)), hud_power(k.alt(0), kFlyEnv.crit_alt_m) * 100.0);
         }
     }
     return 0;
@@ -1094,7 +1210,7 @@ int run_fly(Playback& pb, double speed) {
             RenderHp fallback; fallback.id = rem[i].id; fallback.hp = 100.0;
             draw_damage_bars(sp, w ? *w : fallback, base ? *base : fallback);
         }
-        draw_scoreboard(pb, wv.hp, GetScreenWidth());
+        draw_scoreboard(pb, wv.hp, maxhp, GetScreenWidth());
         if (cfeed.active()) {
             auto screen_of = [&](int64_t id, Vector2& out) -> bool {
                 for (const auto& e : rem)
