@@ -2,11 +2,13 @@
 """
 gen_envelope_tables.py — emit src/kernel/envelope_tables.h from the tuning envelopes.
 
-Emits, for every envelope referenced by a scenario in config/scenarios/*.json, the radian-unit
+Emits, for EVERY roster tuning envelope in data/tuning/envelopes/*.json, the radian-unit
 LUTs (phi_max, roll_rate in rad / rad-per-s; climb_max/min in m/s) as exact hex-float arrays so
 the C++ kernel interpolates BIT-IDENTICAL tables to tools/ref_kernel.py. The deg->rad conversion
 is baked into the nodes by tools/envelopes.load_envelope (single source of truth). CI checks sync
-with --check.
+with --check. (Pre-mesh-variants this emitted only scenario-referenced envelopes, which left
+Yak-3/La-7 without envtab entries; the full roster is emitted now so every airframe can fly in a
+recording. Every scenario-referenced envelope must still exist — asserted below.)
 
 Usage:  python tools/gen_envelope_tables.py [--check]
 """
@@ -25,14 +27,18 @@ def cpp_name(env):
     return "".join(c.upper() if c.isalnum() else "_" for c in env)
 
 
-def referenced_envelopes():
-    """Unique envelope basenames referenced by any scenario, sorted for stable output."""
-    names = set()
+def roster_envelopes():
+    """All tuning envelope basenames, sorted for stable output. Sanity: every envelope any
+    scenario references must be one of them (a scenario can't name a missing tuning file)."""
+    names = sorted(p.stem for p in envmod.ENV_DIR.glob("*.json"))
+    referenced = set()
     for p in sorted(SCEN_DIR.glob("*.json")):
         doc = json.loads(p.read_text(encoding="utf-8"))
         for ac in doc["aircraft"]:
-            names.add(ac["envelope"])
-    return sorted(names)
+            referenced.add(ac["envelope"])
+    missing = referenced - set(names)
+    assert not missing, f"scenario references envelopes with no tuning JSON: {sorted(missing)}"
+    return names
 
 
 def hx(v):
@@ -55,7 +61,7 @@ def build():
         '#include "flight_types.h"',
         "namespace seads { namespace envtab {",
     ]
-    for name in referenced_envelopes():
+    for name in roster_envelopes():
         env = envmod.load_envelope(name)
         L.append(f"constexpr Envelope {cpp_name(name)} = {{")
         L.append(",\n".join(_lut(f, env) for f in envmod.LUT_FIELDS) + ",")

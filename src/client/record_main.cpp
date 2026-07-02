@@ -89,11 +89,12 @@ Flight make_gundemo() {
     return f;
 }
 
-// Built-in 4-ship dogfight (NOT a golden) — a longer, rolling engagement: two hunter/prey pairs in
-// parallel lanes. AC0 P-47D kills AC1 A6M2, then AC2 P-51 (slightly staggered) kills AC3 Ki-61; both
-// victors then BREAK into hard banking turns over the tiny globe. The firing runs use the proven
-// co-altitude tail-chase geometry from GOLDEN-SK-Hit-001 (gentle shared bank, attacker faster + fast
-// rounds overtake), so the kills land reliably before the hard maneuvering begins. ~26 s of action.
+// Built-in 6-ship dogfight (NOT a golden) — a longer, rolling engagement: three hunter/prey pairs
+// in parallel lanes. AC0 P-47D kills AC1 A6M2, then AC2 P-51 (staggered) kills AC3 Ki-61, then AC4
+// Yak-3 (staggered again) kills AC5 La-7 — the VVS pair puts the last two roster mesh variants on
+// screen. Each victor then BREAKs into hard banking turns over the tiny globe. The firing runs use
+// the proven co-altitude tail-chase geometry from GOLDEN-SK-Hit-001 (gentle shared bank, attacker
+// faster + fast rounds overtake), so the kills land reliably before the hard maneuvering begins.
 Flight make_dogfight() {
     Flight f;
     f.id = "DEMO-DOGFIGHT";
@@ -118,6 +119,16 @@ Flight make_dogfight() {
         {2300,  0.0, 1.0,  0.95, 0.0}}});
     f.ac.push_back(Ac{3, 3.0, 2.5, 90.0, 0.0, 3600.0, 176.0, &envtab::KI61, {
         {0,     6.0, 1.01, 0.74, 0.0}}});
+    // --- Pair C (southern lane, lat -3): Yak-3 hunts a La-7 ~650 m ahead, staggered last ---
+    f.ac.push_back(Ac{4, -3.0, 0.0, 90.0, 0.0, 3200.0, 230.0, &envtab::YAK3, {
+        {0,     6.0, 1.01, 0.96, 0.0},
+        {450,   6.0, 1.01, 0.96, 1.0},   // FIRE — downs the La-7 (~t650), staggered after Pair B
+        {750,   6.0, 1.01, 0.96, 0.0},
+        {980, -58.0, 1.60, 0.97, 0.0},   // BREAK
+        {1800, 45.0, 1.50, 0.97, 0.0},
+        {2400,  0.0, 1.0,  0.95, 0.0}}});
+    f.ac.push_back(Ac{5, -3.0, 2.5, 90.0, 0.0, 3200.0, 172.0, &envtab::LA7, {
+        {0,     6.0, 1.01, 0.72, 0.0}}}); // flies the shared gentle turn, takes the burst, dies
     return f;
 }
 
@@ -144,8 +155,8 @@ Flight from_scenario(const scen::Scenario& S) {
 }
 
 // Airframe type code for an envelope (the .seadsrec v3 presentation trailer). Pointer identity
-// against the generated envtab is exact — every Flight sources its envelopes from there. Types
-// with no envelope yet (Yak-3 / La-7) simply can't appear in a recording; unknown -> GENERIC.
+// against the generated envtab is exact — every Flight sources its envelopes from there. The
+// full sealed roster (8 types) has envtab entries; unknown -> GENERIC.
 uint32_t type_code_of(const Envelope* e) {
     using client::AircraftType;
     AircraftType t = AircraftType::GENERIC;
@@ -153,6 +164,8 @@ uint32_t type_code_of(const Envelope* e) {
     else if (e == &envtab::BF109F4) t = AircraftType::BF109F4;
     else if (e == &envtab::KI61) t = AircraftType::KI61;
     else if (e == &envtab::A6M2) t = AircraftType::A6M2;
+    else if (e == &envtab::YAK3) t = AircraftType::YAK3;
+    else if (e == &envtab::LA7) t = AircraftType::LA7;
     else if (e == &envtab::SPITFIRE_MK5) t = AircraftType::SPITFIRE_MK5;
     else if (e == &envtab::P51) t = AircraftType::P51;
     return static_cast<uint32_t>(t);
