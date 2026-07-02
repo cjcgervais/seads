@@ -35,6 +35,11 @@
 > sync, all 11 goldens byte-identical (validate_snapshot + validate_scenarios PASS).**
 > Ledger: **ADR-Step7-Guns-WireTransport-RegionDamage-v1.19r0**, SEAL_CARD v1.19r0 (wire row +
 > history), CLAUDE.md header/rails/roadmap current.
+> **GIT: pushed to `origin/main` (code `9e75d77` + receipt `5bc27f7`); guardian CI run
+> [28582213041](https://github.com/cjcgervais/seads/actions/runs/28582213041) GREEN** — Python
+> gates + MSVC + GCC/Clang × x64/AArch64 + the cross-toolchain hash aggregation gate all reproduce
+> **all 11 goldens bit-for-bit** on every leg AND run the protocol-7 parity legs
+> (snapshot/weapon/session + the five socket bridges against the new session digest).
 > **NEXT (free pick, none blocking):** renderer polish (damage state + kill-feed + scoreboard in
 > the live `--fly` path — every field now rides the wire); **B5** ISA atmosphere (a seal); an
 > open-ended live frame SOURCE feeding `broadcast_async` incrementally; or per-airframe region
