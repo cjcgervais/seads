@@ -129,6 +129,13 @@ const RenderHp* weap_for(const std::vector<RenderHp>& v, int64_t id) {
     return nullptr;
 }
 
+// Airframe display name for a HUD/scoreboard row, or nullptr when the recording carries no type
+// trailer (pre-v3) — those rows then stay exactly as before instead of all reading "fighter".
+const char* type_name_for(const Playback& pb, int64_t id) {
+    if (pb.types().empty()) return nullptr;
+    return aircraft_type_name(aircraft_type_from_code(pb.type_code_of(id)));
+}
+
 // ---- WEAPON-001 presentation helpers (shared by replay + fly) ----------------------------------
 // Everything below draws from the DECODED wire only (Playback::sample_weapons) — the same bytes a
 // remote client holds — so what the viewer shows is exactly what replicates (seal v1.19r0: hp,
@@ -339,7 +346,8 @@ void draw_damage_bars(Vector2 sp, const RenderHp& w, const RenderHp& base) {
 }
 
 // Top-right scoreboard from the decoded wire: kills / ammo / status per aircraft, kills-desc.
-void draw_scoreboard(const std::vector<RenderHp>& hp, int screen_w) {
+// Rows carry the airframe name when the recording has the v3 type trailer.
+void draw_scoreboard(const Playback& pb, const std::vector<RenderHp>& hp, int screen_w) {
     if (hp.empty()) return;
     std::vector<const RenderHp*> rows;
     rows.reserve(hp.size());
@@ -348,24 +356,29 @@ void draw_scoreboard(const std::vector<RenderHp>& hp, int screen_w) {
         if (a->kills != b->kills) return a->kills > b->kills;
         return a->id < b->id;
     });
-    int x = screen_w - 280, y = 40;
-    DrawText("SCORE      kills   ammo", x, y, 16, RAYWHITE);
+    int x = screen_w - 340, y = 40;
+    DrawText("SCORE                 kills   ammo", x, y, 16, RAYWHITE);
     y += 20;
     char line[96];
     for (const RenderHp* h : rows) {
-        std::snprintf(line, sizeof(line), "#%-6lld     %3lld   %4.0f%s",
-                      static_cast<long long>(h->id), static_cast<long long>(h->kills), h->ammo,
+        const char* tn = type_name_for(pb, h->id);
+        char who[24];
+        std::snprintf(who, sizeof(who), "#%lld %s", static_cast<long long>(h->id), tn ? tn : "");
+        std::snprintf(line, sizeof(line), "%-17s %3lld   %4.0f%s", who,
+                      static_cast<long long>(h->kills), h->ammo,
                       h->hp <= 0.0 ? "   KIA" : (h->ammo <= 0.0 ? "   WINCHESTER" : ""));
         DrawText(line, x, y, 16, h->hp <= 0.0 ? GRAY : SKYBLUE);
         y += 20;
     }
 }
 
-// ---- Fighter model (procedural mesh, renderer cosmetic) ----------------------------------------
-// The pure vertex data comes from build_fighter_mesh() (seads_client, headlessly tested); this
-// wrapper uploads it as four GPU meshes — ENGINE / WING / TAIL in the wire's region order, plus
-// the BODY hull — so a knocked-out region can be tinted straight from the decoded WEAPON-001
-// pools: the aircraft itself becomes the damage display, beside the bars.
+// ---- Fighter models (procedural meshes, renderer cosmetic) -------------------------------------
+// The pure vertex data comes from build_fighter_mesh(type) (seads_client, headlessly tested); this
+// wrapper uploads each variant as four GPU meshes — ENGINE / WING / TAIL in the wire's region
+// order, plus the BODY hull — so a knocked-out region can be tinted straight from the decoded
+// WEAPON-001 pools: the aircraft itself becomes the damage display, beside the bars. Which
+// aircraft gets which roster variant comes from the .seadsrec v3 type trailer (Playback::
+// type_code_of); a recording without it draws every aircraft as the GENERIC fighter.
 
 constexpr double PROP_SPIN_RAD_S = 24.0;      // visual prop spin; freezes when the engine is out
 const Color REGION_OUT_C{110, 45, 45, 255};   // tint for a knocked-out region's part
@@ -377,8 +390,8 @@ struct FighterModel {
 
     // Upload needs the GL context — call after InitWindow. Headless paths never call it, and
     // draw_aircraft falls back to the original line marker while !ready.
-    void init() {
-        FighterMesh fmesh = build_fighter_mesh();
+    void init(AircraftType type) {
+        FighterMesh fmesh = build_fighter_mesh(type);
         const MeshPart* parts[4] = {&fmesh.engine, &fmesh.wing, &fmesh.tail, &fmesh.body};
         for (int i = 0; i < 4; ++i) {
             const MeshPart& p = *parts[i];
@@ -408,6 +421,22 @@ struct FighterModel {
     }
 };
 
+// All roster variants + the generic fallback, uploaded once post-InitWindow. Indexed by the
+// .seadsrec type code (unknown/absent -> the generic slot), so both viewer modes can hand
+// draw_aircraft the right silhouette per aircraft id.
+struct FighterModelSet {
+    FighterModel models[AIRCRAFT_TYPE_COUNT + 1];  // [0..7] roster, [8] generic
+
+    void init() {
+        for (uint32_t i = 0; i < AIRCRAFT_TYPE_COUNT; ++i)
+            models[i].init(static_cast<AircraftType>(i));
+        models[AIRCRAFT_TYPE_COUNT].init(AircraftType::GENERIC);
+    }
+    FighterModel& for_code(uint32_t code) {
+        return models[code < AIRCRAFT_TYPE_COUNT ? code : AIRCRAFT_TYPE_COUNT];
+    }
+};
+
 // Draw a banking/pitching aircraft (definition below, shared by replay + fly): the fighter mesh
 // oriented by heading/bank/pitch, region parts tinted from the decoded wire (w = current reading,
 // base = first-frame full pools; either may be null — regions then draw in the aircraft colour),
@@ -422,6 +451,14 @@ int run_selfcheck(const Playback& pb, int n) {
     double t1 = static_cast<double>(pb.last_tick());
     std::printf("selfcheck: span ticks [%.0f, %.0f], delay=%.1f ticks, %d Hz snaps, %zu journal events\n",
                 t0, t1, pb.delay_ticks(), pb.snap_hz(), pb.events().size());
+    // Echo the airframe type trailer (v3) — headless proof of the mesh-variant data path.
+    if (!pb.types().empty()) {
+        std::printf("  types:");
+        for (std::size_t i = 0; i < pb.types().size(); ++i)
+            std::printf("  #%zu=%s", i,
+                        aircraft_type_name(aircraft_type_from_code(pb.types()[i])));
+        std::printf("\n");
+    }
     // Echo the combat journal (per-round hits + kills, at the full 100 Hz tick) so the data path is
     // provable headless — this is what the GUI feed draws as floating damage numbers + kill lines.
     for (const auto& e : pb.events())
@@ -480,17 +517,21 @@ void draw_hud(const Playback& pb, double render_tick, const std::vector<RenderEn
             rgn[1] = w->wing_hp > 0.0 ? 'W' : '-';
             rgn[2] = w->tail_hp > 0.0 ? 'T' : '-';
         }
+        // Airframe name from the v3 type trailer (blank for an older recording).
+        const char* tn = type_name_for(pb, e.id);
+        char who[32];
+        std::snprintf(who, sizeof(who), "#%lld%s%s", static_cast<long long>(e.id), tn ? " " : "",
+                      tn ? tn : "");
         if (dead)
             std::snprintf(line, sizeof(line),
-                          "#%lld  *** KILLED by #%lld ***   hp [%s] 0/%.0f   kills %lld",
-                          static_cast<long long>(e.id),
+                          "%s  *** KILLED by #%lld ***   hp [%s] 0/%.0f   kills %lld", who,
                           static_cast<long long>(w ? w->last_hit_by : -1), bar, mh,
                           static_cast<long long>(w ? w->kills : 0));
         else
             std::snprintf(line, sizeof(line),
-                          "#%lld  alt %5.0fm  brg %5.1f  bank %+5.1f  tas %5.1f   hp [%s] %.0f/%.0f"
+                          "%s  alt %5.0fm  brg %5.1f  bank %+5.1f  tas %5.1f   hp [%s] %.0f/%.0f"
                           "   rgn %s   ammo %4.0f   kills %lld",
-                          static_cast<long long>(e.id), e.alt_m, e.bearing_deg, e.phi_deg,
+                          who, e.alt_m, e.bearing_deg, e.phi_deg,
                           e.tas_mps, bar, hp, mh, rgn, w ? w->ammo : 0.0,
                           static_cast<long long>(w ? w->kills : 0));
         DrawText(line, 12, y, 16, dead ? GRAY : SKYBLUE);
@@ -504,8 +545,8 @@ int run_gui(Playback& pb, double speed) {
     const int W = 1280, H = 720;
     InitWindow(W, H, "SEADS globe viewer");
     SetTargetFPS(60);
-    FighterModel model;
-    model.init();
+    FighterModelSet models;
+    models.init();
 
     Camera3D cam{};
     cam.position = Vector3{0, DISPLAY_R * 1.4f, DISPLAY_R * 2.6f};
@@ -571,10 +612,12 @@ int run_gui(Playback& pb, double speed) {
             for (size_t k = 1; k < trails[i].size(); ++k)
                 DrawLine3D(trails[i][k - 1], trails[i][k], Fade(c, 0.6f));
             Vector3 d = to_display(ents[i].pos, pb.radius_m());
-            // Attitude-aware fighter mesh (same model as fly): wings roll with bank (phi), nose
+            // Attitude-aware fighter mesh (same models as fly): wings roll with bank (phi), nose
             // tilts with the flight-path angle (gamma) — both ride the KIN wire, snapped per
             // Playback::sample. Region parts tint from the wire pools; the prop spin is visual.
-            draw_aircraft(model, d, ents[i].lat_deg * DEG2RAD_V, ents[i].lon_deg * DEG2RAD_V,
+            // The silhouette is the aircraft's roster variant (.seadsrec v3 type trailer).
+            draw_aircraft(models.for_code(pb.type_code_of(ents[i].id)), d,
+                          ents[i].lat_deg * DEG2RAD_V, ents[i].lon_deg * DEG2RAD_V,
                           ents[i].bearing_deg * DEG2RAD_V, ents[i].phi_deg * DEG2RAD_V,
                           ents[i].gamma_deg * DEG2RAD_V, c, 1.2f, weap_for(wv.hp, ents[i].id),
                           weap_for(maxhp, ents[i].id), now * PROP_SPIN_RAD_S);
@@ -594,7 +637,7 @@ int run_gui(Playback& pb, double speed) {
             RenderHp fallback; fallback.id = ents[i].id; fallback.hp = 100.0;
             draw_damage_bars(sp, w ? *w : fallback, base ? *base : fallback);
         }
-        draw_scoreboard(wv.hp, GetScreenWidth());
+        draw_scoreboard(pb, wv.hp, GetScreenWidth());
         // Combat feed: journal-driven per-round events (numbers pinned to on-screen targets), or the
         // transition fallback for a v1 recording.
         if (cfeed.active()) {
@@ -806,8 +849,8 @@ int run_fly(Playback& pb, double speed) {
     const int W = 1280, H = 720;
     InitWindow(W, H, "SEADS fly — predict own / interp remotes");
     SetTargetFPS(60);
-    FighterModel model;
-    model.init();
+    FighterModelSet models;
+    models.init();
 
     Rails rails = fly_rails();
     const predict::OwnState start = fly_start();
@@ -1004,7 +1047,8 @@ int run_fly(Playback& pb, double speed) {
             Vector3 d = to_display(rem[i].pos, pb.radius_m());
             // Remotes now tilt with their true flight-path angle (gamma rides the KIN wire) instead
             // of the old flat pitch=0 — a climbing/diving bandit reads correctly on the globe.
-            draw_aircraft(model, d, rem[i].lat_deg * DEG2RAD_V, rem[i].lon_deg * DEG2RAD_V,
+            draw_aircraft(models.for_code(pb.type_code_of(rem[i].id)), d,
+                          rem[i].lat_deg * DEG2RAD_V, rem[i].lon_deg * DEG2RAD_V,
                           rem[i].bearing_deg * DEG2RAD_V, rem[i].phi_deg * DEG2RAD_V,
                           rem[i].gamma_deg * DEG2RAD_V, c, 1.0f, weap_for(wv.hp, rem[i].id),
                           weap_for(maxhp, rem[i].id), now * PROP_SPIN_RAD_S);
@@ -1019,8 +1063,10 @@ int run_fly(Playback& pb, double speed) {
         // gamma. The old presentation-only exaggeration band-aid is gone.
         double own_pitch = pred.kernel().gamma(0);
         // Own ship carries no wire weapon state in this single-process loop (no server) — regions
-        // draw in the ship colour, prop always spinning.
-        draw_aircraft(model, od, pred.kernel().lat(0), pred.kernel().lon(0), pred.kernel().psi(0),
+        // draw in the ship colour, prop always spinning. The airframe matches the fly envelope
+        // (kFlyEnv is the Ki-61), independent of the recording's type trailer.
+        draw_aircraft(models.for_code(static_cast<uint32_t>(AircraftType::KI61)), od,
+                      pred.kernel().lat(0), pred.kernel().lon(0), pred.kernel().psi(0),
                       pred.kernel().phi(0), own_pitch, RED, 1.6f, nullptr, nullptr,
                       now * PROP_SPIN_RAD_S);
         EndMode3D();
@@ -1048,7 +1094,7 @@ int run_fly(Playback& pb, double speed) {
             RenderHp fallback; fallback.id = rem[i].id; fallback.hp = 100.0;
             draw_damage_bars(sp, w ? *w : fallback, base ? *base : fallback);
         }
-        draw_scoreboard(wv.hp, GetScreenWidth());
+        draw_scoreboard(pb, wv.hp, GetScreenWidth());
         if (cfeed.active()) {
             auto screen_of = [&](int64_t id, Vector2& out) -> bool {
                 for (const auto& e : rem)

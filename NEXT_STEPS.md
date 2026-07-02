@@ -1,6 +1,64 @@
 # SEADS 2026 — Next Steps (handoff)
 
-> ## ►► CURRENT STATE (2026-07-02): **AIRCRAFT MESHES — PROCEDURAL LOW-POLY FIGHTER, REGION-DAMAGE TINTED, IN THE VIEWER DONE ✅** (no-seal, rides **ATM-Sphere v1.19r0**)
+> ## ►► CURRENT STATE (2026-07-02): **PER-AIRFRAME MESH VARIANTS — ROSTER SILHOUETTES IN THE VIEWER DONE ✅** (no-seal, rides **ATM-Sphere v1.19r0**)
+> **Latest: the one-size fighter becomes eight — each aircraft now draws its ROSTER TYPE's silhouette (radial vs inline nose, wing plan, tail, size), fed by a new `.seadsrec` v3 per-aircraft type trailer. The named blocker ("the wire carries no type field") is resolved the honest way: the type is STATIC per flight, so it rides the recording META, not the sealed 20 Hz wire — no reseal, nothing kernel-side.**
+> Five pieces, ALL `src/client` + web (downstream-only presentation):
+> **(a) `aircraft_mesh.{h,cpp}` — the builder is PARAMETERIZED** (`Proportions`, internal): the same
+> loft/slab assembly driven by per-type dimensions — fuselage radii + nose stations (radials P-47D/
+> A6M2/La-7 get a blunt wide cowl + short nose; inlines Bf 109/Ki-61/Yak-3/Spitfire/P-51 a slender
+> pointed one), a TWO-PANEL wing plan (root→mid→tip chord factors + sweep ⇒ straight taper, squared
+> Bf 109/P-51 tips, the A6M2's long rounded taper, the Spitfire ELLIPSE), stab span/fin height,
+> canopy footprint (P-47 razorback / P-51 bubble / A6M2 greenhouse), blade reach, a P-51 ventral
+> scoop slab, and overall scale (P-47D 1.14 … Yak-3 0.86). New public `enum AircraftType` with
+> **STABLE presentation codes 0–7 in sealed roster order** (+ GENERIC=255 fallback = the original
+> model), `aircraft_type_name`, `aircraft_type_from_code`. Still headless — pure float arrays, no
+> raylib types.
+> **(b) `.seadsrec` v3** (`seadsrec.{h,cpp}`, `SEADSREC_VERSION 2→3`): a second append-only trailer
+> after the event journal — `u32 n_types` then one u32 AircraftType code per aircraft slot. Same
+> back-compat pattern as v2: a v1/v2 file loads with an EMPTY type list (every aircraft → generic
+> mesh), a truncated trailer is rejected; old 3/4-arg `write_recording` overloads delegate with
+> empty types. `Playback` exposes `types()` + `type_code_of(id)` (out-of-range → generic).
+> **(c) The recorder emits it** (`record_main.cpp`): `Envelope*` → code by pointer identity against
+> the generated envtab (P-47D/Bf 109/Ki-61/A6M2/Spitfire/P-51 — the 6 roster types with generated
+> envelopes; Yak-3/La-7 have tuning JSONs but no envtab entry yet, so they can't appear in a
+> recording), written into the v3 trailer + a `"types"` display-name array in the trajectory.js
+> meta + the console summary ("aircraft 1 (A6M2): hp 0 *** KILLED ***").
+> **(d) The viewer draws per-type variants** (`viewer_main.cpp`): `FighterModel::init(type)` +
+> a `FighterModelSet` (9 uploads post-InitWindow, indexed by code); BOTH replay and fly pick each
+> aircraft's variant via `Playback::type_code_of`; the fly OWN ship is the Ki-61 variant (matches
+> `kFlyEnv`). HUD rows + the scoreboard + `--selfcheck` now carry airframe names ("#0 P-47D",
+> "types: #0=P-47D #1=A6M2 …" — headless proof); a pre-v3 recording renders EXACTLY as before
+> (generic mesh, no names). The web viewer HUD rows show `meta.types` names, guarded for old files.
+> **(e) Headless gates extended** (`seads_client_test`): the full structural suite (winding==stored
+> normal, unit normals, no degenerates, z-mirror symmetry, shade band) now runs over ALL 8 roster
+> variants + generic with the layout claims made RELATIVE (engine = forward-most vertex, tail =
+> aft-most, wings out-span every part — absolute thresholds don't survive per-type scale); plus
+> pairwise variant DISTINCTNESS (every pair differs in wing or engine vertex data), signature
+> proportions (P-47D out-sizes the Yak-3, A6M2 out-spans it), and the v3 trailer tests (round-trip,
+> Playback exposure + fallbacks, journal-only recordings keep an empty type list, truncation
+> rejected, version stamped v3).
+> **PRESENTATION-ONLY: no `src/kernel/**`, `src/det_math/**`, `src/net/**`, `config/rails/**`,
+> `data/tuning/**`, or wire bytes touched ⇒ ALL 11 GOLDENS BYTE-IDENTICAL, no digest moved, no new
+> ctest target ⇒ guardian.yml UNCHANGED. No seal.** (The `.seadsrec` container is a local
+> presentation format, not a sealed wire — its version bump is not a reseal.)
+> **Gates: ctest 17/17 GCC + 17/17 Clang, replay + fly selfchecks green over a fresh `--dogfight`
+> recording (types echoed headless), 12 s GUI smoke of BOTH modes clean, fly own-ship
+> SCREENSHOT-VERIFIED (the Ki-61 variant's long slender inline nose reads on screen).**
+> **GIT: see the receipt + CI note below (updated post-push).**
+> **NEXT (free pick, none blocking):** **B5** ISA atmosphere (a seal); an open-ended live frame
+> SOURCE feeding `broadcast_async` incrementally; per-airframe region toughness (data-only envelope
+> scalars + a kernel consumer — its own ADR, would move goldens); or generate the missing Yak-3/La-7
+> envtab entries (data/tooling — the generated envelope table covers 6 of the 8 roster tuning JSONs)
+> so those two variants can actually fly in a recording.
+> **NOTE FOR THE NEXT AGENT:** the AircraftType codes are STABLE presentation constants (written
+> into every v3 recording) — never renumber them; add new codes only. The type trailer is META, not
+> wire: keep it off the sealed snapshot (a per-tick type field would be a reseal for a static fact).
+> `Proportions` is deliberately internal to aircraft_mesh.cpp — tests gate the OUTPUT (structure +
+> distinctness), so silhouettes can be retuned freely without an API break. The GENERIC model keeps
+> the original silhouette but now uses the two-panel wing (slightly different tri count than the old
+> single-slab wing); nothing pins tri counts.
+>
+> ## ►► PRIOR STATE (2026-07-02): **AIRCRAFT MESHES — PROCEDURAL LOW-POLY FIGHTER, REGION-DAMAGE TINTED, IN THE VIEWER DONE ✅** (no-seal, rides **ATM-Sphere v1.19r0**)
 > **Latest: the last renderer cosmetic lands — the sphere+lines marker is now a real low-poly WWII prop fighter, and the airframe itself shows the v1.18r0 damage state: a knocked-out region's part tints dark straight from the decoded WEAPON-001 pools, and the prop stops on a dead engine.**
 > Four pieces, ALL `src/client` (downstream-only presentation):
 > **(a) `aircraft_mesh.{h,cpp}` — a pure vertex-data builder** (new files, in the headless

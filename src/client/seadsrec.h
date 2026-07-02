@@ -16,6 +16,12 @@
 // per-round kill-feed + damage numbers, instead of inferring kills from 20 Hz state transitions.
 // This is downstream presentation only — the hit queue is observable kernel output, never hashed.
 //
+// A v3 recording ALSO carries the per-aircraft AIRFRAME TYPE (one code per aircraft slot, the
+// stable AircraftType presentation codes from aircraft_mesh.h) so the viewer can draw each
+// aircraft's roster mesh variant. The sealed wire deliberately carries no type field — this is
+// recording metadata, static per flight, appended after the journal (same back-compat pattern:
+// a v1/v2 file loads with an empty type list, and every aircraft falls back to the generic mesh).
+//
 // Container layout (all integers little-endian; this is a non-canonical PRESENTATION format, so
 // its byte order is a local convenience and is NOT the hashed/sealed snapshot):
 //   magic[8]      = "SEADSREC"
@@ -30,6 +36,9 @@
 //   u32 n_events
 //   n_events x { i64 tick, i64 target, i64 attacker, i64 damage_milli, i64 hp_after_milli,
 //                i64 killed, i64 region }   (each i64 little-endian, two's complement)
+//   -- v3 only, appended after the journal: --
+//   u32 n_types
+//   n_types x u32 type_code   (AircraftType code for aircraft slot i; unknown -> generic)
 #pragma once
 #include <cstdint>
 #include <string>
@@ -41,7 +50,8 @@ namespace seads {
 namespace client {
 
 constexpr char     SEADSREC_MAGIC[8] = {'S', 'E', 'A', 'D', 'S', 'R', 'E', 'C'};
-constexpr uint32_t SEADSREC_VERSION  = 2;   // v2 adds the trailing combat event journal (v1 = frames only)
+constexpr uint32_t SEADSREC_VERSION  = 3;   // v2 added the combat event journal; v3 the aircraft types
+                                            // (v1 = frames only; every trailer is append-only + optional)
 
 // One replayable combat event: the layer-6 journal record (mirrors event::Event) plus the struck
 // region (v1.18r0). tick is the 100 Hz physics tick the round connected on; damage/hp are milli-hp
@@ -67,11 +77,13 @@ struct RecordingMeta {
 };
 
 // A loaded recording: metadata + decoded snapshot frames (ascending server_tick) + the combat
-// event journal (empty for a v1 recording; ascending tick, then round order within a tick).
+// event journal (empty for a v1 recording; ascending tick, then round order within a tick) +
+// the per-aircraft airframe type codes (empty pre-v3; types[i] belongs to aircraft slot/id i).
 struct Recording {
     RecordingMeta meta;
     std::vector<netsnap::Snapshot> frames;
     std::vector<RecEvent> events;
+    std::vector<uint32_t> types;
 };
 
 // Serialize a recording from already-encoded wire payloads (one per frame). `frames` holds the
@@ -81,10 +93,17 @@ void write_recording(const RecordingMeta& meta,
                      const std::vector<std::vector<uint8_t>>& frames,
                      std::vector<uint8_t>& out);
 
-// As above, plus the trailing combat event journal (v2).
+// As above, plus the trailing combat event journal (v2 trailer; empty type list).
 void write_recording(const RecordingMeta& meta,
                      const std::vector<std::vector<uint8_t>>& frames,
                      const std::vector<RecEvent>& events,
+                     std::vector<uint8_t>& out);
+
+// As above, plus the per-aircraft airframe type codes (v3 trailer; types[i] = aircraft slot i).
+void write_recording(const RecordingMeta& meta,
+                     const std::vector<std::vector<uint8_t>>& frames,
+                     const std::vector<RecEvent>& events,
+                     const std::vector<uint32_t>& types,
                      std::vector<uint8_t>& out);
 
 // Parse a .seadsrec image. Decodes each frame via netsnap::decode_snapshot (so a malformed or

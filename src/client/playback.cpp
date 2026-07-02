@@ -13,6 +13,7 @@ bool Playback::load(const Recording& rec) {
     if (rec.frames.empty()) return false;
     for (const auto& f : rec.frames) buffer_.add(f);
     events_ = rec.events;  // layer-6 journal (empty for a v1 recording)
+    types_ = rec.types;    // airframe type codes (empty pre-v3 -> generic mesh fallback)
     first_tick_ = rec.frames.front().server_tick;
     last_tick_ = rec.frames.back().server_tick;
     // ~1.5 snapshot intervals of delay so two received frames always bracket the render time.

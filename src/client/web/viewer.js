@@ -24,6 +24,7 @@ const frames = traj.frames;                       // [{tick, e:[{id,lat,lon,brg,
 const radiusM = traj.meta.radius_m || 15000;
 const tickHz = traj.meta.tick_hz || 100;
 const snapHz = traj.meta.snap_hz || 20;
+const typeNames = traj.meta.types || [];  // airframe display names per aircraft slot (v3 meta)
 const scale = DISPLAY_R / radiusM;
 const firstTick = frames[0].tick;
 const lastTick = frames[frames.length - 1].tick;
@@ -252,10 +253,11 @@ function frame(now) {
     // ammo counter + kill tally, when the recording carries them (wire fields v1.14r0/v1.19r0).
     const extra = (ammoNow[i] !== undefined ? `  ammo ${String(ammoNow[i]).padStart(3)}` : '') +
                   (killsNow[i] !== undefined ? `  kills ${killsNow[i]}` : '');
+    const who = `#${e.id}` + (typeNames[i] ? ` ${typeNames[i]}` : '');
     rows[i].textContent = dead
-      ? `#${e.id}  ☠ KILLED   hp ${bar} 0/${maxHp[i].toFixed(0)}` +
+      ? `${who}  ☠ KILLED   hp ${bar} 0/${maxHp[i].toFixed(0)}` +
         (killsNow[i] !== undefined ? `  kills ${killsNow[i]}` : '')
-      : `#${e.id}  alt ${e.alt.toFixed(0).padStart(5)}m  brg ${e.brg.toFixed(0).padStart(3)}  ` +
+      : `${who}  alt ${e.alt.toFixed(0).padStart(5)}m  brg ${e.brg.toFixed(0).padStart(3)}  ` +
         `tas ${e.tas.toFixed(0).padStart(3)}  hp ${bar} ${hp.toFixed(0)}/${maxHp[i].toFixed(0)}` + extra;
   });
 

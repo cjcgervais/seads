@@ -58,12 +58,20 @@ bool get_i64(const uint8_t* data, size_t len, size_t& pos, int64_t& v) {
 void write_recording(const RecordingMeta& meta,
                      const std::vector<std::vector<uint8_t>>& frames,
                      std::vector<uint8_t>& out) {
-    write_recording(meta, frames, std::vector<RecEvent>{}, out);
+    write_recording(meta, frames, std::vector<RecEvent>{}, std::vector<uint32_t>{}, out);
 }
 
 void write_recording(const RecordingMeta& meta,
                      const std::vector<std::vector<uint8_t>>& frames,
                      const std::vector<RecEvent>& events,
+                     std::vector<uint8_t>& out) {
+    write_recording(meta, frames, events, std::vector<uint32_t>{}, out);
+}
+
+void write_recording(const RecordingMeta& meta,
+                     const std::vector<std::vector<uint8_t>>& frames,
+                     const std::vector<RecEvent>& events,
+                     const std::vector<uint32_t>& types,
                      std::vector<uint8_t>& out) {
     out.clear();
     out.insert(out.end(), SEADSREC_MAGIC, SEADSREC_MAGIC + 8);
@@ -88,11 +96,15 @@ void write_recording(const RecordingMeta& meta,
         put_i64(out, e.killed);
         put_i64(out, e.region);
     }
+    // v3 trailer: per-aircraft airframe type codes.
+    put_u32(out, static_cast<uint32_t>(types.size()));
+    for (uint32_t t : types) put_u32(out, t);
 }
 
 bool read_recording(const uint8_t* data, size_t len, Recording& out) {
     out.frames.clear();
     out.events.clear();
+    out.types.clear();
     size_t pos = 0;
     if (len < 8 || std::memcmp(data, SEADSREC_MAGIC, 8) != 0) return false;
     pos = 8;
@@ -130,6 +142,18 @@ bool read_recording(const uint8_t* data, size_t len, Recording& out) {
                 !get_i64(data, len, pos, e.region))
                 return false;
             out.events.push_back(e);
+        }
+    }
+    // v3 trailer: per-aircraft airframe type codes. Same optional/append-only pattern as the
+    // journal — a pre-v3 image ends before it, a truncated list is a structural error.
+    if (out.meta.version >= 3 && pos < len) {
+        uint32_t nt = 0;
+        if (!get_u32(data, len, pos, nt)) return false;
+        out.types.reserve(nt);
+        for (uint32_t i = 0; i < nt; ++i) {
+            uint32_t t = 0;
+            if (!get_u32(data, len, pos, t)) return false;
+            out.types.push_back(t);
         }
     }
     return true;

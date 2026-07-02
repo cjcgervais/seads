@@ -236,7 +236,7 @@ static void test_event_journal() {
 
     Recording rec;
     check(read_recording(blob.data(), blob.size(), rec), "v2 recording with journal parses");
-    check(rec.meta.version == 2, "version stamped v2");
+    check(rec.meta.version == SEADSREC_VERSION, "version stamped current");
     check(rec.events.size() == 3, "three journal events round-tripped");
     check(rec.events[0].tick == 44 && rec.events[0].attacker == 0 && rec.events[0].region == 2 &&
               rec.events[0].damage_milli == 12000,
@@ -262,13 +262,34 @@ static void test_event_journal() {
     check(!read_recording(blob.data(), blob.size() - 1, bad), "truncated journal rejected");
 }
 
-// The procedural fighter mesh (renderer cosmetic): pure vertex data, so every structural claim is
-// checkable without a GPU — array shapes, winding/normal agreement, bilateral symmetry, and the
-// region-part layout the viewer's damage tinting relies on (engine forward, tail aft, wings widest).
-static void test_aircraft_mesh() {
-    FighterMesh fm = build_fighter_mesh();
+// ---- Procedural fighter meshes (renderer cosmetic) ----------------------------------------------
+// Pure vertex data, so every structural claim is checkable without a GPU — array shapes,
+// winding/normal agreement, bilateral symmetry, and the region-part layout the viewer's damage
+// tinting relies on (engine forward, tail aft, wings widest). Run for EVERY roster variant plus
+// the generic fallback; layout claims are relative so they hold across per-type proportions.
+
+static double part_extent(const MeshPart& p, int axis, bool max_abs) {
+    double best = max_abs ? 0.0 : p.vertices[axis];
+    for (size_t k = axis; k < p.vertices.size(); k += 3) {
+        double v = p.vertices[k];
+        if (max_abs) { if (std::fabs(v) > best) best = std::fabs(v); }
+        else { if (v > best) best = v; }
+    }
+    return best;
+}
+static double part_min_x(const MeshPart& p) {
+    double best = p.vertices[0];
+    for (size_t k = 0; k < p.vertices.size(); k += 3)
+        if (p.vertices[k] < best) best = p.vertices[k];
+    return best;
+}
+
+static void mesh_structural_gates(const FighterMesh& fm, const char* tname) {
     const MeshPart* parts[4] = {&fm.engine, &fm.wing, &fm.tail, &fm.body};
     const char* names[4] = {"engine", "wing", "tail", "body"};
+    auto C = [&](bool cond, const char* what) {
+        if (!cond) { std::printf("FAIL: [%s] %s\n", tname, what); g_fail = 1; }
+    };
 
     // Whole-model vertex list for the symmetry + extent checks.
     std::vector<float> all;
@@ -276,11 +297,11 @@ static void test_aircraft_mesh() {
 
     for (int i = 0; i < 4; ++i) {
         const MeshPart& p = *parts[i];
-        check(p.tri_count() > 0, "mesh part is non-empty");
-        check(p.vertices.size() % 9 == 0, "vertices are whole triangles");
-        check(p.normals.size() == p.vertices.size(), "one normal per vertex");
-        check(p.shade.size() == p.vertices.size() / 3, "one shade per vertex");
-        for (float s : p.shade) check(s >= 0.5f && s <= 1.0f, "baked shade in the key-light band");
+        C(p.tri_count() > 0, "mesh part is non-empty");
+        C(p.vertices.size() % 9 == 0, "vertices are whole triangles");
+        C(p.normals.size() == p.vertices.size(), "one normal per vertex");
+        C(p.shade.size() == p.vertices.size() / 3, "one shade per vertex");
+        for (float s : p.shade) C(s >= 0.5f && s <= 1.0f, "baked shade in the key-light band");
 
         for (size_t t = 0; t + 8 < p.vertices.size(); t += 9) {
             const float* v = &p.vertices[t];
@@ -291,13 +312,13 @@ static void test_aircraft_mesh() {
             double wx = v[6] - v[0], wy = v[7] - v[1], wz = v[8] - v[2];
             double cx = uy * wz - uz * wy, cy = uz * wx - ux * wz, cz = ux * wy - uy * wx;
             double len = std::sqrt(cx * cx + cy * cy + cz * cz);
-            check(len > 1e-9, "no degenerate triangles");
+            C(len > 1e-9, "no degenerate triangles");
             cx /= len; cy /= len; cz /= len;
-            check(close(cx, n[0], 1e-4) && close(cy, n[1], 1e-4) && close(cz, n[2], 1e-4),
-                  "stored normal matches the winding");
-            check(close(std::sqrt(double(n[0]) * n[0] + double(n[1]) * n[1] + double(n[2]) * n[2]),
-                        1.0, 1e-4),
-                  "normals are unit length");
+            C(close(cx, n[0], 1e-4) && close(cy, n[1], 1e-4) && close(cz, n[2], 1e-4),
+              "stored normal matches the winding");
+            C(close(std::sqrt(double(n[0]) * n[0] + double(n[1]) * n[1] + double(n[2]) * n[2]),
+                    1.0, 1e-4),
+              "normals are unit length");
         }
 
         // Bilateral symmetry: every vertex's z-mirror exists somewhere in the model.
@@ -308,7 +329,7 @@ static void test_aircraft_mesh() {
                         close(p.vertices[k + 1], all[m + 1], 1e-5) &&
                         close(p.vertices[k + 2], -all[m + 2], 1e-5);
             if (!found) {
-                std::printf("FAIL: %s part vertex has no z-mirror\n", names[i]);
+                std::printf("FAIL: [%s] %s part vertex has no z-mirror\n", tname, names[i]);
                 g_fail = 1;
                 break;
             }
@@ -317,30 +338,126 @@ static void test_aircraft_mesh() {
 
     // Part layout (body frame: +X nose, +Z starboard) — what the region tinting shows must sit
     // where the aspect-cone damage model books it: engine forward, tail aft, wings the widest.
-    auto extent = [](const MeshPart& p, int axis, bool max_abs) {
-        double best = max_abs ? 0.0 : p.vertices[axis];
-        for (size_t k = axis; k < p.vertices.size(); k += 3) {
-            double v = p.vertices[k];
-            if (max_abs) { if (std::fabs(v) > best) best = std::fabs(v); }
-            else { if (v > best) best = v; }
+    // Relative claims (per-variant proportions move the absolute extents).
+    double model_max_x = part_extent(fm.engine, 0, false), model_min_x = part_min_x(fm.engine);
+    for (const MeshPart* p : parts) {
+        double mx = part_extent(*p, 0, false), mn = part_min_x(*p);
+        if (mx > model_max_x) model_max_x = mx;
+        if (mn < model_min_x) model_min_x = mn;
+    }
+    C(close(part_extent(fm.engine, 0, false), model_max_x, 1e-6),
+      "engine part reaches the nose (forward-most vertex)");
+    C(part_min_x(fm.engine) > 0.15, "engine part stays forward of the body");
+    C(close(part_min_x(fm.tail), model_min_x, 1e-6),
+      "tail part reaches the tail tip (aft-most vertex)");
+    C(part_extent(fm.tail, 0, false) < -0.1, "tail part stays aft of the body");
+    C(part_extent(fm.wing, 2, true) > 0.3, "wings carry real span");
+    C(part_extent(fm.wing, 2, true) > part_extent(fm.body, 2, true) &&
+          part_extent(fm.wing, 2, true) > part_extent(fm.engine, 2, true) &&
+          part_extent(fm.wing, 2, true) > part_extent(fm.tail, 2, true),
+      "no other part out-spans the wings");
+}
+
+static void test_aircraft_mesh() {
+    // Every roster variant + the generic fallback passes the full structural gate set.
+    FighterMesh roster[AIRCRAFT_TYPE_COUNT];
+    for (uint32_t i = 0; i < AIRCRAFT_TYPE_COUNT; ++i) {
+        AircraftType t = aircraft_type_from_code(i);
+        roster[i] = build_fighter_mesh(t);
+        mesh_structural_gates(roster[i], aircraft_type_name(t));
+    }
+    FighterMesh generic = build_fighter_mesh();
+    mesh_structural_gates(generic, "generic");
+
+    // The variants are genuinely DISTINCT silhouettes: every pair of roster types differs in the
+    // wing plan or the engine/nose geometry (vertex data, not just tint).
+    auto differs = [](const FighterMesh& a, const FighterMesh& b) {
+        if (a.wing.vertices.size() != b.wing.vertices.size() ||
+            a.engine.vertices.size() != b.engine.vertices.size())
+            return true;
+        for (size_t k = 0; k < a.wing.vertices.size(); ++k)
+            if (!close(a.wing.vertices[k], b.wing.vertices[k], 1e-6)) return true;
+        for (size_t k = 0; k < a.engine.vertices.size(); ++k)
+            if (!close(a.engine.vertices[k], b.engine.vertices[k], 1e-6)) return true;
+        return false;
+    };
+    for (uint32_t i = 0; i < AIRCRAFT_TYPE_COUNT; ++i)
+        for (uint32_t j = i + 1; j < AIRCRAFT_TYPE_COUNT; ++j) {
+            if (!differs(roster[i], roster[j])) {
+                std::printf("FAIL: variants %s and %s are identical\n",
+                            aircraft_type_name(aircraft_type_from_code(i)),
+                            aircraft_type_name(aircraft_type_from_code(j)));
+                g_fail = 1;
+            }
         }
-        return best;
+
+    // A couple of signature proportions (indices: P47D=0, A6M2=3, YAK3=4).
+    auto length_of = [](const FighterMesh& m) {
+        double mx = part_extent(m.engine, 0, false), mn = part_min_x(m.tail);
+        return mx - mn;
     };
-    auto min_x = [](const MeshPart& p) {
-        double best = p.vertices[0];
-        for (size_t k = 0; k < p.vertices.size(); k += 3)
-            if (p.vertices[k] < best) best = p.vertices[k];
-        return best;
-    };
-    check(extent(fm.engine, 0, false) > 0.5, "engine part reaches the nose");
-    check(min_x(fm.engine) > 0.25, "engine part stays forward of the body");
-    check(min_x(fm.tail) < -0.5, "tail part reaches the tail tip");
-    check(extent(fm.tail, 0, false) < -0.1, "tail part stays aft of the body");
-    check(extent(fm.wing, 2, true) > 0.4, "wings span the widest");
-    check(extent(fm.wing, 2, true) > extent(fm.body, 2, true) &&
-              extent(fm.wing, 2, true) > extent(fm.engine, 2, true) &&
-              extent(fm.wing, 2, true) > extent(fm.tail, 2, true),
-          "no other part out-spans the wings");
+    check(length_of(roster[0]) > length_of(roster[4]), "the P-47D out-sizes the Yak-3");
+    check(part_extent(roster[3].wing, 2, true) > part_extent(roster[4].wing, 2, true),
+          "the A6M2 out-spans the Yak-3");
+}
+
+// The v3 per-aircraft airframe type trailer: round-trips through the container, Playback exposes
+// it (with the generic fallback for out-of-range ids), and journal-only / frames-only recordings
+// still load with an empty type list.
+static void test_type_trailer() {
+    // Code mapping: roster codes are stable, anything else falls back to GENERIC.
+    check(aircraft_type_from_code(0) == AircraftType::P47D &&
+              aircraft_type_from_code(3) == AircraftType::A6M2 &&
+              aircraft_type_from_code(7) == AircraftType::P51,
+          "roster codes map to their types");
+    check(aircraft_type_from_code(8) == AircraftType::GENERIC &&
+              aircraft_type_from_code(255) == AircraftType::GENERIC,
+          "unknown codes fall back to GENERIC");
+    check(aircraft_type_name(AircraftType::SPITFIRE_MK5)[0] != '\0' &&
+              aircraft_type_name(AircraftType::GENERIC)[0] != '\0',
+          "display names non-empty");
+
+    netsnap::Snapshot s0;
+    s0.protocol = netsnap::SNAPSHOT_PROTOCOL;
+    s0.server_tick = 0;
+    s0.entities.push_back(netsnap::EntityState{0, 0, 0, 45, 2000, 0, 170, 0, 100.0});
+    std::vector<uint8_t> w0;
+    netsnap::encode_snapshot(s0, w0);
+    RecordingMeta meta;
+    meta.radius_m = 15000.0; meta.tick_hz = 100; meta.snap_hz = 20;
+    std::vector<std::vector<uint8_t>> wires = {w0};
+
+    const std::vector<uint32_t> types = {0, 3, 6};  // P-47D, A6M2, Spitfire Mk V
+    std::vector<uint8_t> blob;
+    write_recording(meta, wires, std::vector<RecEvent>{}, types, blob);
+
+    Recording rec;
+    check(read_recording(blob.data(), blob.size(), rec), "v3 recording with types parses");
+    check(rec.meta.version == 3, "version stamped v3");
+    check(rec.types.size() == 3 && rec.types[0] == 0 && rec.types[1] == 3 && rec.types[2] == 6,
+          "type codes round-tripped");
+
+    Playback pb;
+    check(pb.load(rec), "playback loads a typed recording");
+    check(pb.types().size() == 3 && pb.type_code_of(1) == 3, "Playback exposes the types by slot");
+    check(pb.type_code_of(5) == 0xFFu && pb.type_code_of(-1) == 0xFFu,
+          "out-of-range ids fall back to the generic code");
+
+    // The 3-arg and 4-arg writers still produce loadable recordings with an EMPTY type list.
+    std::vector<uint8_t> blob_j;
+    write_recording(meta, wires, std::vector<RecEvent>{RecEvent{1, 0, 1, 500, 99500, 0, 1}},
+                    blob_j);
+    Recording rec_j;
+    check(read_recording(blob_j.data(), blob_j.size(), rec_j) && rec_j.types.empty() &&
+              rec_j.events.size() == 1,
+          "journal-only recording loads with empty types");
+    Playback pbj;
+    check(pbj.load(rec_j) && pbj.type_code_of(0) == 0xFFu,
+          "typeless recording -> generic code for every id");
+
+    // A truncated type trailer is rejected (no out-of-bounds read).
+    Recording bad;
+    check(!read_recording(blob.data(), blob.size() - 1, bad), "truncated type trailer rejected");
 }
 
 int main() {
@@ -349,6 +466,7 @@ int main() {
     test_weapon_playback();
     test_event_journal();
     test_aircraft_mesh();
+    test_type_trailer();
     if (g_fail) { std::printf("seads_client_test: FAILED\n"); return 1; }
     std::printf("seads_client_test: all checks passed\n");
     return 0;

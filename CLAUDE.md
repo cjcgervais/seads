@@ -305,7 +305,17 @@ docs/{adr,annex,cards,receipts,seals}  governance ledger  .claude/{agents,skills
   tints dark straight from the decoded WEAPON-001 pools and the prop (engine part spun about the
   nose axis) freezes on a dead engine. Both replay + fly paths; line-marker headless fallback;
   `test_aircraft_mesh` gates the structure. Presentation-only ⇒ all 11 goldens byte-identical.
+- **Per-airframe mesh variants (no-seal, rides v1.19r0):** the one-size fighter becomes eight —
+  `aircraft_mesh` is parameterized (per-type `Proportions`: radial vs inline nose, two-panel wing
+  plan incl. the Spitfire ellipse, tail/canopy/scale, P-51 belly scoop) with a public
+  `AircraftType` enum (STABLE presentation codes 0–7 in roster order + GENERIC fallback); the
+  `.seadsrec` container gains a v3 append-only per-aircraft type trailer (v1/v2 files load with
+  empty types ⇒ generic mesh; the type is STATIC per flight so it rides recording META, not the
+  sealed wire); the recorder maps `Envelope*`→code + emits a `"types"` name array to
+  trajectory.js; both viewer modes draw each aircraft's variant (fly own ship = Ki-61) and HUD/
+  scoreboard/selfcheck/web rows carry airframe names. Structural gates run over all 9 models +
+  pairwise distinctness. Presentation-only ⇒ all 11 goldens byte-identical.
 - next — free pick (none blocking): **B5** ISA atmosphere (a seal); an open-ended live frame SOURCE
   feeding `broadcast_async` incrementally; per-airframe region toughness (data-only envelopes + a
-  kernel consumer — its own ADR); or per-airframe mesh variants (needs an aircraft-type field on
-  the wire/.seadsrec meta — none exists today).
+  kernel consumer — its own ADR); or generate the missing Yak-3/La-7 envelope-table entries so
+  those two mesh variants can appear in a recording.

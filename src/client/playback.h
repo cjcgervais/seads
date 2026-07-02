@@ -78,6 +78,16 @@ public:
     // at the FULL 100 Hz physics tick, for a precise-tick, per-round kill-feed / damage numbers.
     const std::vector<RecEvent>& events() const { return events_; }
 
+    // Per-aircraft airframe type codes (.seadsrec v3 trailer; empty pre-v3). types()[i] belongs to
+    // aircraft slot/id i; type_code_of() maps an entity id, falling back to the GENERIC code for a
+    // recording without the trailer or an out-of-range id.
+    const std::vector<uint32_t>& types() const { return types_; }
+    uint32_t type_code_of(int64_t id) const {
+        return (id >= 0 && static_cast<size_t>(id) < types_.size())
+                   ? types_[static_cast<size_t>(id)]
+                   : 0xFFu;  // AircraftType::GENERIC
+    }
+
 private:
     // Newest received frame with server_tick <= render_tick (else the first). The non-interpolated
     // sample seam shared by sample_weapons (hp/rounds) and sample's attitude fill (phi/tas/gamma).
@@ -85,6 +95,7 @@ private:
 
     interp::SnapshotBuffer buffer_;
     std::vector<RecEvent> events_;
+    std::vector<uint32_t> types_;
     double radius_m_ = 15000.0;
     int tick_hz_ = 100;
     int snap_hz_ = 20;
