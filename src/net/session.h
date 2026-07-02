@@ -81,8 +81,26 @@ struct SessionResult {
     netsnap::Snapshot final_wframe;      // freshest frame at the last tick (replicated weapon truth)
 };
 
-// Run the full server->transport->client session. When reconcile=false the client never corrects
-// its predicted own ship against the wire (a negative control for the property tests).
+// The server's ordered snapshot frames: (emit_tick, protocol-6 wire bytes), ascending emit_tick,
+// one every snap_every ticks plus the tick-0 pre-step frame. This is the exact byte stream the
+// server half produces; layer 7 ships each frame over a socket, then rebuilds this list on the
+// client (keyed on each frame's decoded server_tick) and hands it to run_client.
+using ServerFrames = std::vector<std::pair<std::int64_t, std::vector<std::uint8_t>>>;
+
+// Server half: drive the authoritative kernel over the whole scenario and serialize a protocol-6
+// wire frame at the 20 Hz cadence (+ the tick-0 frame). Pure of any transport.
+ServerFrames build_server_frames(const Rails& rails, const Scenario& sc);
+
+// Client half: reconstruct the dogfight from a delivered frame list under the scenario's integer
+// lag + drop set (own predicted @ now + remotes interpolated + wire-sourced HP/kills/rounds). The
+// frames are looked up by emit_tick, so a socket-delivered list keyed on server_tick reconstructs
+// IDENTICALLY to the in-process list — the determinism bridge that makes layer 7 gateable.
+SessionResult run_client(const Rails& rails, const Scenario& sc, const ServerFrames& frames,
+                         bool reconcile);
+
+// Run the full server->transport->client session (build_server_frames + run_client). When
+// reconcile=false the client never corrects its predicted own ship against the wire (a negative
+// control for the property tests).
 SessionResult run_session(const Rails& rails, const Scenario& sc, bool reconcile);
 
 }  // namespace session

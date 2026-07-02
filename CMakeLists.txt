@@ -95,6 +95,26 @@ add_library(seads_event STATIC src/net/event.cpp)
 target_include_directories(seads_event PUBLIC src/net)
 target_link_libraries(seads_event PUBLIC seads_kernel seads_net seads_replay seads_det_flags)
 
+# --- net / layer-7 stream framing codec (length-prefixed envelope over a byte stream) ---
+# Wraps each self-delimiting protocol-6 snapshot payload in an OUTER LEB128 length prefix so frames
+# can be reassembled from arbitrary TCP chunks. Reuses seads_net's sealed geo001 LEB128 varint (so
+# C++≡Python parity is free) and NOTHING else — pure integer/byte work, no kernel/det_math. Links
+# the strict FP flags for uniformity though it has no float ops. TRANSPORT: outside the world_hash.
+add_library(seads_framing STATIC src/net/framing.cpp)
+target_include_directories(seads_framing PUBLIC src/net)
+target_link_libraries(seads_framing PUBLIC seads_net seads_det_flags)
+
+# --- net / layer-7 minimal blocking-TCP socket wrapper (dependency-free BSD/Winsock) ---
+# The only OS-socket code in the tree, behind one #ifdef _WIN32 boundary. No asio/boost. TRANSPORT
+# only — moves layer-7 bytes between processes/threads; never on the sim path. On Windows it needs
+# ws2_32; POSIX threads come from the global Threads::Threads link above.
+add_library(seads_socket STATIC src/net/socket.cpp)
+target_include_directories(seads_socket PUBLIC src/net)
+target_link_libraries(seads_socket PUBLIC seads_det_flags)
+if(WIN32)
+  target_link_libraries(seads_socket PUBLIC ws2_32)
+endif()
+
 # --- client presentation lib (Step 5 renderer): recording container + playback ---
 # DOWNSTREAM-ONLY. Decodes the GEO-001/KIN-001 wire (via seads_net) and interpolates remotes
 # (layer 4a) for display. It NEVER feeds the sim: it links seads_net but NOT the kernel/det_math,
@@ -152,6 +172,23 @@ target_link_libraries(seads_session_test PRIVATE seads_session seads_predict sea
 add_executable(seads_event_test src/net/event_test_main.cpp)
 target_link_libraries(seads_event_test PRIVATE seads_event seads_kernel seads_net seads_replay seads_det_math seads_det_flags)
 
+# --- layer-7 stream-framing byte-exact test (chunk-boundary invariance vs Python reference) ---
+add_executable(seads_framing_test src/net/framing_test_main.cpp)
+target_link_libraries(seads_framing_test PRIVATE seads_framing seads_net seads_det_flags)
+
+# --- layer-7 cross-process demo (two-process server/client over a real TCP socket) ---
+add_executable(seads_netserver src/net/netserver_main.cpp)
+target_link_libraries(seads_netserver PRIVATE seads_session seads_event seads_framing seads_socket
+                      seads_predict seads_net seads_kernel seads_replay seads_det_math seads_det_flags)
+add_executable(seads_netclient src/net/netclient_main.cpp)
+target_link_libraries(seads_netclient PRIVATE seads_session seads_event seads_framing seads_socket
+                      seads_predict seads_net seads_kernel seads_replay seads_det_math seads_det_flags)
+
+# --- layer-7 loopback determinism bridge: socket-path digest == in-process session digest ---
+add_executable(seads_netloop_test src/net/netloop_test_main.cpp)
+target_link_libraries(seads_netloop_test PRIVATE seads_session seads_event seads_framing seads_socket
+                      seads_predict seads_net seads_kernel seads_replay seads_det_math seads_det_flags)
+
 # --- client presentation test (globe projection + .seadsrec container + playback interp) ---
 add_executable(seads_client_test src/client/client_test_main.cpp)
 target_link_libraries(seads_client_test PRIVATE seads_client seads_net seads_det_flags)
@@ -187,4 +224,12 @@ add_test(NAME predict_equal COMMAND seads_predict_test)
 add_test(NAME session_reconstruct COMMAND seads_session_test)
 add_test(NAME event_reliable COMMAND seads_event_test)
 add_test(NAME client_presentation COMMAND seads_client_test)
+add_test(NAME framing_byteexact COMMAND seads_framing_test)
+# The socket loopback bridge needs a live 127.0.0.1 port; skip when cross-compiling (the built
+# binary can't run on the build host) but keep it on by default for native builds. Override with
+# -DSEADS_SOCKET_TESTS=OFF.
+option(SEADS_SOCKET_TESTS "Run the layer-7 socket loopback determinism bridge test" ON)
+if(SEADS_SOCKET_TESTS AND NOT CMAKE_CROSSCOMPILING)
+  add_test(NAME netloop_bridge COMMAND seads_netloop_test)
+endif()
 # Golden hash compare is run in CI (guardian.yml) across the toolchain matrix.

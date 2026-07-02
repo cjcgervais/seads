@@ -129,17 +129,17 @@ const netsnap::Snapshot* freshest_frame(const interp::SnapshotBuffer& buf, std::
 
 }  // namespace
 
-SessionResult run_session(const Rails& rails, const Scenario& sc, bool reconcile) {
+ServerFrames build_server_frames(const Rails& rails, const Scenario& sc) {
     const unsigned ticks = sc.ticks;
 
-    // --- server: drive the authoritative kernel; emit protocol-5 frames at 20 Hz -------------
+    // --- server: drive the authoritative kernel; emit protocol-6 frames at 20 Hz -------------
     Kernel server(rails);
     for (unsigned i = 0; i < sc.n_aircraft; ++i) {
         const AircraftSpec& a = sc.aircraft[i];
         server.add(a.lat, a.lon, a.psi, a.phi, a.alt, a.tas, 0.0, a.env->hp_start, a.env->ammo_start);
     }
     // frames as (emit_tick, bytes) ascending — emits are snap_every apart, so a small vector.
-    std::vector<std::pair<std::int64_t, std::vector<std::uint8_t>>> frames;
+    ServerFrames frames;
     frames.emplace_back(0, serialize_world(server, 0));  // initial world (pre-step)
     for (unsigned t = 1; t <= ticks; ++t) {
         std::vector<Command> cmds;
@@ -153,6 +153,12 @@ SessionResult run_session(const Rails& rails, const Scenario& sc, bool reconcile
         server.step(cmds, envs);
         if (t % sc.snap_every == 0) frames.emplace_back(t, serialize_world(server, t));
     }
+    return frames;
+}
+
+SessionResult run_client(const Rails& rails, const Scenario& sc, const ServerFrames& frames,
+                         bool reconcile) {
+    const unsigned ticks = sc.ticks;
 
     auto is_dropped = [&](std::int64_t emit_tick) {
         for (unsigned d = 0; d < sc.n_drops; ++d)
@@ -225,6 +231,10 @@ SessionResult run_session(const Rails& rails, const Scenario& sc, bool reconcile
     for (const auto& h : res.per_tick) cat.insert(cat.end(), h.begin(), h.end());
     res.digest = sha256_hex(cat);
     return res;
+}
+
+SessionResult run_session(const Rails& rails, const Scenario& sc, bool reconcile) {
+    return run_client(rails, sc, build_server_frames(rails, sc), reconcile);
 }
 
 }  // namespace session

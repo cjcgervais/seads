@@ -217,6 +217,18 @@ docs/{adr,annex,cards,receipts,seals}  governance ledger  .claude/{agents,skills
   **Transport-only** (4th instance of the wire-reseal pattern): no kernel/det_math/tuning touched ⇒ **all 10
   goldens byte-identical**, no new golden, guardian.yml unchanged; session + event digests moved (regenerated).
   +2 property tests ⇒ 128. **Attribution arc closed end-to-end.** See ADR-Step7-Guns-WireTransport-Attribution-v1.17r0.
-- next — free pick (none blocking): a genuinely cross-PROCESS transport (sockets) over the layer-5/6 frames;
+- **Netcode layer 7 (no-seal, ride v1.17r0):** a genuinely cross-PROCESS **socket transport** over the
+  layer-5/6 frames. A strictly-OUTER length-prefixed framing (`stream = concat of LEB128(len)||payload`,
+  payload = a whole protocol-6 snapshot; reuses the sealed GEO-001 LEB128) with a `StreamReassembler`
+  that is a PURE function of the byte stream (any chunking → identical frames; buffers a split length
+  PREFIX, truncated=wait / overlong=error) + a dependency-free blocking-TCP wrapper (BSD/Winsock behind
+  one `#ifdef _WIN32`, `send_all` loop, `SO_REUSEADDR`, SIGPIPE-safe, endian-neutral). A determinism
+  BRIDGE (`seads_netloop_test`) ships SESSION-SK-001 over a real 127.0.0.1 socket and reconstructs the
+  **identical** in-process `run_session` digest (`session.cpp` split into `build_server_frames` +
+  `run_client`; client keys on each frame's `server_tick`, never wall-clock). **Transport-only — no
+  kernel/det_math/rails/wire/golden change, all 10 goldens byte-identical**; new `seads_framing_test`
+  (byte-exact, all 5 legs) + `netloop_bridge` (x64 legs) ⇒ ctest 10→12; +4 property tests ⇒ **132**.
+  Two-process demo: `seads_netserver`/`seads_netclient`. See ADR-Step-Net-Layer7-Socket-v1.17r0.
+- next — free pick (none blocking): non-blocking / multi-client sockets over the layer-7 transport;
   per-round hit granularity (a kernel event queue, its own ADR); renderer polish (meshes; guns + kill-feed in
   the live `--fly` path); or an optional new seal (component-damage, **B5** ISA atmosphere).

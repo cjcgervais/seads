@@ -1,6 +1,54 @@
 # SEADS 2026 — Next Steps (handoff)
 
-> ## ►► CURRENT STATE (2026-07-01): seal **ATM-Sphere v1.17r0** — **`last_hit_by` ON THE WEAPON-001 WIRE + `Event.attacker` DONE ✅ — ATTRIBUTION ARC CLOSED END-TO-END**
+> ## ►► CURRENT STATE (2026-07-01): **NETCODE LAYER 7 — CROSS-PROCESS SOCKET TRANSPORT DONE ✅** (no-seal, rides **ATM-Sphere v1.17r0**)
+> **Latest: the replication stack finally crosses a real OS process boundary — and it's bit-exact.**
+> Layers 1–6 built the whole server↔client stack but shipped frames through an *in-process* transport
+> (a dict / a `frame_at` lookup with integer lag + a drop set). Layer 7 moves them over a **real TCP
+> socket** and proves, with a determinism bridge, that sockets + framing add **zero information and
+> zero nondeterminism**. Three pieces:
+> **(a) Framing** (`src/net/framing`, `tools/framing_ref.py`): a strictly-OUTER length prefix —
+> `stream = concat of ( LEB128(len(payload)) || payload )`, payload = a whole protocol-6 snapshot. The
+> length prefix reuses the **sealed** GEO-001 `leb128_encode_u64/decode_u64` (C++≡Python free). The
+> `StreamReassembler` is a **PURE function of the byte stream**: any partition of a stream reassembles
+> to the identical frames as feeding it whole. The one fragile spot — the length prefix itself can
+> split across chunks — is handled by buffering a partial PREFIX (**truncated → wait**; **overlong >10
+> bytes → error**, mirroring `leb128_decode_u64`'s bound bit-for-bit), never emitting a frame until all
+> `len` bytes are present.
+> **(b) Sockets** (`src/net/socket`): dependency-free blocking TCP, BSD/Winsock behind one
+> `#ifdef _WIN32` (RAII `WsaGuard`, `socket_t`/`is_valid`, `send_all` loop over short writes,
+> `recv_some`, `SO_REUSEADDR`, SIGPIPE-safe via `MSG_NOSIGNAL`). Endian-neutral (LEB128) — only
+> `sin_port`/`sin_addr` use network order.
+> **(c) The determinism BRIDGE** (`seads_netloop_test`): reference = the sealed **in-process**
+> `session::run_session(rails, SESSION-SK-001, reconcile=true).digest` (NOT re-derived). `session.cpp`
+> was split into `build_server_frames()` + `run_client()` (`run_session` = their composition) so the
+> socket path reuses the EXACT reconstruction. The server sends **every** frame losslessly over a real
+> `127.0.0.1` socket (incl. the tick-0 frame); the client reassembles, rebuilds the frame list **keyed
+> on each frame's decoded `server_tick`**, and applies the sealed lag + drop set purely from
+> `server_tick`/`t` (never wall-clock) ⇒ socket-path digest **==** in-process digest (`24f71845…c332`,
+> GCC **and** Clang). OS-assigned port via `bind :0` + `getsockname`, handed over a `mutex`+`cv`
+> handshake; a finite watchdog fails-not-wedges on a hang. Plus a two-process human demo
+> (`seads_netserver`/`seads_netclient`).
+> **TRANSPORT-ONLY — the outer envelope never touches the sealed protocol-6 bytes: no
+> `src/kernel/**`, `src/det_math/**`, `config/rails/**`, wire scales, or goldens touched ⇒ ALL 10
+> GOLDENS BYTE-IDENTICAL, no new golden, no seal.** `seads_session_test` digest is UNCHANGED (the
+> `run_session` split is behavior-preserving). **Gates: +4 property tests ⇒ 132
+> (`tests/property/test_framing.py`: reassembly round-trip / chunk-boundary invariance / partial-frame
+> buffered / overlong reject), ctest 10→12 (`framing_byteexact` all legs + `netloop_bridge` x64), all
+> generated headers in sync (`framing_vectors.h` added), 10 goldens byte-identical.** guardian.yml:
+> `gen_framing_vectors.py --check` + `framing_ref.py` self-test + `seads_framing_test` on all 5 legs +
+> build-only-smoke of the socket binaries on all legs + `seads_netloop_test` on the native x64 legs.
+> Ledger: **ADR-Step-Net-Layer7-Socket-v1.17r0**. **Seal stays v1.17r0** (this is a Tier-2 net layer,
+> like interp/session/events were).
+> **NEXT (free pick, none blocking):** non-blocking / multi-client sockets over the layer-7 transport;
+> per-round hit granularity (a kernel event QUEUE — its own ADR); renderer polish (meshes; guns +
+> kill-feed in the live `--fly` path); or an optional new seal (component/region damage; **B5** ISA
+> atmosphere).
+> **NOTE FOR THE NEXT AGENT:** layer 7 is code-complete + green locally (GCC+Clang, ctest 12/12, 132
+> property tests, framing + bridge PASS). Verify guardian CI is green after push. `std::future` was
+> deliberately avoided in the bridge (MinGW libstdc++ `call_once` link quirk) — use the
+> `condition_variable` handshake if you extend it.
+>
+> ## ►► PRIOR STATE (2026-07-01): seal **ATM-Sphere v1.17r0** — **`last_hit_by` ON THE WEAPON-001 WIRE + `Event.attacker` DONE ✅ — ATTRIBUTION ARC CLOSED END-TO-END**
 > **Latest (SEAL v1.17r0): attribution now replicates — a remote client renders the attributed kill-feed.**
 > The one gap v1.16r0 left open closes, in BOTH replication paths at once. **(a) State path:** the
 > per-aircraft attacker index **`last_hit_by` joins the WEAPON-001 snapshot section** as the 11th
