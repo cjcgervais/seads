@@ -1,8 +1,8 @@
 {
   "header": {
     "id": "SEADS-RAILS",
-    "version": 300,
-    "seal": "ATM-Sphere v1.20r0",
+    "version": 310,
+    "seal": "ATM-Sphere v1.21r0",
     "note": "Data-driven immutable rails. Any change here REQUIRES a new seal (ADR + Forge audit card + Chronicle receipt). See CLAUDE.md > Change-Control Law."
   },
   "rails": {
@@ -18,12 +18,20 @@
     "atm_top_m": 8000,
     "atm_soft_band_m": 100,
     "atmosphere": "still_air",
+    "atmosphere_density": {
+      "model": "B5 ISA density-vs-altitude (v1.21r0): the air THINS with altitude. sigma(alt) = rho(alt)/rho0 is a sealed 17-node LUT (500 m spacing over the whole ATM realm [0, 8000 m], hex-float node values shared bit-for-bit between kernel.cpp and ref_kernel.py) interpolated by the SAME deterministic lut_eval as the envelope tables — pure +,-,*,/ at runtime, ZERO new det_math (the det_exp/det_pow the original B5 plan feared are never needed: the ICAO power law sigma(h) = ((T0 - L*h)/T0)^(g0/(Rs*L) - 1), T0=288.15 K, L=0.0065 K/m, Rs=287.05287, g0=the gravity rail, runs OFFLINE in tools/gen_isa_lut.py; the sealed spec is the table itself). sigma scales BOTH aero forces (q = 0.5*rho0*sigma(alt)*V^2 in the envelope-driven step — drag falls aloft AND the n_aero stall ceiling drops: mushier turns, higher stall/corner TAS, worse sustained-g) AND engine power (T *= sigma — sea-level power is NOT held to altitude, so no airframe exceeds its sealed B4 historical top speed anywhere in the band; per-airframe supercharger critical-altitude modeling is a deferred data-driven phase). Deliberately UNTOUCHED: 'still air' (no wind/weather — unchanged), gravity (constant rail), the no-arg kinematic path (the Sphere golden's pure great-circle tail has no aero at all), and the projectile advance (PROJ_DRAG_K stays a lumped GLOBAL constant — a bullet is a bullet; ISA scaling of round drag is deferred and would be its own kernel seal). See ADR-Step8-FlightModel-B5-v1.21r0.",
+      "sigma_lut_nodes": 17,
+      "sigma_lut_spacing_m": 500,
+      "isa_T0_K": 288.15,
+      "isa_lapse_K_per_m": 0.0065,
+      "isa_Rs_J_per_kgK": 287.05287
+    },
     "kinematics": {
       "model": "intrinsic_S2",
       "turn_law": "3-DOF point mass (B2, v1.6r0): psi_dot = (g0/V)*(n*sin(phi)/cos(gamma)); gamma_dot = (g0/V)*(n*cos(phi)-cos(gamma)); reduces to psi_dot = g0*tan(phi)/V for the level coordinated turn (gamma=0, n=1/cos(phi)). The no-arg straight golden keeps the pure great-circle kinematic tail.",
       "step": "closed_form_great_circle",
       "cartesian_fallback": false,
-      "flight_model": "B3 limits & stall: tas integrated from thrust-drag (B1); flight-path angle gamma is a stored state driven by commanded load factor n (B2); altitude earned (alt_dot=V*sin gamma). Constant density rho0=1.225. B3 (v1.7r0): n is bounded per-airframe by the structural g limits (n_min_struct/n_max_struct) AND the C_Lmax aerodynamic ceiling n_aero=cl_max*qS/(m*g0); below the corner speed n_aero binds and the turn collapses (accelerated stall). Retires the B2 global [-3,9] placeholder. No new det_math; post-stall lift held at C_Lmax (no departure / ISA density = later phases)."
+      "flight_model": "B5 ISA atmosphere (v1.21r0) over B3 limits & stall: tas integrated from thrust-drag (B1); flight-path angle gamma is a stored state driven by commanded load factor n (B2); altitude earned (alt_dot=V*sin gamma). B5: density is ALTITUDE-DEPENDENT — q = 0.5*rho0*sigma(alt)*V^2 and thrust T *= sigma(alt), with sigma the sealed ISA density-ratio LUT (see atmosphere_density; zero new det_math). B3 (v1.7r0): n is bounded per-airframe by the structural g limits (n_min_struct/n_max_struct) AND the C_Lmax aerodynamic ceiling n_aero=cl_max*qS/(m*g0); below the corner speed n_aero binds and the turn collapses (accelerated stall) — both now altitude-dependent through sigma (the corner/stall TAS rise aloft). Post-stall lift held at C_Lmax (no departure)."
     },
     "determinism": {
       "math_lib": "det_math",

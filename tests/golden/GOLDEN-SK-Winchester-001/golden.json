@@ -1,8 +1,8 @@
 {
   "id": "GOLDEN-SK-Winchester-001",
-  "seal": "ATM-Sphere v1.20r0",
+  "seal": "ATM-Sphere v1.21r0",
   "ticks": 950,
-  "world_hash": "2474914c6a09e2b115e1ae36cdf577107fa514e8a4ceca5007e5809e10dc47d1",
+  "world_hash": "0e0c95a1797b813293e2d5827699c7abf25bb1772241fd0d1f9d9b58c8cf3b55",
   "snapshot_format": "see ref_kernel.py docstring",
   "generated_by": "tools/ref_kernel.py (Python det_math reference)"
 }

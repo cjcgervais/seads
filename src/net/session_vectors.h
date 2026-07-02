@@ -81,14 +81,14 @@ constexpr int FINAL_WEAPON_COUNT = sizeof(FINAL_WEAPON)/sizeof(FINAL_WEAPON[0]);
 // --- expected reconstructed client-view hash checkpoints + whole-session digest ---
 struct Checkpoint { unsigned tick; const char* hash; };
 constexpr Checkpoint CHECKPOINTS[] = {
-  { 1u, "0a035ddaef51e444ec87d3c57e2f3dd72a6f47d1c2fe247e1e87d838734bede7" },
-  { 50u, "45103462fd1f9fc231903cd0160c98efea80db028cc196dbd8c679c788bbd951" },
-  { 100u, "be327ffd29f62322fce2e555b8954af706eb465f6d244048b5dc4727e0256589" },
-  { 150u, "588c817235bdd262e51e2b9d3d55c86db1af8c4fa41fd54473005f16b9a2add6" },
-  { 200u, "b39f005263cd1f8f34d650b90c09cf8434a730984bee69eff40a44282e07f166" },
+  { 1u, "2a9908cf9f1718f88ee0957c8a118d4963e6870847cb1e767200d7f32ef8542d" },
+  { 50u, "c41abcd3449687e840e544c0c0abafa21a93b0a954ad04b89df2a7e30df72831" },
+  { 100u, "0714ddbe0f8689b72abe89d05e6756186793075ca05463e710c0033401231669" },
+  { 150u, "345a429e0e6afcec176b6c001f00c2420d50e544df9ca23fb158111cf9e1fef6" },
+  { 200u, "5182f0ce79475f9ef4bcfccdeba8f306895ef8d8fd5dba5f28aa1044a21bac71" },
 };
 constexpr int CHECKPOINT_COUNT = sizeof(CHECKPOINTS)/sizeof(CHECKPOINTS[0]);
 
-constexpr const char* SEQUENCE_DIGEST = "d0e94e2ea48a31dd1418f84c22b09b8a8ad371b96c840a70a0f4010e4cb1a8fd";
+constexpr const char* SEQUENCE_DIGEST = "21aaab4908dd76f707a0311ac578eb7271e2e3e09bdf3f2457df3e1978618abb";
 
 }} // namespace seads::sess_vec

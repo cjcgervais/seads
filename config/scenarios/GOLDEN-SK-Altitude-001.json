@@ -1,0 +1,86 @@
+{
+  "header": {
+    "id": "GOLDEN-SK-Altitude-001",
+    "version": 311,
+    "seal": "ATM-Sphere v1.21r0",
+    "description": "Two-ship SAME-AIRFRAME altitude-contrast scenario for B5 (ISA atmosphere, v1.21r0): two Spitfire Mk Vs fly the IDENTICAL 4-phase schedule with altitude as the ONLY independent variable \u2014 AC0 low (800 m, sigma ~0.92) vs AC1 high (6900 m, sigma ~0.49). They can never interact (no fire phases -> no projectiles exist; started on opposite great-circle arcs, lon 0 psi 90 vs lon 90 psi 270). Schedule: phase 0 (t=0) full-throttle 1 g wings-level acceleration from TAS 120 \u2014 by t=2000 the low ship reaches ~142.0 m/s while the high ship only ~131.3 (thrust scales with sigma; the ~11 m/s divergence IS the B5 signal); phase 1 (t=2000) a 1 s g 6.0 pull \u2014 the LOW ship has aero headroom (n_aero stays ~[11.17,11.67] > 6, the commanded 6 g is delivered un-clamped, below n_max_struct 8), the HIGH ship is AERO-LIMITED (n_aero ~[4.90,5.25] < 6 \u2014 the SAME command is clamped to the B3 C_Lmax ceiling, which B5 made altitude-dependent); phase 2 (t=2100) floats at g 0.5 while the zoom tops out; phase 3 (t=2400) recovers to 1 g at throttle 0.8. The low ship's zoom climbs ~800->1142 m CROSSING the 1000 m sigma-LUT node; the high ship climbs ~6900->7158 m CROSSING the 7000 m node \u2014 both ships traverse a sigma LUT segment boundary in flight, so the 17-node table's interpolation AND segment switching are pinned in the golden bytes (not just single-segment evaluation). No guns: hp/regions full, ammo untouched, kills 0, last_hit_by -1 \u2014 this golden pins the B5 FLIGHT-MODEL coupling (sigma -> thrust/drag/n_aero) in C++ <-> Python lockstep; combat goldens own the weapon arcs. Exercises: air_sigma LUT interpolation in two different segments + two node crossings, sigma-scaled thrust (divergent acceleration), sigma-scaled dynamic pressure (divergent drag), and the altitude-dependent B3 aero ceiling (one clamped pull, one un-clamped pull, same command).",
+    "introduced": "NEW golden for B5 (ISA atmosphere, seal v1.21r0): the first scenario in which ALTITUDE is the only independent variable \u2014 it pins the sigma(alt) density-ratio LUT end-to-end through the flight model in C++ <-> Python lockstep. See ADR-Step8-FlightModel-B5-v1.21r0."
+  },
+  "ticks": 3000,
+  "aircraft": [
+    {
+      "envelope": "spitfire_mk5",
+      "start": {
+        "lat_deg": 0.0,
+        "lon_deg": 0.0,
+        "psi_deg": 90.0,
+        "phi_deg": 0.0,
+        "alt_m": 800.0,
+        "tas_mps": 120.0
+      },
+      "schedule": [
+        {
+          "start_tick": 0,
+          "bank_deg": 0.0,
+          "g_cmd": 1.0,
+          "throttle": 1.0
+        },
+        {
+          "start_tick": 2000,
+          "bank_deg": 0.0,
+          "g_cmd": 6.0,
+          "throttle": 1.0
+        },
+        {
+          "start_tick": 2100,
+          "bank_deg": 0.0,
+          "g_cmd": 0.5,
+          "throttle": 1.0
+        },
+        {
+          "start_tick": 2400,
+          "bank_deg": 0.0,
+          "g_cmd": 1.0,
+          "throttle": 0.8
+        }
+      ]
+    },
+    {
+      "envelope": "spitfire_mk5",
+      "start": {
+        "lat_deg": 0.0,
+        "lon_deg": 90.0,
+        "psi_deg": 270.0,
+        "phi_deg": 0.0,
+        "alt_m": 6900.0,
+        "tas_mps": 120.0
+      },
+      "schedule": [
+        {
+          "start_tick": 0,
+          "bank_deg": 0.0,
+          "g_cmd": 1.0,
+          "throttle": 1.0
+        },
+        {
+          "start_tick": 2000,
+          "bank_deg": 0.0,
+          "g_cmd": 6.0,
+          "throttle": 1.0
+        },
+        {
+          "start_tick": 2100,
+          "bank_deg": 0.0,
+          "g_cmd": 0.5,
+          "throttle": 1.0
+        },
+        {
+          "start_tick": 2400,
+          "bank_deg": 0.0,
+          "g_cmd": 1.0,
+          "throttle": 0.8
+        }
+      ]
+    }
+  ]
+}

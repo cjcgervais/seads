@@ -29,10 +29,13 @@ RAILS = json.loads((ROOT / "config" / "rails" / "atm.json").read_text(encoding="
 ROSTER = ("ki61", "bf109f4", "a6m2", "yak3", "la7", "spitfire_mk5", "p47d", "p51")
 G0 = 9.80665
 DT = 0.01
+TEST_ALT = 4000.0   # every _achieved_n run flies here — B5 (v1.21r0): the limits are now
+                    # ALTITUDE-DEPENDENT (n_aero scales with the ISA density ratio sigma(alt)),
+                    # so the expected-value helpers below carry the SAME sigma the kernel uses.
 
 
-def _n_aero(e, V):
-    qS = 0.5 * rk.RHO0 * V * V * e["wing_area_m2"]
+def _n_aero(e, V, alt=TEST_ALT):
+    qS = 0.5 * rk.RHO0 * rk.air_sigma(alt) * V * V * e["wing_area_m2"]
     return e["cl_max"] * qS / (e["mass_kg"] * G0)
 
 
@@ -47,16 +50,18 @@ def _achieved_n(envname, V, g_cmd, throttle=0.0):
     """Run ONE wings-level tick at speed V commanding g_cmd; recover the load factor the kernel
     actually used (after the structural + aerodynamic limiter)."""
     k = rk.Kernel(RAILS)
-    k.aircraft.append(rk.Aircraft(0.0, 0.0, 0.0, 0.0, 4000.0, V))   # phi=0, gamma=0
+    k.aircraft.append(rk.Aircraft(0.0, 0.0, 0.0, 0.0, TEST_ALT, V))   # phi=0, gamma=0
     e = envmod.load_envelope(envname)
     k.step_scenario([(0.0, float(g_cmd), float(throttle))], [e])
     ac = k.aircraft[0]
     return 1.0 + ac.gamma * ac.tas / (G0 * DT)
 
 
-def _corner(e):
-    # V* where n_aero == n_max_struct  ->  the V-n diagram corner.
-    return math.sqrt(2.0 * e["n_max_struct"] * e["mass_kg"] * G0 / (rk.RHO0 * e["wing_area_m2"] * e["cl_max"]))
+def _corner(e, alt=TEST_ALT):
+    # V* where n_aero == n_max_struct -> the V-n diagram corner. B5: rises with altitude
+    # (thinner air needs more TAS for the same lift) — evaluate at the test altitude.
+    return math.sqrt(2.0 * e["n_max_struct"] * e["mass_kg"] * G0
+                     / (rk.RHO0 * rk.air_sigma(alt) * e["wing_area_m2"] * e["cl_max"]))
 
 
 @given(env=st.sampled_from(ROSTER))
@@ -119,9 +124,13 @@ def test_one_g_stall_speed_consistent(env):
     # wing cannot even hold level flight (max n < 1 -> the aircraft must descend / mush).
     e = envmod.load_envelope(env)
     doc = json.loads((ROOT / "data" / "tuning" / "envelopes" / f"{env}.json").read_text())
+    # The declared stall_tas_mps is a SEA-LEVEL figure (sigma = 1) — the envelope coherence
+    # contract is altitude-free. B5: at the 4000 m test altitude the true 1 g stall TAS is
+    # HIGHER (thinner air), so the behavioral check below holds a fortiori.
     v_stall_1g = math.sqrt(2.0 * e["mass_kg"] * G0 / (rk.RHO0 * e["wing_area_m2"] * e["cl_max"]))
     assert abs(v_stall_1g - float(doc["tuning"]["stall_tas_mps"])) < 0.5
-    # just below the 1 g stall speed, even commanding lots of g cannot reach n = 1
+    # just below the sea-level 1 g stall speed (and thus well below the 4000 m one), even
+    # commanding lots of g cannot reach n = 1
     assert _achieved_n(env, v_stall_1g * 0.95, 9.0) < 1.0
 
 
@@ -148,7 +157,8 @@ def test_over_corner_turn_is_unsustainable_and_stalls():
         k.step_scenario([cmd], [e])
     assert ac.tas < 0.5 * v0                 # energy collapsed: bled well into the stall region
     assert ac.tas <= 60.0                    # near the floor
-    assert _n_aero(e, ac.tas) < 2.0 - 1e-6   # can no longer generate the demanded 2 g (stalled)
+    # B5: evaluate the ceiling at the aircraft's ACTUAL final altitude (it drifts in the spiral)
+    assert _n_aero(e, ac.tas, ac.alt) < 2.0 - 1e-6   # can no longer make the demanded 2 g (stalled)
 
 
 def test_stall_is_deterministic():

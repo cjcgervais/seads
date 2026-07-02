@@ -112,7 +112,10 @@ def test_toughness_binds_through_the_kernel():
             lat=tg.lat, lon=tg.lon, psi=rk.deg2rad(270.0), alt=tg.alt,
             tas=600.0, gamma=0.0, damage=30.0, ttl=100, owner=0))
         cmds = [(0.0, 1.0, 0.7, False), (0.0, 1.0, 0.7, False)]
-        for _ in range(300):
+        # B5 (v1.21r0): at the 4000 m test altitude sigma ~0.67 scales BOTH the glider's drag
+        # and the powered ship's thrust down, so the TAS gap opens ~2/3 as fast as under the
+        # old constant-density model — 500 ticks (5 s) restores a decisive margin.
+        for _ in range(500):
             k.step_scenario(cmds, [env, env])
         return tg
     tender, tough = run(0.125), run(0.625)

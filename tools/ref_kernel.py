@@ -44,11 +44,71 @@ ROOT = Path(__file__).resolve().parent.parent
 
 # --- B1 longitudinal-energy model constants (ATM-Sphere v1.5r0) -------------------------
 # Exact hex-float literals so Python and C++ (kernel.cpp) share identical bit patterns.
-# RHO0: constant sea-level ISA air density (the "still air / constant atmosphere" rail; ISA
-# density-vs-altitude is deferred to B5). V_MIN: hard speed floor keeping psi_dot = g0*tan(phi)/V
+# RHO0: SEA-LEVEL ISA air density (the reference rho for the B5 density ratio below; B1-B4 used
+# it as a constant everywhere). V_MIN: hard speed floor keeping psi_dot = g0*tan(phi)/V
 # and the drag solve well-defined (a real stall model is B3). See ADR-Step8-FlightModel-B1.
 RHO0 = float.fromhex('0x1.399999999999ap+0')   # 1.225 kg/m^3
 V_MIN = float.fromhex('0x1.e000000000000p+4')   # 30.0 m/s
+
+# --- B5 ISA atmosphere: density ratio sigma(alt) (ATM-Sphere v1.21r0) --------------------
+# The air THINS with altitude: sigma(h) = rho(h)/rho0, a sealed 17-node LUT (500 m spacing over
+# the whole ATM realm [0, 8000 m]) interpolated by the SAME deterministic lut_eval as the
+# envelope tables — pure +,-,*,/ at runtime, ZERO new det_math (the det_exp/det_pow the original
+# B5 plan feared are never needed: the power law runs OFFLINE in tools/gen_isa_lut.py, and the
+# sealed spec is this table itself). Node provenance: ICAO ISA troposphere,
+# sigma(h) = ((T0 - L*h)/T0)^(g0/(Rs*L) - 1), T0=288.15 K, L=0.0065 K/m, Rs=287.05287 J/(kg K),
+# g0 = the gravity rail. sigma scales BOTH aero forces (q = 0.5*rho0*sigma*V^2 — so drag falls
+# and the n_aero stall ceiling drops aloft: mushier turns, higher stall/corner TAS, worse
+# sustained-g) AND engine power (T *= sigma — sea-level power is NOT held to altitude), so no
+# airframe exceeds its sealed B4 historical top speed anywhere in the band; supercharger
+# critical-altitude modeling is deferred (a future data-only phase). The no-arg kinematic path
+# (_advance — the Sphere golden) and the projectile advance (PROJ_DRAG_K stays a lumped GLOBAL:
+# a bullet is a bullet) are deliberately untouched. See ADR-Step8-FlightModel-B5-v1.21r0.
+ISA_SIGMA_ALT = (
+    float.fromhex('0x0.0p+0'),                 # 0 m
+    float.fromhex('0x1.f400000000000p+8'),     # 500 m
+    float.fromhex('0x1.f400000000000p+9'),     # 1000 m
+    float.fromhex('0x1.7700000000000p+10'),    # 1500 m
+    float.fromhex('0x1.f400000000000p+10'),    # 2000 m
+    float.fromhex('0x1.3880000000000p+11'),    # 2500 m
+    float.fromhex('0x1.7700000000000p+11'),    # 3000 m
+    float.fromhex('0x1.b580000000000p+11'),    # 3500 m
+    float.fromhex('0x1.f400000000000p+11'),    # 4000 m
+    float.fromhex('0x1.1940000000000p+12'),    # 4500 m
+    float.fromhex('0x1.3880000000000p+12'),    # 5000 m
+    float.fromhex('0x1.57c0000000000p+12'),    # 5500 m
+    float.fromhex('0x1.7700000000000p+12'),    # 6000 m
+    float.fromhex('0x1.9640000000000p+12'),    # 6500 m
+    float.fromhex('0x1.b580000000000p+12'),    # 7000 m
+    float.fromhex('0x1.d4c0000000000p+12'),    # 7500 m
+    float.fromhex('0x1.f400000000000p+12'),    # 8000 m
+)
+ISA_SIGMA = (
+    float.fromhex('0x1.0000000000000p+0'),     # sigma(0)    = 1.0
+    float.fromhex('0x1.e7dee7742131ap-1'),     # sigma(500)  = 0.9528724984416812
+    float.fromhex('0x1.d09f05fc701a4p-1'),     # sigma(1000) = 0.9074632521297201
+    float.fromhex('0x1.ba3a9a8f8e957p-1'),     # sigma(1500) = 0.8637283611526908
+    float.fromhex('0x1.a4abf95589a58p-1'),     # sigma(2000) = 0.821624557201015
+    float.fromhex('0x1.8fed8b97c2a68p-1'),     # sigma(2500) = 0.7811092016939485
+    float.fromhex('0x1.7bf9cfb0b4917p-1'),     # sigma(3000) = 0.742140283890225
+    float.fromhex('0x1.68cb58fb94924p-1'),     # sigma(3500) = 0.704676418982022
+    float.fromhex('0x1.565ccfc3cd27ap-1'),     # sigma(4000) = 0.6686768461718906
+    float.fromhex('0x1.44a8f13453073p-1'),     # sigma(4500) = 0.634101426732299
+    float.fromhex('0x1.33aa8f46d2eedp-1'),     # sigma(5000) = 0.6009106420474076
+    float.fromhex('0x1.235c90b2b78c0p-1'),     # sigma(5500) = 0.5690655916366936
+    float.fromhex('0x1.13b9f0dc0699dp-1'),     # sigma(6000) = 0.5385279911600268
+    float.fromhex('0x1.04bdbfc2144a5p-1'),     # sigma(6500) = 0.5092601704037817
+    float.fromhex('0x1.ecc643dc18156p-2'),     # sigma(7000) = 0.4812250712475551
+    float.fromhex('0x1.d14aa0c29b568p-2'),     # sigma(7500) = 0.45438624561105323
+    float.fromhex('0x1.b6ff31073bca1p-2'),     # sigma(8000) = 0.428707853380681
+)
+
+
+def air_sigma(alt):
+    """B5 (v1.21r0): ISA density ratio rho(alt)/rho0 via the sealed LUT. alt is already inside
+    [0, ATM_TOP] (the kernel clamps it every tick), and lut_eval clamps at the end nodes anyway.
+    MUST match kernel.cpp air_sigma bit-for-bit (same lut_eval, same sealed nodes)."""
+    return dm.lut_eval(ISA_SIGMA_ALT, ISA_SIGMA, alt)
 
 # --- B3 limits & stall (ATM-Sphere v1.7r0) ----------------------------------------------
 # The B2 global placeholder clamp on the load factor (N_MIN=-3, N_MAX=+9) is RETIRED. The
@@ -447,8 +507,11 @@ class Kernel:
             delta = clamp(delta, -step_max, step_max)
             ac.phi = ac.phi + delta
             ac.phi = clamp(ac.phi, -phimax, phimax)
-            # --- dynamic pressure (depends only on V; needed for the aero stall ceiling) ---
-            q = 0.5 * RHO0 * V * V                        # dynamic pressure
+            # --- dynamic pressure (B5, v1.21r0: the air thins with altitude — sigma(alt) scales
+            # rho, so drag falls AND the n_aero stall ceiling drops aloft; alt is the pre-step
+            # value, matching the V the ceiling/drag solve uses) ---
+            sigma = air_sigma(ac.alt)                     # ISA density ratio (sealed LUT)
+            q = 0.5 * RHO0 * sigma * V * V                # dynamic pressure
             qS = q * e["wing_area_m2"]
             # --- commanded load factor n, bounded by structural g AND C_Lmax (B3, v1.7r0) ---
             # n_aero = most |n| the wing can lift at this q; below the corner speed it is the
@@ -476,7 +539,10 @@ class Kernel:
             Di = e["induced_k"] * CL * CL * qS            # induced drag (rises with n -> g bleeds speed)
             D = Dp + Di
             thr = clamp(commands[i][2] if len(commands[i]) > 2 else 0.0, 0.0, 1.0)
-            T = thr * e["thrust_static_n"] * (1.0 - V / e["v_max_mps"])
+            # B5 (v1.21r0): engine power scales with density too (sea-level power is NOT held to
+            # altitude) — so top TAS stays near the sealed B4 historical values everywhere in the
+            # band while climb/turn genuinely degrade aloft. Supercharger modeling deferred.
+            T = thr * e["thrust_static_n"] * (1.0 - V / e["v_max_mps"]) * sigma
             if T < 0.0:
                 T = 0.0
             if ac.engine_hp <= 0.0:
