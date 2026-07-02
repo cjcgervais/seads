@@ -30,6 +30,12 @@
 > property tests, det_math oracle + tuning/spec/ceiling probes + determinism lint PASS.**
 > Ledger: **ADR-Step7-Guns-A6M2EngineToughness-v1.23r0**, SEAL_CARD v1.23r0 (header + 4 golden
 > rows + region-toughness paragraph + history row), CLAUDE.md header/roadmap current.
+> **GIT: pushed to `origin/main` (code `ba664e2` + receipt `b779b4d`,
+> `receipt-ATM-Sphere_v1.23r0-ba664e2.yml` — 15/15 gates PASS); guardian CI run
+> [28626759324](https://github.com/cjcgervais/seads/actions/runs/28626759324) GREEN** — Python
+> gates + MSVC + GCC/Clang × x64/AArch64 + the cross-toolchain hash aggregation gate all
+> reproduce **all 14 v1.23r0 goldens bit-for-bit** (3 moved + 11 unchanged incl. EngineOut +
+> Sphere, on every leg).
 > **NEXT (free pick, none blocking):** per-airframe toughness / σ / crit-alt surfaced in the
 > HUD (presentation-only — the pools already ride the wire, crit_alt is static tuning data);
 > projectile σ-drag (a kernel seal moving every firing golden, deliberately deferred at B5); a
