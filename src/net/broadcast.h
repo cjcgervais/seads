@@ -17,6 +17,15 @@
 // the delivered stream is byte-exact for that join point regardless of OS timing. The determinism
 // bridge (seads_netdyn_test) pins one join to an exact frame via the `on_frame` hook and checks
 // each client got precisely frames[join:].
+//
+// Layer 10 (late-join CATCH-UP): with `catchup=true`, a client accepted mid-stream at frame fi is
+// first REPLAYED the missed prefix frames[0:fi] (each length-prefixed, atomically) before it enters
+// the live broadcast for frame fi onward — so it receives the WHOLE frame stream frames[0:] and can
+// reconstruct the full sealed session digest exactly as a client present from frame 0, closing the
+// layer-9 honest-scope gap (a bare late joiner missed the ticks before its join). The replay is a
+// synchronous burst on the accepting select iteration (a slow catch-up joiner back-pressures the
+// broadcast for that iteration — bounded by the prefix length; async per-client send buffers are a
+// separate deferred layer). Still TRANSPORT — no kernel/wire/golden/seal.
 #pragma once
 #include <cstddef>
 #include <cstdint>
@@ -46,7 +55,8 @@ struct Stats {
 Stats broadcast_select(netsock::socket_t listener,
                        const std::vector<std::vector<std::uint8_t>>& payloads,
                        std::size_t min_initial, int accept_deadline_ms,
-                       const std::function<void(std::size_t)>& on_frame = {});
+                       const std::function<void(std::size_t)>& on_frame = {},
+                       bool catchup = false);
 
 }  // namespace netbcast
 }  // namespace seads

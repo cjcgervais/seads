@@ -37,6 +37,20 @@ def broadcast_delivery(n_frames, members):
     return out
 
 
+def broadcast_delivery_catchup(n_frames, members):
+    """Reference layer-10 delivery WITH catch-up: a joiner accepted at frame `join` is first
+    replayed the missed prefix frames[0:join], then streamed the live window [join, leave). So a
+    client that stays to the end (leave==n_frames) receives the WHOLE frames[0:] regardless of when
+    it joined — the late joiner sees the whole fight. Mirrors netbcast::broadcast_select(catchup=1):
+    accept_pending replays frames[0:fi] to a new client, then it enters the live broadcast at fi."""
+    out = {}
+    for c, (join, leave) in members.items():
+        prefix = list(range(0, join))            # catch-up replay
+        live = list(range(join, leave))          # live broadcast window
+        out[c] = prefix + live                   # == range(0, leave)
+    return out
+
+
 N = st.integers(min_value=0, max_value=40)
 
 
@@ -96,3 +110,33 @@ def test_delivered_suffix_reassembles_byte_exact(payloads, join, step):
     stream = fr.encode_stream(suffix)
     chunks = [stream[i:i + step] for i in range(0, len(stream), step)]
     assert fr.reassemble(chunks) == suffix
+
+
+# --- layer 10: late-join CATCH-UP -----------------------------------------------------------------
+@given(N, st.data())
+def test_catchup_joiner_gets_the_whole_stream(n_frames, data):
+    # With catch-up, a joiner accepted at any frame j (and staying to the end) receives the WHOLE
+    # frames[0:] — prefix replay frames[0:j] then live frames[j:] — so it CAN reconstruct the whole
+    # fight, closing the layer-9 gap. This holds for every join point, incl. an early client (j=0).
+    j = data.draw(st.integers(min_value=0, max_value=n_frames))
+    got = broadcast_delivery_catchup(n_frames, {"catchup": (j, n_frames)})
+    assert got["catchup"] == list(range(n_frames))  # identical to a client present from frame 0
+    # ...and byte-identical to what a full (join=0) client received under the plain layer-9 model.
+    full = broadcast_delivery(n_frames, {"full": (0, n_frames)})
+    assert got["catchup"] == full["full"]
+
+
+@given(st.lists(st.binary(min_size=0, max_size=80), min_size=1, max_size=12),
+       st.integers(min_value=0, max_value=11),
+       st.integers(min_value=1, max_value=7))
+def test_catchup_stream_reassembles_to_all_frames(payloads, join, step):
+    # Compose the catch-up model with the layer-7 framing codec: the bytes a catch-up joiner receives
+    # are encode_stream(frames[0:join]) [replay] ++ encode_stream(frames[join:]) [live] — and under
+    # ANY TCP chunking that reassembles to ALL payloads (== what an early client got). This is the
+    # pure-codec form of what netcatchup_bridge proves over real sockets: replay + live == whole.
+    all_payloads = [bytes(p) for p in payloads]
+    join = min(join, len(all_payloads))
+    stream = fr.encode_stream(all_payloads[:join]) + fr.encode_stream(all_payloads[join:])
+    assert stream == fr.encode_stream(all_payloads)  # concatenation is exactly the whole stream
+    chunks = [stream[i:i + step] for i in range(0, len(stream), step)]
+    assert fr.reassemble(chunks) == all_payloads

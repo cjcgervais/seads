@@ -1,6 +1,52 @@
 # SEADS 2026 — Next Steps (handoff)
 
-> ## ►► CURRENT STATE (2026-07-01): **NETCODE LAYER 9 — SINGLE-THREAD select() BROADCAST + DYNAMIC JOIN/LEAVE DONE ✅** (no-seal, rides **ATM-Sphere v1.17r0**)
+> ## ►► CURRENT STATE (2026-07-01): **NETCODE LAYER 10 — LATE-JOIN CATCH-UP (PREFIX REPLAY) DONE ✅** (no-seal, rides **ATM-Sphere v1.17r0**)
+> **Latest: a client that joins mid-stream now reconstructs the WHOLE fight — the layer-9 honest-scope gap is closed.**
+> Layer 9 proved a late joiner receives EXACTLY the contiguous frame suffix `frames[K:]` from its join
+> point — but it deliberately couldn't reconstruct the full session (it missed the ticks before K).
+> Layer 10 closes that gap with **catch-up**: when the single-thread `select()` broadcast server accepts
+> a joiner mid-stream at frame K (with `catchup=true`), it first **REPLAYS the missed prefix `frames[0:K]`**
+> (each shipped as one atomically length-prefixed frame, the same envelope the live stream uses) and only
+> then feeds it the live suffix `frames[K:]` — so the joiner receives the WHOLE stream `frames[0:]`,
+> **byte-identical to a client present from frame 0**, and reconstructs the SAME sealed SESSION-SK-001
+> digest `24f71845…c332`. Three pieces:
+> **(a) Opt-in catch-up on the broadcast server** (`src/net/broadcast.{h,cpp}`): `broadcast_select(...)`
+> gains a final `bool catchup=false` (default preserves layer-9 behavior EXACTLY). `accept_pending` now
+> takes the payload list + `upto` (frames already sent) + the flag; a mid-stream joiner is first replayed
+> `frames[0:upto]` via a new `catch_up_client()` helper, then enters the live set. Initial-gather clients
+> (upto=0) are never replayed (present from frame 0). A joiner that dies during replay is closed and NOT
+> counted as a join. The replay is a synchronous burst on the accepting `select` iteration (a slow joiner
+> back-pressures that iteration — bounded by the prefix length; async send buffers are the next rung).
+> **(b) The catch-up determinism BRIDGE** (`seads_netcatchup_test`): ref = the sealed in-process
+> `run_session(...).digest`. Over 41 real 127.0.0.1 frames, **EARLY** (from frame 0) reconstructs
+> `24f71845…c332` (GCC+Clang; catch-up mode doesn't perturb it), and **CATCHUP** (rendezvoused to frame
+> J=20 via the `on_frame` hook, no sleeps) is replayed `frames[0:20]` then streamed `frames[20:]`, receives
+> the WHOLE `frames[0:]` byte-identical to EARLY, and reconstructs the SAME digest. Server `joins=2`,
+> every frame sent. Finite watchdog fails-not-wedges; 12/12 (gcc) + 8/8 (clang) stress reruns clean.
+> **(c) The demo server exposes it** (`seads_netserver [port] [num_clients] [catchup]`, catchup default 0):
+> shares the same loop (no untested divergence).
+> **TRANSPORT-ONLY — no `src/kernel/**`, `src/det_math/**`, `config/rails/**`, framing envelope, wire
+> scales, or goldens touched ⇒ ALL 10 GOLDENS BYTE-IDENTICAL** (Sphere re-validated `f2db95bd…`), no
+> new golden, no seal. **Gates: +2 property tests ⇒ 141 (`tests/property/test_broadcast.py`: the pure
+> catch-up model — a joiner at K receives `[0,K)`++`[K,leave)` == `range(0,leave)`, identical to a
+> from-frame-0 client; composition with the layer-7 framing codec — `encode_stream(frames[0:K]) ++
+> encode_stream(frames[K:]) == encode_stream(frames[0:])`), ctest 14→15 (`netcatchup_bridge`, x64 legs),
+> 15/15 receipt gates PASS, 10 goldens byte-identical.** guardian.yml: `seads_netcatchup_test`
+> build-only-smoked on all 5 legs (default target) + `netcatchup_bridge` run on the native x64 legs (like
+> the layer-7/8/9 bridges). Ledger: **ADR-Step-Net-Layer10-CatchUp-v1.17r0**. **Seal stays v1.17r0**
+> (Tier-2 net layer). Layer-9 regression: `netdyn_bridge` unchanged + still green (4/4 stress).
+> **NEXT (free pick, none blocking):** async single-thread OUTPUT (writability `select` + per-client send
+> buffers, so a slow client can't back-pressure the broadcast — the honest boundary layer 10 leaves);
+> per-round hit granularity (a kernel event QUEUE — its own ADR); renderer polish (guns + kill-feed in the
+> live `--fly` path); or an optional new seal (component/region damage; **B5** ISA atmosphere).
+> **NOTE FOR THE NEXT AGENT:** layer 10 is code-complete + green locally (GCC+Clang, ctest 15/15, 141
+> property tests, catch-up bridge PASS + 12/12 stress, all 10 goldens byte-identical). Verify guardian CI
+> green after push (this session couldn't — `gh` CLI absent locally). Catch-up is a LITERAL replay of the
+> frames the server already holds (`build_server_frames`) — no interpolation / state fast-forward; keep it
+> that way. `std::future` stays avoided (cv+`notify_all` handshake); the rendezvous uses `on_frame` so
+> there are NO sleeps — keep it that way if you extend the bridge.
+>
+> ## ►► PRIOR STATE (2026-07-01): **NETCODE LAYER 9 — SINGLE-THREAD select() BROADCAST + DYNAMIC JOIN/LEAVE DONE ✅** (no-seal, rides **ATM-Sphere v1.17r0**)
 > **Latest: the fan-out is now a genuine single-threaded `select()` event loop with live membership churn — and every membership case is byte-exact.**
 > Layer 8 broadcast to N clients that ALL connected before streaming, one blocking `send_all` per
 > already-connected client. Layer 9 makes it a real async fan-out: **one thread, one `select()` over

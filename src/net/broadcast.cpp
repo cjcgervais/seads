@@ -11,13 +11,37 @@ namespace netbcast {
 
 using netsock::socket_t;
 
+// Replay the missed prefix frames[0:upto] (each length-prefixed, atomically) to a just-accepted
+// late joiner so it too receives the WHOLE stream (layer-10 catch-up). Returns false if the joiner
+// dies mid-replay (it then never enters the live broadcast set). A synchronous burst — bounded by
+// the prefix length.
+static bool catch_up_client(socket_t c, const std::vector<std::vector<std::uint8_t>>& payloads,
+                            std::size_t upto) {
+    std::vector<std::uint8_t> frame;
+    for (std::size_t i = 0; i < upto; ++i) {
+        frame.clear();
+        framing::encode_frame(payloads[i], frame);
+        if (!netsock::send_all(c, frame)) return false;
+    }
+    return true;
+}
+
 // Accept every pending connection on a non-blocking listener (drain the accept queue). Each new
 // socket is appended to `clients` and counted as a join. Safe to call every frame: on an empty
-// queue accept_one returns invalid and we stop.
-static void accept_pending(socket_t listener, std::vector<socket_t>& clients, Stats& st) {
+// queue accept_one returns invalid and we stop. When `catchup` and `upto>0`, a new joiner is first
+// replayed the missed prefix frames[0:upto] (layer 10); a joiner that dies during that replay is
+// closed and never enters the broadcast set (no join counted). During the initial gather (upto==0)
+// nothing is replayed — those clients are present from frame 0 and get everything live.
+static void accept_pending(socket_t listener, std::vector<socket_t>& clients, Stats& st,
+                           const std::vector<std::vector<std::uint8_t>>& payloads,
+                           std::size_t upto, bool catchup) {
     while (true) {
         socket_t c = netsock::accept_one(listener);
         if (!netsock::is_valid(c)) break;  // no more pending (EWOULDBLOCK on a non-blocking listener)
+        if (catchup && upto > 0 && !catch_up_client(c, payloads, upto)) {
+            netsock::close_socket(c);  // joiner died during prefix replay; never becomes live
+            continue;
+        }
         clients.push_back(c);
         ++st.joins;
     }
@@ -48,16 +72,18 @@ static void reap_leavers(std::vector<socket_t>& clients, const std::vector<socke
 Stats broadcast_select(socket_t listener,
                        const std::vector<std::vector<std::uint8_t>>& payloads,
                        std::size_t min_initial, int accept_deadline_ms,
-                       const std::function<void(std::size_t)>& on_frame) {
+                       const std::function<void(std::size_t)>& on_frame, bool catchup) {
     Stats st;
     std::vector<socket_t> clients;
 
     // --- gather the initial clients (bounded wait) before frame 0 -----------------------------
     // 100 ms readability slices up to accept_deadline_ms total, so an absent client fails (returns
-    // with ok=false) rather than wedging the server.
+    // with ok=false) rather than wedging the server. upto==0 => no catch-up replay (these clients
+    // are present from frame 0).
     int waited = 0;
     while (clients.size() < min_initial && waited < accept_deadline_ms) {
-        if (netsock::wait_readable(listener, 100)) accept_pending(listener, clients, st);
+        if (netsock::wait_readable(listener, 100))
+            accept_pending(listener, clients, st, payloads, /*upto=*/0, catchup);
         waited += 100;
     }
     if (clients.size() < min_initial) {
@@ -78,7 +104,9 @@ Stats broadcast_select(socket_t listener,
             bool listener_ready = false;
             for (socket_t r : ready)
                 if (r == listener) { listener_ready = true; break; }
-            if (listener_ready) accept_pending(listener, clients, st);
+            // a joiner accepted here is replayed frames[0:fi] first (catch-up) so it too gets the
+            // whole stream; otherwise it enters live at fi and receives only frames[fi:].
+            if (listener_ready) accept_pending(listener, clients, st, payloads, /*upto=*/fi, catchup);
             reap_leavers(clients, ready, st);  // ignores the listener entry
         }
 

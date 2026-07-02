@@ -131,6 +131,7 @@ jobs:
             echo "nloop=build/Release/seads_netloop_test.exe" >> "$GITHUB_OUTPUT"
             echo "nmulti=build/Release/seads_multiclient_test.exe" >> "$GITHUB_OUTPUT"
             echo "ndyn=build/Release/seads_netdyn_test.exe" >> "$GITHUB_OUTPUT"
+            echo "ncatch=build/Release/seads_netcatchup_test.exe" >> "$GITHUB_OUTPUT"
           else
             echo "golden=build/seads_golden" >> "$GITHUB_OUTPUT"
             echo "scenario=build/seads_scenario" >> "$GITHUB_OUTPUT"
@@ -150,6 +151,7 @@ jobs:
             echo "nloop=build/seads_netloop_test" >> "$GITHUB_OUTPUT"
             echo "nmulti=build/seads_multiclient_test" >> "$GITHUB_OUTPUT"
             echo "ndyn=build/seads_netdyn_test" >> "$GITHUB_OUTPUT"
+            echo "ncatch=build/seads_netcatchup_test" >> "$GITHUB_OUTPUT"
           fi
 
       - name: det_math bit-exact test
@@ -220,6 +222,15 @@ jobs:
         if: matrix.name == 'MSVC x64' || matrix.name == 'GCC x64' || matrix.name == 'Clang x64'
         shell: bash
         run: "${{ steps.bin.outputs.ndyn }}"
+
+      # Layer 10. seads_netcatchup_test is a default target (build-only-smoked on every leg above);
+      # the late-join catch-up bridge (a mid-stream joiner is replayed the missed prefix and
+      # reconstructs the SAME sealed digest as a from-frame-0 client) needs live 127.0.0.1 ports, so
+      # it runs only on the NATIVE x64 legs, exactly like the layer-7/8/9 bridges.
+      - name: Late-join catch-up determinism bridge (layer 10)
+        if: matrix.name == 'MSVC x64' || matrix.name == 'GCC x64' || matrix.name == 'Clang x64'
+        shell: bash
+        run: "${{ steps.bin.outputs.ncatch }}"
 
       - name: Run all goldens + hash + validate
         shell: bash

@@ -209,6 +209,12 @@ add_executable(seads_netdyn_test src/net/netdyn_test_main.cpp)
 target_link_libraries(seads_netdyn_test PRIVATE seads_session seads_event seads_broadcast seads_framing
                       seads_socket seads_predict seads_net seads_kernel seads_replay seads_det_math seads_det_flags)
 
+# --- layer-10 late-join catch-up bridge: a mid-stream joiner is replayed the missed prefix and
+# reconstructs the SAME sealed digest as a client present from frame 0 ---
+add_executable(seads_netcatchup_test src/net/netcatchup_test_main.cpp)
+target_link_libraries(seads_netcatchup_test PRIVATE seads_session seads_event seads_broadcast seads_framing
+                      seads_socket seads_predict seads_net seads_kernel seads_replay seads_det_math seads_det_flags)
+
 # --- client presentation test (globe projection + .seadsrec container + playback interp) ---
 add_executable(seads_client_test src/client/client_test_main.cpp)
 target_link_libraries(seads_client_test PRIVATE seads_client seads_net seads_det_flags)
@@ -253,5 +259,6 @@ if(SEADS_SOCKET_TESTS AND NOT CMAKE_CROSSCOMPILING)
   add_test(NAME netloop_bridge COMMAND seads_netloop_test)
   add_test(NAME multiclient_bridge COMMAND seads_multiclient_test)
   add_test(NAME netdyn_bridge COMMAND seads_netdyn_test)
+  add_test(NAME netcatchup_bridge COMMAND seads_netcatchup_test)
 endif()
 # Golden hash compare is run in CI (guardian.yml) across the toolchain matrix.
