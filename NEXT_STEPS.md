@@ -35,7 +35,10 @@
 > property tests 166 (unchanged — no reference/wire change), replay selfcheck over a fresh
 > `--dogfight` recording shows the whole arc (ammo 500→406, victims tail=0.00 lhb=0/2, killers
 > kills=1), fly selfcheck green, 8 s GUI smoke runs of BOTH modes clean.**
-> **GIT: code `52a38a4` + receipt committed on `main`.**
+> **GIT: pushed to `origin/main` (code `52a38a4` + receipt `df1eecb`); guardian CI run
+> [28605668208](https://github.com/cjcgervais/seads/actions/runs/28605668208) GREEN** — Python gates
+> + MSVC + GCC/Clang × x64/AArch64 + the cross-toolchain hash aggregation gate all reproduce all 11
+> goldens bit-for-bit (a presentation-only change moves no golden; the client is off the gate).
 > **NEXT (free pick, none blocking):** **B5** ISA atmosphere (a seal); an open-ended live frame
 > SOURCE feeding `broadcast_async` incrementally; per-airframe region toughness (data-only envelope
 > scalars + a kernel consumer — its own ADR, would move goldens); or further renderer cosmetics
