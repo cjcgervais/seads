@@ -201,6 +201,7 @@ static int run_volume_leg() {
         if (done.load() < 1) {
             std::printf("FAIL layer-11 volume leg TIMED OUT — the broadcast back-pressured on the "
                         "slow client (async output must never wedge)\n");
+            std::fflush(stdout);  // _Exit skips stdio flush; don't lose the diagnostic
             std::_Exit(1);
         }
     });
@@ -344,6 +345,7 @@ static int run_session_leg() {
             std::this_thread::sleep_for(std::chrono::milliseconds(100));  // up to ~40 s
         if (done.load() < 2) {
             std::printf("FAIL layer-11 session leg TIMED OUT (socket hang)\n");
+            std::fflush(stdout);  // _Exit skips stdio flush; don't lose the diagnostic
             std::_Exit(1);
         }
     });

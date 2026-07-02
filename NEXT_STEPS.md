@@ -18,13 +18,14 @@
 > **(a) The policy** (`src/net/broadcast.{h,cpp}`): `cap_bytes` param + `over_cap` check beside the
 > enqueue + `Stats.capped`; drain phase needs no check (nothing enqueued there — backlogs only shrink).
 > **(b) The byte-cap BRIDGE** (`seads_netcap_test`, ctest `netcap_bridge`): **LEG 1 (drop-slowest)**
-> — ~7.5 MiB (512×15 KiB; one ENCODED frame stays under the pinned 16-KiB SO_SNDBUF, making the
-> pacing provably deadlock-free) to FAST + SLOW through cap=1 MiB. FAST is rate-coupled to the frame
-> loop via `on_frame` (frame fi waits until FAST consumed up to fi−32 ⇒ FAST's backlog provably
-> ≈507 KiB < cap/2 — never at risk, NO sleeps); SLOW reads NOTHING. Server finishes every frame
-> un-wedged, `joins=2 capped=1 leaves=1` (exactly SLOW shed); FAST byte-identical; SLOW a STRICT
-> byte-prefix. (Which frame SLOW is shed at is OS-timing — deliberately unasserted.
-> `seads_netasync_test` still gates the capless side: same shape, ~7 MiB buffered and delivered.)
+> — ~7.5 MiB (512×15 KiB) to FAST + SLOW through cap=1 MiB + pinned 16-KiB SO_SNDBUF. FAST keeps up
+> BY CONSTRUCTION: the `on_frame` hook itself drains FAST's client-side socket at the top of every
+> frame iteration (server thread reads the CLIENT endpoint the test owns; `wait_readable(0)` poll)
+> ⇒ each enqueue lands in an almost-empty kernel pipe, FAST's backlog stays ~one frame ≪ cap, on
+> every OS, NO sleeps/parked threads; SLOW reads NOTHING. Server finishes every frame un-wedged,
+> `joins=2 capped=1 leaves=1` (exactly SLOW shed); FAST byte-identical; SLOW a STRICT byte-prefix.
+> (Which frame SLOW is shed at is OS-timing — deliberately unasserted. `seads_netasync_test` still
+> gates the capless side: same shape, ~7 MiB buffered and delivered.)
 > **LEG 2 (healthy path unperturbed)** — the layer-11 sealed-session shape (EARLY + CATCHUP at J=20)
 > through `cap_bytes=8 MiB`: both receive all 41 frames byte-identically, both reconstruct the sealed
 > SESSION-SK-001 digest `24f71845…c332`, **capped=0**. 12/12 (gcc) + 8/8 (clang) stress reruns clean.
@@ -46,15 +47,20 @@
 > ADR); renderer polish (guns + kill-feed in the live `--fly` path); an optional new seal
 > (component/region damage; **B5** ISA atmosphere); or further live-stream rungs (an open-ended
 > frame SOURCE feeding broadcast_async incrementally instead of a precomputed list).
-> **NOTE FOR THE NEXT AGENT:** layer 12 is code-complete + green locally (GCC+Clang, ctest 17/17,
-> 145 property tests, netcap bridge PASS + 12/12+8/8 stress, all 10 goldens byte-identical). Verify
-> guardian CI green after push. The policy is deliberately BINARY (shed at cap) — frame-skipping /
-> priority tiers would break the "delivered bytes are a prefix of the same stream" statement and is
-> a different, lossier contract (its own rung). Every existing broadcast_async caller passes
-> cap_bytes=0 ⇒ layer-11 path bit-for-bit; keep it that way for the sealed-session bridges. All
-> bridge rendezvous stay cv+`notify_all` + `on_frame` (NO sleeps, no `std::future`) — the leg-1
-> FAST pacing (enc frame < SO_SNDBUF ⇒ deadlock-free) is load-bearing; don't resize the frames
-> without rechecking that margin.
+> **NOTE FOR THE NEXT AGENT:** layer 12 is green (GCC+Clang, ctest 17/17, 145 property tests, netcap
+> bridge PASS + 12/12+8/8 stress, all 10 goldens byte-identical). The policy is deliberately BINARY
+> (shed at cap) — frame-skipping / priority tiers would break the "delivered bytes are a prefix of
+> the same stream" statement and is a different, lossier contract (its own rung). Every existing
+> broadcast_async caller passes cap_bytes=0 ⇒ layer-11 path bit-for-bit; keep it that way for the
+> sealed-session bridges. All bridge rendezvous stay cv+`notify_all` + `on_frame` (NO sleeps, no
+> `std::future`). **CI lesson (first guardian round, fixed same session):** the first leg-1 cut
+> PARKED the server in `on_frame` until a free-running FAST thread caught up; its deadlock margin
+> assumed a kernel-full send buffer holds ≥ SO_SNDBUF bytes of PAYLOAD — true on Windows, FALSE on
+> Linux (SO_SNDBUF accounts sk_buff TRUESIZE = payload+overhead) ⇒ the GCC/Clang x64 legs wedged.
+> Never park the producer thread on a consumer it is the sole flusher for — the fix has the hook
+> DRAIN FAST's socket itself. Also: bridge watchdogs must `fflush(stdout)` before `std::_Exit`
+> (skips stdio flush ⇒ the first CI failure's diagnostic was lost to a full pipe buffer) — now done
+> in netcap + netasync.
 >
 > ## ►► PRIOR STATE (2026-07-01): **NETCODE LAYER 11 — ASYNC SINGLE-THREAD OUTPUT (PER-CLIENT SEND BUFFERS) DONE ✅** (no-seal, rides **ATM-Sphere v1.17r0**)
 > **Latest: no client can back-pressure the broadcast — the last blocking send is gone from the fan-out.**

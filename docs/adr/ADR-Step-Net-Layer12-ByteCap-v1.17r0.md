@@ -52,19 +52,27 @@ verbatim; their bridges keep gating it). Semantics:
 **(b) The byte-cap determinism BRIDGE (`seads_netcap_test`).** Two legs, all rendezvous
 cv+`notify_all` (no `std::future` — MinGW `call_once` caveat), **no sleeps**:
 
-- **LEG 1 (drop-slowest under volume):** a ~7.5 MiB synthetic stream (512 × 15 KiB — one encoded
-  frame stays strictly under the pinned 16-KiB kernel send buffer, which makes the pacing
-  rendezvous provably deadlock-free) to **two** clients through `cap_bytes = 1 MiB`. **FAST** reads
-  continuously, *rate-coupled to the frame loop via the `on_frame` hook* (the loop doesn't enqueue
-  frame `fi` until FAST has consumed everything up to frame `fi−32`), so FAST's backlog is provably
-  bounded ≈ 33 encoded frames ≈ 507 KiB < cap/2 — FAST can never be the one capped,
-  deterministically, with no sleeps. **SLOW** reads nothing. Asserted: the server finishes **every**
-  frame un-wedged with `joins=2, capped=1, leaves=1` (exactly SLOW shed); FAST's reassembled stream
-  is **byte-identical** to the frame list; SLOW's delivered bytes are a **strict byte-prefix** of
-  the encoded stream. WHICH frame index SLOW is shed at is OS-timing (how many bytes its kernel
-  buffers absorbed) — deliberately unasserted. A capless layer-11 server would instead buffer ~7 MiB
-  for SLOW and deliver it all — `seads_netasync_test` still gates exactly that, so the two bridges
-  pin both sides of the policy boundary.
+- **LEG 1 (drop-slowest under volume):** a ~7.5 MiB synthetic stream (512 × 15 KiB) to **two**
+  clients through `cap_bytes = 1 MiB` and a pinned 16-KiB `SO_SNDBUF`. **FAST keeps up BY
+  CONSTRUCTION**: the `on_frame` hook itself drains FAST's client-side socket at the top of every
+  frame iteration (the hook runs on the server thread, reading the CLIENT endpoint the test owns —
+  `wait_readable(0)` poll + `recv`), so each frame is enqueued into an almost-empty kernel pipe and
+  FAST's userspace backlog stays ~one frame, orders of magnitude under the cap, on every OS — no
+  sleeps, no parked threads. **SLOW** reads nothing. Asserted: the server finishes **every** frame
+  un-wedged with `joins=2, capped=1, leaves=1` (exactly SLOW shed); FAST's reassembled stream is
+  **byte-identical** to the frame list; SLOW's delivered bytes are a **strict byte-prefix** of the
+  encoded stream. WHICH frame index SLOW is shed at is OS-timing (how many bytes its kernel buffers
+  absorbed) — deliberately unasserted. A capless layer-11 server would instead buffer ~7 MiB for
+  SLOW and deliver it all — `seads_netasync_test` still gates exactly that, so the two bridges pin
+  both sides of the policy boundary.
+  *CI lesson (first guardian round):* a first cut instead **parked the server thread** in `on_frame`
+  until a free-running FAST thread had read up to frame `fi−32`; its deadlock-freedom margin assumed
+  a kernel-full send buffer holds ≥ `SO_SNDBUF` bytes of **payload** — true on Windows (exact payload
+  accounting, green locally), false on Linux, where `SO_SNDBUF` accounts sk_buff **truesize**
+  (payload + overhead), and the GCC/Clang x64 legs wedged (the server was the only flusher of the
+  very bytes it was waiting for). Never park the producer on a consumer it is the sole flusher for.
+  Relatedly, the bridge watchdogs now `fflush(stdout)` before `std::_Exit` — `_Exit` skips stdio
+  flush, and the first CI round's diagnostic was lost to a full pipe buffer.
 - **LEG 2 (the cap does not perturb the healthy path):** the layer-11 sealed-session shape — EARLY
   (from frame 0) + CATCHUP (joins at frame J=20, prefix enqueued) — run through
   `broadcast_async(catchup=true, cap_bytes=8 MiB)`. Both receive the whole 41 frames

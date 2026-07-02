@@ -10,13 +10,20 @@
 // over real 127.0.0.1 sockets and with NO sleeps / NO timing guesses, two claims:
 //
 //   LEG 1 (drop-slowest under volume): a ~7.5 MiB synthetic stream through a pinned tiny kernel
-//   send buffer, to TWO clients: FAST reads continuously (rate-coupled to the frame loop via the
-//   on_frame hook so its backlog is provably bounded WELL under the cap — never at risk), SLOW
-//   reads NOTHING. With cap_bytes = 1 MiB the server must shed exactly SLOW (capped == 1), finish
-//   every frame un-wedged, and deliver FAST the whole stream byte-identically. SLOW's delivered
-//   bytes must be a strict byte-PREFIX of the encoded stream (the kernel-accepted prefix — the cap
-//   discards the pending tail whole, it never reorders or corrupts). WHICH frame index SLOW is shed
-//   at is OS-timing (how many bytes its kernel buffers absorbed) — deliberately unasserted; the
+//   send buffer, to TWO clients: FAST keeps up BY CONSTRUCTION — the on_frame hook itself drains
+//   FAST's client-side socket at the top of every frame iteration (the hook runs on the server
+//   thread, reading the CLIENT endpoint the test owns), so each frame is enqueued into an
+//   almost-empty kernel pipe and FAST's userspace backlog stays ~one frame, orders of magnitude
+//   under the cap, on every OS. (A first cut instead PARKED the server in on_frame until a
+//   free-running FAST thread had read to frame fi-32; its deadlock-freedom margin assumed a
+//   kernel-full send buffer holds >= SO_SNDBUF bytes of PAYLOAD — true on Windows, false on Linux,
+//   where SO_SNDBUF accounts sk_buff truesize, payload + overhead — and CI wedged. Never park the
+//   producer thread on a consumer it is the only flusher for.) SLOW reads NOTHING. With
+//   cap_bytes = 1 MiB the server must shed exactly SLOW (capped == 1), finish every frame
+//   un-wedged, and deliver FAST the whole stream byte-identically. SLOW's delivered bytes must be
+//   a strict byte-PREFIX of the encoded stream (the kernel-accepted prefix — the cap discards the
+//   pending tail whole, it never reorders or corrupts). WHICH frame index SLOW is shed at is
+//   OS-timing (how many bytes its kernel buffers absorbed) — deliberately unasserted; the
 //   deterministic claims are who survives, what the survivor gets, and the prefix shape of what the
 //   shed client got. A capless (layer-11) server would instead buffer ~7 MiB for SLOW and deliver
 //   it all — seads_netasync_test still gates exactly that; the two bridges together pin both sides
@@ -100,19 +107,12 @@ static bool collect_to_eof(netsock::socket_t s, std::vector<std::vector<std::uin
 // FAST's stream is byte-identical and SLOW's is a strict byte-prefix. Returns failure count.
 // ---------------------------------------------------------------------------------------------
 static int run_dropslowest_leg() {
-    // 512 frames x 15 KiB ~= 7.5 MiB. 15 KiB (not 16) keeps one ENCODED frame (2-byte LEB128
-    // prefix + 15360 = 15362 bytes) strictly under the pinned 16-KiB kernel send buffer — the
-    // slack makes the FAST-pacing rendezvous below provably deadlock-free (see kPaceWindow).
+    // 512 frames x 15 KiB ~= 7.5 MiB: orders of magnitude beyond both the cap and SLOW's
+    // kernel-absorbable bytes, so SLOW's backlog provably crosses the cap.
     const std::size_t kFrames = 512, kFrameBytes = 15 * 1024;
     const std::size_t kEncFrame = 2 + kFrameBytes;  // LEB128(15360) is 2 bytes
     const int kBufBytes = 16 * 1024;
-    const std::size_t kCap = 1u << 20;  // 1 MiB: >> FAST's bounded backlog, << the stream size
-    // FAST is released to read frame fi's bytes only once the loop is at frame fi+kPaceWindow, so
-    // FAST's userspace backlog is bounded by ~(kPaceWindow+1)*kEncFrame ~= 507 KiB < kCap/2 —
-    // FAST can never be the one capped, deterministically. Deadlock-free: when the loop parks in
-    // on_frame(fi), the bytes already FLUSHED to the kernel exceed the pacing requirement (the
-    // last kernel-full flush left >= kBufBytes buffered kernel-side, and kBufBytes > kEncFrame).
-    const std::size_t kPaceWindow = 32;
+    const std::size_t kCap = 1u << 20;  // 1 MiB: >> FAST's ~one-frame backlog, << the stream size
     std::vector<std::vector<std::uint8_t>> payloads(kFrames);
     for (std::size_t i = 0; i < kFrames; ++i) {
         payloads[i].resize(kFrameBytes);
@@ -131,7 +131,11 @@ static int run_dropslowest_leg() {
     std::uint16_t port_val = 0;
     bool port_ready = false;
     bool server_done = false;
-    long long fast_bytes = 0;  // raw bytes FAST has read so far (guards the pacing rendezvous)
+    // FAST's client endpoint, connected by the MAIN thread; published under mtx because the
+    // on_frame hook (server thread) drains it. Its received bytes are written by the hook during
+    // the loop and by the main thread after join() — never concurrently (join = happens-before).
+    netsock::socket_t fast_sock = netsock::invalid_socket();
+    std::vector<std::uint8_t> fast_bytes;
 
     netbcast::Stats stats;
     std::atomic<int> done{0};
@@ -154,14 +158,23 @@ static int run_dropslowest_leg() {
         cv.notify_all();
         if (!netsock::is_valid(listener)) return;
 
-        // Pace the loop to FAST's reads: don't enqueue frame fi until FAST has consumed everything
-        // up to frame fi-kPaceWindow. Keeps FAST's backlog far under the cap with no sleeps.
-        auto on_frame = [&](std::size_t fi) {
-            if (fi <= kPaceWindow) return;
-            const long long need =
-                static_cast<long long>(fi - kPaceWindow) * static_cast<long long>(kEncFrame);
-            std::unique_lock<std::mutex> lk(mtx);
-            cv.wait(lk, [&] { return fast_bytes >= need; });
+        // FAST keeps up BY CONSTRUCTION: the hook drains FAST's receive pipe at the top of every
+        // frame iteration, so each enqueue lands in an almost-empty kernel pipe and FAST's
+        // userspace backlog stays ~one frame — no parked thread, no pacing margins, no sleeps
+        // (wait_readable(0) is a poll; see the file header for the Linux lesson).
+        auto on_frame = [&](std::size_t) {
+            netsock::socket_t s;
+            {
+                std::lock_guard<std::mutex> lk(mtx);
+                s = fast_sock;
+            }
+            if (!netsock::is_valid(s)) return;  // frame 0 can race FAST's connect-return; harmless
+            std::uint8_t buf[4096];
+            while (netsock::wait_readable(s, 0)) {
+                std::ptrdiff_t n = netsock::recv_some(s, buf, sizeof(buf));
+                if (n <= 0) break;
+                fast_bytes.insert(fast_bytes.end(), buf, buf + n);
+            }
         };
         stats = netbcast::broadcast_async(listener, payloads, /*min_initial=*/2,
                                           /*accept_deadline_ms=*/10000, on_frame,
@@ -172,6 +185,7 @@ static int run_dropslowest_leg() {
             server_done = true;
         }
         cv.notify_all();
+        ++done;
     });
 
     auto wait_port = [&]() -> std::uint16_t {
@@ -179,38 +193,6 @@ static int run_dropslowest_leg() {
         cv.wait(lk, [&] { return port_ready; });
         return port_val;
     };
-
-    // FAST: reads continuously, publishing its byte count for the pacing rendezvous.
-    std::vector<std::vector<std::uint8_t>> fast_payloads;
-    std::size_t fast_pending = 0;
-    bool fast_ok = false;
-    std::thread fast([&] {
-        std::uint16_t port = wait_port();
-        if (port == 0) { ++done; return; }
-        netsock::socket_t s = netsock::connect_loopback(port);
-        if (netsock::is_valid(s)) {
-            framing::StreamReassembler r;
-            std::uint8_t buf[4096];
-            bool ok = true;
-            while (true) {
-                std::ptrdiff_t n = netsock::recv_some(s, buf, sizeof(buf));
-                if (n > 0) {
-                    {
-                        std::lock_guard<std::mutex> lk(mtx);
-                        fast_bytes += n;
-                    }
-                    cv.notify_all();
-                    if (!r.feed(buf, static_cast<std::size_t>(n), fast_payloads)) { ok = false; break; }
-                } else {
-                    break;
-                }
-            }
-            fast_pending = r.pending();
-            fast_ok = ok;
-            netsock::close_socket(s);
-        }
-        ++done;
-    });
 
     // SLOW: connects, reads NOTHING until the whole broadcast has returned (it will have been
     // capped long before then), then drains its kernel-buffered prefix to EOF.
@@ -240,15 +222,45 @@ static int run_dropslowest_leg() {
             std::this_thread::sleep_for(std::chrono::milliseconds(100));  // up to ~60 s
         if (done.load() < 2) {
             std::printf("FAIL layer-12 drop-slowest leg TIMED OUT (wedge: the cap policy or the "
-                        "pacing rendezvous broke the frame loop)\n");
+                        "FAST drain broke the frame loop)\n");
+            std::fflush(stdout);  // _Exit skips stdio flush; don't lose the diagnostic (CI lesson)
             std::_Exit(1);
         }
     });
     watchdog.detach();
 
+    // FAST connects on the main thread; the server's on_frame hook does its reading.
+    {
+        std::uint16_t port = wait_port();
+        if (port != 0) {
+            netsock::socket_t s = netsock::connect_loopback(port);
+            std::lock_guard<std::mutex> lk(mtx);
+            fast_sock = s;
+        }
+    }
+
     server.join();
-    fast.join();
     slow.join();
+
+    // Final drain: the hook stopped reading at the last frame; the tail (drain-phase flushes +
+    // whatever sits in the kernel pipe) is still owed. The server has closed FAST's endpoint, so
+    // a blocking read runs to EOF.
+    std::vector<std::vector<std::uint8_t>> fast_payloads;
+    std::size_t fast_pending = 0;
+    bool fast_ok = false;
+    if (netsock::is_valid(fast_sock)) {
+        std::uint8_t buf[4096];
+        while (true) {
+            std::ptrdiff_t n = netsock::recv_some(fast_sock, buf, sizeof(buf));
+            if (n <= 0) break;
+            fast_bytes.insert(fast_bytes.end(), buf, buf + n);
+        }
+        netsock::close_socket(fast_sock);
+        framing::StreamReassembler r;
+        fast_ok = fast_bytes.empty() ||
+                  r.feed(fast_bytes.data(), fast_bytes.size(), fast_payloads);
+        fast_pending = r.pending();
+    }
 
     int fails = 0;
     if (!stats.ok || stats.frames_sent != kFrames) {
@@ -394,6 +406,7 @@ static int run_session_leg() {
             std::this_thread::sleep_for(std::chrono::milliseconds(100));  // up to ~40 s
         if (done.load() < 2) {
             std::printf("FAIL layer-12 session leg TIMED OUT (socket hang)\n");
+            std::fflush(stdout);  // _Exit skips stdio flush; don't lose the diagnostic
             std::_Exit(1);
         }
     });
