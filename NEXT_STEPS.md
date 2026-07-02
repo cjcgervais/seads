@@ -47,8 +47,15 @@
 > ADR); renderer polish (guns + kill-feed in the live `--fly` path); an optional new seal
 > (component/region damage; **B5** ISA atmosphere); or further live-stream rungs (an open-ended
 > frame SOURCE feeding broadcast_async incrementally instead of a precomputed list).
+> **GIT: pushed to `origin/main` (code `5740a8c` + receipt `8f8bc5c`; Linux fix `4da022e` + receipt
+> `96b83f7`); guardian CI run
+> [28571959667](https://github.com/cjcgervais/seads/actions/runs/28571959667) GREEN** — Python gates
+> + MSVC + GCC/Clang × x64/AArch64 + the cross-toolchain hash aggregation gate all reproduce the 10
+> goldens bit-for-bit AND run the new `netcap_bridge` on the native x64 legs (first round
+> [28571414301](https://github.com/cjcgervais/seads/actions/runs/28571414301) failed exactly there
+> on Linux — see the CI lesson below, fixed same session).
 > **NOTE FOR THE NEXT AGENT:** layer 12 is green (GCC+Clang, ctest 17/17, 145 property tests, netcap
-> bridge PASS + 12/12+8/8 stress, all 10 goldens byte-identical). The policy is deliberately BINARY
+> bridge PASS + 12/12+8/8 stress, all 10 goldens byte-identical, guardian GREEN). The policy is deliberately BINARY
 > (shed at cap) — frame-skipping / priority tiers would break the "delivered bytes are a prefix of
 > the same stream" statement and is a different, lossier contract (its own rung). Every existing
 > broadcast_async caller passes cap_bytes=0 ⇒ layer-11 path bit-for-bit; keep it that way for the
