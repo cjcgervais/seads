@@ -44,7 +44,11 @@
 > **Gates: ctest 17/17 GCC + 17/17 Clang, replay + fly selfchecks green over a fresh `--dogfight`
 > recording (types echoed headless), 12 s GUI smoke of BOTH modes clean, fly own-ship
 > SCREENSHOT-VERIFIED (the Ki-61 variant's long slender inline nose reads on screen).**
-> **GIT: see the receipt + CI note below (updated post-push).**
+> **GIT: pushed to `origin/main` (code `210e9b6` + receipt `51fc737`,
+> `receipt-ATM-Sphere_v1.19r0-210e9b6.yml` — 15/15 gates PASS); guardian CI run
+> [28610490818](https://github.com/cjcgervais/seads/actions/runs/28610490818) GREEN** — Python
+> gates + MSVC + GCC/Clang × x64/AArch64 + the cross-toolchain hash aggregation gate all reproduce
+> all 11 goldens bit-for-bit (a presentation-only change moves no golden; the client is off the gate).
 > **NEXT (free pick, none blocking):** **B5** ISA atmosphere (a seal); an open-ended live frame
 > SOURCE feeding `broadcast_async` incrementally; per-airframe region toughness (data-only envelope
 > scalars + a kernel consumer — its own ADR, would move goldens); or generate the missing Yak-3/La-7
