@@ -129,6 +129,7 @@ jobs:
             echo "nsvr=build/Release/seads_netserver.exe" >> "$GITHUB_OUTPUT"
             echo "ncli=build/Release/seads_netclient.exe" >> "$GITHUB_OUTPUT"
             echo "nloop=build/Release/seads_netloop_test.exe" >> "$GITHUB_OUTPUT"
+            echo "nmulti=build/Release/seads_multiclient_test.exe" >> "$GITHUB_OUTPUT"
           else
             echo "golden=build/seads_golden" >> "$GITHUB_OUTPUT"
             echo "scenario=build/seads_scenario" >> "$GITHUB_OUTPUT"
@@ -146,6 +147,7 @@ jobs:
             echo "nsvr=build/seads_netserver" >> "$GITHUB_OUTPUT"
             echo "ncli=build/seads_netclient" >> "$GITHUB_OUTPUT"
             echo "nloop=build/seads_netloop_test" >> "$GITHUB_OUTPUT"
+            echo "nmulti=build/seads_multiclient_test" >> "$GITHUB_OUTPUT"
           fi
 
       - name: det_math bit-exact test
@@ -200,6 +202,14 @@ jobs:
         if: matrix.name == 'MSVC x64' || matrix.name == 'GCC x64' || matrix.name == 'Clang x64'
         shell: bash
         run: "${{ steps.bin.outputs.nloop }}"
+
+      # Layer 8. seads_multiclient_test is a default target (build-only-smoked on every leg above);
+      # the fan-out determinism bridge (N clients over N live sockets) needs live 127.0.0.1 ports, so
+      # it runs only on the NATIVE x64 legs, exactly like the layer-7 bridge.
+      - name: Multi-client fan-out determinism bridge (layer 8)
+        if: matrix.name == 'MSVC x64' || matrix.name == 'GCC x64' || matrix.name == 'Clang x64'
+        shell: bash
+        run: "${{ steps.bin.outputs.nmulti }}"
 
       - name: Run all goldens + hash + validate
         shell: bash

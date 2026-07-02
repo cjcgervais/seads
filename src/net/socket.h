@@ -44,6 +44,16 @@ public:
 
 void close_socket(socket_t s);
 
+// --- non-blocking helpers (netcode layer 8: multi-client fan-out) --------------------------
+// Put a socket in non-blocking mode (ioctlsocket FIONBIO on Windows, fcntl O_NONBLOCK on POSIX).
+// Returns false on error. Used so a fan-out server's accept() never wedges on an absent client.
+bool set_nonblocking(socket_t s);
+
+// Block up to `timeout_ms` for `s` to become readable (a pending connection on a listener, or
+// data on a stream). Returns true iff readable within the timeout; false on timeout OR error —
+// portable select() wrapper (Winsock ignores nfds; POSIX uses s+1). timeout_ms<0 => wait forever.
+bool wait_readable(socket_t s, int timeout_ms);
+
 // Send exactly `n` bytes (loops over short writes). Returns false on error/EOF before all sent.
 bool send_all(socket_t s, const std::uint8_t* buf, std::size_t n);
 bool send_all(socket_t s, const std::vector<std::uint8_t>& buf);

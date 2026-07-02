@@ -1,6 +1,44 @@
 # SEADS 2026 — Next Steps (handoff)
 
-> ## ►► CURRENT STATE (2026-07-01): **NETCODE LAYER 7 — CROSS-PROCESS SOCKET TRANSPORT DONE ✅** (no-seal, rides **ATM-Sphere v1.17r0**)
+> ## ►► CURRENT STATE (2026-07-01): **NETCODE LAYER 8 — MULTI-CLIENT FAN-OUT DONE ✅** (no-seal, rides **ATM-Sphere v1.17r0**)
+> **Latest: the socket transport now fans one authoritative stream out to N clients — and every client is bit-exact.**
+> Layer 7 proved a *single* client over a real 127.0.0.1 socket reconstructs SESSION-SK-001 to the
+> sealed in-process digest. Layer 8 proves the fan-out case: **one server broadcasts the frame stream
+> to N independent clients (each its own TCP connection + `StreamReassembler`), and ALL N reconstruct
+> the byte-identical digest** — fan-out adds zero information and zero nondeterminism per client,
+> regardless of connect order or how each client's `recv()` chunks the stream. Three pieces:
+> **(a) Non-blocking primitives** (`src/net/socket`): `set_nonblocking` (`ioctlsocket FIONBIO` /
+> `fcntl O_NONBLOCK`) + `wait_readable` (portable `select()` readability wait) so a fan-out server
+> accepts clients without wedging on an absent one (`wait_readable` gates `accept_one`, bounded by a
+> finite deadline ⇒ fail-not-wedge).
+> **(b) The multi-client determinism BRIDGE** (`seads_multiclient_test`): reference = the sealed
+> in-process `session::run_session(...).digest` (NOT re-derived). Server binds `:0`, publishes the port
+> over a `mutex`+`cv` (`notify_all`; no `std::future` — MinGW `call_once` caveat), sets the listener
+> non-blocking, accepts **N=3** clients, then **broadcasts** the identical lossless frame stream
+> (`build_server_frames`, every frame incl. tick 0) to each. Each client reassembles its OWN stream,
+> keys the frame list on decoded `server_tick`, and runs the SAME `run_client()` (reuses the layer-7
+> `session.cpp` split — no reimplementation) ⇒ all 3 digests **==** `24f71845…c332` (GCC **and** Clang).
+> Finite watchdog fails-not-wedges on any hang.
+> **(c) The demo server gains fan-out** (`seads_netserver [port] [num_clients]`, default 1 =
+> backward-compatible): with `>1` it accepts that many connections then broadcasts the identical stream.
+> **TRANSPORT-ONLY — no `src/kernel/**`, `src/det_math/**`, `config/rails/**`, framing envelope,
+> wire scales, or goldens touched ⇒ ALL 10 GOLDENS BYTE-IDENTICAL** (Sphere re-validated `f2db95bd…`),
+> no new golden, no seal. **Gates: +1 property test ⇒ 133 (`test_fanout_all_clients_identical`:
+> N clients, N different chunkings, identical frame lists — the pure-codec form of the socket claim),
+> ctest 12→13 (`multiclient_bridge`, x64 legs), 15/15 receipt gates PASS, 10 goldens byte-identical.**
+> guardian.yml: `seads_multiclient_test` build-only-smoked on all 5 legs (default target) +
+> `multiclient_bridge` run on the native x64 legs (like the layer-7 bridge). Ledger:
+> **ADR-Step-Net-Layer8-MultiClient-v1.17r0**. **Seal stays v1.17r0** (Tier-2 net layer).
+> **NEXT (free pick, none blocking):** async/`select`-based single-thread broadcast + dynamic
+> join/leave over the layer-8 fan-out; per-round hit granularity (a kernel event QUEUE — its own ADR);
+> renderer polish (meshes; guns + kill-feed in the live `--fly` path); or an optional new seal
+> (component/region damage; **B5** ISA atmosphere).
+> **NOTE FOR THE NEXT AGENT:** layer 8 is code-complete + green locally (GCC+Clang, ctest 13/13, 133
+> property tests, multi-client bridge PASS, all 10 goldens byte-identical). Verify guardian CI green
+> after push (this session couldn't — `gh` CLI absent locally). `std::future` stays avoided in the
+> bridge (use the `condition_variable` + `notify_all` handshake if you extend it to more clients).
+>
+> ## ►► PRIOR STATE (2026-07-01): **NETCODE LAYER 7 — CROSS-PROCESS SOCKET TRANSPORT DONE ✅** (no-seal, rides **ATM-Sphere v1.17r0**)
 > **Latest: the replication stack finally crosses a real OS process boundary — and it's bit-exact.**
 > Layers 1–6 built the whole server↔client stack but shipped frames through an *in-process* transport
 > (a dict / a `frame_at` lookup with integer lag + a drop set). Layer 7 moves them over a **real TCP

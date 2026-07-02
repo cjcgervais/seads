@@ -10,6 +10,8 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <sys/select.h>
+#include <fcntl.h>
 #include <unistd.h>
 #include <cerrno>
 #endif
@@ -43,6 +45,11 @@ bool send_all(socket_t s, const std::uint8_t* buf, std::size_t n) {
 std::ptrdiff_t recv_some(socket_t s, std::uint8_t* buf, std::size_t cap) {
     int r = ::recv(s, reinterpret_cast<char*>(buf), static_cast<int>(cap), 0);
     return static_cast<std::ptrdiff_t>(r);
+}
+
+bool set_nonblocking(socket_t s) {
+    u_long mode = 1;  // non-zero => non-blocking
+    return ::ioctlsocket(s, FIONBIO, &mode) == 0;
 }
 
 #else  // ---------------- POSIX ----------------
@@ -81,10 +88,34 @@ std::ptrdiff_t recv_some(socket_t s, std::uint8_t* buf, std::size_t cap) {
     return static_cast<std::ptrdiff_t>(r);
 }
 
+bool set_nonblocking(socket_t s) {
+    int fl = ::fcntl(s, F_GETFL, 0);
+    if (fl < 0) return false;
+    return ::fcntl(s, F_SETFL, fl | O_NONBLOCK) == 0;
+}
+
 #endif
 
 bool send_all(socket_t s, const std::vector<std::uint8_t>& buf) {
     return send_all(s, buf.data(), buf.size());
+}
+
+// Portable select() readability wait. On Winsock the first arg (nfds) is ignored; on POSIX it must
+// be the highest fd + 1. A negative timeout blocks indefinitely (nullptr timeval).
+bool wait_readable(socket_t s, int timeout_ms) {
+    fd_set rfds;
+    FD_ZERO(&rfds);
+    FD_SET(s, &rfds);
+    timeval tv;
+    tv.tv_sec = timeout_ms / 1000;
+    tv.tv_usec = (timeout_ms % 1000) * 1000;
+    timeval* ptv = (timeout_ms < 0) ? nullptr : &tv;
+#ifdef _WIN32
+    int r = ::select(0, &rfds, nullptr, nullptr, ptv);
+#else
+    int r = ::select(static_cast<int>(s) + 1, &rfds, nullptr, nullptr, ptv);
+#endif
+    return r > 0 && FD_ISSET(s, &rfds);
 }
 
 // --- shared (portable) setup helpers, using the type aliases above --------------------

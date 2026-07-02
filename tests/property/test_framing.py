@@ -58,6 +58,20 @@ def test_partial_frame_is_buffered(payloads, data):
     assert r.pending() == 0
 
 
+@given(PAYLOADS, st.lists(st.integers(min_value=1, max_value=9), min_size=1, max_size=4))
+def test_fanout_all_clients_identical(payloads, chunk_steps):
+    # The netcode LAYER-8 invariant at the pure-codec level: one server broadcasts the SAME encoded
+    # stream to N clients, but each client's TCP recv() chops it into DIFFERENT chunk sizes. Every
+    # client's independent StreamReassembler must still emit the byte-identical frame list — fan-out
+    # adds no information and no per-client nondeterminism. (seads_multiclient_test proves the same
+    # end-to-end over real sockets to the full session digest.)
+    stream = fr.encode_stream(payloads)
+    full = [bytes(p) for p in payloads]
+    for step in chunk_steps:  # each "client" reads the stream in its own fixed chunk size
+        chunks = [stream[i:i + step] for i in range(0, len(stream), step)]
+        assert fr.reassemble(chunks) == full
+
+
 def test_overlong_prefix_rejected():
     # a 10-continuation-byte varint with no terminator is malformed (mirrors leb128's 10-byte bound).
     import pytest
