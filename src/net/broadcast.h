@@ -54,6 +54,25 @@
 // a dropped client's delivered bytes are always a clean byte-PREFIX of the encoded stream (the
 // kernel-accepted prefix; the pending tail is discarded whole). Still TRANSPORT — no
 // kernel/wire/golden/seal.
+//
+// Layer 13 (open-ended LIVE frame SOURCE): every layer so far broadcast a PRECOMPUTED finite
+// payload list — the sealed session was run to completion before the first byte moved. A real
+// server does the opposite: it steps the simulation BETWEEN sends. broadcast_live is
+// broadcast_async's loop fed by a pull SOURCE (`FrameSource` — fills the next payload, returns
+// false at end-of-stream): the loop never knows the frame count up front, services JOIN/LEAVE/
+// writability once per produced frame, and enqueues each frame through the SAME per-client
+// buffers, byte-cap, and drain machinery as layers 11/12 — so a source that never ends streams
+// forever in bounded memory (cap_bytes sheds the laggards). With catchup=true the produced
+// payloads are RETAINED as they are made (the history a mid-stream joiner is replayed) — for a
+// finite stream that is exactly layer 10's memory shape, but for a genuinely open-ended source
+// retention is O(stream): run an unbounded live stream with catchup=false (the honest boundary
+// this layer leaves is bounded/windowed catch-up). The source is pulled synchronously once per
+// iteration: socket service happens per frame, so a source that stalls stalls join service with
+// it (frame pacing belongs to the caller — e.g. the demo server sleeps between pulls; nothing in
+// this loop reads the wall clock). Delivered bytes are IDENTICAL to handing the same frames to
+// broadcast_async as a vector — the bridge (seads_netlive_test) proves a live-stepped sealed
+// session reconstructs the sealed digest, batch == incremental byte-for-byte. Still TRANSPORT —
+// no kernel/wire/golden/seal.
 #pragma once
 #include <cstddef>
 #include <cstdint>
@@ -103,6 +122,24 @@ Stats broadcast_async(netsock::socket_t listener,
                       std::size_t min_initial, int accept_deadline_ms,
                       const std::function<void(std::size_t)>& on_frame = {},
                       bool catchup = false, std::size_t cap_bytes = 0);
+
+// Layer-13 pull source: fill `payload` with the next whole snapshot payload and return true, or
+// return false at end-of-stream (payload is then ignored). Called exactly once per frame
+// iteration; may compute (e.g. step the sealed kernel — session::FrameProducer) between calls.
+using FrameSource = std::function<bool(std::vector<std::uint8_t>&)>;
+
+// Layer-13 LIVE variant of broadcast_async — the SAME gather/enqueue/cap/drain machinery, but the
+// frames are pulled from `source` one at a time as the loop runs (the frame count is unknown up
+// front; the stream ends when the source says so). `on_frame(fi)` fires after frame fi is
+// produced and BEFORE it is enqueued (same rendezvous semantics as the batch loops). With
+// catchup=true every produced payload is retained so a mid-stream joiner is replayed the full
+// missed prefix (O(stream) server memory — use catchup=false for a genuinely open-ended source).
+// `frames_sent` counts frames produced + enqueued to the then-current broadcast set; ok == the
+// initial gather succeeded and the source was drained to its end.
+Stats broadcast_live(netsock::socket_t listener, const FrameSource& source,
+                     std::size_t min_initial, int accept_deadline_ms,
+                     const std::function<void(std::size_t)>& on_frame = {},
+                     bool catchup = false, std::size_t cap_bytes = 0);
 
 }  // namespace netbcast
 }  // namespace seads

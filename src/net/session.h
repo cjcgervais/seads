@@ -91,6 +91,27 @@ using ServerFrames = std::vector<std::pair<std::int64_t, std::vector<std::uint8_
 // wire frame at the 20 Hz cadence (+ the tick-0 frame). Pure of any transport.
 ServerFrames build_server_frames(const Rails& rails, const Scenario& sc);
 
+// Incremental server half (netcode layer 13): the SAME frames build_server_frames produces, one
+// call at a time. The authoritative kernel lives INSIDE the producer and is stepped ON DEMAND
+// between emits, so a live broadcast (netbcast::broadcast_live) can interleave simulation and
+// socket I/O without ever precomputing the stream — the open-ended frame SOURCE the async layers
+// deferred. next() fills (emit_tick, payload) with the next frame — the tick-0 pre-step world
+// first, then one every snap_every ticks — and returns true; it returns false when the scenario
+// is exhausted (outputs untouched). build_server_frames is implemented ON TOP of this class, so
+// the batch and incremental frame bytes are identical BY CONSTRUCTION (the sealed session digest
+// gates both). The Scenario must outlive the producer (it is referenced, not copied).
+class FrameProducer {
+public:
+    FrameProducer(const Rails& rails, const Scenario& sc);
+    bool next(std::int64_t& emit_tick, std::vector<std::uint8_t>& payload);
+
+private:
+    const Scenario* sc_;
+    Kernel server_;
+    unsigned t_ = 0;                 // ticks stepped so far
+    bool emitted_initial_ = false;   // tick-0 pre-step frame emitted?
+};
+
 // Client half: reconstruct the dogfight from a delivered frame list under the scenario's integer
 // lag + drop set (own predicted @ now + remotes interpolated + wire-sourced HP/kills/rounds). The
 // frames are looked up by emit_tick, so a socket-delivered list keyed on server_tick reconstructs

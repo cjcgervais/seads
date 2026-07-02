@@ -7,7 +7,7 @@
 // determinism BRIDGEs (seads_netloop_test / seads_multiclient_test / seads_netdyn_test) are what CI
 // gates, this pair is the human demo.
 //
-// Usage:  seads_netserver [port] [num_clients] [catchup] [async] [cap_bytes]
+// Usage:  seads_netserver [port] [num_clients] [catchup] [async] [cap_bytes] [live]
 //   port 0 or omitted => OS-assigned (the chosen port is printed); num_clients defaults to 1.
 //   catchup 0/1 (default 0): with 1 (layer 10) a client that joins mid-stream is first replayed the
 //   missed prefix frames[0:join], so it too reconstructs the WHOLE dogfight; with 0 (layer 9) a late
@@ -17,6 +17,9 @@
 //   sends are blocking (broadcast_select, layers 9/10).
 //   cap_bytes (default 0 = unbounded; needs async=1): layer-12 send-buffer byte-cap — a client
 //   whose pending backlog exceeds it is dropped (drop-slowest live-stream hygiene).
+//   live 0/1 (default 0): with 1 (layer 13) the frame stream is NOT precomputed — the sealed
+//   kernel is stepped INSIDE the broadcast loop (session::FrameProducer pulled by
+//   netbcast::broadcast_live, inherently async; the async flag is implied, cap_bytes applies).
 //   The server waits for num_clients connection(s), then broadcasts the identical frame stream to
 //   each — every client present from the start reconstructs the same dogfight.
 #include "session.h"
@@ -54,13 +57,16 @@ int main(int argc, char** argv) {
     bool catchup = (argc > 3) && std::atoi(argv[3]) != 0;
     bool use_async = (argc > 4) && std::atoi(argv[4]) != 0;
     std::size_t cap_bytes = (argc > 5) ? static_cast<std::size_t>(std::atoll(argv[5])) : 0;
-    if (cap_bytes > 0 && !use_async) {
-        std::printf("NOTE: cap_bytes applies only to the async path (layer 12); ignoring it\n");
+    bool live = (argc > 6) && std::atoi(argv[6]) != 0;
+    if (cap_bytes > 0 && !use_async && !live) {
+        std::printf("NOTE: cap_bytes applies only to the async/live paths (layers 12/13); ignoring it\n");
         cap_bytes = 0;
     }
 
     const Rails rails = sealed_rails();
-    const session::ServerFrames frames = session::build_server_frames(rails, sess_vec::SCENARIO);
+    // live mode never precomputes; the batch modes build the whole stream up front as before.
+    const session::ServerFrames frames =
+        live ? session::ServerFrames{} : session::build_server_frames(rails, sess_vec::SCENARIO);
 
     std::uint16_t port = 0;
     netsock::socket_t listener = netsock::listen_loopback(req_port, port, /*backlog=*/num_clients);
@@ -68,9 +74,14 @@ int main(int argc, char** argv) {
         std::printf("ERROR: could not bind/listen on 127.0.0.1:%u\n", req_port);
         return 1;
     }
-    std::printf("seads_netserver: listening on 127.0.0.1:%u (%zu frames ready, expecting %d client(s), "
-                "catchup=%d, async=%d, cap_bytes=%zu)\n",
-                port, frames.size(), num_clients, catchup ? 1 : 0, use_async ? 1 : 0, cap_bytes);
+    if (live)
+        std::printf("seads_netserver: listening on 127.0.0.1:%u (LIVE source — kernel stepped in "
+                    "the broadcast loop, expecting %d client(s), catchup=%d, cap_bytes=%zu)\n",
+                    port, num_clients, catchup ? 1 : 0, cap_bytes);
+    else
+        std::printf("seads_netserver: listening on 127.0.0.1:%u (%zu frames ready, expecting %d client(s), "
+                    "catchup=%d, async=%d, cap_bytes=%zu)\n",
+                    port, frames.size(), num_clients, catchup ? 1 : 0, use_async ? 1 : 0, cap_bytes);
     std::fflush(stdout);
 
     // the raw per-frame payloads (broadcast_select length-prefixes each so joiners stay frame-aligned)
@@ -84,14 +95,28 @@ int main(int argc, char** argv) {
     // client whose backlog exceeds the cap is shed). 60 s bounded initial-wait. Same shared loops
     // the CI bridges gate — no untested divergence.
     netsock::set_nonblocking(listener);
-    netbcast::Stats st =
-        use_async ? netbcast::broadcast_async(listener, payloads,
-                                              static_cast<std::size_t>(num_clients),
-                                              /*accept_deadline_ms=*/60000, /*on_frame=*/{}, catchup,
-                                              cap_bytes)
-                  : netbcast::broadcast_select(listener, payloads,
-                                               static_cast<std::size_t>(num_clients),
-                                               /*accept_deadline_ms=*/60000, /*on_frame=*/{}, catchup);
+    netbcast::Stats st;
+    if (live) {
+        // layer 13: the stream is produced AS it is broadcast — the sealed kernel is stepped
+        // between sends, one 20 Hz frame per pull. Nothing was precomputed above.
+        session::FrameProducer producer(rails, sess_vec::SCENARIO);
+        auto source = [&](std::vector<std::uint8_t>& payload) {
+            std::int64_t emit_tick = 0;
+            return producer.next(emit_tick, payload);
+        };
+        st = netbcast::broadcast_live(listener, source, static_cast<std::size_t>(num_clients),
+                                      /*accept_deadline_ms=*/60000, /*on_frame=*/{}, catchup,
+                                      cap_bytes);
+    } else {
+        st = use_async ? netbcast::broadcast_async(listener, payloads,
+                                                   static_cast<std::size_t>(num_clients),
+                                                   /*accept_deadline_ms=*/60000, /*on_frame=*/{},
+                                                   catchup, cap_bytes)
+                       : netbcast::broadcast_select(listener, payloads,
+                                                    static_cast<std::size_t>(num_clients),
+                                                    /*accept_deadline_ms=*/60000, /*on_frame=*/{},
+                                                    catchup);
+    }
     netsock::close_socket(listener);
 
     if (!st.ok) {

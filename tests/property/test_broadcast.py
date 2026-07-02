@@ -243,3 +243,56 @@ def test_cap_never_bites_a_client_that_keeps_up(frames, cap):
     delivered, capped = sendbuffer_deliver_capped(frames, greedy, cap)
     assert not capped
     assert delivered == fr.encode_stream(frames)
+
+
+# --- layer 13: open-ended LIVE frame SOURCE ---------------------------------------------------------
+def live_deliver(source_frames, accepts):
+    """Reference layer-13 live-source model — mirrors netbcast::broadcast_live: the loop PULLS one
+    frame at a time from a source whose length it never knows (a Python iterator here; the loop
+    stops only when the source is exhausted), enqueues it through the SAME send-buffer model as
+    layer 11, and retains a HISTORY of what it has produced (the catch-up store). Returns
+    (delivered byte stream after the drain, history)."""
+    queue = b""
+    delivered = b""
+    history = []
+    accepts = list(accepts)
+    it = iter(source_frames)                    # the loop has no len(); only StopIteration ends it
+    while True:
+        try:
+            f = next(it)
+        except StopIteration:
+            break
+        history.append(f)                       # retained AS PRODUCED (catchup=true posture)
+        queue += fr.encode_stream([f])          # enqueue_bytes: append the length-prefixed frame
+        take = min(accepts.pop(0), len(queue)) if accepts else 0
+        delivered += queue[:take]               # flush_client: kernel accepted `take` bytes
+        queue = queue[take:]
+    return delivered + queue, history           # drain phase: the pending tail flushes last
+
+
+@given(st.lists(st.binary(min_size=0, max_size=60), min_size=1, max_size=10), st.data())
+def test_live_source_delivery_equals_batch(frames, data):
+    # A stream PULLED one frame at a time from a source of unknown length delivers — under ANY
+    # kernel-acceptance pattern — exactly the bytes the batch layer-11 path delivers for the same
+    # frames: producing incrementally adds no bytes, no reordering, no truncation. This is the pure
+    # form of the netlive_bridge leg-1 claim (live-stepped kernel stream == precomputed stream,
+    # sealed digest reconstructed either way).
+    frames = [bytes(f) for f in frames]
+    accepts = [data.draw(st.integers(min_value=0, max_value=200)) for _ in frames]
+    live, _ = live_deliver(frames, accepts)
+    assert live == sendbuffer_deliver(frames, accepts)   # == the batch send-buffer model
+    assert live == fr.encode_stream(frames)              # == the canonical encoded stream
+
+
+@given(st.lists(st.binary(min_size=0, max_size=60), min_size=1, max_size=10), st.data())
+def test_live_history_replays_a_joiner_the_whole_stream(frames, data):
+    # The on-the-fly retained history equals frames[0:j] after j pulls — so a catch-up joiner
+    # accepted at ANY production point j receives history (replay) ++ live suffix == the whole
+    # stream, byte-identical to an early client, even though the whole stream never existed when
+    # it joined. This is the pure form of the netlive_bridge leg-2 claim.
+    frames = [bytes(f) for f in frames]
+    _, history = live_deliver(frames, [10**9] * len(frames))
+    assert history == frames                             # history is exactly what was produced
+    j = data.draw(st.integers(min_value=0, max_value=len(frames)))
+    replay_then_live = fr.encode_stream(history[:j]) + fr.encode_stream(frames[j:])
+    assert replay_then_live == fr.encode_stream(frames)  # joiner at j reconstructs the whole stream

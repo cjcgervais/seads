@@ -134,6 +134,7 @@ jobs:
             echo "ncatch=build/Release/seads_netcatchup_test.exe" >> "$GITHUB_OUTPUT"
             echo "nasync=build/Release/seads_netasync_test.exe" >> "$GITHUB_OUTPUT"
             echo "ncap=build/Release/seads_netcap_test.exe" >> "$GITHUB_OUTPUT"
+            echo "nlive=build/Release/seads_netlive_test.exe" >> "$GITHUB_OUTPUT"
           else
             echo "golden=build/seads_golden" >> "$GITHUB_OUTPUT"
             echo "scenario=build/seads_scenario" >> "$GITHUB_OUTPUT"
@@ -156,6 +157,7 @@ jobs:
             echo "ncatch=build/seads_netcatchup_test" >> "$GITHUB_OUTPUT"
             echo "nasync=build/seads_netasync_test" >> "$GITHUB_OUTPUT"
             echo "ncap=build/seads_netcap_test" >> "$GITHUB_OUTPUT"
+            echo "nlive=build/seads_netlive_test" >> "$GITHUB_OUTPUT"
           fi
 
       - name: det_math bit-exact test
@@ -255,6 +257,17 @@ jobs:
         if: matrix.name == 'MSVC x64' || matrix.name == 'GCC x64' || matrix.name == 'Clang x64'
         shell: bash
         run: "${{ steps.bin.outputs.ncap }}"
+
+      # Layer 13. seads_netlive_test is a default target (build-only-smoked on every leg above);
+      # the live-frame-source bridge (the sealed kernel stepped INSIDE the broadcast loop —
+      # incremental == batch byte-for-byte, an early client reconstructs the sealed session digest,
+      # a late joiner gets the exact suffix, catch-up replays the on-the-fly retained history)
+      # needs live 127.0.0.1 ports, so it runs only on the NATIVE x64 legs, exactly like the
+      # layer-7/8/9/10/11/12 bridges.
+      - name: Live-frame-source determinism bridge (layer 13)
+        if: matrix.name == 'MSVC x64' || matrix.name == 'GCC x64' || matrix.name == 'Clang x64'
+        shell: bash
+        run: "${{ steps.bin.outputs.nlive }}"
 
       - name: Run all goldens + hash + validate
         shell: bash

@@ -231,6 +231,14 @@ add_executable(seads_netcap_test src/net/netcap_test_main.cpp)
 target_link_libraries(seads_netcap_test PRIVATE seads_session seads_event seads_broadcast seads_framing
                       seads_socket seads_predict seads_net seads_kernel seads_replay seads_det_math seads_det_flags)
 
+# --- layer-13 live-frame-source bridge: broadcast_live pulls frames from session::FrameProducer
+# (the sealed kernel stepped ON DEMAND inside the broadcast loop — no precomputed stream);
+# incremental == batch byte-for-byte, an early client reconstructs the sealed session digest, a
+# late joiner gets the exact suffix, and catch-up replays the on-the-fly retained history ---
+add_executable(seads_netlive_test src/net/netlive_test_main.cpp)
+target_link_libraries(seads_netlive_test PRIVATE seads_session seads_event seads_broadcast seads_framing
+                      seads_socket seads_predict seads_net seads_kernel seads_replay seads_det_math seads_det_flags)
+
 # --- client presentation test (globe projection + .seadsrec container + playback interp) ---
 add_executable(seads_client_test src/client/client_test_main.cpp)
 target_link_libraries(seads_client_test PRIVATE seads_client seads_net seads_det_flags)
@@ -278,5 +286,6 @@ if(SEADS_SOCKET_TESTS AND NOT CMAKE_CROSSCOMPILING)
   add_test(NAME netcatchup_bridge COMMAND seads_netcatchup_test)
   add_test(NAME netasync_bridge COMMAND seads_netasync_test)
   add_test(NAME netcap_bridge COMMAND seads_netcap_test)
+  add_test(NAME netlive_bridge COMMAND seads_netlive_test)
 endif()
 # Golden hash compare is run in CI (guardian.yml) across the toolchain matrix.

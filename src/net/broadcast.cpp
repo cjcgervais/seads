@@ -351,5 +351,109 @@ Stats broadcast_async(netsock::socket_t listener,
     return st;
 }
 
+// ===================== layer 13: open-ended LIVE frame source ===================================
+// broadcast_async's loop fed by a pull SOURCE instead of a precomputed vector: the frame count is
+// unknown up front — the loop pulls one payload per iteration and stops when the source says so.
+// Everything else (gather, per-frame select_rw JOIN/LEAVE/writability service, per-client buffers,
+// the layer-12 byte-cap, the bounded drain) is the layer-11/12 machinery verbatim. With
+// catchup=true each produced payload is retained in `history` AS IT IS MADE, so a mid-stream
+// joiner is replayed exactly frames[0:fi] — the batch semantics, from a stream that never existed
+// as a whole. catchup=false retains nothing (the open-ended posture).
+Stats broadcast_live(netsock::socket_t listener, const FrameSource& source,
+                     std::size_t min_initial, int accept_deadline_ms,
+                     const std::function<void(std::size_t)>& on_frame, bool catchup,
+                     std::size_t cap_bytes) {
+    Stats st;
+    std::vector<BufClient> clients;
+    std::vector<std::vector<std::uint8_t>> history;  // produced payloads (retained iff catchup)
+
+    // --- gather the initial clients (bounded wait) before frame 0, exactly as broadcast_async ---
+    int waited = 0;
+    while (clients.size() < min_initial && waited < accept_deadline_ms) {
+        if (netsock::wait_readable(listener, 100))
+            accept_pending_async(listener, clients, st, history, /*upto=*/0, catchup, cap_bytes);
+        waited += 100;
+    }
+    if (clients.size() < min_initial) {
+        for (BufClient& c : clients) netsock::close_socket(c.s);
+        return st;  // ok stays false
+    }
+
+    // --- live frame loop: PULL the next payload (the source may step the sim here), then service
+    // sockets and enqueue it — the broadcast_async iteration with the vector index replaced by the
+    // source. A joiner accepted at iteration fi is replayed history[0:fi] (== frames[0:fi] when
+    // catchup) and enters live at fi, exactly the batch semantics. ------------------------------
+    std::vector<netsock::socket_t> rfds, wfds, readable, writable;
+    std::vector<std::uint8_t> payload, frame;
+    for (std::size_t fi = 0;; ++fi) {
+        payload.clear();
+        if (!source(payload)) break;  // end of stream — only the source knows
+        if (on_frame) on_frame(fi);   // test hook: rendezvous a deterministic mid-stream join
+
+        rfds.clear();
+        wfds.clear();
+        for (const BufClient& c : clients) {
+            rfds.push_back(c.s);
+            if (c.pending()) wfds.push_back(c.s);
+        }
+        rfds.push_back(listener);
+        if (netsock::select_rw(rfds, wfds, 0, readable, writable)) {
+            bool listener_ready = false;
+            for (netsock::socket_t r : readable)
+                if (r == listener) { listener_ready = true; break; }
+            if (listener_ready)
+                accept_pending_async(listener, clients, st, history, /*upto=*/history.size(),
+                                     catchup, cap_bytes);
+            reap_leavers_async(clients, readable, st);  // ignores the listener entry
+            flush_writable(clients, writable, st);
+        }
+
+        frame.clear();
+        framing::encode_frame(payload, frame);
+        for (std::size_t i = clients.size(); i-- > 0;) {
+            if (!enqueue_bytes(clients[i], frame)) {
+                drop_client(clients, i, st);
+            } else if (over_cap(clients[i], cap_bytes)) {
+                ++st.capped;
+                drop_client(clients, i, st);
+            }
+        }
+        if (catchup) history.push_back(std::move(payload));  // retain for future joiners
+        ++st.frames_sent;
+    }
+
+    // --- bounded DRAIN + trailing-leaver sweep + close: broadcast_async's tail verbatim ---------
+    int idle = 0;
+    while (idle < 600) {
+        rfds.clear();
+        wfds.clear();
+        for (const BufClient& c : clients) {
+            rfds.push_back(c.s);
+            if (c.pending()) wfds.push_back(c.s);
+        }
+        if (wfds.empty()) break;  // every buffer drained
+        if (netsock::select_rw(rfds, wfds, 50, readable, writable)) {
+            reap_leavers_async(clients, readable, st);
+            flush_writable(clients, writable, st);
+            idle = 0;
+        } else {
+            ++idle;
+        }
+    }
+    for (std::size_t i = clients.size(); i-- > 0;)
+        if (clients[i].pending()) drop_client(clients, i, st);  // drain deadline: still owed bytes
+
+    std::vector<netsock::socket_t> ready;
+    for (int pass = 0; pass < 3 && !clients.empty(); ++pass) {
+        rfds.clear();
+        for (const BufClient& c : clients) rfds.push_back(c.s);
+        if (!netsock::select_readable(rfds, 50, ready)) break;
+        reap_leavers_async(clients, ready, st);
+    }
+    for (BufClient& c : clients) netsock::close_socket(c.s);
+    st.ok = true;  // initial gather succeeded and the source ran to its end
+    return st;
+}
+
 }  // namespace netbcast
 }  // namespace seads

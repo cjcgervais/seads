@@ -1,6 +1,54 @@
 # SEADS 2026 — Next Steps (handoff)
 
-> ## ►► CURRENT STATE (2026-07-02): seal **ATM-Sphere v1.20r0** — **PER-AIRFRAME REGION TOUGHNESS DONE ✅**
+> ## ►► CURRENT STATE (2026-07-02): **NETCODE LAYER 13 — OPEN-ENDED LIVE FRAME SOURCE DONE ✅** (no-seal, rides **ATM-Sphere v1.20r0**)
+> **Latest: the broadcast server is finally LIVE — the sealed kernel is stepped INSIDE the
+> broadcast loop, one 20 Hz frame per pull, instead of precomputing the whole stream. The named
+> free pick ("an open-ended live frame SOURCE feeding `broadcast_async` incrementally") lands as
+> layer 13.** Three pieces, all transport-side:
+> **(a) `session::FrameProducer`** — the incremental server half: the authoritative kernel lives
+> in a producer object; `next(emit_tick, payload)` steps it ON DEMAND to the next emit point and
+> serializes that frame (tick-0 pre-step first), false at scenario end.
+> **`build_server_frames` is now implemented ON the producer** ⇒ batch and incremental bytes are
+> identical BY CONSTRUCTION — the refactor is gated by the sealed session digest (`d0e94e2e…`
+> UNCHANGED, `session_vectors.h --check` in sync, all six socket bridges green).
+> **(b) `netbcast::broadcast_live`** — `broadcast_async`'s loop fed by a pull **`FrameSource`**
+> (`bool(std::vector<uint8_t>&)`, false = end): the loop NEVER knows the frame count; same gather /
+> per-frame `select_rw` JOIN+LEAVE+writability service / per-client userspace buffers / layer-12
+> `cap_bytes` shed / bounded drain — the layer-11/12 machinery verbatim (`broadcast_select`/
+> `broadcast_async` untouched). With `catchup=true` each produced payload is RETAINED as it is
+> made ⇒ a mid-stream joiner is replayed exactly frames[0:fi] — layer-10 semantics from a stream
+> that never existed as a whole. HONEST BOUNDARIES: catch-up retention is O(stream) (run a
+> genuinely open-ended source with catchup=false; bounded/windowed catch-up deferred); the source
+> is pulled synchronously once per iteration (a stalling source stalls join service — frame pacing
+> belongs to the caller, no wall-clock in the loop); live `Stats.ok` = gather succeeded + source
+> drained (no expected count exists).
+> **(c) The BRIDGE `seads_netlive_test`** (ctest `netlive_bridge`, native-x64 CI legs): **LEG 0**
+> producer == batch builder byte-for-byte (41 frames, + idempotent exhaustion); **LEG 1** (live
+> socket, catchup=false) EARLY reconstructs the sealed digest from a live-stepped stream +
+> a rendezvoused joiner at J=20 receives EXACTLY frames[20:]; **LEG 2** (catchup=true) the joiner
+> receives the WHOLE stream from the on-the-fly history and reconstructs the SAME sealed digest.
+> Demo: `seads_netserver [port] [n] [catchup] [async] [cap_bytes] [live]` — live=1 smoke-verified
+> cross-process (a real `seads_netclient` reconstructed `d0e94e2e…` from the live server).
+> **TRANSPORT-ONLY: no `src/kernel/**`, `src/det_math/**`, `config/rails/**`, wire bytes, or
+> tuning touched ⇒ ALL 12 GOLDENS BYTE-IDENTICAL, no digest moved. No seal.**
+> **Gates: ctest 17→18 GCC + 17→18 Clang (`netlive_bridge`), property tests 175 → 177 (+2
+> `test_broadcast.py` layer-13: pull-of-unknown-length delivery == batch model == encode_stream;
+> retained history after j pulls == frames[0:j] ⇒ replay+live == whole stream for any join point),
+> session vectors in sync (the build_server_frames refactor moved NOTHING).**
+> Ledger: **ADR-Step-Net-Layer13-LiveSource-v1.20r0**; guardian.yml gains the layer-13 bridge step
+> (native x64 legs, like layers 7–12).
+> **NEXT (free pick, none blocking):** **B5** ISA atmosphere (a seal); bounded/windowed catch-up
+> for open-ended live streams (layer 13's named boundary); an A6M2 engine-toughness retune (its
+> own data-only seal that MOVES EngineOut-001's story); or per-airframe toughness surfaced in the
+> HUD (presentation-only).
+> **NOTE FOR THE NEXT AGENT:** `broadcast_live` deliberately does NOT touch `broadcast_async`/
+> `broadcast_select` — layers 9–12 are verbatim; keep it that way (a source overload on
+> broadcast_async risks silent drift under the sealed bridges). The FrameSource is pulled ONCE per
+> iteration — if you ever add wall-clock pacing, put it in the CALLER/source (the demo), never in
+> the loop (doctrine: no wall-clock in transport that could feed timing back into delivered
+> bytes). `FrameProducer` references its Scenario (does not copy) — keep the Scenario alive.
+>
+> ## ►► PRIOR STATE (2026-07-02): seal **ATM-Sphere v1.20r0** — **PER-AIRFRAME REGION TOUGHNESS DONE ✅**
 > **Latest (SEAL v1.20r0): airframes now break DIFFERENTLY — the v1.18r0 global region-pool
 > fractions (0.375/0.5/0.25 × hp_start) became per-airframe envelope scalars, and the roster is
 > tuned to WWII engineering: radials shrug off engine hits, liquid-cooled inlines don't.**

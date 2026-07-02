@@ -136,20 +136,27 @@ const netsnap::Snapshot* freshest_frame(const interp::SnapshotBuffer& buf, std::
 
 }  // namespace
 
-ServerFrames build_server_frames(const Rails& rails, const Scenario& sc) {
-    const unsigned ticks = sc.ticks;
-
-    // --- server: drive the authoritative kernel; emit protocol-6 frames at 20 Hz -------------
-    Kernel server(rails);
+// Incremental server half (layer 13). Seeds the authoritative kernel exactly as the batch builder
+// always did; each next() steps the kernel forward to the next emit point and serializes it — the
+// SAME op order, so batch and incremental frame bytes are identical by construction.
+FrameProducer::FrameProducer(const Rails& rails, const Scenario& sc) : sc_(&sc), server_(rails) {
     for (unsigned i = 0; i < sc.n_aircraft; ++i) {
         const AircraftSpec& a = sc.aircraft[i];
-        server.add(a.lat, a.lon, a.psi, a.phi, a.alt, a.tas, 0.0, a.env->hp_start, a.env->ammo_start,
-                   a.env->engine_frac, a.env->wing_frac, a.env->tail_frac);
+        server_.add(a.lat, a.lon, a.psi, a.phi, a.alt, a.tas, 0.0, a.env->hp_start,
+                    a.env->ammo_start, a.env->engine_frac, a.env->wing_frac, a.env->tail_frac);
     }
-    // frames as (emit_tick, bytes) ascending — emits are snap_every apart, so a small vector.
-    ServerFrames frames;
-    frames.emplace_back(0, serialize_world(server, 0));  // initial world (pre-step)
-    for (unsigned t = 1; t <= ticks; ++t) {
+}
+
+bool FrameProducer::next(std::int64_t& emit_tick, std::vector<std::uint8_t>& payload) {
+    const Scenario& sc = *sc_;
+    if (!emitted_initial_) {                     // initial world (pre-step), emit_tick 0
+        emitted_initial_ = true;
+        emit_tick = 0;
+        payload = serialize_world(server_, 0);
+        return true;
+    }
+    while (t_ < sc.ticks) {
+        const unsigned t = t_ + 1;
         std::vector<Command> cmds;
         std::vector<const Envelope*> envs;
         cmds.reserve(sc.n_aircraft);
@@ -158,9 +165,25 @@ ServerFrames build_server_frames(const Rails& rails, const Scenario& sc) {
             cmds.push_back(server_command_at(sc.aircraft[i], t - 1));
             envs.push_back(sc.aircraft[i].env);
         }
-        server.step(cmds, envs);
-        if (t % sc.snap_every == 0) frames.emplace_back(t, serialize_world(server, t));
+        server_.step(cmds, envs);
+        t_ = t;
+        if (t % sc.snap_every == 0) {
+            emit_tick = static_cast<std::int64_t>(t);
+            payload = serialize_world(server_, static_cast<std::int64_t>(t));
+            return true;
+        }
     }
+    return false;                                // scenario exhausted
+}
+
+ServerFrames build_server_frames(const Rails& rails, const Scenario& sc) {
+    // frames as (emit_tick, bytes) ascending — emits are snap_every apart, so a small vector.
+    // Implemented ON the incremental producer (layer 13) so the two paths cannot drift.
+    ServerFrames frames;
+    FrameProducer producer(rails, sc);
+    std::int64_t emit_tick = 0;
+    std::vector<std::uint8_t> payload;
+    while (producer.next(emit_tick, payload)) frames.emplace_back(emit_tick, std::move(payload));
     return frames;
 }
 
