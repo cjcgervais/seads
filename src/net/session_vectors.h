@@ -82,13 +82,13 @@ constexpr int FINAL_WEAPON_COUNT = sizeof(FINAL_WEAPON)/sizeof(FINAL_WEAPON[0]);
 struct Checkpoint { unsigned tick; const char* hash; };
 constexpr Checkpoint CHECKPOINTS[] = {
   { 1u, "417e518b4c20787ec3512129172dbb79f35287381ac60384475e77505843c390" },
-  { 50u, "80b1ee651007577178fb14a995575b0f16a6fcef821c616503964531d0104bbf" },
-  { 100u, "684c7a14717c3f4a54d44d8f031ec397de2e11520cc02b7de192bcef05f40698" },
-  { 150u, "3f93f728fb3fd1537f43b5e8b1df62cdaa75a146ac707d47eea44bdeb264a665" },
-  { 200u, "11d24e63dd31b88ff3f4db5c4327cf80227daa802641dbddb0d99fc590cd4c45" },
+  { 50u, "a55afc47c86247b29622b92b27825c0d1ce201da2f38dcbb8846e8ddef40684d" },
+  { 100u, "06a8b2fc8b450fe40af48f75033b718a70bd6c68fbd31441398fc93642f60831" },
+  { 150u, "703cb46d920fb53764ad795fd9a3dbc4acb32b0d9e1a106503691b07cb92e966" },
+  { 200u, "5a5e19936dbc0fe8351997bc03ad6942fcb2db282344b78f9b7463d5a0e8ca19" },
 };
 constexpr int CHECKPOINT_COUNT = sizeof(CHECKPOINTS)/sizeof(CHECKPOINTS[0]);
 
-constexpr const char* SEQUENCE_DIGEST = "f67368e93b82379b7d2ab0d0ab786dce6a529bce0e7165f3594284419336aa2e";
+constexpr const char* SEQUENCE_DIGEST = "966aca05932ac12b4e53e054b421fdbd6f12e4df91f55029ca233084682dc1fb";
 
 }} // namespace seads::sess_vec

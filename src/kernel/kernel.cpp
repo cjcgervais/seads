@@ -26,9 +26,10 @@ static constexpr double V_MIN = 0x1.e000000000000p+4;   // 30.0 m/s
 // g0 = the gravity rail. sigma scales BOTH aero forces (q — so drag falls and the n_aero stall
 // ceiling drops aloft) AND engine power (T — sea-level power is NOT held to altitude), so no
 // airframe exceeds its sealed B4 top speed anywhere in the band. The no-arg kinematic path
-// (advance_ — the Sphere golden) and the projectile advance (PROJ_DRAG_K stays a lumped GLOBAL)
-// are deliberately untouched. Hex-floats shared bit-for-bit with tools/ref_kernel.py.
-// See ADR-Step8-FlightModel-B5-v1.21r0.
+// (advance_ — the Sphere golden) is deliberately untouched. v1.24r0: the projectile advance now
+// rides the SAME sigma (PROJ_DRAG_K scaled by air_sigma(round alt) — B5 deferred this; a bullet
+// finally flies in the same thin air). Hex-floats shared bit-for-bit with tools/ref_kernel.py.
+// See ADR-Step8-FlightModel-B5-v1.21r0 + ADR-Step7-Guns-ProjectileSigmaDrag-v1.24r0.
 static constexpr int ISA_SIGMA_N = 17;
 static constexpr double ISA_SIGMA_ALT[ISA_SIGMA_N] = {
     0x0.0p+0,                  //    0 m
@@ -75,8 +76,10 @@ static constexpr double ISA_SIGMA[ISA_SIGMA_N] = {
 // for G1 (a generic gun); per-airframe weapon rosters are G3. See ADR-Step7-Guns-G1.
 // G3 (v1.11r0): muzzle velocity and damage-per-round are PER-AIRFRAME (Envelope::muzzle_v_mps /
 // damage_per_round); drag and ttl stay GLOBAL (a bullet is a bullet). Shared hex-floats with
-// tools/ref_kernel.py.
-static constexpr double        PROJ_DRAG_K    = 0x1.a36e2eb1c432dp-13;   // 2.0e-4 quadratic drag decel coeff
+// tools/ref_kernel.py. v1.24r0: the GLOBAL coefficient is sigma-scaled at run time
+// (Vdot -= k*sigma(alt)*V^2) — sigma(0) = 1.0 exactly, so a sea-level round is bit-identical
+// to the pre-v1.24r0 round.
+static constexpr double        PROJ_DRAG_K    = 0x1.a36e2eb1c432dp-13;   // 2.0e-4 quadratic drag decel coeff (x sigma)
 static constexpr std::uint32_t PROJ_TTL_TICKS = 250u;                    // 2.5 s lifetime, then despawn
 
 // G2 hit detection + per-aircraft hitpoints (Step 7 guns, ATM-Sphere v1.10r0). Shared hex-floats
@@ -237,7 +240,13 @@ void Kernel::advance_projectiles_() {
         double V = p_tas_[i];
         double sg = det_sin(p_gamma_[i]);
         double cg = det_cos(p_gamma_[i]);
-        double Vdot = -PROJ_DRAG_K * V * V - g0 * sg;   // lumped quadratic drag + gravity along path
+        // v1.24r0: the round finally flies in the SAME thin air as the airframes — the lumped
+        // PROJ_DRAG_K is scaled by the sealed ISA density ratio at the round's PRE-step altitude
+        // (one air_sigma per round per tick, mirroring the aircraft step's pre-step sigma
+        // convention). Same sealed LUT + lut_eval => ZERO new det_math. MUST match
+        // ref_kernel._advance_projectiles op-for-op.
+        double sigma = air_sigma(p_alt_[i]);
+        double Vdot = -PROJ_DRAG_K * sigma * V * V - g0 * sg;   // sigma-scaled drag + gravity along path
         double Vnew = V + Vdot * dt;
         if (Vnew < V_MIN) Vnew = V_MIN;
         double gdot = (g0 / Vnew) * (-cg);              // n=0 -> gamma bends down under gravity

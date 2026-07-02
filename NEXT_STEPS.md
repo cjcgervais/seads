@@ -1,6 +1,64 @@
 # SEADS 2026 — Next Steps (handoff)
 
-> ## ►► CURRENT STATE (2026-07-02): seal **ATM-Sphere v1.23r0** — **A6M2 ENGINE-TOUGHNESS RETUNE DONE ✅** (data-only — the Sakae radial gets its due)
+> ## ►► CURRENT STATE (2026-07-02): seal **ATM-Sphere v1.24r0** — **PROJECTILE σ-DRAG DONE ✅** (B5's last deferral closed — a bullet finally flies in thin air)
+> **Latest (SEAL v1.24r0): the projectile advance scales its lumped `PROJ_DRAG_K` by the sealed
+> ISA density ratio at the round's PRE-step altitude — `Vdot = -k·σ(alt)·V² - g₀·sinγ`, one
+> `air_sigma` per round per tick (the aircraft step's pre-step convention), op-for-op mirrored
+> kernel.cpp ↔ ref_kernel.py.** Same sealed 17-node LUT + `lut_eval` ⇒ **ZERO new det_math**
+> (twelfth consecutive); **σ(0) = 1.0 exactly ⇒ a sea-level round is bit-identical to
+> pre-v1.24r0** (guarded by `test_proj_sigma`). Deliberately untouched: spawn geometry (the
+> convergence zeroing keeps its sealed flat-fire formula), hit detection, ttl, the no-arg path,
+> and the wire (**no protocol change** — protocol stays 7).
+> **A kernel MODEL seal, measured story-by-story: exactly 4 goldens move — Gunfire `c0170fd3…`
+> / Hit `f811b0a3…` / Winchester `cebeac79…` / YakLa `fadedd98…` — and in EVERY mover the
+> aircraft state is field-wise byte-identical; only projectile kinematics moved (thin-air
+> rounds keep more speed, e.g. Gunfire round 0 tas 729.9→789.3).** Stories re-verified: Hit
+> still kills in exactly six 12-hp TAIL connects walking hp 70→0 — but the three MID-BURST
+> connects land one tick earlier (**ticks 39/41/44/47/50/53**; was 39/42/45/48/50/53; kill
+> tick 53 unchanged; description re-written, also shedding stale pre-G3 numbers); Winchester's
+> tick-891 depletion is EXACT (schedule-driven, σ-independent; 22 live rounds moved); YakLa's
+> two aircraft + every crossing claim byte-identical (only its 63 sealed live rounds moved).
+> **EngineOut-001 is BYTE-IDENTICAL a SECOND seal running** (a different reason each time):
+> σ-drag pulls its FIRST connect a tick earlier (29→28) but ticks 31/33/35, the drain values
+> (35→23→11→0), the tick-33 engine cut, and the glider are unchanged — the shifted tick lives
+> only in the never-hashed hit-event journal (description re-written honestly).
+> Fingerprint: 4 golden dirs re-sealed; **session digest `f67368e9…` → `966aca05…`**
+> (checkpoint tick-1 + ALL FINAL_WEAPON facts byte-identical — the astern kill lands on the
+> same ticks; only live-round wire bytes moved); **EVENT DIGEST MOVES for the first time since
+> v1.17r0** (`06629a69…` → `2a9ae8a3…` — the layer-6 channel reports per-round hit ticks, and
+> hit ticks are exactly what σ-drag shifts: SESSION-SK-001 seq 1–3 arrive at 42/45/48 not
+> 43/46/49, EVENT-MULTIHIT-001 volleys at 43/46/49 not 44/47/50; first-hit/kill ticks + all
+> kill facts intact — this is BY CONSTRUCTION, not a regression); scenario_params/golden_params/
+> lockstep/predict + every codec vector verified in sync UNTOUCHED; trajectory.js dogfight
+> regenerated (same 3 kills / 18 events). 5 scenario descriptions updated (Gunfire/Hit/
+> Winchester/YakLa re-seal notes + EngineOut tick fix). Rails 330→340 (`atmosphere_density` +
+> `weapons.model` text; NO rail value changed). guardian.yml UNCHANGED (no new golden, no new
+> ctest target; 4 sealed hashes moved).
+> **Gates: ctest 19/19 GCC + 19/19 Clang, Sphere + all 13 scenario goldens C++ ≡ Python
+> bit-for-bit on GCC AND Clang locally (10 unchanged + 4 moved, validated hash-by-hash),
+> property tests 190 → 197 (+7 `test_proj_sigma.py`: sea-level bit-identity / one-tick op-order
+> replication / pre-step-altitude convention / high-round-keeps-more-speed / first-tick drag
+> ∝ σ / the re-measured Hit + EngineOut journals pinned), det_math oracle + tuning/spec/ceiling
+> probes + determinism lint PASS.**
+> Ledger: **ADR-Step7-Guns-ProjectileSigmaDrag-v1.24r0**, SEAL_CARD v1.24r0 (header +
+> atmosphere/weapons lines + 5 golden rows + history row), CLAUDE.md header/rails/roadmap
+> current.
+> **NEXT (free pick, none blocking):** per-airframe toughness / σ / crit-alt surfaced in the
+> HUD (presentation-only — the pools already ride the wire, crit_alt/σ are static/derived);
+> a per-airframe two-speed blower schedule (deferred at v1.22r0); or more netcode (layer 15 —
+> e.g. a heartbeat/timeout LEAVE for silently-dead clients, or input upstreaming).
+> **NOTE FOR THE NEXT AGENT:** the projectile σ evaluation is ONE call from the PRE-step
+> altitude — inserting a second evaluation (or moving it post-integration) is a MODEL change,
+> not a refactor, exactly like the aircraft-step rule. The Hit/EngineOut hit-tick claims
+> (39/41/44/47/50/53 and 28/31/33/35) are v1.24r0 measurements now PINNED by
+> `test_proj_sigma.py` — any change that moves round flight (drag, muzzle, convergence, σ LUT)
+> must re-measure them AND move those pins deliberately. The event digest is now hit-tick
+> sensitive: any kernel change that shifts a connect tick moves `event_vectors.h` even when
+> hp deltas are identical — regenerate + `--check`, and say so in the ADR (v1.24r0 is the
+> precedent). EngineOut-001 has now survived TWO seals byte-identical; do not assume it always
+> will — its immunity is measured, never designed.
+>
+> ## ►► PRIOR STATE (2026-07-02): seal **ATM-Sphere v1.23r0** — **A6M2 ENGINE-TOUGHNESS RETUNE DONE ✅** (data-only — the Sakae radial gets its due)
 > **Latest (SEAL v1.23r0): `a6m2.json engine_frac 0.375 → 0.5` — ONE value in ONE JSON.** The
 > Sakae joins the radial class (La-7-level 0.5, still under the R-2800's 0.625), retiring
 > v1.20r0's explicit golden-preservation pin ("a6m2 keeps 0.375 so EngineOut-001 is preserved

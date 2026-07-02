@@ -62,8 +62,10 @@ V_MIN = float.fromhex('0x1.e000000000000p+4')   # 30.0 m/s
 # sustained-g) AND engine power (T *= sigma — sea-level power is NOT held to altitude), so no
 # airframe exceeds its sealed B4 historical top speed anywhere in the band; supercharger
 # critical-altitude modeling is deferred (a future data-only phase). The no-arg kinematic path
-# (_advance — the Sphere golden) and the projectile advance (PROJ_DRAG_K stays a lumped GLOBAL:
-# a bullet is a bullet) are deliberately untouched. See ADR-Step8-FlightModel-B5-v1.21r0.
+# (_advance — the Sphere golden) is deliberately untouched. v1.24r0: the projectile advance now
+# rides the SAME sigma (PROJ_DRAG_K scaled by air_sigma(round alt) — B5 deferred this; a bullet
+# finally flies in the same thin air). See ADR-Step8-FlightModel-B5-v1.21r0 +
+# ADR-Step7-Guns-ProjectileSigmaDrag-v1.24r0.
 ISA_SIGMA_ALT = (
     float.fromhex('0x0.0p+0'),                 # 0 m
     float.fromhex('0x1.f400000000000p+8'),     # 500 m
@@ -133,7 +135,10 @@ def air_sigma(alt):
 # G3 (v1.11r0): muzzle velocity and damage-per-round are now PER-AIRFRAME (envelope scalars
 # muzzle_v_mps / damage_per_round); drag and ttl stay GLOBAL (a bullet is a bullet). Exact hex-float
 # literals so Python and C++ (kernel.cpp) share identical bit patterns. See ADR-Step7-Guns-G1/G3.
-PROJ_DRAG_K = float.fromhex('0x1.a36e2eb1c432dp-13')  # 2.0e-4: lumped quadratic drag decel coeff (Vdot -= k*V^2)
+# v1.24r0: the GLOBAL coefficient is now sigma-scaled at run time (Vdot -= k*sigma(alt)*V^2) —
+# the sea-level value below is unchanged; sigma(0) = 1.0 exactly, so a sea-level round is
+# bit-identical to the pre-v1.24r0 round.
+PROJ_DRAG_K = float.fromhex('0x1.a36e2eb1c432dp-13')  # 2.0e-4: lumped quadratic drag decel coeff (Vdot -= k*sigma*V^2)
 PROJ_TTL_TICKS = 250                                 # 2.5 s lifetime, then the round despawns
 
 # --- G2 hit detection + per-aircraft hitpoints (Step 7 guns, ATM-Sphere v1.10r0) ---------
@@ -349,8 +354,14 @@ class Kernel:
             V = p.tas
             sg = dm.det_sin(p.gamma)
             cg = dm.det_cos(p.gamma)
-            # speed: lumped quadratic drag + gravity along the path (uses OLD gamma)
-            Vdot = -PROJ_DRAG_K * V * V - g0 * sg
+            # speed: sigma-scaled quadratic drag + gravity along the path (uses OLD gamma).
+            # v1.24r0: the round finally flies in the SAME thin air as the airframes — the
+            # lumped PROJ_DRAG_K is scaled by the sealed ISA density ratio at the round's
+            # PRE-step altitude (one air_sigma per round per tick, mirroring the aircraft
+            # step's pre-step sigma convention). Same sealed LUT + lut_eval => ZERO new
+            # det_math. MUST match Kernel::advance_projectiles_ op-for-op.
+            sigma = air_sigma(p.alt)
+            Vdot = -PROJ_DRAG_K * sigma * V * V - g0 * sg
             Vnew = V + Vdot * dt
             if Vnew < V_MIN:
                 Vnew = V_MIN

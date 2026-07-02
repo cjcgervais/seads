@@ -15,9 +15,9 @@ constexpr int WINDOW_K = 4;   // must equal seads::event::EVENT_WINDOW_K
 struct ExpectEvent { std::int64_t seq, tick, target, damage_milli, hp_after_milli, killed, attacker; };
 constexpr ExpectEvent EXPECTED_EVENTS[] = {
   { 0, 40, 1, 12000, 58000, 0, 0 },
-  { 1, 43, 1, 12000, 46000, 0, 0 },
-  { 2, 46, 1, 12000, 34000, 0, 0 },
-  { 3, 49, 1, 12000, 22000, 0, 0 },
+  { 1, 42, 1, 12000, 46000, 0, 0 },
+  { 2, 45, 1, 12000, 34000, 0, 0 },
+  { 3, 48, 1, 12000, 22000, 0, 0 },
   { 4, 51, 1, 12000, 10000, 0, 0 },
   { 5, 54, 1, 10000, 0, 1, 0 },
 };
@@ -29,7 +29,7 @@ constexpr unsigned N_WINDOWS = 41u;
 constexpr unsigned DELIVERED = 36u;
 
 // --- full-reconstruction digest (SHA-256 over the client's applied event log) ---
-constexpr const char* EVENT_DIGEST = "06629a692551102c862dacbc2c520b3cecbd63e2984ee0dfd76da695016257a6";
+constexpr const char* EVENT_DIGEST = "2a9ae8a3a929a25ab6be6abcace9f82c9387f46716eb898624d175dec10b490a";
 
 // --- reliability-bound vector: a K-consecutive-frame blackout (aged-out early hits lost, 
 //     journal resyncs, kill still delivered) — the client recovers exactly these seqs ---
@@ -37,7 +37,7 @@ constexpr std::int64_t BLACKOUT_DROPS[] = { 40, 45, 50 };
 constexpr unsigned BLACKOUT_N_DROPS = 3u;
 constexpr std::int64_t BLACKOUT_APPLIED_SEQS[] = { 2, 3, 4, 5 };
 constexpr int BLACKOUT_APPLIED_COUNT = 4;
-constexpr const char* BLACKOUT_DIGEST = "90d6e67c7275876a6af5e95fe5f7ce1b69da603b36aa52d8ea7bb31adeda3b38";
+constexpr const char* BLACKOUT_DIGEST = "3d776f7db879cd8a991358501e7c5d803c72daaad41aaae7e7e1e4aafc3d66ac";
 
 // --- EVENT-MULTIHIT-001: the per-round GRANULARITY scenario (twin shooters, one target;
 //     every volley = two rounds on the SAME tick -> two attributed events; the kill volley
@@ -65,17 +65,17 @@ constexpr session::Scenario MH_SCENARIO = {
 };
 
 constexpr ExpectEvent MH_EXPECTED_EVENTS[] = {
-  { 0, 44, 2, 12000, 58000, 0, 0 },
-  { 1, 44, 2, 12000, 46000, 0, 1 },
-  { 2, 47, 2, 12000, 34000, 0, 0 },
-  { 3, 47, 2, 12000, 22000, 0, 1 },
-  { 4, 50, 2, 12000, 10000, 0, 0 },
-  { 5, 50, 2, 10000, 0, 1, 1 },
+  { 0, 43, 2, 12000, 58000, 0, 0 },
+  { 1, 43, 2, 12000, 46000, 0, 1 },
+  { 2, 46, 2, 12000, 34000, 0, 0 },
+  { 3, 46, 2, 12000, 22000, 0, 1 },
+  { 4, 49, 2, 12000, 10000, 0, 0 },
+  { 5, 49, 2, 10000, 0, 1, 1 },
 };
 constexpr int MH_EXPECTED_EVENT_COUNT = sizeof(MH_EXPECTED_EVENTS)/sizeof(MH_EXPECTED_EVENTS[0]);
 constexpr int MH_KILL_INDEX = 5;
 constexpr unsigned MH_N_WINDOWS = 25u;
 constexpr unsigned MH_DELIVERED = 22u;
-constexpr const char* MH_EVENT_DIGEST = "8a071bb032f99e48f4256e4830d714465fb537618d97c4589b8f8e3097409920";
+constexpr const char* MH_EVENT_DIGEST = "2d21822e99b2fbeb0b78cfea17e9d2d30d4a560fc91663444122563027b4d6af";
 
 }} // namespace seads::event_vec
