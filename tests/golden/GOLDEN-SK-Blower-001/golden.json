@@ -1,8 +1,8 @@
 {
-  "id": "GOLDEN-SK-Accel-001",
+  "id": "GOLDEN-SK-Blower-001",
   "seal": "ATM-Sphere v1.25r0",
-  "ticks": 5000,
-  "world_hash": "6f146a892e4d56cd54fd5a8413b41fa26937522dd095f1e43193df10c9f4202b",
+  "ticks": 3500,
+  "world_hash": "128ee2cd1df139a6842b5405eaf140ae5ffc3433478168639eab8cdae5b08be8",
   "snapshot_format": "see ref_kernel.py docstring",
   "generated_by": "tools/ref_kernel.py (Python det_math reference)"
 }

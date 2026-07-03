@@ -36,6 +36,12 @@ struct Lut5 { double x[5]; double y[5]; };
 // comparison + one divide. A multiple of 500 inside [0, 8000] (tuning_probe enforces it) so
 // sigma(crit) is exactly a sealed ISA-LUT node; 0 = "no supercharger" = the B5 T *= sigma
 // bit-for-bit. thrust_static_n/v_max_mps were re-anchored with it (tools/supercharger_retune.py).
+// The two-speed blower block (seal v1.25r0) adds crit_lo_alt_m (the LOW/MS gear's full-throttle
+// height, a 500 m multiple in (0, crit_alt_m) — a sealed LUT node) and gear2_frac (the HIGH/FS
+// gear's rated-power fraction, a 1/16 multiple with sigma(crit_alt)/sigma(crit_lo) < g2 < 1):
+// the lapse becomes max(min(1, sigma/sigma(crit_lo)), gear2_frac*min(1, sigma/sigma(crit_alt)))
+// — flat-fall-flat-fall. crit_lo_alt_m = 0 (gear2_frac = 1) = single-speed = the v1.22r0 lapse
+// path bit-for-bit (the two-speed branch is never entered). See Kernel::step.
 // Scalar field order MUST match tools/envelopes.py AERO_FIELDS (the single source of truth).
 struct Envelope { Lut5 phi_max, roll_rate, climb_max, climb_min;
                   double mass_kg, wing_area_m2, cd0, induced_k, thrust_static_n, v_max_mps,
@@ -43,7 +49,8 @@ struct Envelope { Lut5 phi_max, roll_rate, climb_max, climb_min;
                          hp_start, muzzle_v_mps, damage_per_round, rof_interval_ticks,
                          ammo_start, convergence_m,
                          engine_frac, wing_frac, tail_frac,
-                         crit_alt_m; };
+                         crit_alt_m,
+                         crit_lo_alt_m, gear2_frac; };
 
 // Per-tick command: target bank (rad), commanded load factor n (target_g, dimensionless; B2 —
 // replaces the B1 climb rate), throttle [0,1] (B1), and the gun trigger fire (G1, v1.9r0). n=1

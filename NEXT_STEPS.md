@@ -1,6 +1,88 @@
 # SEADS 2026 — Next Steps (handoff)
 
-> ## ►► CURRENT STATE (2026-07-02): **HUD ATMOSPHERE + AIRFRAME DATA DONE ✅** (no-seal, rides **ATM-Sphere v1.24r0**)
+> ## ►► CURRENT STATE (2026-07-04): seal **ATM-Sphere v1.25r0 — TWO-SPEED BLOWER SCHEDULE DONE ✅**
+> **The v1.22r0-deferred two-speed blower is COMPLETE end-to-end: model + data + kernel + goldens
+> + HUD rider + full ledger, sealed as ONE seal. (Core landed 2026-07-02 as local wip 9aa31aa; the
+> HUD/ledger half + receipt + push finished 2026-07-04.)**
+> **THE MODEL:** airframes with a two-speed supercharger carry two new envelope scalars (20th–21st
+> AERO fields, appended after `crit_alt_m` in `envelopes.py AERO_FIELDS` + `flight_types.h`):
+> **`crit_lo_alt_m`** (LOW/MS-gear full-throttle height, 500 m grid, **0 = single-speed**) and
+> **`gear2_frac`** (HIGH/FS-gear rated-power fraction, dyadic /16). Kernel lapse (kernel.cpp ↔
+> ref_kernel.py, op-for-op, branch entered ONLY when `crit_lo_alt_m > 0` ⇒ single-speed is
+> **bit-for-bit v1.22r0**): `lapse = max(min(1, σ/σ(crit_lo)), gear2_frac·min(1, σ/σ(crit_alt)))`
+> — flat-fall-flat-fall. **ZERO new det_math (thirteenth consecutive).** tuning_probe
+> `validate_supercharger` extended (grid + dyadic + non-degeneracy `σ(crit)/σ(crit_lo) < g2 < 1`;
+> single-speed must carry exactly (0, 1)).
+> **THE DATA (`tools/blower_retune.py`, new tool — Eq1 anchors top speed at crit_alt with
+> lapse = gear2_frac there, Eq2 SL climb at rated low gear):** two-speed roster **P-51 crit_lo
+> 3000 g2 14/16 (T0 16960→16320, vmax 275→300, shift ~4280 m)** · **La-7 1500 14/16
+> (15420→14600, 290→325, shift ~2826 m)** · **Yak-3 1000 15/16 (11280→10900, 335→365, shift
+> ~1655 m)**; other five single-speed (0, 1), knobs untouched. All 8 JSONs headers → v1.25r0
+> (version 250). Top-at-crit anchors verified exact (703/661/655 km/h); SL tops rise slightly
+> (163.9/166.8/168.6 m/s — low gear rated, documented emergent).
+> **DONE + VERIFIED LOCALLY:**
+> - rails 340→350 (`blower_lapse` + `blower_gear2_frac_grid` in `atmosphere_density`; header seal
+>   string already reads v1.25r0).
+> - Headers regenerated: envelope_tables / lockstep / predict / scenario_params / session —
+>   **lockstep/predict/session moved ENVELOPE LITERALS ONLY (no digest moved; session digest
+>   `966aca05…` UNCHANGED — SESSION-SK-001 carries no two-speed airframe); event/golden_params/
+>   snapshot/weapon/framing/geo001/interp/detmath/coeffs all verified in sync.**
+> - **EXACTLY 4 goldens moved (measured + re-sealed): Accel `6f146a89…` / Pitch `8d92ad88…`
+>   (p51 knob retune — descriptions qualitative, untouched) / Supercharger `6fa607ac…` / YakLa
+>   `a99a6201…`; 10 byte-identical incl. Sphere** (verified before re-seal: only p51/yak3/la7
+>   carriers move). **NEW 15th golden `GOLDEN-SK-Blower-001` `128ee2cd…`** (3500 ticks: Yak-3 all
+>   THREE below-crit regimes — rated LOW below 1000 m, falling MS branch with a 1500 σ-node
+>   crossing INSIDE it t~1944, **gear-shift max() flip t~2227 @~1654 m**, flat FS **0.9375
+>   EXACTLY** to the end — beside a single-speed Bf 109 F-4 control on the identical schedule,
+>   no flips; finals Yak 118.2 @1974 / Bf 109.3 @1933). guardian.yml **+1 in all three lists**.
+> - **Stories re-measured (descriptions REWRITTEN in the scenario JSONs with these numbers):**
+>   Supercharger-001 — the SAME 3000 m node is now the Yak-3's FS FTH AND the P-51's MS FTH:
+>   Yak FS-min flips t~2067, P-51 MS-min flips t~2070 (max() never flips on either; Yak HIGH
+>   gear throughout at flat 0.9375 below 3000, P-51 LOW gear rated; finals Yak 137.4 @3197
+>   lapse ~0.9189, P-51 135.6 @3194 ~0.9804). YakLa-001 — every crossing PRESERVED, re-measured:
+>   Yak 160 up t~1124 / down t~1873; La-7 125 up t~1214 / down t~2405, 85 down t~2858, pull
+>   n_aero [9.03, 9.32] > 8, γ max +80.3°, final mush 72.7 m/s; **BONUS: the La-7 crosses its
+>   ~2825 m gear-shift TWICE (HIGH→LOW t~1696 diving, LOW→HIGH t~2336 zooming) — the max() flips
+>   both directions in the sealed bytes**; bursts/ammo/63 live rounds unchanged.
+> - **Gates green locally: ctest 19/19 GCC + 19/19 Clang; ALL 15 goldens C++ ≡ Python
+>   bit-for-bit on BOTH toolchains (validated hash-by-hash); property tests 197 → 203**
+>   (+6 `test_blower.py`: roster contract/flavor, two-speed one-tick bit-exact in every regime,
+>   single-speed-never-enters-the-branch inertness, flat-fall-flat-fall shape with the FS band
+>   == the dyadic constant EXACTLY, Blower-001 non-degeneracy, SL-rated-is-low-gear;
+>   `test_supercharger.py` updated: `_expected_vnew` carries the branch, crit-0 test zeroes the
+>   new fields too, p51 margin 2.0→1.0 (measured +1.7 at 6500 m on 14/16 FS power — comment
+>   documents it), two stale comments rewritten). tuning_probe PASS.
+> **LEDGER/HUD HALF — ALL DONE (2026-07-04):**
+> - **HUD two-speed pwr** (presentation rider, part of this seal): `viewer_main.cpp` `hud_power`
+>   gained the two-min/max branch (native replay + fly HUD `pwr`, scoreboard crit column shows
+>   `lo/hi` for two-speed airframes, selfcheck echoes crit_lo/gear2); `record_main.cpp` emits a
+>   per-slot `"crit": [crit_alt, crit_lo, gear2]` array into `trajectory.js` meta; `web/viewer.js`
+>   gained `hudPower` + a `pwr` readout on each HUD row. build-client rebuilt clean; selfchecks
+>   verified — dogfight reads the roster back exactly (P-51 3000/0.875, Yak-3 1000/0.9375, La-7
+>   1500/0.875; pwr 94/92/88% on the three two-speed ships), fly Ki-61 single-speed pwr 100%.
+> - **Remaining gates green:** spec_monotone / det_math_oracle / atm_top_probe / lint_determinism
+>   all PASS (clean — no det_math or rail-value change).
+> - **Ledger written:** ADR-Step8-FlightModel-TwoSpeedBlower-v1.25r0; SEAL_CARD v1.25r0 (header +
+>   atmosphere/flight-model lines + 5 golden rows updated + Blower-001 added + history row);
+>   CLAUDE.md (header seal line + rails Atmosphere row + roadmap v1.25r0 entry); THIS banner.
+> - **Receipt + push:** see the GIT line below.
+> **GIT: sealed as ONE seal — code+HUD+ledger `<CODE_SHA>` + receipt `<RECEIPT_SHA>`
+> (`<RECEIPT_FILE>`, gates PASS); guardian CI run `<CI_RUN>` <CI_STATUS>.**
+> **NEXT: the user's queued follow-up — netcode layer 15** (heartbeat/timeout LEAVE for
+> silently-dead clients, or input upstreaming) — transport-only, rides v1.25r0.
+> **NOTE FOR THE NEXT AGENT:** the two-speed branch is entered ONLY on `crit_lo_alt_m > 0` —
+> moving the max() out of the branch (or reordering the two min()s) changes single-speed bytes
+> and is a MODEL change. The FS flat band equals `gear2_frac` EXACTLY (dyadic) — tests pin it
+> bit-exact; keep any HUD/tooling reimplementation to the same two-min/max op shape. YakLa's
+> crossing ticks and Supercharger's flip ticks above are v1.25r0 measurements already baked into
+> the descriptions — do NOT re-measure unless you change round/aero data. `blower_retune.py`
+> leaves `supercharger_retune.py` untouched as the v1.22r0 provenance artifact (same pattern as
+> b4_retune.py). The HUD σ/pwr is the ICAO LAW client-side (libm pow), NOT the sealed LUT — same
+> as the v1.24r0 HUD rider; `env_for_code`/`envelope_for_code` must track the AircraftType enum
+> (STABLE codes 0–7). The `trajectory.js` meta gained a `crit` array (pre-v1.25r0 recordings lack
+> it ⇒ web pwr degrades off gracefully).
+>
+> ## ►► PRIOR STATE (2026-07-02): **HUD ATMOSPHERE + AIRFRAME DATA DONE ✅** (no-seal, rides **ATM-Sphere v1.24r0**)
 > **Latest: the named presentation-only free pick lands — per-airframe toughness / σ / crit-alt
 > are finally VISIBLE. Both native HUDs (replay + fly) and the web viewer surface the flight
 > model's atmosphere, and the scoreboard carries the static airframe data.** Four readouts, all

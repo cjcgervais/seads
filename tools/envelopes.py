@@ -71,7 +71,19 @@ AERO_FIELDS = ("mass_kg", "wing_area_m2", "cd0", "induced_k", "thrust_static_n",
                # reproduces the B5 thrust (T *= sigma) bit-for-bit. thrust_static_n/v_max_mps were
                # re-anchored with it (top speed at the CRITICAL altitude, sea-level climb) by
                # tools/supercharger_retune.py. See ADR-Step8-FlightModel-Supercharger-v1.22r0.
-               "crit_alt_m")
+               "crit_alt_m",
+               # Two-speed blower schedule (flight model, seal v1.25r0): crit_lo_alt_m is the LOW
+               # (MS) gear's full-throttle height and gear2_frac the HIGH (FS) gear's rated-power
+               # fraction (driving the taller gear costs shaft power). The kernel lapse becomes
+               # max(min(1, sigma/sigma(crit_lo_alt_m)), gear2_frac*min(1, sigma/sigma(crit_alt_m)))
+               # — flat-fall-flat-fall. crit_lo_alt_m MUST be a multiple of 500 in (0, crit_alt_m)
+               # (a sealed LUT node) and gear2_frac a multiple of 1/16 strictly between
+               # sigma(crit_alt_m)/sigma(crit_lo_alt_m) and 1 (both gears non-degenerate) — OR
+               # crit_lo_alt_m = 0 with gear2_frac = 1: single-speed, the v1.22r0 lapse path
+               # BIT-FOR-BIT (tuning_probe-enforced). thrust_static_n/v_max_mps re-anchored for
+               # two-speed airframes by tools/blower_retune.py.
+               # See ADR-Step8-FlightModel-TwoSpeedBlower-v1.25r0.
+               "crit_lo_alt_m", "gear2_frac")
 
 
 def deg2rad(d):

@@ -1,0 +1,109 @@
+{
+  "header": {
+    "id": "GOLDEN-SK-Blower-001",
+    "version": 250,
+    "seal": "ATM-Sphere v1.25r0",
+    "description": "Two-ship two-speed-blower scenario -- the v1.25r0 seal's golden. A Yak-3 (crit_lo_alt_m 1000 / gear2_frac 15/16 / crit_alt_m 3000 -- the VK-105PF-2's two blower gears) and a Bf 109 F-4 (single-speed: crit_lo_alt_m 0, the DB 601E's hydraulic variable-speed coupling has no gear kink; crit_alt_m 6000) fly the IDENTICAL 5-phase full-throttle wings-level zoom-climb from the same start (800 m, TAS 170) so the per-airframe blower schedule is the ONLY thing that splits their thrust. They can never interact (no fire phases -> no projectiles; opposite great-circle arcs, lon 0 psi 90 vs lon 90 psi 270). Together with GOLDEN-SK-Supercharger-001 (which pins the Yak-3's falling FS branch above 3000 m) this golden seals the Yak-3's ENTIRE four-regime lapse schedule. Phase 0 (t=0) settles level at 800 m -- BELOW the Yak-3's MS-gear full-throttle height, so BOTH ships hold RATED power (lapse = 1, both mins clamped; by t=500 Yak 170.5, Bf 167.1); phase 1 (t=500) a g 2.0 pull rotates the nose to ~28 deg; the climb crosses 1000 m at t~1146/1149 -- the Yak-3's MS-gear min FLIPS (lapse = sigma(alt)/sigma(1000) < 1, the falling LOW-gear branch) while the Bf 109 crosses the SAME sealed sigma-LUT node with NO flip (rated to 6000 m); phase 2 (t=1200) coasts the zoom at 1 g -- the Yak-3 crosses the 1500 m sigma-node at t~1944 INSIDE its falling MS branch (a LUT segment switch with no blower event -- distinguished from the gear events in the same bytes; lapse ~0.9486 at t=2000); phase 3 (t=2000) a g 0.3 push-over shallows the climb, and at t~2227 (~1654 m) the Yak-3 crosses its GEAR-SHIFT altitude: the two-speed max() FLIPS SIDES from the falling LOW gear to the FLAT HIGH gear -- from here to the end its lapse is the sealed dyadic constant 15/16 = 0.9375 EXACTLY (gear2_frac, bit-exact in f64), while the Bf 109 stays at rated 1.0; phase 4 (t=2600) resumes 1 g -- both ships settle into a shallow full-throttle climbing mush (gamma ~10-11 deg, TAS bleeding fractionally), the Yak-3 on its flat FS rating. Final: Yak 118.2 m/s @ 1974 m (lapse = 0.9375 exactly, HIGH gear), Bf 109.3 m/s @ 1933 m (lapse = 1.0, rated). No guns: hp/regions full, ammo untouched, kills 0, last_hit_by -1. Exercises: all three below-crit regimes of the two-speed lapse (rated LOW gear clamp, falling MS branch, flat FS rating), the max() flipping sides in flight, a sigma-node segment switch inside a falling gear branch, the dyadic gear2_frac as a sealed bit-exact constant, and a single-speed control ship crossing the same sigma-nodes with no blower events -- proving the new envelope fields are inert for crit_lo_alt_m = 0."
+  },
+  "ticks": 3500,
+  "aircraft": [
+    {
+      "envelope": "yak3",
+      "start": {
+        "lat_deg": 0.0,
+        "lon_deg": 0.0,
+        "psi_deg": 90.0,
+        "phi_deg": 0.0,
+        "alt_m": 800.0,
+        "tas_mps": 170.0
+      },
+      "schedule": [
+        {
+          "start_tick": 0,
+          "bank_deg": 0.0,
+          "g_cmd": 1.0,
+          "throttle": 1.0
+        },
+        {
+          "start_tick": 500,
+          "bank_deg": 0.0,
+          "g_cmd": 2.0,
+          "throttle": 1.0
+        },
+        {
+          "start_tick": 1200,
+          "bank_deg": 0.0,
+          "g_cmd": 1.0,
+          "throttle": 1.0
+        },
+        {
+          "start_tick": 2000,
+          "bank_deg": 0.0,
+          "g_cmd": 0.3,
+          "throttle": 1.0
+        },
+        {
+          "start_tick": 2600,
+          "bank_deg": 0.0,
+          "g_cmd": 1.0,
+          "throttle": 1.0
+        },
+        {
+          "start_tick": 3500,
+          "bank_deg": 0.0,
+          "g_cmd": 1.0,
+          "throttle": 1.0
+        }
+      ]
+    },
+    {
+      "envelope": "bf109f4",
+      "start": {
+        "lat_deg": 0.0,
+        "lon_deg": 90.0,
+        "psi_deg": 270.0,
+        "phi_deg": 0.0,
+        "alt_m": 800.0,
+        "tas_mps": 170.0
+      },
+      "schedule": [
+        {
+          "start_tick": 0,
+          "bank_deg": 0.0,
+          "g_cmd": 1.0,
+          "throttle": 1.0
+        },
+        {
+          "start_tick": 500,
+          "bank_deg": 0.0,
+          "g_cmd": 2.0,
+          "throttle": 1.0
+        },
+        {
+          "start_tick": 1200,
+          "bank_deg": 0.0,
+          "g_cmd": 1.0,
+          "throttle": 1.0
+        },
+        {
+          "start_tick": 2000,
+          "bank_deg": 0.0,
+          "g_cmd": 0.3,
+          "throttle": 1.0
+        },
+        {
+          "start_tick": 2600,
+          "bank_deg": 0.0,
+          "g_cmd": 1.0,
+          "throttle": 1.0
+        },
+        {
+          "start_tick": 3500,
+          "bank_deg": 0.0,
+          "g_cmd": 1.0,
+          "throttle": 1.0
+        }
+      ]
+    }
+  ]
+}

@@ -1,8 +1,8 @@
 {
   "id": "GOLDEN-SK-Supercharger-001",
-  "seal": "ATM-Sphere v1.22r0",
+  "seal": "ATM-Sphere v1.25r0",
   "ticks": 3000,
-  "world_hash": "99ab876540da68cdcd03265a8e4f680189c35ebad4ee16970585011ebef4a084",
+  "world_hash": "6fa607ac699b04d8672f9a3145978ce29fe8fa9644442fdd585219a9b790445a",
   "snapshot_format": "see ref_kernel.py docstring",
   "generated_by": "tools/ref_kernel.py (Python det_math reference)"
 }

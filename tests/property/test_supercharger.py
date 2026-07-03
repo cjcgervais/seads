@@ -70,7 +70,8 @@ def _one_tick_vnew(e, V, alt, thr=1.0):
 
 
 def _expected_vnew(e, V, alt, thr=1.0, crit=None):
-    """Replicate the kernel's speed integration op-for-op (phi=0, gamma=0, n=1 un-clamped)."""
+    """Replicate the kernel's speed integration op-for-op (phi=0, gamma=0, n=1 un-clamped),
+    including the v1.25r0 two-speed blower branch (entered only when crit_lo_alt_m > 0)."""
     sigma = rk.air_sigma(alt)
     q = 0.5 * rk.RHO0 * sigma * V * V
     qS = q * e["wing_area_m2"]
@@ -81,6 +82,12 @@ def _expected_vnew(e, V, alt, thr=1.0, crit=None):
     lapse = sigma / sig_c
     if lapse > 1.0:
         lapse = 1.0
+    if e["crit_lo_alt_m"] > 0.0:
+        lo_gear = sigma / rk.air_sigma(e["crit_lo_alt_m"])
+        if lo_gear > 1.0:
+            lo_gear = 1.0
+        hi_gear = e["gear2_frac"] * lapse
+        lapse = lo_gear if lo_gear > hi_gear else hi_gear
     T = thr * e["thrust_static_n"] * (1.0 - V / e["v_max_mps"]) * lapse
     if T < 0.0:
         T = 0.0
@@ -110,6 +117,8 @@ def test_crit_zero_reproduces_b5_thrust_bit_for_bit(env):
     assert rk.air_sigma(0.0) == 1.0
     e = dict(envmod.load_envelope(env))
     e["crit_alt_m"] = 0.0
+    e["crit_lo_alt_m"] = 0.0     # "no supercharger" means no blower gears either (v1.25r0)
+    e["gear2_frac"] = 1.0
     for alt in (0.0, 800.0, 3210.0, 6900.0):
         sigma = rk.air_sigma(alt)
         assert sigma / rk.air_sigma(0.0) == sigma          # the divide is exact
@@ -128,13 +137,16 @@ def _fly_level_full_throttle(envname, alt0, ticks=2000, tas0=120.0):
 @given(env=st.sampled_from(("p47d", "p51")))
 @settings(max_examples=2, deadline=None)
 def test_acceleration_improves_with_altitude_below_crit(env):
-    # BELOW the critical altitude the supercharger holds rated power while drag falls with
-    # sigma — so the same full-throttle level acceleration ends FASTER up high. (These two
-    # airframes keep rated power through 6500 m; the low-crit roster is covered by the
-    # above-crit degradation test.)
+    # BELOW the critical altitude the supercharger holds its gear's rating while drag falls
+    # with sigma — so the same full-throttle level acceleration ends FASTER up high. (The
+    # turbo P-47D is rated through 6500 m; the two-speed P-51 sits on its FLAT 14/16 FS rating
+    # there (v1.25r0) — still comfortably ahead of half the drag. The low-crit roster is
+    # covered by the above-crit degradation test.)
     low = _fly_level_full_throttle(env, 1000.0)
     high = _fly_level_full_throttle(env, 6500.0)
-    assert high.tas > low.tas + 2.0
+    # v1.25r0 margins: the rated P-47D keeps the old +2; the P-51's margin shrank to ~+1.7
+    # when its 6500 m power became the flat 14/16 FS rating (measured +5.2 / +1.7).
+    assert high.tas > low.tas + (2.0 if env == "p47d" else 1.0)
 
 
 @given(env=st.sampled_from(tuple(n for n in ROSTER if SEALED_CRIT[n] <= 6000.0)))
@@ -151,9 +163,9 @@ def test_acceleration_degrades_above_crit(env):
 
 def test_supercharger_golden_setup_not_degenerate():
     # Guards GOLDEN-SK-Supercharger-001's raison d'être: identical schedules, the Yak-3 starting
-    # BELOW its own critical altitude (so the in-flight upward crossing/branch flip is possible)
-    # and the P-51's critical altitude far above anything the profile reaches (so it stays on
-    # the rated branch — the contrast ship).
+    # BELOW its own critical altitude (so the in-flight upward crossing/FS-min flip is possible)
+    # and the P-51's critical altitude far above anything the profile reaches (its 3000 m event
+    # is the MS-gear min flip — v1.25r0 — never a crit_alt crossing).
     doc = json.loads((ROOT / "config" / "scenarios" / "GOLDEN-SK-Supercharger-001.json")
                      .read_text(encoding="utf-8"))
     a0, a1 = doc["aircraft"]

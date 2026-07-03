@@ -25,6 +25,7 @@ const radiusM = traj.meta.radius_m || 15000;
 const tickHz = traj.meta.tick_hz || 100;
 const snapHz = traj.meta.snap_hz || 20;
 const typeNames = traj.meta.types || [];  // airframe display names per aircraft slot (v3 meta)
+const critData = traj.meta.crit || [];    // per-slot [crit_alt, crit_lo, gear2] for the pwr readout
 const scale = DISPLAY_R / radiusM;
 const firstTick = frames[0].tick;
 const lastTick = frames[frames.length - 1].tick;
@@ -73,6 +74,21 @@ function isaSigma(altM) {
   const h = Math.min(8000, Math.max(0, altM));
   const T0 = 288.15, L = 0.0065, RS = 287.05287, G0 = 9.80665;
   return Math.pow((T0 - L * h) / T0, G0 / (RS * L) - 1);
+}
+
+// Engine power fraction (supercharger lapse) at alt, mirroring the kernel op-shape presentation-side
+// (v1.22r0 min(1, sigma/sigma(crit)) generalized to the v1.25r0 two-speed blower). `crit` is the
+// per-airframe [crit_alt, crit_lo, gear2] from meta.crit; null (GENERIC / pre-v3) yields no readout.
+// crit_lo = 0 (single-speed) never enters the two-speed branch, reproducing the v1.22r0 lapse.
+function hudPower(altM, crit) {
+  if (!crit) return null;
+  const [critAlt, critLo, gear2] = crit;
+  const s = isaSigma(altM);
+  let lapse = Math.min(1, s / isaSigma(critAlt));
+  if (critLo > 0) {                                        // two-speed: max(low gear, gear2 * high gear)
+    lapse = Math.max(Math.min(1, s / isaSigma(critLo)), gear2 * lapse);
+  }
+  return lapse;
 }
 
 // ---- geometry helpers (match globe.h) -------------------------------------------------------
@@ -268,7 +284,8 @@ function frame(now) {
         (killsNow[i] !== undefined ? `  kills ${killsNow[i]}` : '')
       : `${who}  alt ${e.alt.toFixed(0).padStart(5)}m  brg ${e.brg.toFixed(0).padStart(3)}  ` +
         `tas ${e.tas.toFixed(0).padStart(3)}  hp ${bar} ${hp.toFixed(0)}/${maxHp[i].toFixed(0)}` +
-        extra + `  σ ${isaSigma(e.alt).toFixed(2)}`;
+        extra + `  σ ${isaSigma(e.alt).toFixed(2)}` +
+        ((pw => pw !== null ? `  pwr ${(pw * 100).toFixed(0)}%` : '')(hudPower(e.alt, critData[i])));
   });
 
   // tracer rounds for this frame (snap to the captured frame; identity isn't tracked across frames)

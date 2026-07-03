@@ -1,8 +1,8 @@
 {
   "header": {
     "id": "SEADS-RAILS",
-    "version": 340,
-    "seal": "ATM-Sphere v1.24r0",
+    "version": 350,
+    "seal": "ATM-Sphere v1.25r0",
     "note": "Data-driven immutable rails. Any change here REQUIRES a new seal (ADR + Forge audit card + Chronicle receipt). See CLAUDE.md > Change-Control Law."
   },
   "rails": {
@@ -26,7 +26,9 @@
       "isa_lapse_K_per_m": 0.0065,
       "isa_Rs_J_per_kgK": 287.05287,
       "supercharger_crit_alt_grid_m": 500,
-      "supercharger_lapse": "min(1, sigma(alt)/sigma(crit_alt_m)) applied to thrust in the envelope-driven step (v1.22r0)"
+      "supercharger_lapse": "min(1, sigma(alt)/sigma(crit_alt_m)) applied to thrust in the envelope-driven step (v1.22r0)",
+      "blower_gear2_frac_grid": 16,
+      "blower_lapse": "two-speed blower schedule (v1.25r0): airframes with a two-speed supercharger carry crit_lo_alt_m (the LOW/MS-gear full-throttle height, a multiple of 500 m in (0, crit_alt_m) so sigma(crit_lo) is a sealed LUT node) and gear2_frac (the HIGH/FS gear's rated-power fraction — driving the taller blower gear costs shaft power — a multiple of 1/16 with sigma(crit_alt_m)/sigma(crit_lo_alt_m) < gear2_frac < 1 so BOTH gears are non-degenerate). The thrust lapse becomes the gear the pilot would pick: lapse = max(min(1, sigma(alt)/sigma(crit_lo_alt_m)), gear2_frac*min(1, sigma(alt)/sigma(crit_alt_m))) — rated power to crit_lo, falling to the gear-shift altitude (where the branches cross), FLAT at gear2_frac to crit_alt, then falling with the density ratio: the classic flat-fall-flat-fall two-speed profile. One extra divide + multiply + comparison, ZERO new det_math. crit_lo_alt_m = 0 (with gear2_frac = 1) means single-speed and takes the v1.22r0 lapse path BIT-FOR-BIT (the two-speed branch is never entered). Sealed two-speed roster (WWII gear ratings on the grid): P-51 crit_lo 3000 gear2 14/16 (two-speed two-stage Packard Merlin) - La-7 crit_lo 1500 gear2 14/16 (ASh-82FN) - Yak-3 crit_lo 1000 gear2 15/16 (VK-105PF-2); the other five stay single-speed (P-47D turbo, Bf 109 F-4 / Ki-61 hydraulic variable-speed couplings, Spitfire Mk V Merlin 45, A6M2 Sakae 12). thrust_static_n/v_max_mps re-anchored for the three (tools/blower_retune.py: Eq1 tops at crit_alt_m with lapse = gear2_frac there; Eq2 sea-level climb with low-gear rated power). See ADR-Step8-FlightModel-TwoSpeedBlower-v1.25r0."
     },
     "kinematics": {
       "model": "intrinsic_S2",

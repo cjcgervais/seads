@@ -410,6 +410,21 @@ void Kernel::step(const std::vector<Command>& cmd, const std::vector<const Envel
         double sig_c = air_sigma(e.crit_alt_m);         // exact LUT node (crit is a 500 m multiple)
         double lapse = sigma / sig_c;
         if (lapse > 1.0) lapse = 1.0;
+        // Two-speed blower schedule (v1.25r0): airframes with a two-speed supercharger carry
+        // crit_lo_alt_m (LOW/MS-gear full-throttle height) + gear2_frac (HIGH/FS-gear rated-power
+        // fraction). The lapse becomes the gear the pilot would pick:
+        //   max(min(1, sigma/sigma(crit_lo)), gear2_frac * min(1, sigma/sigma(crit_alt)))
+        // — rated to crit_lo, falling to the gear-shift altitude, FLAT at gear2_frac to crit_alt,
+        // then falling (flat-fall-flat-fall). One divide + multiply + comparisons — no new
+        // det_math. crit_lo_alt_m = 0 (single-speed) NEVER enters this branch, so the v1.22r0
+        // lapse above is reproduced bit-for-bit. MUST mirror ref_kernel.step_scenario op-for-op.
+        if (e.crit_lo_alt_m > 0.0) {
+            double sig_lo = air_sigma(e.crit_lo_alt_m); // exact LUT node (crit_lo is a 500 m multiple)
+            double lo_gear = sigma / sig_lo;
+            if (lo_gear > 1.0) lo_gear = 1.0;
+            double hi_gear = e.gear2_frac * lapse;
+            lapse = (lo_gear > hi_gear) ? lo_gear : hi_gear;
+        }
         double T = thr * e.thrust_static_n * (1.0 - V / e.v_max_mps) * lapse;
         if (T < 0.0) T = 0.0;
         if (engine_hp_[i] <= 0.0) T = 0.0;              // v1.18r0: engine out — no thrust at any throttle

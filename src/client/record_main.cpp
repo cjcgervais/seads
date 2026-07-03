@@ -171,6 +171,23 @@ uint32_t type_code_of(const Envelope* e) {
     return static_cast<uint32_t>(t);
 }
 
+// Inverse of type_code_of: the envtab envelope for a presentation type code (the supercharger
+// data the web HUD's pwr readout needs — crit_alt / crit_lo / gear2). nullptr for GENERIC.
+const Envelope* env_for_code(uint32_t code) {
+    using client::AircraftType;
+    switch (static_cast<AircraftType>(code)) {
+        case AircraftType::P47D: return &envtab::P47D;
+        case AircraftType::BF109F4: return &envtab::BF109F4;
+        case AircraftType::KI61: return &envtab::KI61;
+        case AircraftType::A6M2: return &envtab::A6M2;
+        case AircraftType::YAK3: return &envtab::YAK3;
+        case AircraftType::LA7: return &envtab::LA7;
+        case AircraftType::SPITFIRE_MK5: return &envtab::SPITFIRE_MK5;
+        case AircraftType::P51: return &envtab::P51;
+        default: return nullptr;
+    }
+}
+
 // Build the kernel from a Flight. `deg` selects whether AcSpec angles need deg->rad (demo) or
 // are already radians (sealed scenario replay). Returns the per-aircraft envelope list.
 void seed(Kernel& k, const Flight& f, bool deg, std::vector<const Envelope*>& env) {
@@ -253,6 +270,16 @@ void write_js(const std::string& path, const client::RecordingMeta& meta, const 
         std::fprintf(fp, "\"%s\"%s",
                      client::aircraft_type_name(client::aircraft_type_from_code(types[a])),
                      (a + 1 < types.size()) ? "," : "");
+    // Supercharger data per aircraft slot (v1.22r0 crit_alt / v1.25r0 two-speed crit_lo + gear2 —
+    // the web HUD's pwr readout mirrors the kernel lapse from these). [crit_alt, crit_lo, gear2].
+    std::fprintf(fp, "], \"crit\": [");
+    for (std::size_t a = 0; a < types.size(); ++a) {
+        const Envelope* env = env_for_code(types[a]);
+        if (env) std::fprintf(fp, "[%.0f,%.0f,%.6f]", env->crit_alt_m, env->crit_lo_alt_m,
+                              env->gear2_frac);
+        else std::fprintf(fp, "null");
+        std::fprintf(fp, "%s", (a + 1 < types.size()) ? "," : "");
+    }
     std::fprintf(fp, "]},\n");
     std::fprintf(fp, "  \"frames\": [\n");
     for (std::size_t fi = 0; fi < frames.size(); ++fi) {

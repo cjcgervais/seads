@@ -1,8 +1,8 @@
 {
   "id": "GOLDEN-SK-YakLa-001",
-  "seal": "ATM-Sphere v1.24r0",
+  "seal": "ATM-Sphere v1.25r0",
   "ticks": 3000,
-  "world_hash": "fadedd98fe173d2c10e53f45ee70e44c3c0cfba1c41cf959eda58b84eabbfc13",
+  "world_hash": "a99a6201bb1e093895e50482059a52dc02c5d2e6a5c9416e8d26bfffa614a603",
   "snapshot_format": "see ref_kernel.py docstring",
   "generated_by": "tools/ref_kernel.py (Python det_math reference)"
 }

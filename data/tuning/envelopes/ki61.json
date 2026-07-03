@@ -1,9 +1,9 @@
 {
   "header": {
     "id": "TUNE-Ki-61",
-    "version": 220,
-    "seal": "ATM-Sphere v1.22r0",
-    "adr": "docs/adr/ADR-Step8-FlightModel-Supercharger-v1.22r0.md"
+    "version": 250,
+    "seal": "ATM-Sphere v1.25r0",
+    "adr": "docs/adr/ADR-Step8-FlightModel-TwoSpeedBlower-v1.25r0.md"
   },
   "aircraft": "Ki-61 Hien",
   "tuning": {
@@ -115,6 +115,8 @@
     "engine_frac": 0.25,
     "wing_frac": 0.5,
     "tail_frac": 0.25,
-    "crit_alt_m": 4000.0
+    "crit_alt_m": 4000.0,
+    "crit_lo_alt_m": 0.0,
+    "gear2_frac": 1.0
   }
 }

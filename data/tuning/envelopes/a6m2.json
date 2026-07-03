@@ -1,9 +1,9 @@
 {
   "header": {
     "id": "TUNE-A6M2",
-    "version": 230,
-    "seal": "ATM-Sphere v1.23r0",
-    "adr": "docs/adr/ADR-Step7-Guns-A6M2EngineToughness-v1.23r0.md"
+    "version": 250,
+    "seal": "ATM-Sphere v1.25r0",
+    "adr": "docs/adr/ADR-Step8-FlightModel-TwoSpeedBlower-v1.25r0.md"
   },
   "aircraft": "A6M2 Zero",
   "tuning": {
@@ -115,6 +115,8 @@
     "engine_frac": 0.5,
     "wing_frac": 0.375,
     "tail_frac": 0.25,
-    "crit_alt_m": 4500.0
+    "crit_alt_m": 4500.0,
+    "crit_lo_alt_m": 0.0,
+    "gear2_frac": 1.0
   }
 }

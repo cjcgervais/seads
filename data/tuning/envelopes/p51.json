@@ -1,9 +1,9 @@
 {
   "header": {
     "id": "TUNE-P-51",
-    "version": 220,
-    "seal": "ATM-Sphere v1.22r0",
-    "adr": "docs/adr/ADR-Step8-FlightModel-Supercharger-v1.22r0.md"
+    "version": 250,
+    "seal": "ATM-Sphere v1.25r0",
+    "adr": "docs/adr/ADR-Step8-FlightModel-TwoSpeedBlower-v1.25r0.md"
   },
   "aircraft": "P-51 Mustang",
   "tuning": {
@@ -101,8 +101,8 @@
     "wing_area_m2": 21.8,
     "cd0": 0.02,
     "induced_k": 0.052,
-    "thrust_static_n": 16960.0,
-    "v_max_mps": 275.0,
+    "thrust_static_n": 16320.0,
+    "v_max_mps": 300.0,
     "cl_max": 1.555,
     "n_max_struct": 8,
     "n_min_struct": -4,
@@ -115,6 +115,8 @@
     "engine_frac": 0.25,
     "wing_frac": 0.5,
     "tail_frac": 0.375,
-    "crit_alt_m": 7500.0
+    "crit_alt_m": 7500.0,
+    "crit_lo_alt_m": 3000.0,
+    "gear2_frac": 0.875
   }
 }

@@ -127,12 +127,29 @@ def validate_envelope(doc):
     return errs
 
 
+def _isa_sigma(alt_m):
+    """ICAO ISA troposphere density ratio — the SAME law tools/gen_isa_lut.py sealed into the
+    17-node LUT (test_isa proves node == law bit-for-bit), so at a 500 m grid point this IS the
+    sealed node value. Tooling only (libm allowed)."""
+    T0, L, RS = 288.15, 0.0065, 287.05287
+    return ((T0 - L * alt_m) / T0) ** (G0 / (RS * L) - 1.0)
+
+
 def validate_supercharger(e):
     """Supercharger critical altitude (v1.22r0): crit_alt_m is the altitude up to which the
     engine holds rated power (kernel lapse = min(1, sigma(alt)/sigma(crit_alt_m))). It MUST be a
     multiple of 500 inside [0, 8000] so sigma(crit_alt_m) is EXACTLY a sealed ISA-LUT node (the
     17-node table has 500 m spacing over the ATM band; lut_eval returns the node value with t=0
-    at a breakpoint, so the divide's denominator is a sealed constant, not an interpolant)."""
+    at a breakpoint, so the divide's denominator is a sealed constant, not an interpolant).
+
+    Two-speed blower schedule (v1.25r0): crit_lo_alt_m (the LOW/MS gear's full-throttle height)
+    and gear2_frac (the HIGH/FS gear's rated-power fraction) extend the lapse to
+    max(min(1, sigma/sigma(crit_lo)), gear2_frac*min(1, sigma/sigma(crit_alt))). Either
+    crit_lo_alt_m = 0 AND gear2_frac = 1 (single-speed — the v1.22r0 path bit-for-bit), or:
+    crit_lo_alt_m a multiple of 500 strictly inside (0, crit_alt_m) (a sealed LUT node), and
+    gear2_frac a multiple of 1/16 with sigma(crit_alt)/sigma(crit_lo) < gear2_frac < 1 — the
+    lower bound makes the HIGH gear win somewhere below crit_alt (a real gear shift exists),
+    the upper bound makes the LOW gear win at sea level (the low gear is not vestigial)."""
     if "crit_alt_m" not in e:
         return ["missing crit_alt_m"]
     try:
@@ -144,6 +161,30 @@ def validate_supercharger(e):
         errs.append(f"crit_alt_m out of the ATM band: {v} (expect 0 <= crit <= 8000)")
     if v / 500.0 != round(v / 500.0):
         errs.append(f"crit_alt_m not a multiple of 500: {v} (sigma(crit) must be a sealed LUT node)")
+    for k in ("crit_lo_alt_m", "gear2_frac"):
+        if k not in e:
+            errs.append(f"missing {k}")
+    if errs:
+        return errs
+    try:
+        lo = float(e["crit_lo_alt_m"])
+        g2 = float(e["gear2_frac"])
+    except Exception:
+        return ["crit_lo_alt_m/gear2_frac non-numeric"]
+    if lo == 0.0:
+        if g2 != 1.0:
+            errs.append(f"gear2_frac must be exactly 1 when crit_lo_alt_m = 0 (single-speed): {g2}")
+        return errs
+    if lo / 500.0 != round(lo / 500.0):
+        errs.append(f"crit_lo_alt_m not a multiple of 500: {lo} (sigma(crit_lo) must be a sealed LUT node)")
+    if not (0.0 < lo < v):
+        errs.append(f"crit_lo_alt_m must sit strictly inside (0, crit_alt_m): lo={lo} crit={v}")
+    if g2 * 16.0 != round(g2 * 16.0):
+        errs.append(f"gear2_frac not a multiple of 1/16: {g2}")
+    if not errs:
+        floor = _isa_sigma(v) / _isa_sigma(lo)
+        if not (floor < g2 < 1.0):
+            errs.append(f"gear2_frac degenerate: {g2} (need sigma(crit)/sigma(crit_lo)={floor:.4f} < gear2_frac < 1)")
     return errs
 
 

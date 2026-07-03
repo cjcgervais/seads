@@ -152,11 +152,22 @@ double hud_sigma(double alt_m) {
     return std::pow((T0 - L * alt_m) / T0, golden::G0 / (RS * L) - 1.0);
 }
 
-// Engine power fraction at alt: the v1.22r0 supercharger lapse min(1, sigma(alt)/sigma(crit)) —
-// RATED (1.0) below the airframe's critical altitude, falling with the density ratio above it.
-double hud_power(double alt_m, double crit_alt_m) {
-    double lapse = hud_sigma(alt_m) / hud_sigma(crit_alt_m);
-    return lapse > 1.0 ? 1.0 : lapse;
+// Engine power fraction at alt. The v1.22r0 supercharger lapse min(1, sigma(alt)/sigma(crit)) —
+// RATED (1.0) below the airframe's critical altitude, falling with the density ratio above it —
+// generalized to the v1.25r0 two-speed blower schedule. Mirrors kernel.cpp's op-shape (this HUD
+// uses libm pow for sigma, so it is not bit-exact — it is the same MODEL, drawn presentation-side).
+// crit_lo_alt_m = 0 (single-speed) never enters the two-speed branch, reproducing the v1.22r0 lapse.
+double hud_power(double alt_m, double crit_alt_m, double crit_lo_alt_m, double gear2_frac) {
+    double sigma = hud_sigma(alt_m);
+    double lapse = sigma / hud_sigma(crit_alt_m);
+    if (lapse > 1.0) lapse = 1.0;
+    if (crit_lo_alt_m > 0.0) {                            // two-speed: max(low gear, gear2 * high gear)
+        double lo_gear = sigma / hud_sigma(crit_lo_alt_m);
+        if (lo_gear > 1.0) lo_gear = 1.0;
+        double hi_gear = gear2_frac * lapse;
+        lapse = (lo_gear > hi_gear) ? lo_gear : hi_gear;
+    }
+    return lapse;
 }
 
 // .seadsrec v3 type code -> the airframe's tuning envelope (crit_alt_m for the power readout);
@@ -426,10 +437,14 @@ void draw_scoreboard(const Playback& pb, const std::vector<RenderHp>& hp,
         const RenderHp* base = weap_for(maxhp, h->id);
         if (base && toughness_eighths(*base, e8))
             std::snprintf(tough, sizeof(tough), "%d-%d-%d", e8[0], e8[1], e8[2]);
-        char crit[8] = "   --";
+        char crit[12] = "     --";
         const Envelope* env = pb.types().empty() ? nullptr
                                                  : envelope_for_code(pb.type_code_of(h->id));
-        if (env) std::snprintf(crit, sizeof(crit), "%4.0fm", env->crit_alt_m);
+        if (env && env->crit_lo_alt_m > 0.0)  // two-speed blower: low-gear / high-gear crit altitudes
+            std::snprintf(crit, sizeof(crit), "%.1f/%.1fk", env->crit_lo_alt_m / 1000.0,
+                          env->crit_alt_m / 1000.0);
+        else if (env)
+            std::snprintf(crit, sizeof(crit), "%5.0fm", env->crit_alt_m);
         std::snprintf(line, sizeof(line), "%-17s %3lld   %4.0f   %s   %s%s", who,
                       static_cast<long long>(h->kills), h->ammo, tough, crit,
                       h->hp <= 0.0 ? "   KIA" : (h->ammo <= 0.0 ? "   WINCHESTER" : ""));
@@ -536,6 +551,9 @@ int run_selfcheck(const Playback& pb, int n) {
         if (ok) std::printf("%d/%d/%d /8", e8[0], e8[1], e8[2]);
         else std::printf("(no region pools)");
         if (env) std::printf("   crit_alt %.0fm", env->crit_alt_m);
+        if (env && env->crit_lo_alt_m > 0.0)  // two-speed blower: low-gear crit + FS-gear fraction
+            std::printf("  (two-speed: crit_lo %.0fm, gear2 %.4f)", env->crit_lo_alt_m,
+                        env->gear2_frac);
         std::printf("\n");
     }
     // Echo the combat journal (per-round hits + kills, at the full 100 Hz tick) so the data path is
@@ -561,7 +579,7 @@ int run_selfcheck(const Playback& pb, int n) {
                 pb.types().empty() ? nullptr : envelope_for_code(pb.type_code_of(e.id));
             if (env)
                 std::snprintf(atmos, sizeof(atmos), " sig=%.2f pwr=%.0f%%", hud_sigma(e.alt_m),
-                              hud_power(e.alt_m, env->crit_alt_m) * 100.0);
+                              hud_power(e.alt_m, env->crit_alt_m, env->crit_lo_alt_m, env->gear2_frac) * 100.0);
             else
                 std::snprintf(atmos, sizeof(atmos), " sig=%.2f", hud_sigma(e.alt_m));
             std::printf(" [#%lld lat=%.3f lon=%.3f alt=%.0f brg=%.1f hp=%.0f ammo=%.0f "
@@ -621,7 +639,7 @@ void draw_hud(const Playback& pb, double render_tick, const std::vector<RenderEn
                 pb.types().empty() ? nullptr : envelope_for_code(pb.type_code_of(e.id));
             if (env)
                 std::snprintf(atmos, sizeof(atmos), "   sig %.2f  pwr %3.0f%%", sig,
-                              hud_power(e.alt_m, env->crit_alt_m) * 100.0);
+                              hud_power(e.alt_m, env->crit_alt_m, env->crit_lo_alt_m, env->gear2_frac) * 100.0);
             else
                 std::snprintf(atmos, sizeof(atmos), "   sig %.2f", sig);
         }
@@ -924,7 +942,7 @@ void draw_fly_hud(const predict::Predictor& pred, uint32_t tick, size_t n_remote
     bool rated = alt <= kFlyEnv.crit_alt_m;
     std::snprintf(line, sizeof(line),
                   "ATMOS  sigma %.2f   engine pwr %3.0f%%   crit alt %.0fm  [%s]",
-                  hud_sigma(alt), hud_power(alt, kFlyEnv.crit_alt_m) * 100.0, kFlyEnv.crit_alt_m,
+                  hud_sigma(alt), hud_power(alt, kFlyEnv.crit_alt_m, kFlyEnv.crit_lo_alt_m, kFlyEnv.gear2_frac) * 100.0, kFlyEnv.crit_alt_m,
                   rated ? "RATED" : "ABOVE CRIT");
     DrawText(line, 12, 106, 16, rated ? LIGHTGRAY : GOLD);
     DrawText("A/D bank  W/S pull/push g  Q/E yaw  Shift/Ctrl throttle   |   mouse: fine aim   hold "
@@ -955,7 +973,7 @@ int run_fly_selfcheck(int n) {
                         "gamma=%+6.2f sig=%.2f pwr=%3.0f%%\n",
                         t, k.lat(0) * RAD2DEG_V, k.lon(0) * RAD2DEG_V, k.alt(0), brg,
                         k.phi(0) * RAD2DEG_V, k.tas(0), k.gamma(0) * RAD2DEG_V,
-                        hud_sigma(k.alt(0)), hud_power(k.alt(0), kFlyEnv.crit_alt_m) * 100.0);
+                        hud_sigma(k.alt(0)), hud_power(k.alt(0), kFlyEnv.crit_alt_m, kFlyEnv.crit_lo_alt_m, kFlyEnv.gear2_frac) * 100.0);
         }
     }
     return 0;
