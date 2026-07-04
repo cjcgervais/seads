@@ -1,6 +1,83 @@
 # SEADS 2026 — Next Steps (handoff)
 
-> ## ►► CURRENT STATE (2026-07-04): **NETCODE LAYER 20 — BIDIRECTIONAL LATE-JOIN CATCH-UP DONE ✅** (no-seal, rides **ATM-Sphere v1.26r0**)
+> ## ►► CURRENT STATE (2026-07-04): **NETCODE LAYER 21 — AUTHENTICATED BINDING (SEAT BY IDENTITY, NOT JOIN-ORDER POSITION) DONE ✅** (no-seal, rides **ATM-Sphere v1.26r0**)
+> **The last honest-scope caveat every bidirectional layer since 15b flagged — the binding was
+> POSITIONAL and UNAUTHENTICATED — is now settled.** Layer 18 gave each client its own aircraft, but by
+> JOIN ORDER: first socket → seat 0, next → seat 1. A reconnecting player got a *different* aircraft
+> depending on who else was connected, and nothing tied a socket to an identity. Layer 21 makes the
+> binding a function of the client's IDENTITY.
+> **THE SERVER (`src/net/authserver.{h,cpp}`, `broadcast_auth`):** `broadcast_bound`'s single-thread
+> `select()` loop with the join-order `SeatPolicy` REPLACED by an identity handshake. A **SIBLING** —
+> owns its own `AuthClient` (identical to layer 18's `BoundClient`) + accept/loop code ⇒ sealed
+> `broadcast_bound`/`broadcast_input`/`broadcast_bidi`/the async & catch-up siblings are byte-for-byte
+> UNTOUCHED. **BIND-001 + `seat_authorizes` reused VERBATIM; NO shared-file change** (no `Stats`/accessor
+> edit — layer 18 already added `cmds_unauth`; the cleanest sibling yet, like layer 19). Three pieces:
+> (1) **HELLO-001** (`src/net/hello001.{h,cpp}` ↔ `tools/auth_ref.py`) — the client's FIRST upstream
+> framing frame, `[version 0x01][ZigZag+LEB128 token]`, the upstream mirror of BIND-001; reuses the
+> sealed GEO-001 i64 codec ⇒ **ZERO new det_math (fifteenth consecutive)**. Read at accept, BEFORE the
+> seat is assigned. (2) **CredentialTable** (`src/net/authserver`) — a pre-shared roster maps each token
+> to a DESIGNATED seat; `authenticate(token)` → that seat if free, else SPECTATOR (unknown token OR its
+> seat already held = double-login); `release` frees it so a reconnecting identity reclaims ITS OWN seat.
+> The seat for a token is a function of the ROSTER, invariant to join order. (3) **BIND-001 +
+> authorization** unchanged from layer 18.
+> **THE CLAIM (strictly stronger than layer 18):** authentication only decides WHICH seat (if any) each
+> identity holds — an admission filter, the OUT_OF_RANGE/`cmds_unauth` determinism class — it never
+> touches the CommandQueue. So N authenticated clients each upstreaming ONLY their own seat's commands
+> compose to `build_server_frames` BYTE-IDENTICAL, regardless of which identity connected in which order,
+> the byte reorder/chunking, or an unknown-token spectator also upstreaming (all dropped). Layer 18 could
+> only assert "distinct seats" (accept-order-dependent); here each identity draws its SPECIFIC designated
+> seat, pinned per token.
+> **HELLO-001 IS TRANSPORT METADATA, NOT A SEALED WIRE** (modelled on BIND-001 / the layer-7 framing
+> envelope — no sim value, no hash, not a `rails.wire` block) ⇒ **no seal**, rides v1.26r0. Byte parity
+> still pinned (shared `[0x01,0x0E]` for token 7).
+> **VERIFIED LOCALLY (gcc + clang), all green:**
+> - **BRIDGE `seads_netauth_test`** (ctest **26→27** `netauth_bridge`, native-x64 like 7–20):
+>   **LEG 1** (identity seats, invariant to join order — the headline) — 3 clients present distinct
+>   tokens with **token order ≠ seat order** (100→seat 2, 200→seat 0, 300→seat 1); each is bound to
+>   EXACTLY its designated seat (asserted per token, not just "distinct"), upstreams ONLY that seat
+>   (scrambled: reversed@1B / forward@7B / reversed@3B) ⇒ each downstream byte-identical to
+>   `build_server_frames`, `cmds_ok=6, unauth=stale=oob=0, joins=3`.
+>   **LEG 2** (auth + authorization boundary) — a valid seat-0 client's 3 foreign commands AND an
+>   unknown-token (999) SPECTATOR's 6 commands ALL rejected (`cmds_unauth=9`); both see the aircraft-0-only
+>   world byte-for-byte (no credential → no aircraft; own seat only). A's BIND seat 0, B's BIND seat -1.
+>   **LEG 3** (in-process) — HELLO-001 codec pin `[0x01,0x0E]` vs `auth_ref.py` + negative-token round-trip
+>   + wrong-version reject; CredentialTable (identity→seat invariant to auth order, unknown→spectator,
+>   double-login→spectator, release-then-reclaim-OWN-seat); reused `seat_authorizes`.
+> - **Gates: full ctest 27/27 GCC + Clang; ALL 15 goldens byte-identical** (Sphere `6914a994…` via
+>   `seads_golden` on both toolchains); **property tests 242→250** (+8 `test_auth.py`: HELLO round-trip +
+>   version + pin, CredentialTable seat-is-a-function-of-identity under a shuffled auth order over a random
+>   bijection, unknown→spectator, no-double-booking + reclaim under a randomised join/leave, reused
+>   `seat_authorizes`, auth+authorization composition); `auth_ref.py` selftest PASS; determinism lint +
+>   det_math oracle + rails monotone + tuning + ceiling PASS.
+> **TRANSPORT-ONLY: no `src/kernel/**`, `src/det_math/**`, `config/rails/**`, snapshot wire bytes,
+> protocol-7, session/event codec, or tuning touched ⇒ all 15 goldens byte-identical, sealed
+> session/event digests unmoved. No seal.** Diff: NEW `src/net/hello001.{h,cpp}`,
+> `src/net/authserver.{h,cpp}`, `src/net/netauth_test_main.cpp`, `tools/auth_ref.py`,
+> `tests/property/test_auth.py`, `docs/adr/ADR-Step-Net-Layer21-AuthenticatedBinding-v1.26r0.md`;
+> MODIFIED `CMakeLists.txt` (`hello001.cpp` + `authserver.cpp` into `seads_netinput`, `seads_netauth_test`
+> target, `netauth_bridge` ctest). **No shared-file/Stats change.** guardian.yml UNCHANGED (ctest-only
+> bridge, like layers 13–20). Ledger: **ADR-Step-Net-Layer21-AuthenticatedBinding-v1.26r0**.
+> **NOT YET COMMITTED** — awaiting go-ahead for the git commit + Chronicle receipt.
+> **NEXT (free pick, none blocking):** **authenticated bound+async/catch-up** — fold identity binding
+> onto the layer-19 async or layer-20 catch-up server (mechanical: authentication = admission is
+> orthogonal to hygiene = delivery and catch-up = replay-depth); **stronger credentials** (a real
+> MAC/signature the server verifies, vs the abstracted i64 token); **input prediction of REMOTE aircraft**
+> (predict-others, not just layer-4a interpolate); or **renderer polish** (assigned seat / auth state /
+> predicted-vs-authoritative correction on the HUD). The bidirectional server arc (15b→21) is now
+> multiplayer-complete: bound, async, hygienic, late-join-catch-up-capable, AND identity-authenticated.
+> **NOTE FOR THE NEXT AGENT:** `broadcast_auth` is a SIBLING — it duplicates `broadcast_bound`'s loop on
+> purpose (the codebase's layer discipline), so DON'T fold identity into `broadcast_bound`. The one real
+> difference from layer 18 is the ACCEPT path: the server now reads the client's HELLO-001 (a blocking
+> handshake read, guarded by `wait_readable(accept_deadline_ms)`) BEFORE assigning a seat, and submits any
+> command frames pipelined after the HELLO in the same read. Keep authentication in the SERVER (the
+> CommandQueue stays a pure function of the command SET, blind to identity). The credential is an opaque
+> i64 looked up in a roster — a production system verifies a MAC/signature; that's orthogonal crypto, out
+> of this cut's scope. HELLO-001 is deliberately NOT a sealed rail (framing-envelope category, like
+> BIND-001); do not add a `rails.wire.hello` block or reseal for it.
+>
+> ---
+>
+> ## ◄ PREVIOUS (2026-07-04): **NETCODE LAYER 20 — BIDIRECTIONAL LATE-JOIN CATCH-UP DONE ✅** (no-seal, rides **ATM-Sphere v1.26r0**)
 > **The capability every bidirectional layer since 15b flagged as deferred — now doubly unblocked and
 > shipped.** A client joining a running authoritative INPUT server mid-fight gets its seat + BIND, is
 > REPLAYED the frames it missed, then fed the live stream — reconstructing (up to its window) the whole
