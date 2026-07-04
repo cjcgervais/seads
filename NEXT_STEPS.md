@@ -1,6 +1,63 @@
 # SEADS 2026 — Next Steps (handoff)
 
-> ## ►► CURRENT STATE (2026-07-04): **NETCODE LAYER 23 — AUTHENTICATED + ASYNC + CATCH-UP SERVER (THE AUTHENTICATED ARC COMPLETE) DONE ✅** (no-seal, rides **ATM-Sphere v1.26r0**)
+> ## ►► CURRENT STATE (2026-07-04): **NETCODE LAYER 24 — REMOTE-AIRCRAFT PREDICTION (PREDICT OTHERS, NOT JUST INTERPOLATE) DONE ✅** (no-seal, rides **ATM-Sphere v1.26r0**)
+> **A remote is now drawn where it IS, not where it WAS.** The prediction story had two halves that never
+> met: layer 4b/17 predict the OWN ship (replay the LOCAL commands you upstream — instant, seamless over a
+> lossless loop), while layer 4a renders REMOTE ships by INTERPOLATION (~100 ms in the PAST, smooth but
+> structurally LATE). Layer 24 closes the gap: predict the remote to "now" too. The hard constraint the
+> own-ship predictor never faced — a client has NO remote's input commands (authorization: only its OWN
+> seat's, every layer 15b–23) — means the layer-17 trick is out. All the client has of a remote is that
+> remote's KINEMATIC STATE on the wire. So the model is **DEAD-RECKONING COAST**.
+> **THE CLIENT (`src/net/remotepredict.{h,cpp}`, `netremote::run_remote_client`):** seed a one-aircraft
+> kernel from the remote's freshest authoritative snapshot and advance it each tick with the **SEALED
+> no-arg `Kernel::step()`** — the *"pure kinematic tail"* that holds bank / γ / speed and propagates the
+> coordinated-turn great circle (the Sphere-golden tail). When a fresher snapshot arrives (under integer
+> `lag` + a downstream loss set), RESEED to it and re-extrapolate forward `lag` kinematic ticks to now —
+> so the displayed remote always represents the CURRENT tick, not a fixed render-delay in the past. NO
+> input replay (a remote has no local inputs; the coast IS the extrapolation). Two reconcile SOURCES like
+> inputpredict: CANONICAL (full-precision reseed) and WIRE (decoded lossy protocol-7 reseed).
+> **THE HONEST BOUND:** no round-trip theorem for a remote (the client never had its inputs), so the coast
+> is BOUNDED, never bit-exact — it assumes the last kinematics HOLD. It TRACKS "now" **1862× tighter than
+> interpolation** over steady flight (removing the render lag), and stays BOUNDED across a maneuver BECAUSE
+> of the reconcile: a no-reconcile control drifts **81× further**. Reproducible (all det_math + the
+> deterministic decode) ⇒ the coasted remote's per-tick hash sequence is a cross-impl parity DIGEST. ZERO
+> new det_math (16th consecutive integration rung); net code stays OUTSIDE the kernel (drives a copy).
+> **VERIFIED LOCALLY (gcc + clang), all green:**
+> - **BRIDGE `seads_netremotepredict_test`** (ctest **29→30** `netremotepredict_bridge`, native-x64
+>   gcc+clang) over **REMOTE-SK-001** (one non-firing Ki-61: wings-level cruise → hard banked break @ tick
+>   90 → roll-out; 200 ticks, snap/5, lag 10): **LEG 1** coast tracks NOW 1862.3× tighter than the layer-4a
+>   interp baseline (1.07e-6 vs 1.99e-3 rad), canonical digest `d28979c3…` (reproducible); **LEG 2**
+>   reconcile keeps the coast bounded (3.05e-6 rad) across the break, no-reconcile drifts 81.2× (2.47e-4
+>   rad); **LEG 3** the remote's commands upstreamed SCRAMBLED (1 B/send) through `broadcast_input` → 41
+>   frames byte-identical to `build_server_frames` → the observing coast reseeds vs the lossy wire within
+>   3.05e-6 rad, wire digest `7468a4ed…`.
+> - **Gates: full ctest 30/30 GCC + Clang; ALL 15 goldens byte-identical** (Sphere `6914a994…`);
+>   **property tests 260→268** (+8 `test_remotepredict.py`: coast beats interp, canonical/wire digests
+>   pinned+reproducible, reconcile load-bearing, deterministic loss set, Hypothesis loss-sweep bounded);
+>   determinism lint + rails monotone + det_math oracle PASS.
+> **TRANSPORT/CLIENT-ONLY: no `src/kernel/**`, `src/det_math/**`, `config/rails/**`, wire bytes, protocol-7,
+> session/event codec, or tuning touched ⇒ all 15 goldens byte-identical, sealed session/event digests
+> unmoved. No seal.** Diff: NEW `src/net/remotepredict.{h,cpp}`, `src/net/netremotepredict_test_main.cpp`,
+> `tools/remotepredict_ref.py`, `tests/property/test_remotepredict.py`,
+> `docs/adr/ADR-Step-Net-Layer24-RemotePrediction-v1.26r0.md`; MODIFIED `CMakeLists.txt`
+> (`remotepredict.cpp` into `seads_netinput`, `seads_netremotepredict_test` target, `netremotepredict_bridge`
+> ctest). No shared-file/`Stats` change. guardian.yml UNCHANGED (ctest-only bridge, like layers 13–23).
+> Ledger: **ADR-Step-Net-Layer24-RemotePrediction-v1.26r0**.
+> **GIT: committed locally on branch `net-layer24-remote-prediction` (code `<PENDING>`); not yet pushed.**
+> **NEXT (free pick, none blocking):** predict-others reconciliation SMOOTHING (blend the coast toward each
+> reseed instead of snapping, to hide the maneuver correction — pure presentation on top of this);
+> **stronger credentials** (a real MAC/signature vs the abstracted i64 token); or **renderer polish** (draw
+> the predicted-vs-interpolated remote / the correction magnitude / the assigned seat on the HUD).
+> **NOTE FOR THE NEXT AGENT:** `run_remote_client` drives a kernel copy via the public NO-ARG `Kernel::step()`
+> (the sealed kinematic tail) — do NOT reach into kernel internals to reseed; rebuild via `Kernel::add()`
+> like `predict::Predictor::reconcile` does. The coast is deliberately NOT the authoritative dynamics (it
+> can't be — no remote inputs), so "bounded, not seamless" is the honest claim; don't try to make it
+> bit-exact. REMOTE-SK-001's start/schedule radians are `deg * netsnap::DEG2RAD` (the shared hex-float PI),
+> which is what makes the canonical digest bit-match the Python ref — keep any new scenario on that path.
+>
+> ---
+>
+> ## ◄ PREVIOUS (2026-07-04): **NETCODE LAYER 23 — AUTHENTICATED + ASYNC + CATCH-UP SERVER (THE AUTHENTICATED ARC COMPLETE) DONE ✅** (no-seal, rides **ATM-Sphere v1.26r0**)
 > **An AUTHENTICATED client joining mid-fight now catches up.** Layer 22 gave identity seats through the
 > async hygiene, but a mid-stream authenticated joiner still received only the SUFFIX from its accept point.
 > Layer 23 is the **19→20 step (bound+async → bound+async+catch-up) re-run on the authenticated server

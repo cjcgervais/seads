@@ -133,7 +133,8 @@ target_link_libraries(seads_broadcast PUBLIC seads_framing seads_socket seads_de
 add_library(seads_netinput STATIC src/net/input001.cpp src/net/cmdqueue.cpp src/net/inputserver.cpp
             src/net/bidiserver.cpp src/net/inputclient.cpp src/net/bind001.cpp src/net/boundserver.cpp
             src/net/boundasyncserver.cpp src/net/boundcatchupserver.cpp src/net/hello001.cpp
-            src/net/authserver.cpp src/net/authasyncserver.cpp src/net/authcatchupserver.cpp)
+            src/net/authserver.cpp src/net/authasyncserver.cpp src/net/authcatchupserver.cpp
+            src/net/remotepredict.cpp)
 target_include_directories(seads_netinput PUBLIC src/net)
 target_link_libraries(seads_netinput PUBLIC seads_session seads_framing seads_socket seads_net
                       seads_kernel seads_replay seads_det_flags)
@@ -363,6 +364,16 @@ target_link_libraries(seads_netauthcatchup_test PRIVATE seads_netinput seads_ses
                       seads_broadcast seads_framing seads_socket seads_predict seads_net seads_kernel
                       seads_replay seads_det_math seads_det_flags)
 
+# --- layer-24 remote-aircraft-prediction bridge: predict OTHERS, not just interpolate them. A remote
+# is dead-reckoned to "now" with the sealed no-arg kinematic tail, reseeding on each authoritative
+# snapshot. Proves (LEG 1) the coast tracks NOW far tighter than the layer-4a interpolation baseline
+# + canonical digest, (LEG 2) the reconcile keeps it bounded across a maneuver (no-reconcile drifts),
+# (LEG 3) over a real socket the coast reseeds against the lossy wire within a bound + wire digest ---
+add_executable(seads_netremotepredict_test src/net/netremotepredict_test_main.cpp)
+target_link_libraries(seads_netremotepredict_test PRIVATE seads_netinput seads_session seads_event
+                      seads_broadcast seads_framing seads_socket seads_predict seads_net seads_kernel
+                      seads_replay seads_det_math seads_det_flags)
+
 # --- client presentation test (globe projection + .seadsrec container + playback interp) ---
 add_executable(seads_client_test src/client/client_test_main.cpp)
 target_link_libraries(seads_client_test PRIVATE seads_client seads_net seads_det_flags)
@@ -422,5 +433,6 @@ if(SEADS_SOCKET_TESTS AND NOT CMAKE_CROSSCOMPILING)
   add_test(NAME netauth_bridge COMMAND seads_netauth_test)
   add_test(NAME netauthasync_bridge COMMAND seads_netauthasync_test)
   add_test(NAME netauthcatchup_bridge COMMAND seads_netauthcatchup_test)
+  add_test(NAME netremotepredict_bridge COMMAND seads_netremotepredict_test)
 endif()
 # Golden hash compare is run in CI (guardian.yml) across the toolchain matrix.
