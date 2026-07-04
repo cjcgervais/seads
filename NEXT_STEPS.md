@@ -54,9 +54,10 @@
 > ctest). **No shared-file/Stats change; no new `_ref.py`** (reference = `auth_ref.py`'s CredentialTable +
 > input001/framing/bound_ref, reused). guardian.yml UNCHANGED (ctest-only bridge, like layers 13–21).
 > Ledger: **ADR-Step-Net-Layer22-AuthAsyncServer-v1.26r0**.
-> **GIT: committed to `main` locally (code `8c32062` + receipt `d49d4f0`,
-> `receipt-ATM-Sphere_v1.26r0-8c32062.yml` — 15/15 gates PASS, overall PASS, golden `6914a994…`).
-> NOT yet pushed — `git push origin main` to trigger guardian CI (the cross-toolchain matrix).**
+> **GIT: pushed to `origin/main` (code `8c32062` + receipt `d49d4f0`,
+> `receipt-ATM-Sphere_v1.26r0-8c32062.yml` — 15/15 gates PASS, overall PASS, golden `6914a994…`);
+> guardian CI (cross-toolchain matrix) triggered on the push — check
+> https://github.com/cjcgervais/seads/actions.**
 > **NEXT (free pick, none blocking):** **authenticated bound + CATCH-UP** — the last rung of the
 > authenticated arc (21→22→23): fold layer-20's windowed catch-up onto `broadcast_auth_async` (mechanical:
 > catch-up = replay-depth, orthogonal to admission + delivery — this layer now owns the send buffers a
