@@ -1,6 +1,63 @@
 # SEADS 2026 — Next Steps (handoff)
 
-> ## ►► CURRENT STATE (2026-07-04): seal **ATM-Sphere v1.25r0 — TWO-SPEED BLOWER SCHEDULE DONE ✅**
+> ## ►► CURRENT STATE (2026-07-04): **NETCODE LAYER 15a — HEARTBEAT / LIVENESS-TIMEOUT LEAVE DONE ✅** (no-seal, rides **ATM-Sphere v1.25r0**)
+> **The long-queued "heartbeat/timeout LEAVE for silently-dead clients" lands as layer 15a —
+> transport-only, riding v1.25r0.** Through layer 14 every LEAVE is EXPLICIT (clean TCP EOF, fatal
+> send, or a layer-12 byte-cap shed by SIZE); a SILENTLY-dead client (killed process / network
+> partition) sends no EOF for minutes, so it is neither readable nor writable, and at `cap_bytes=0`
+> its userspace backlog grows forever on an open-ended live stream.
+> **THE KNOB:** `broadcast_live` gains one defaulted param **`liveness_frames`** (0 = layer-14
+> behavior EXACTLY). A client that makes **no receive progress** — drains zero bytes to the kernel
+> AND stays pending — for **more than `liveness_frames` consecutive produced frames** is REAPED
+> (new `Stats.reaped`, and — being live — also a `leave`, like a cap drop). **THE SIGNAL:** the
+> client's cumulative kernel-accepted bytes (`BufClient.sent_total`, accumulated in `flush_client`);
+> `reap_dead_async` (once per frame, after the enqueue) resets the idle counter when the buffer is
+> empty OR `sent_total` advanced, so a **slow-but-ALIVE** client (draining ANY bytes) is never
+> reaped — only a stalled one. **ORTHOGONAL to layer 12:** `cap_bytes` sheds by backlog SIZE,
+> `liveness_frames` reaps by STALENESS ⇒ a dead client is bounded EVEN AT `cap_bytes=0` (backlog
+> grows for at most liveness+O(buffer) frames, then reaped). Frame-denominated (no wall-clock —
+> doctrine); `broadcast_live` ONLY (the batch async/select paths bound a dead client via the finite
+> stream + drain phase). `liveness_frames==0` is bit-for-bit layer 14 (reap_dead_async early-returns,
+> never reads the liveness fields).
+> **VERIFIED LOCALLY (gcc + clang):**
+> - **BRIDGE `seads_netheartbeat_test`** (ctest `netheartbeat_bridge`, native-x64 CI legs like
+>   layers 7–14): **LEG 1** (reap at cap_bytes=0) — a ~7.5 MiB synthetic live stream through a
+>   pinned 16 KiB send buffer to TWO clients, cap=0 (only liveness can drop): FAST drained by the
+>   on_frame hook keeps up (never reaped, whole stream byte-identical); DEAD reads nothing ⇒
+>   `reaped=1 leaves=1 capped=0`, backlog bounded, delivered a strict byte-PREFIX, stream un-wedged
+>   (WHICH frame it's reaped at is OS-timing, unasserted — like netcap's shed frame). **LEG 2**
+>   (healthy immunity) — the sealed SESSION-SK-001 live stream to a continuous reader with an
+>   AGGRESSIVE `liveness=1`: `reaped=0 leaves=0`, whole stream + sealed digest `966aca05…`.
+> - **Gates green: ctest 19→20 GCC + 19→20 Clang (`netheartbeat_bridge`); ALL 15 goldens byte-
+>   identical** (Sphere `6914a994…` via seads_golden + ref_kernel; the 14 scenario goldens C++ ≡
+>   seal). Property tests **203 → 205** (+2 `test_broadcast.py` layer-15a: `live_deliver_liveness`
+>   — a client silent past the deadline is reaped with a clean byte-prefix, liveness=0 delivers
+>   everything bit-for-bit, and a keeping-up client is never reaped under any deadline).
+> - **Demo:** `seads_netserver [port] [n] [catchup] [async] [cap_bytes] [live] [window] [liveness]`
+>   — the 8th positional arg, live-path only (rejected otherwise); the done line surfaces `reaped`.
+> **TRANSPORT-ONLY: no `src/kernel/**`, `src/det_math/**`, `config/rails/**`, wire bytes, or tuning
+> touched ⇒ all 15 goldens byte-identical, no digest moved. No seal.** Diff: `broadcast.{h,cpp}`
+> (Stats.reaped + BufClient liveness fields + flush_client sent_total + reap_dead_async + the
+> broadcast_live param), `netserver_main.cpp` (the demo arg), `netheartbeat_test_main.cpp` (new
+> bridge), `CMakeLists.txt` (+ executable + `netheartbeat_bridge`), `guardian.yml` (+ bridge step),
+> `test_broadcast.py` (+2). Ledger: **ADR-Step-Net-Layer15-Heartbeat-v1.25r0**.
+> **GIT:** see the git line below (pushed; guardian CI GREEN reproduces all 15 goldens + the new
+> layer-15a bridge on the native-x64 legs).
+> **NEXT (free pick, none blocking):** **layer 15b — input upstreaming** (the first bidirectional
+> layer: clients send `Command`s back, fed into the authoritative kernel via a canonical
+> tick-stamped queue — brushes the determinism rail, wants a careful ordering contract + ADR); or
+> more renderer polish; or a fresh flight/gunnery idea.
+> **NOTE FOR THE NEXT AGENT:** the liveness signal is cumulative `sent_total`, NOT a backlog-shrink
+> heuristic (a steady-state client that drains ≈ what it's fed each frame keeps a constant backlog
+> but IS alive — sent_total is monotone and unambiguous). The reap runs at the ONE point per frame
+> after the enqueue; `broadcast_select`/`broadcast_async` are untouched. `liveness_frames` is a
+> FRAME count (T seconds = T×20 frames), never wall-clock. It's `broadcast_live`-only BY DESIGN.
+> If you add layer 15b's upstream, the client→server bytes currently IGNORED by
+> `reap_leavers_async` (a one-way broadcast) become meaningful — reconcile the two (upstream bytes
+> are receive activity, but a heartbeat-only client draining the stream is the liveness signal, not
+> upstream traffic).
+>
+> ## ►► PRIOR STATE (2026-07-04): seal **ATM-Sphere v1.25r0 — TWO-SPEED BLOWER SCHEDULE DONE ✅**
 > **The v1.22r0-deferred two-speed blower is COMPLETE end-to-end: model + data + kernel + goldens
 > + HUD rider + full ledger, sealed as ONE seal. (Core landed 2026-07-02 as local wip 9aa31aa; the
 > HUD/ledger half + receipt + push finished 2026-07-04.)**

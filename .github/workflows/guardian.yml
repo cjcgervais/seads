@@ -136,6 +136,7 @@ jobs:
             echo "ncap=build/Release/seads_netcap_test.exe" >> "$GITHUB_OUTPUT"
             echo "nlive=build/Release/seads_netlive_test.exe" >> "$GITHUB_OUTPUT"
             echo "nwindow=build/Release/seads_netwindow_test.exe" >> "$GITHUB_OUTPUT"
+            echo "nheart=build/Release/seads_netheartbeat_test.exe" >> "$GITHUB_OUTPUT"
           else
             echo "golden=build/seads_golden" >> "$GITHUB_OUTPUT"
             echo "scenario=build/seads_scenario" >> "$GITHUB_OUTPUT"
@@ -160,6 +161,7 @@ jobs:
             echo "ncap=build/seads_netcap_test" >> "$GITHUB_OUTPUT"
             echo "nlive=build/seads_netlive_test" >> "$GITHUB_OUTPUT"
             echo "nwindow=build/seads_netwindow_test" >> "$GITHUB_OUTPUT"
+            echo "nheart=build/seads_netheartbeat_test" >> "$GITHUB_OUTPUT"
           fi
 
       - name: det_math bit-exact test
@@ -281,6 +283,16 @@ jobs:
         if: matrix.name == 'MSVC x64' || matrix.name == 'GCC x64' || matrix.name == 'Clang x64'
         shell: bash
         run: "${{ steps.bin.outputs.nwindow }}"
+
+      # Layer 15a. seads_netheartbeat_test is a default target (build-only-smoked on every leg
+      # above); the heartbeat/liveness-timeout bridge (broadcast_live's liveness_frames reaps a
+      # silently-dead client that makes no receive progress — bounding its backlog even at
+      # cap_bytes=0, orthogonal to layer 12's size cap — while a keeping-up client is never reaped)
+      # needs live 127.0.0.1 ports, so it runs only on the NATIVE x64 legs, like the layer-7..14 bridges.
+      - name: Heartbeat / liveness-timeout determinism bridge (layer 15a)
+        if: matrix.name == 'MSVC x64' || matrix.name == 'GCC x64' || matrix.name == 'Clang x64'
+        shell: bash
+        run: "${{ steps.bin.outputs.nheart }}"
 
       - name: Run all goldens + hash + validate
         shell: bash

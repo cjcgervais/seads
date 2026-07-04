@@ -247,6 +247,13 @@ add_executable(seads_netwindow_test src/net/netwindow_test_main.cpp)
 target_link_libraries(seads_netwindow_test PRIVATE seads_session seads_event seads_broadcast seads_framing
                       seads_socket seads_predict seads_net seads_kernel seads_replay seads_det_math seads_det_flags)
 
+# --- layer-15a heartbeat/liveness-timeout bridge: broadcast_live's liveness_frames reaps a client
+# that makes NO receive progress (a silently-dead peer that never sends EOF) — bounding its backlog
+# even at cap_bytes=0 (orthogonal to layer 12) — while a keeping-up client is never reaped ---
+add_executable(seads_netheartbeat_test src/net/netheartbeat_test_main.cpp)
+target_link_libraries(seads_netheartbeat_test PRIVATE seads_session seads_event seads_broadcast seads_framing
+                      seads_socket seads_predict seads_net seads_kernel seads_replay seads_det_math seads_det_flags)
+
 # --- client presentation test (globe projection + .seadsrec container + playback interp) ---
 add_executable(seads_client_test src/client/client_test_main.cpp)
 target_link_libraries(seads_client_test PRIVATE seads_client seads_net seads_det_flags)
@@ -296,5 +303,6 @@ if(SEADS_SOCKET_TESTS AND NOT CMAKE_CROSSCOMPILING)
   add_test(NAME netcap_bridge COMMAND seads_netcap_test)
   add_test(NAME netlive_bridge COMMAND seads_netlive_test)
   add_test(NAME netwindow_bridge COMMAND seads_netwindow_test)
+  add_test(NAME netheartbeat_bridge COMMAND seads_netheartbeat_test)
 endif()
 # Golden hash compare is run in CI (guardian.yml) across the toolchain matrix.

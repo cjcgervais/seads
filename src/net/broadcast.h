@@ -90,6 +90,30 @@
 // bounding memory); the claim is the transport delivered precisely frames[max(0,fi-W):], and
 // the join frame is knowable from the first decoded server_tick, exactly the layer-9 law. Still
 // TRANSPORT — no kernel/wire/golden/seal.
+//
+// Layer 15a (heartbeat / liveness-timeout LEAVE): every leave so far is EXPLICIT — a client sends a
+// clean TCP EOF (recv==0) or a send fatally errors (peer gone), or layer 12 sheds it by backlog
+// SIZE. A SILENTLY-dead client — its process killed with the connection half-open, or a network
+// partition — does none of these: TCP delivers no EOF for minutes, so the socket is neither readable
+// (no data / no EOF) nor writable (its buffers filled once it stopped reading), and at cap_bytes==0
+// its userspace backlog just grows — on an OPEN-ENDED live stream, forever. broadcast_live gains an
+// opt-in `liveness_frames` (0 = layer-14 behavior EXACTLY): a client that makes NO receive progress
+// — drains zero bytes to the kernel AND stays pending — for more than `liveness_frames` consecutive
+// PRODUCED frames is presumed dead and REAPED (counted in the new `Stats.reaped`, and — like a
+// layer-12 cap drop — also as a `leave`). The signal is the client's cumulative kernel-accepted byte
+// count: it resets the idle counter whenever the buffer is empty (fully caught up) or more bytes
+// left to the kernel since the last frame, so a merely SLOW-but-ALIVE client (draining SOME bytes
+// each frame) is NEVER reaped — only one that has stopped receiving entirely. Frame-denominated by
+// design (no wall-clock in the loop — doctrine; the caller expresses "T seconds silent" as T*20
+// frames), and ORTHOGONAL to layer 12: `cap_bytes` bounds a client's backlog by SIZE, `liveness_frames`
+// reaps a stalled client by STALENESS — so a dead client is bounded even at cap_bytes==0 (its backlog
+// grows for at most liveness_frames+O(buffer) frames, then it is reaped). Honest scope: WHICH frame a
+// dead client crosses the threshold is OS-timing (how many frames its kernel/userspace buffers absorb
+// before send stalls), exactly like layer 12's shed frame — the deterministic claims are that a
+// never-reading client IS reaped within a bounded number of frames and a keeping-up client is NEVER
+// reaped. Applies only to broadcast_live (the open-ended path where a silent client is unbounded; the
+// batch async/select paths broadcast a finite precomputed stream with a bounded fail-not-wedge drain).
+// Still TRANSPORT — no kernel/wire/golden/seal.
 #pragma once
 #include <cstddef>
 #include <cstdint>
@@ -110,6 +134,8 @@ struct Stats {
                                   // during its catch-up replay was never live — capped only)
     std::size_t trimmed = 0;      // layer-14 window evictions: payloads dropped from the catch-up
                                   // history once it exceeded catchup_window (0 when unwindowed)
+    std::size_t reaped = 0;       // layer-15a liveness-timeout drops: clients that made no receive
+                                  // progress for > liveness_frames produced frames (also a leave)
     bool ok = false;              // reached >=min_initial clients and sent every frame
 };
 
@@ -157,13 +183,19 @@ using FrameSource = std::function<bool(std::vector<std::uint8_t>&)>;
 // history to the LAST catchup_window payloads — a joiner accepted at frame fi is replayed
 // frames[max(0,fi-catchup_window):fi] (evictions counted in `trimmed`), so an open-ended source
 // can run catch-up in O(window) memory; see the file header for the delivered-suffix law.
+// Layer 15a: `liveness_frames` (0 = no liveness reaping, layer-14 behavior exactly) reaps a client
+// that made NO receive progress (drained zero bytes AND stayed pending) for more than
+// liveness_frames consecutive produced frames — a silently-dead peer that never sends EOF. Such a
+// client is dropped and counted in `reaped` (and, being live, also in `leaves`); a slow-but-alive
+// client draining any bytes each frame is never reaped. See the file header for the ORTHOGONALITY to
+// cap_bytes (size vs staleness) and the honest scope.
 // `frames_sent` counts frames produced + enqueued to the then-current broadcast set; ok == the
 // initial gather succeeded and the source was drained to its end.
 Stats broadcast_live(netsock::socket_t listener, const FrameSource& source,
                      std::size_t min_initial, int accept_deadline_ms,
                      const std::function<void(std::size_t)>& on_frame = {},
                      bool catchup = false, std::size_t cap_bytes = 0,
-                     std::size_t catchup_window = 0);
+                     std::size_t catchup_window = 0, std::size_t liveness_frames = 0);
 
 }  // namespace netbcast
 }  // namespace seads

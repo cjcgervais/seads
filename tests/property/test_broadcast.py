@@ -363,3 +363,75 @@ def test_window_never_changes_live_delivery_and_window0_is_layer13(frames, windo
     assert delivered_w == fr.encode_stream(frames)       # == the canonical encoded stream
     delivered_0, history_0, trimmed_0 = live_deliver_windowed(frames, accepts, 0)
     assert (delivered_0, history_0, trimmed_0) == (delivered_13, history_13, 0)
+
+
+# --- layer 15a: heartbeat / liveness-timeout LEAVE ------------------------------------------------
+def live_deliver_liveness(frames, accepts, liveness):
+    """Reference layer-15a liveness-reap model — mirrors netbcast::{flush_client,reap_dead_async}:
+    each frame is enqueued and the kernel accepts `accepts[i]` bytes (0 == a stalled/dead receiver),
+    THEN (once per produced frame) a client that has made NO receive progress — its buffer is
+    non-empty AND no bytes left the kernel since the last check — for more than `liveness`
+    consecutive frames is REAPED (its pending tail discarded whole, like a cap drop; delivery stops
+    at the kernel-accepted bytes). A frame that empties the buffer OR advances the cumulative sent
+    count resets the idle counter, so a client draining ANY bytes is never reaped. liveness==0
+    disables the policy (layer-13 behavior: no reap, the tail flushes in the drain). Returns
+    (delivered byte stream, reaped?)."""
+    queue = b""
+    delivered = b""
+    sent_total = 0
+    last_sent = 0
+    idle = 0
+    accepts = list(accepts)
+    for i, f in enumerate(frames):
+        queue += fr.encode_stream([f])          # enqueue_bytes: append the length-prefixed frame
+        take = min(accepts[i], len(queue)) if i < len(accepts) else 0
+        delivered += queue[:take]               # flush_client: kernel accepted `take` bytes
+        queue = queue[take:]
+        sent_total += take                       # ...tracked as the receive-progress signal
+        if len(queue) == 0 or sent_total > last_sent:   # progress: fully drained or bytes moved
+            idle = 0
+            last_sent = sent_total
+        elif liveness:                           # stalled this frame; count against the deadline
+            idle += 1
+            if idle > liveness:
+                return delivered, True           # reaped: the pending tail is discarded whole
+    return delivered + queue, False              # survivor: the drain phase flushes the tail
+
+
+@given(st.lists(st.binary(min_size=1, max_size=60), min_size=2, max_size=12), st.data())
+def test_liveness_reaps_a_dead_client_and_a_prefix_is_delivered(frames, data):
+    # A client that STOPS receiving at some frame d (kernel accepts nothing thereafter) is reaped
+    # once it has been silent for > liveness frames — its delivered bytes are a clean byte-PREFIX of
+    # the encoded stream (the tail is discarded whole, never reordered) and strictly short of it (it
+    # died before the end). The pure form of the netheartbeat_bridge reap leg. A generous head start
+    # (everything accepted through frame d) makes the pre-death buffer empty, so the deadline starts
+    # cleanly at d; the death frame d is drawn to leave > liveness silent frames after it so the
+    # deadline provably elapses within the stream.
+    frames = [bytes(f) for f in frames]
+    n = len(frames)
+    liveness = data.draw(st.integers(min_value=1, max_value=n - 1))   # < n: a from-0-dead client
+                                                                     # can still exceed the deadline
+    d = data.draw(st.integers(min_value=0, max_value=n - 1 - liveness))  # silent = n-d >= liveness+1
+    accepts = [10 ** 9] * d + [0] * (n - d)             # alive through d, then dead
+    whole = fr.encode_stream(frames)
+    delivered, reaped = live_deliver_liveness(frames, accepts, liveness)
+    assert reaped                                        # a permanently-silent client IS reaped
+    assert whole.startswith(delivered)                  # exactly a byte-prefix (tail discarded)
+    assert len(delivered) < len(whole)                  # strictly short — it died mid-stream
+    # liveness==0 disables the reap bit-for-bit: the same acceptance pattern delivers everything.
+    delivered0, reaped0 = live_deliver_liveness(frames, accepts, 0)
+    assert not reaped0 and delivered0 == whole
+
+
+@given(st.lists(st.binary(min_size=0, max_size=60), min_size=1, max_size=10),
+       st.integers(min_value=1, max_value=8))
+def test_liveness_never_bites_a_client_that_keeps_up(frames, liveness):
+    # Healthy-client immunity (the mirror of test_cap_never_bites_a_client_that_keeps_up): a client
+    # whose kernel always accepts everything offered — its backlog returns to zero every frame — is
+    # NEVER reaped by ANY liveness deadline, and receives the whole stream. Liveness sheds only a
+    # client that has stopped receiving, exactly the netheartbeat_bridge healthy leg.
+    frames = [bytes(f) for f in frames]
+    greedy = [10 ** 9] * len(frames)
+    delivered, reaped = live_deliver_liveness(frames, greedy, liveness)
+    assert not reaped
+    assert delivered == fr.encode_stream(frames)

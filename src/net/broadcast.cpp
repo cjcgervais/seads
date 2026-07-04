@@ -144,6 +144,13 @@ struct BufClient {
     netsock::socket_t s;
     std::vector<std::uint8_t> buf;
     std::size_t off = 0;
+    // layer-15a liveness: sent_total is the cumulative bytes this client's kernel has accepted (the
+    // receive-progress signal — monotone). idle_frames counts consecutive produced frames with no
+    // progress; last_sent snapshots sent_total at the last liveness check. All three are inert when
+    // liveness_frames==0 (reap_dead_async early-returns and never reads them).
+    std::size_t sent_total = 0;
+    std::size_t idle_frames = 0;
+    std::size_t last_sent = 0;
     bool pending() const { return off < buf.size(); }
     std::size_t pending_bytes() const { return buf.size() - off; }
 };
@@ -154,12 +161,14 @@ struct BufClient {
 // memory tracks the pending BACKLOG (the quantity the layer-12 cap bounds), not the total bytes
 // ever flushed.
 static bool flush_client(BufClient& c) {
+    const std::size_t start_off = c.off;
     while (c.pending()) {
         std::ptrdiff_t r = netsock::send_some(c.s, c.buf.data() + c.off, c.buf.size() - c.off);
         if (r < 0) return false;
         if (r == 0) break;  // kernel full; select_rw will report writability later
         c.off += static_cast<std::size_t>(r);
     }
+    c.sent_total += c.off - start_off;  // layer-15a receive-progress signal (bytes the kernel took)
     if (c.off > 0) {
         c.buf.erase(c.buf.begin(), c.buf.begin() + static_cast<std::ptrdiff_t>(c.off));
         c.off = 0;
@@ -250,6 +259,28 @@ static void flush_writable(std::vector<BufClient>& clients,
         for (netsock::socket_t w : writable)
             if (w == clients[i].s) { is_writable = true; break; }
         if (is_writable && !flush_client(clients[i])) drop_client(clients, i, st);
+    }
+}
+
+// Layer-15a liveness reap (once per produced frame, after this frame is enqueued/flushed): a client
+// that has made NO receive progress — its buffer is non-empty AND no bytes left to the kernel since
+// the last check — for more than `liveness_frames` consecutive frames is presumed dead (a silent
+// peer that never sends EOF) and dropped (counted `reaped` + `leaves`, like a cap drop). A client
+// that is fully drained (!pending) or advanced sent_total this frame resets its idle counter, so a
+// slow-but-alive client is never reaped. liveness_frames==0 disables the policy bit-for-bit (no
+// BufClient liveness field is read). See broadcast.h for the orthogonality to cap_bytes.
+static void reap_dead_async(std::vector<BufClient>& clients, Stats& st,
+                            std::size_t liveness_frames) {
+    if (liveness_frames == 0) return;
+    for (std::size_t i = clients.size(); i-- > 0;) {
+        BufClient& c = clients[i];
+        if (!c.pending() || c.sent_total > c.last_sent) {
+            c.idle_frames = 0;
+            c.last_sent = c.sent_total;  // progress observed: the deadline restarts
+        } else if (++c.idle_frames > liveness_frames) {
+            drop_client(clients, i, st);  // silent past the deadline: leave
+            ++st.reaped;
+        }
     }
 }
 
@@ -364,10 +395,14 @@ Stats broadcast_async(netsock::socket_t listener,
 // replayed exactly frames[max(0,fi-W):fi] and catch-up runs in O(W) memory on a stream of any
 // length. The window is consulted only where history grows — the replay path (accept_pending_async
 // with upto=history.size()) already sends "the whole retained history", which IS the window.
+// Layer 15a: liveness_frames>0 reaps a client that makes no receive progress for > liveness_frames
+// produced frames (reap_dead_async, once per frame after the enqueue) — a silently-dead peer that
+// never sends EOF; 0 disables it (layer-14 behavior exactly). See broadcast.h for the full rationale.
 Stats broadcast_live(netsock::socket_t listener, const FrameSource& source,
                      std::size_t min_initial, int accept_deadline_ms,
                      const std::function<void(std::size_t)>& on_frame, bool catchup,
-                     std::size_t cap_bytes, std::size_t catchup_window) {
+                     std::size_t cap_bytes, std::size_t catchup_window,
+                     std::size_t liveness_frames) {
     Stats st;
     std::vector<BufClient> clients;
     std::vector<std::vector<std::uint8_t>> history;  // produced payloads (retained iff catchup;
@@ -424,6 +459,10 @@ Stats broadcast_live(netsock::socket_t listener, const FrameSource& source,
                 drop_client(clients, i, st);
             }
         }
+        // layer 15a: after this frame is enqueued/flushed, reap any client that has gone silent
+        // (no receive progress) past the liveness deadline. Orthogonal to the byte-cap above:
+        // that sheds by backlog size, this by staleness — so a dead client is bounded at cap==0.
+        reap_dead_async(clients, st, liveness_frames);
         if (catchup) {
             history.push_back(std::move(payload));  // retain for future joiners
             // layer 14: the window evicts the oldest retained payload (at most one — exactly one
