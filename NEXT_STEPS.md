@@ -66,8 +66,9 @@
 >   atmosphere/flight-model lines + 5 golden rows updated + Blower-001 added + history row);
 >   CLAUDE.md (header seal line + rails Atmosphere row + roadmap v1.25r0 entry); THIS banner.
 > - **Receipt + push:** see the GIT line below.
-> **GIT: sealed as ONE seal — code+HUD+ledger `<CODE_SHA>` + receipt `<RECEIPT_SHA>`
-> (`<RECEIPT_FILE>`, gates PASS); guardian CI run `<CI_RUN>` <CI_STATUS>.**
+> **GIT: sealed as ONE seal — code+HUD+ledger `41d6aaa` + receipt
+> (`receipt-ATM-Sphere_v1.25r0-41d6aaa.yml`, 15/15 gates PASS); pushed to origin/main; guardian
+> CI run `<CI_RUN>` <CI_STATUS> (fill after push).**
 > **NEXT: the user's queued follow-up — netcode layer 15** (heartbeat/timeout LEAVE for
 > silently-dead clients, or input upstreaming) — transport-only, rides v1.25r0.
 > **NOTE FOR THE NEXT AGENT:** the two-speed branch is entered ONLY on `crit_lo_alt_m > 0` —
