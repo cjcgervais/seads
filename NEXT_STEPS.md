@@ -1,6 +1,80 @@
 # SEADS 2026 — Next Steps (handoff)
 
-> ## ►► CURRENT STATE (2026-07-04): **NETCODE LAYER 22 — AUTHENTICATED + ASYNC SERVER (IDENTITY BINDING × DOWNSTREAM HYGIENE) DONE ✅** (no-seal, rides **ATM-Sphere v1.26r0**)
+> ## ►► CURRENT STATE (2026-07-04): **NETCODE LAYER 23 — AUTHENTICATED + ASYNC + CATCH-UP SERVER (THE AUTHENTICATED ARC COMPLETE) DONE ✅** (no-seal, rides **ATM-Sphere v1.26r0**)
+> **An AUTHENTICATED client joining mid-fight now catches up.** Layer 22 gave identity seats through the
+> async hygiene, but a mid-stream authenticated joiner still received only the SUFFIX from its accept point.
+> Layer 23 is the **19→20 step (bound+async → bound+async+catch-up) re-run on the authenticated server
+> (22→23)** — exactly as layer 22 was the 18→19 step re-run on it. It folds layer-20's windowed late-join
+> catch-up onto layer 22. This CLOSES the authenticated arc: the bidirectional server is now identity-
+> authenticated, async/byte-capped/liveness-reaped, AND late-join-catch-up-capable, all composed.
+> **THE SERVER (`src/net/authcatchupserver.{h,cpp}`, `broadcast_auth_catchup`):** `broadcast_auth_async`'s
+> async `select_rw()` loop (identity accept + non-blocking send buffers + byte-cap + liveness reap) with
+> `broadcast_live`'s history-retention + windowed replay folded in (the SAME two additions layer 20 made to
+> `broadcast_bound_async`). A **SIBLING of both** `broadcast_auth_async` AND `broadcast_bound_catchup` —
+> owns its own `AuthCatchupClient` (layer 22's `AuthAsyncClient` exactly; catch-up adds NO per-client state,
+> the retained `history` lives on the server) + its own flush/enqueue/cap/reap/drop helpers ⇒ sealed
+> `broadcast.cpp`, `broadcast_bound`, `broadcast_bidi`, `broadcast_bound_async`, `broadcast_bound_catchup`,
+> `broadcast_auth`, `broadcast_auth_async` ALL byte-for-byte UNTOUCHED (every bridge still passes).
+> **`CredentialTable` + `seat_authorizes` + HELLO-001 + BIND-001 reused VERBATIM; NO shared-file/`Stats`
+> change** — `Stats.trimmed` was added by layer 20; layer 23 INHERITS it (the cleanest sibling class, like
+> 19/21/22). Four composed axes: (1) **identity seat** (HELLO-001 → CredentialTable → designated seat;
+> freed on EVERY drop path incl. mid-replay cap shed ⇒ reclaimed by its OWN identity). (2) **BIND +
+> authorization** through the async buffer (BIND enqueued first). (3) **async hygiene** (no back-pressure +
+> byte-cap + liveness reap). (4) **late-join catch-up** — a `history` vector retains the produced payloads
+> (last `catchup_window`, or ALL when 0; oldest evicted ⇒ `trimmed`), and `accept_all` ENQUEUES the retained
+> prefix right after the BIND ⇒ a joiner at frame fi gets `[BIND | frames[max(0,fi-W):]]`; the byte-cap
+> applies per replayed frame (a joiner whose replay backlog trips it is shed DURING replay — `capped`, seat
+> returned, never a live member).
+> **THE CLAIM:** the four axes touch DISJOINT machinery — admission (authentication+authorization, never
+> touches the CommandQueue), delivery (hygiene), replay-depth (catch-up). So N authenticated clients each
+> upstreaming ONLY their own seat compose to `build_server_frames` BYTE-IDENTICAL regardless of connect
+> order, upstream reorder/chunking, any downstream cap/liveness drop, OR any joiner's replay window — and
+> every client's delivery is a byte-exact window of `[BIND | the produced stream]`. Headline over layer 20:
+> a seat freed by a mid-replay byte-cap shed is reclaimed by its OWN identity (join-order could only promise
+> *some* free seat).
+> **VERIFIED LOCALLY (gcc + clang), all green:**
+> - **BRIDGE `seads_netauthcatchup_test`** (ctest **28→29** `netauthcatchup_bridge`, native-x64 gcc+clang):
+>   **LEG 1** (identity + window regimes) — 3 identities (token order ≠ seat order: 100→2, 200→0, 300→1)
+>   from the initial gather ⇒ produced stream byte-identical to `build_server_frames` (31 frames), each
+>   draws its designated seat; a 4th unknown-token (999) SPECTATOR joins at kJoin and across W ∈ {1,
+>   kJoin/2, retain-all} receives EXACTLY `[BIND(spectator) | frames[max(0,kJoin-W):]]`, `trimmed` = 30/24/0.
+>   **LEG 2** (auth + authorization compose) — the spectator upstreams the WHOLE set, all rejected
+>   (`cmds_unauth=6`), produced stream unchanged, spectator STILL catches up the whole stream byte-for-byte.
+>   **LEG 3** (hygiene composes) — long stream / pinned 16 KiB buffer: FAST (token 200 → seat 0,
+>   hook-drained) byte-identical to the aircraft-0-only reference + its commands drove the sim; DEAD (token
+>   300 → seat 1) joins mid-stream, non-reading, catch-up backlog shed by the byte-cap (`capped=1`) + its
+>   seat freed, delivered `[BIND(seat 1) | strict prefix]`.
+> - **Gates: full ctest 29/29 GCC + Clang; ALL 15 goldens byte-identical** (Sphere `6914a994…` via the
+>   Python reference); **property tests 255→260** (+5 `test_authcatchup.py`: authenticated catch-up window
+>   delivers exact suffix, `trimmed`==max(0,N-W), catch-up downstream of authentication, `[BIND | prefix |
+>   live]` ordering, cap sheds a non-reading joiner mid-replay + its designated seat reclaimed by its OWN
+>   identity); rails monotone + det_math oracle PASS.
+> **TRANSPORT-ONLY: no `src/kernel/**`, `src/det_math/**`, `config/rails/**`, snapshot wire bytes,
+> protocol-7, session/event codec, or tuning touched ⇒ all 15 goldens byte-identical, sealed
+> session/event digests unmoved. No seal.** Diff: NEW `src/net/authcatchupserver.{h,cpp}`,
+> `src/net/netauthcatchup_test_main.cpp`, `tests/property/test_authcatchup.py`,
+> `docs/adr/ADR-Step-Net-Layer23-AuthCatchup-v1.26r0.md`; MODIFIED `CMakeLists.txt`
+> (`authcatchupserver.cpp` into `seads_netinput`, `seads_netauthcatchup_test` target, `netauthcatchup_bridge`
+> ctest). **No shared-file/Stats change; no new `_ref.py`** (reference = `auth_ref.py`'s CredentialTable +
+> input001/framing/bound refs + the layer-20 retained-history/window model, reused). guardian.yml UNCHANGED
+> (ctest-only bridge, like layers 13–22).
+> Ledger: **ADR-Step-Net-Layer23-AuthCatchup-v1.26r0**.
+> **GIT: committed locally (code `__CODE_SHA__`), NOT yet pushed; receipt pending.**
+> **NEXT (free pick, none blocking — the authenticated arc is COMPLETE):** **stronger credentials** (a real
+> MAC/signature the server verifies vs the abstracted i64 token); **input prediction of REMOTE aircraft**
+> (predict-others, not just layer-4a interpolate); or **renderer polish** (assigned seat / auth state /
+> predicted-vs-authoritative correction / catch-up-in-progress on the HUD).
+> **NOTE FOR THE NEXT AGENT:** `broadcast_auth_catchup` is a SIBLING of BOTH `broadcast_auth_async` and
+> `broadcast_bound_catchup` — it duplicates the async loop + adds the history/replay on purpose (the layer
+> discipline), so DON'T edit either parent. With layer 23 the four transport axes (admission × delivery ×
+> replay-depth, with identity binding) are all composed on the authenticated server — there is no obvious
+> "next merge" left in this arc; the remaining picks (real credentials, remote prediction, HUD) are new
+> directions, not compositions. HELLO-001 stays transport metadata (framing-envelope category); do not add
+> a `rails.wire.hello` block.
+>
+> ---
+>
+> ## ◄ PREVIOUS (2026-07-04): **NETCODE LAYER 22 — AUTHENTICATED + ASYNC SERVER (IDENTITY BINDING × DOWNSTREAM HYGIENE) DONE ✅** (no-seal, rides **ATM-Sphere v1.26r0**)
 > **Authentication and the production-grade downstream hygiene can finally be used TOGETHER.** Layer 21
 > gave identity-based seats but only on the BLOCKING base (`broadcast_bound`), so an authenticated server
 > still back-pressured on one slow client and never shed a dead peer. Layer 22 is the **18→19 step re-run
