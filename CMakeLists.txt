@@ -124,6 +124,17 @@ add_library(seads_broadcast STATIC src/net/broadcast.cpp)
 target_include_directories(seads_broadcast PUBLIC src/net)
 target_link_libraries(seads_broadcast PUBLIC seads_framing seads_socket seads_det_flags)
 
+# --- net / layer-15b authoritative INPUT server (the FIRST BIDIRECTIONAL layer) ---
+# INPUT-001 upstream command codec + the canonical tick-stamped CommandQueue (the ordering contract:
+# drop + hold-last, selection a pure function of the command SET) + the input-driven authoritative
+# producer/server. Reads client Commands UP into the sealed kernel; the kernel's output is a pure
+# function of the canonically-ordered command set, so upstream reorder/chunking is bit-invariant.
+# TRANSPORT: outside the world_hash, no det_math (the wire quantize is the sealed geo001 pipeline).
+add_library(seads_netinput STATIC src/net/input001.cpp src/net/cmdqueue.cpp src/net/inputserver.cpp)
+target_include_directories(seads_netinput PUBLIC src/net)
+target_link_libraries(seads_netinput PUBLIC seads_session seads_framing seads_socket seads_net
+                      seads_kernel seads_replay seads_det_flags)
+
 # --- client presentation lib (Step 5 renderer): recording container + playback ---
 # DOWNSTREAM-ONLY. Decodes the GEO-001/KIN-001 wire (via seads_net) and interpolates remotes
 # (layer 4a) for display. It NEVER feeds the sim: it links seads_net but NOT the kernel/det_math,
@@ -254,6 +265,15 @@ add_executable(seads_netheartbeat_test src/net/netheartbeat_test_main.cpp)
 target_link_libraries(seads_netheartbeat_test PRIVATE seads_session seads_event seads_broadcast seads_framing
                       seads_socket seads_predict seads_net seads_kernel seads_replay seads_det_math seads_det_flags)
 
+# --- layer-15b input-upstream bridge (FIRST BIDIRECTIONAL): a client sends tick-stamped INPUT-001
+# commands UP in SCRAMBLED order + adversarial chunking; the authoritative input server produces frames
+# BYTE-IDENTICAL to build_server_frames (upstream order/chunk invariance), and the drop + hold-last
+# ordering contract is exercised in-process ---
+add_executable(seads_netinput_test src/net/netinput_test_main.cpp)
+target_link_libraries(seads_netinput_test PRIVATE seads_netinput seads_session seads_event seads_broadcast
+                      seads_framing seads_socket seads_predict seads_net seads_kernel seads_replay
+                      seads_det_math seads_det_flags)
+
 # --- client presentation test (globe projection + .seadsrec container + playback interp) ---
 add_executable(seads_client_test src/client/client_test_main.cpp)
 target_link_libraries(seads_client_test PRIVATE seads_client seads_net seads_det_flags)
@@ -304,5 +324,6 @@ if(SEADS_SOCKET_TESTS AND NOT CMAKE_CROSSCOMPILING)
   add_test(NAME netlive_bridge COMMAND seads_netlive_test)
   add_test(NAME netwindow_bridge COMMAND seads_netwindow_test)
   add_test(NAME netheartbeat_bridge COMMAND seads_netheartbeat_test)
+  add_test(NAME netinput_bridge COMMAND seads_netinput_test)
 endif()
 # Golden hash compare is run in CI (guardian.yml) across the toolchain matrix.

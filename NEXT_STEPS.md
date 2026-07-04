@@ -1,6 +1,69 @@
 # SEADS 2026 — Next Steps (handoff)
 
-> ## ►► CURRENT STATE (2026-07-04): **NETCODE LAYER 15a — HEARTBEAT / LIVENESS-TIMEOUT LEAVE DONE ✅** (no-seal, rides **ATM-Sphere v1.25r0**)
+> ## ►► CURRENT STATE (2026-07-04): **NETCODE LAYER 15b — INPUT UPSTREAMING (THE FIRST BIDIRECTIONAL LAYER) SEALED ✅ — ATM-Sphere v1.26r0**
+> **Every layer 5→15a was server→client. Layer 15b closes the loop: a client sends tick-stamped
+> `Command`s UP into the authoritative sealed kernel.** It "brushes the determinism rail", so the
+> whole design is an ORDERING CONTRACT, not a transport trick.
+> **THE WIRE (INPUT-001, new sealed rail block `rails.wire.command`):** `src/net/input001.{h,cpp}` ↔
+> `tools/input001_ref.py` encode one `Command` — fields `apply_tick, aircraft, seq, target_phi,
+> target_g, throttle, fire` (the three continuous ×1e6). **Reuses the sealed GEO-001 ZigZag+LEB128
+> pipeline ⇒ ZERO new det_math (fourteenth consecutive).** Upstream framing reuses the layer-7
+> `StreamReassembler`.
+> **THE ORDERING CONTRACT (`src/net/cmdqueue.{h,cpp}`, drop + hold-last):** (1) **drop-at-ingest** —
+> a command whose `apply_tick` is below the queue's FLOOR (the next tick still to be stepped, advanced
+> ONLY by the producer's progress — never wall-clock) is rejected STALE, byte-identical to never
+> arriving; an out-of-range aircraft is OUT_OF_RANGE. (2) **canonical selection** — the
+> `(apply_tick, aircraft)` winner is MAXIMAL under a total order on the wire fields (`seq` first, then
+> quantized phi/g/throttle/fire) ⇒ a **pure function of the command SET**, submit them in any order/
+> chunking and the same one wins. (3) **hold-last** — a tick with no command reuses the aircraft's
+> last (= `session::phase_at`).
+> **THE SERVER (`src/net/inputserver.{h,cpp}`):** `InputProducer` is `session::FrameProducer`'s twin
+> but pulls each tick's `Command` from the `CommandQueue`; `broadcast_input` is a single-thread
+> `select()` server that reads upstream (reassemble→decode→submit), steps the producer, sends the
+> frame down. It is a **SIBLING of `broadcast_live`** ⇒ the sealed layer-13/14/15a bridges are
+> **byte-for-byte untouched**. `session::serialize_world` was exposed (moved out of session.cpp's anon
+> namespace, declared in session.h) so the input producer emits frames byte-identical to
+> `build_server_frames`.
+> **THE DETERMINISM CLAIM (honest scope):** given commands delivered BEFORE their apply_tick is
+> stepped (adequate lead), the produced frame stream is INVARIANT to upstream ORDER and CHUNKING (the
+> input-direction analogue of the downstream layers' "lossy ≠ nondeterministic"); late arrival is a
+> separate, deterministic-given-progress DROP. This is authoritative-server netcode: the server
+> applies what arrived in time.
+> **VERIFIED LOCALLY (gcc + clang), all green:**
+> - **BRIDGE `seads_netinput_test`** (ctest **20→21** `netinput_bridge`): **codec parity** —
+>   `encode_command(5,1,2,0.5,1.5,0.75,true)` == the 14-byte vector pinned in `input001_ref.py`;
+>   **LEG 1** (socket order+chunk invariance) — a grid-exact **INPUT-SK-001** scenario (the three
+>   SESSION-SK-001 airframes, DYADIC command values so the lossy wire round-trips bit-for-bit) driven
+>   ENTIRELY by upstream commands sent SCRAMBLED (reversed@1 byte/send, rotate-3@7 bytes/send) produces
+>   frames **byte-identical to `build_server_frames`**; **LEG 2** (drop + hold-last, in-process) —
+>   reversed + injected stale/oob/low-seq commands reproduce the canonical frames; queue-level STALE/
+>   OUT_OF_RANGE/max-seq-winner pins.
+> - **Gates: full ctest 21/21** (all sealed net bridges still reconstruct `966aca05…`); **property
+>   tests 205→211** (+6 `test_input001.py`); rails/roster + det_math oracle + tuning + ceiling PASS;
+>   **all 15 goldens byte-identical** (Sphere `6914a994…` — no `src/kernel/**`, `src/det_math/**`, or
+>   tuning touched).
+> **A WIRE RESEAL ONLY (like WEAPON-001 v1.12r0 — a seal only because the wire is a sealed rail):**
+> no kernel/det_math/tuning/protocol-7 change ⇒ all 15 goldens byte-identical, sealed session/event
+> digests unmoved. Diff: NEW `input001.{h,cpp}` / `cmdqueue.{h,cpp}` / `inputserver.{h,cpp}` /
+> `netinput_test_main.cpp`, `input001_ref.py`, `test_input001.py`; MODIFIED `session.{cpp,h}`
+> (expose `serialize_world`), `CMakeLists.txt` (+lib +test +`netinput_bridge`), `config/rails/atm.json`
+> (`wire.command` block, version 350→360). guardian.yml UNCHANGED (ctest-only bridge, like 13–15a).
+> Ledger: **ADR-Step-Net-Layer15b-InputUpstream-v1.26r0**.
+> **GIT: committed locally (push to `origin/main` + guardian CI pending user OK).**
+> **NEXT (free pick, none blocking):** a real bidirectional server merging the layer 11–15a output
+> hygiene (async / byte-cap / liveness) with the upstream input path; OR input prediction/
+> reconciliation against this authoritative input server; OR more renderer polish.
+> **NOTE FOR THE NEXT AGENT:** `broadcast_input` is a first cut — BLOCKING downstream, one `recv` per
+> readable event per iteration (fine for the tiny command volume; a large upstream burst spanning many
+> recvs would ingest across iterations). The rendezvous in the bridge (on_frame(0) blocks until the
+> client has sent) guarantees "adequate lead"; a real client must stamp commands for a near-future
+> tick. Client→aircraft binding is positional (the server trusts the `aircraft` field) — auth/anti-
+> cheat is out of scope. The upstream bytes that `reap_leavers_async` IGNORED (a one-way broadcast)
+> are now MEANINGFUL in `broadcast_input`'s own read path; `broadcast_live` itself is unchanged.
+>
+> ---
+>
+> ## ◄ PREVIOUS (2026-07-04): **NETCODE LAYER 15a — HEARTBEAT / LIVENESS-TIMEOUT LEAVE DONE ✅** (no-seal, rides **ATM-Sphere v1.25r0**)
 > **The long-queued "heartbeat/timeout LEAVE for silently-dead clients" lands as layer 15a —
 > transport-only, riding v1.25r0.** Through layer 14 every LEAVE is EXPLICIT (clean TCP EOF, fatal
 > send, or a layer-12 byte-cap shed by SIZE); a SILENTLY-dead client (killed process / network

@@ -87,6 +87,11 @@ struct SessionResult {
 // client (keyed on each frame's decoded server_tick) and hands it to run_client.
 using ServerFrames = std::vector<std::pair<std::int64_t, std::vector<std::uint8_t>>>;
 
+// Serialize the kernel's FULL world to a protocol-7 wire frame (every aircraft: GEO + KIN-002 +
+// WEAPON section; every live round: GEO + damage + ttl/owner). Exposed (netcode layer 15b) so the
+// input-driven authoritative producer emits frames BYTE-IDENTICAL to build_server_frames.
+std::vector<std::uint8_t> serialize_world(const Kernel& k, std::int64_t server_tick);
+
 // Server half: drive the authoritative kernel over the whole scenario and serialize a protocol-6
 // wire frame at the 20 Hz cadence (+ the tick-0 frame). Pure of any transport.
 ServerFrames build_server_frames(const Rails& rails, const Scenario& sc);

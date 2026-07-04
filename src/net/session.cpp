@@ -33,6 +33,9 @@ Command own_kinematic_command_at(const AircraftSpec& a, unsigned t) {
     return Command{p.target_phi, p.target_g, p.throttle, false};
 }
 
+}  // namespace (close anon: serialize_world below is EXPOSED via session.h so the layer-15b input
+   // server emits byte-identical frames — see inputserver.h)
+
 // Serialize the kernel's FULL world to a protocol-7 wire frame (every aircraft: GEO + KIN-002 +
 // WEAPON hp/fire_cd/ammo/last_hit_by/region pools/kills; every live round: GEO + damage +
 // ttl/owner). Aircraft/projectile id = SoA index (rounds are transient — a per-frame index is
@@ -58,6 +61,8 @@ std::vector<std::uint8_t> serialize_world(const Kernel& k, std::int64_t server_t
     netsnap::encode_snapshot(s, out);
     return out;
 }
+
+namespace {  // reopen anon: the client-view helpers below stay internal to session.cpp
 
 void enc_geo(std::vector<std::uint8_t>& out, const netsnap::EntityState& e) {
     geo001::GeoPoint p{e.lat_deg, e.lon_deg, e.bearing_deg, e.alt_m};

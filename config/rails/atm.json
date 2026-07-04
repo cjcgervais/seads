@@ -1,8 +1,8 @@
 {
   "header": {
     "id": "SEADS-RAILS",
-    "version": 350,
-    "seal": "ATM-Sphere v1.25r0",
+    "version": 360,
+    "seal": "ATM-Sphere v1.26r0",
     "note": "Data-driven immutable rails. Any change here REQUIRES a new seal (ADR + Forge audit card + Chronicle receipt). See CLAUDE.md > Change-Control Law."
   },
   "rails": {
@@ -82,6 +82,13 @@
         "winghp_scale": 1000,
         "tailhp_scale": 1000,
         "kills_scale": 1
+      },
+      "command": {
+        "format": "INPUT-001",
+        "note": "UPSTREAM command wire (netcode layer 15b, seal v1.26r0, snapshot-independent — NOT part of the protocol-7 downstream snapshot). The FIRST client->server wire: a client encodes a tick-stamped flight Command and sends it back to the authoritative server, which feeds it into the sealed kernel step. Field order (contract): apply_tick, aircraft, seq, target_phi, target_g, throttle, fire. apply_tick is the PRE-step tick the command governs (applied on the step advancing apply_tick -> apply_tick+1, the session::server_command_at(a, t-1) convention); aircraft is the SoA index the command steers; seq is a client-assigned monotone tag that is the canonical tiebreak so the (apply_tick, aircraft) winner is a pure function of the command SET, never of network arrival order. apply_tick/aircraft/seq are exact integers (ZigZag+LEB128, not quantized); target_phi (bank, radians), target_g (load factor) and throttle ([0,1]) quantize at 1e6; fire is a 0/1 integer. Same ZigZag+LEB128 encoding as GEO-001 (reuses geo001::{quantize,encode_i64}) => ZERO new det_math, the fourteenth consecutive zero-transcendental seal. LOSSY by quantization exactly like the downstream wires — the determinism guarantee is NOT that the wire is lossless but that the authoritative kernel's output is a pure function of the DECODED, canonically-ordered command SET (drop + hold-last, see the CommandQueue ordering contract in src/net/cmdqueue.h): any upstream ORDER/CHUNKING that delivers the same commands before their apply_tick yields BIT-IDENTICAL frames; a command that arrives after its apply_tick is stepped past is deterministically DROPPED. No kernel/golden change (the kernel already steps arbitrary Commands; the sealed scenarios keep using the phase schedule) => all 15 goldens byte-identical. See ADR-Step-Net-Layer15b-InputUpstream-v1.26r0.",
+        "phi_scale": 1000000,
+        "targetg_scale": 1000000,
+        "throttle_scale": 1000000
       }
     },
     "weapons": {
