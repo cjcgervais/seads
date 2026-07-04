@@ -59,8 +59,10 @@
 > input001/framing/bound refs + the layer-20 retained-history/window model, reused). guardian.yml UNCHANGED
 > (ctest-only bridge, like layers 13–22).
 > Ledger: **ADR-Step-Net-Layer23-AuthCatchup-v1.26r0**.
-> **GIT: committed locally (code `587cf3e` + receipt `receipt-ATM-Sphere_v1.26r0-587cf3e.yml` — 15/15
-> gates PASS, overall PASS, golden `6914a994…`), NOT yet pushed.**
+> **GIT: pushed to `origin/main` (code `587cf3e` + receipt `d8c9a2d`,
+> `receipt-ATM-Sphere_v1.26r0-587cf3e.yml` — 15/15 gates PASS, overall PASS, golden `6914a994…`);
+> guardian CI (cross-toolchain matrix) triggered on the push — check
+> https://github.com/cjcgervais/seads/actions.**
 > **NEXT (free pick, none blocking — the authenticated arc is COMPLETE):** **stronger credentials** (a real
 > MAC/signature the server verifies vs the abstracted i64 token); **input prediction of REMOTE aircraft**
 > (predict-others, not just layer-4a interpolate); or **renderer polish** (assigned seat / auth state /
