@@ -49,7 +49,12 @@
 > (expose `serialize_world`), `CMakeLists.txt` (+lib +test +`netinput_bridge`), `config/rails/atm.json`
 > (`wire.command` block, version 350→360). guardian.yml UNCHANGED (ctest-only bridge, like 13–15a).
 > Ledger: **ADR-Step-Net-Layer15b-InputUpstream-v1.26r0**.
-> **GIT: committed locally (push to `origin/main` + guardian CI pending user OK).**
+> **GIT: pushed to `origin/main` (code `17adf3b` + receipt `165078f`,
+> `receipt-ATM-Sphere_v1.26r0-17adf3b.yml` — 15/15 gates PASS); guardian CI run
+> [28701764712](https://github.com/cjcgervais/seads/actions/runs/28701764712) GREEN** — Python gates
+> + MSVC + GCC/Clang × x64/AArch64 + the cross-toolchain hash aggregation reproduce all 15 v1.26r0
+> goldens bit-for-bit (nothing moved — a wire reseal), and the new layer-15b bridge (`netinput_bridge`)
+> passes on every native-x64 leg.
 > **NEXT (free pick, none blocking):** a real bidirectional server merging the layer 11–15a output
 > hygiene (async / byte-cap / liveness) with the upstream input path; OR input prediction/
 > reconciliation against this authoritative input server; OR more renderer polish.
