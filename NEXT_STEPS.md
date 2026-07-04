@@ -1,6 +1,77 @@
 # SEADS 2026 — Next Steps (handoff)
 
-> ## ►► CURRENT STATE (2026-07-04): **NETCODE LAYER 18 — MULTI-CLIENT SEAT BINDING (EACH CLIENT ITS OWN AIRCRAFT) DONE ✅** (no-seal, rides **ATM-Sphere v1.26r0**)
+> ## ►► CURRENT STATE (2026-07-04): **NETCODE LAYER 19 — BOUND + ASYNC SERVER (SEAT BINDING MEETS DOWNSTREAM HYGIENE) DONE ✅** (no-seal, rides **ATM-Sphere v1.26r0**)
+> **The two most recent bidirectional servers, composed.** Layer 16 (`broadcast_bidi`) gave the UNBOUND
+> bidirectional server the async/byte-cap/liveness DOWNSTREAM hygiene; layer 18 (`broadcast_bound`) gave
+> each client its own aircraft (SeatPolicy + BIND-001 + authorization) but kept the BLOCKING downstream.
+> They grew from `broadcast_input` along ORTHOGONAL axes — layer 16 = downstream delivery, layer 18 =
+> upstream admission — and both ADRs named the merge as next. Layer 19 is that product: the FIRST server
+> that is simultaneously multiplayer-safe upstream AND back-pressure-safe downstream.
+> **THE SERVER (`src/net/boundasyncserver.{h,cpp}`, `broadcast_bound_async`):** `broadcast_bidi`'s async
+> `select_rw()` loop with `broadcast_bound`'s three binding additions folded in. A **SIBLING of BOTH** —
+> it owns its own `BoundAsyncClient` (the layer-16 `BidiClient`: upstream `StreamReassembler` + downstream
+> `buf`/`off` send buffer + the three liveness fields — **plus** a `seat`) and its own
+> `flush_client`/`over_cap`/`enqueue_bytes`/`drop_client`/`reap_dead` helpers ⇒ sealed `broadcast.cpp`
+> (layers 11/12/15a), `broadcast_bound`, AND `broadcast_bidi` are byte-for-byte UNTOUCHED. **No new
+> `Stats` field or accessor** — layer 16 already added `capped`/`reaped`, layer 18 already added
+> `cmds_unauth` + `InputProducer::n_aircraft()`. Three integration seams, all present in the source
+> siblings: (1) **the seat is freed on EVERY drop path** — `drop_client` calls `seats.release(seat)`, and
+> every leave route funnels through it (clean EOF / malformed framing, a fatal flush, a byte-cap shed, a
+> liveness reap); (2) **BIND-001 is ENQUEUED as the first downstream bytes**, not layer-18's blocking
+> `send_all` — the accepted socket goes non-blocking first (the async invariant), so the BIND rides the
+> same FIFO send buffer as every frame and the async flush delivers it FIRST (same "BIND before any
+> frame" ordering, through the userspace buffer); (3) **per-seat authorization** unchanged from layer 18.
+> **THE CLAIM:** the two axes touch DISJOINT machinery — authorization is an upstream admission filter (it
+> can only reject, the OUT_OF_RANGE determinism class), hygiene is purely downstream delivery (WHEN bytes
+> move, WHICH slow/dead clients shed); neither touches the `CommandQueue`. So when N clients each upstream
+> ONLY their own seat's commands and the union is the whole command set (delivered before each apply_tick),
+> the produced frames are BYTE-IDENTICAL to `build_server_frames` — regardless of the seat permutation,
+> the upstream reorder/chunking, OR any downstream cap/liveness drop; a foreign command changes nothing.
+> **VERIFIED LOCALLY (gcc + clang), all green:**
+> - **BRIDGE `seads_netboundasync_test`** (ctest **24→25** `netboundasync_bridge`, native-x64 like 7–18):
+>   **LEG 1** — THREE seated clients each learn their seat + upstream ONLY that seat's commands (scrambled:
+>   reversed@1 B, forward@7 B, reversed@3 B) THROUGH the FULL async path (cap=0/liveness=0); each
+>   downstream (after its BIND) **byte-identical to `build_server_frames`**, distinct seats in `[0,3)`,
+>   `cmds_ok=6`, `unauth=stale=oob=capped=reaped=0`. **LEG 2** — a seat-0 client upstreams EVERY aircraft's
+>   commands through the async path; only aircraft-0's take (`cmds_ok=3`, `cmds_unauth=3`) ⇒ the
+>   aircraft-0-only world byte-for-byte. **LEG 3** — a LONG (~1 MB, 20 000-tick) stream through a pinned
+>   16 KiB kernel buffer to a seated hook-drained FAST + a DEAD client: DEAD reaped (liveness, cap=0) /
+>   byte-cap shed (liveness=0) + its **seat freed** (`leaves=1`, the OTHER policy stat 0), FAST
+>   byte-identical to its own-seat reference + its commands drove the sim, DEAD delivered
+>   `[BIND | strict frame-prefix]`. Robust to accept-order (the two sub-legs drew FAST into seats 1 and 0;
+>   the per-seat reference matched each).
+> - **Gates: full ctest 25/25 GCC + Clang; ALL 15 goldens byte-identical** (Sphere `6914a994…` via
+>   `seads_golden`); **property tests 232→237** (+5 `test_boundasync.py`: the three axes AUTHORIZE ×
+>   PRODUCE × DELIVER are orthogonal, a seat is freed on ANY drop reason under a randomised join/mixed-drop
+>   interleaving, BIND-first ordering + `[BIND | prefix]`); determinism lint + det_math oracle + rails
+>   monotone + tuning + ceiling PASS.
+> **TRANSPORT-ONLY: no `src/kernel/**`, `src/det_math/**`, `config/rails/**`, snapshot wire bytes,
+> protocol-7, session/event codec, or tuning touched ⇒ all 15 goldens byte-identical, sealed
+> session/event digests unmoved. No seal.** Diff: NEW `src/net/boundasyncserver.{h,cpp}`,
+> `src/net/netboundasync_test_main.cpp`, `tests/property/test_boundasync.py`; MODIFIED `CMakeLists.txt`
+> (`boundasyncserver.cpp` into `seads_netinput`, `seads_netboundasync_test` target, `netboundasync_bridge`
+> ctest). No Python ref, no `Stats`/accessor change (layers 16+18 already added everything needed).
+> guardian.yml UNCHANGED (ctest-only bridge, like layers 13–18). Ledger:
+> **ADR-Step-Net-Layer19-BoundAsyncServer-v1.26r0**.
+> **NEXT (free pick, none blocking):** **bidirectional late-join catch-up** — now DOUBLY unblocked: the
+> binding is settled (a replayed joiner gets a seat + BIND, then the prefix) AND this async server already
+> owns the per-client userspace send buffers a catch-up prefix enqueue builds on (layer 13's live catch-up
+> retained history; here a joiner's prefix would be enqueued ahead of the live suffix). Or: **authenticated**
+> binding (identity, not join-order position); input prediction of REMOTE aircraft (predict-others, not
+> just layer-4a interpolate); renderer polish (assigned seat / predicted-vs-authoritative correction HUD).
+> **NOTE FOR THE NEXT AGENT:** `broadcast_bound_async` is a SIBLING — it duplicates the loop on purpose
+> (the codebase's layer discipline), so DON'T fold seats into `broadcast_bidi` or async buffers into
+> `broadcast_bound`. The BIND MUST be enqueued (not blocking-sent) — a blocking write on a non-blocking
+> client the loop must not wait on would wedge the accept; the `[BIND | prefix]` bridge assertion proves
+> the FIFO ordering survives even when the client is later shed mid-stream. Centralise seat release in
+> `drop_client` (every leave route calls it) — a new drop route that forgets `seats.release` would strand
+> seats; the "seat freed on any drop reason" property pins it. For the catch-up layer: the seat + BIND go
+> out FIRST (they're the join identity), then the prefix, then the live suffix — a replayed joiner is a
+> real seated client, so its own future upstream commands are authorized for its seat like anyone's.
+>
+> ---
+>
+> ## ◄ PREVIOUS (2026-07-04): **NETCODE LAYER 18 — MULTI-CLIENT SEAT BINDING (EACH CLIENT ITS OWN AIRCRAFT) DONE ✅** (no-seal, rides **ATM-Sphere v1.26r0**)
 > **Settles the deferral every bidirectional layer flagged: the client→aircraft binding was POSITIONAL
 > and UNAUTHENTICATED.** In layers 15b/16 a connected client was just a socket in a vector — nothing
 > tied a socket to an aircraft, and the `CommandQueue` accepted a command for ANY in-range aircraft

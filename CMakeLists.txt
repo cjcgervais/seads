@@ -131,7 +131,8 @@ target_link_libraries(seads_broadcast PUBLIC seads_framing seads_socket seads_de
 # function of the canonically-ordered command set, so upstream reorder/chunking is bit-invariant.
 # TRANSPORT: outside the world_hash, no det_math (the wire quantize is the sealed geo001 pipeline).
 add_library(seads_netinput STATIC src/net/input001.cpp src/net/cmdqueue.cpp src/net/inputserver.cpp
-            src/net/bidiserver.cpp src/net/inputclient.cpp src/net/bind001.cpp src/net/boundserver.cpp)
+            src/net/bidiserver.cpp src/net/inputclient.cpp src/net/bind001.cpp src/net/boundserver.cpp
+            src/net/boundasyncserver.cpp)
 target_include_directories(seads_netinput PUBLIC src/net)
 target_link_libraries(seads_netinput PUBLIC seads_session seads_framing seads_socket seads_net
                       seads_kernel seads_replay seads_det_flags)
@@ -306,6 +307,17 @@ target_link_libraries(seads_netbound_test PRIVATE seads_netinput seads_session s
                       seads_framing seads_socket seads_predict seads_net seads_kernel seads_replay
                       seads_det_math seads_det_flags)
 
+# --- layer-19 bound + async bridge: the layer-18 seat binding (SeatPolicy + BIND-001 + authorization)
+# merged with the layer-16 async/byte-cap/liveness downstream hygiene (broadcast_bound_async). Proves
+# (LEG 1) three seated clients each fly their own seat THROUGH the async path to build_server_frames
+# byte-for-byte, (LEG 2) a client's foreign-aircraft commands are rejected through the async path, and
+# (LEG 3) a dead client is reaped/capped + its seat freed without disturbing a cooperative seated client
+# (BIND delivered first by the async buffer) ---
+add_executable(seads_netboundasync_test src/net/netboundasync_test_main.cpp)
+target_link_libraries(seads_netboundasync_test PRIVATE seads_netinput seads_session seads_event
+                      seads_broadcast seads_framing seads_socket seads_predict seads_net seads_kernel
+                      seads_replay seads_det_math seads_det_flags)
+
 # --- client presentation test (globe projection + .seadsrec container + playback interp) ---
 add_executable(seads_client_test src/client/client_test_main.cpp)
 target_link_libraries(seads_client_test PRIVATE seads_client seads_net seads_det_flags)
@@ -360,5 +372,6 @@ if(SEADS_SOCKET_TESTS AND NOT CMAKE_CROSSCOMPILING)
   add_test(NAME netbidi_bridge COMMAND seads_netbidi_test)
   add_test(NAME netpredict_bridge COMMAND seads_netpredict_test)
   add_test(NAME netbound_bridge COMMAND seads_netbound_test)
+  add_test(NAME netboundasync_bridge COMMAND seads_netboundasync_test)
 endif()
 # Golden hash compare is run in CI (guardian.yml) across the toolchain matrix.
