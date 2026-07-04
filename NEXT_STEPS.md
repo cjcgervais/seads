@@ -57,7 +57,9 @@
 > MODIFIED `CMakeLists.txt` (`hello001.cpp` + `authserver.cpp` into `seads_netinput`, `seads_netauth_test`
 > target, `netauth_bridge` ctest). **No shared-file/Stats change.** guardian.yml UNCHANGED (ctest-only
 > bridge, like layers 13–20). Ledger: **ADR-Step-Net-Layer21-AuthenticatedBinding-v1.26r0**.
-> **NOT YET COMMITTED** — awaiting go-ahead for the git commit + Chronicle receipt.
+> **GIT: pushed to `origin/main` (code `dbc8b26` + receipt `c1b2ad8`,
+> `receipt-ATM-Sphere_v1.26r0-dbc8b26.yml` — 15/15 gates PASS, overall PASS, golden `6914a994…`);
+> guardian CI pending on the push.**
 > **NEXT (free pick, none blocking):** **authenticated bound+async/catch-up** — fold identity binding
 > onto the layer-19 async or layer-20 catch-up server (mechanical: authentication = admission is
 > orthogonal to hygiene = delivery and catch-up = replay-depth); **stronger credentials** (a real
