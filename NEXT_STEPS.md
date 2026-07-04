@@ -1,6 +1,68 @@
 # SEADS 2026 — Next Steps (handoff)
 
-> ## ►► CURRENT STATE (2026-07-04): **NETCODE LAYER 17 — PREDICTIVE INPUT CLIENT (THE ROUND-TRIP LOOP CLOSED) DONE ✅** (no-seal, rides **ATM-Sphere v1.26r0**)
+> ## ►► CURRENT STATE (2026-07-04): **NETCODE LAYER 18 — MULTI-CLIENT SEAT BINDING (EACH CLIENT ITS OWN AIRCRAFT) DONE ✅** (no-seal, rides **ATM-Sphere v1.26r0**)
+> **Settles the deferral every bidirectional layer flagged: the client→aircraft binding was POSITIONAL
+> and UNAUTHENTICATED.** In layers 15b/16 a connected client was just a socket in a vector — nothing
+> tied a socket to an aircraft, and the `CommandQueue` accepted a command for ANY in-range aircraft
+> from ANY client. Layer 18 makes it a real multiplayer binding: **a join-order `SeatPolicy` assigns
+> each client its own aircraft, a `BIND-001` handshake TELLS the client its seat, and the server
+> AUTHORIZES upstream commands (a client may steer ONLY its own seat).**
+> **THE SERVER (`src/net/boundserver.{h,cpp}`, `broadcast_bound`):** a **SIBLING of `broadcast_input`**
+> (blocking downstream base ⇒ layers 15b/16/17 byte-for-byte untouched) with three transport additions,
+> all outside the world_hash: (1) `SeatPolicy` — `assign()` hands the LOWEST free aircraft index in
+> `[0,n)`, spectators (seat -1) when full, `release()` reuses on leave; deterministic in the join/leave
+> order. (2) a one-time `BIND-001` record (`src/net/bind001.{h,cpp}` ↔ `tools/bound_ref.py`;
+> `[version 0x01][ZigZag+LEB128 seat][ZigZag+LEB128 n_aircraft]`, seat -1 = spectator) sent as the
+> client's FIRST downstream framing frame — the client is TOLD its aircraft, not left to guess. (3)
+> **authorization**: `seat_authorizes(seat, aircraft) := seat>=0 && aircraft==seat`; a foreign-aircraft
+> command (or any command from a spectator) is DROPPED (`Stats.cmds_unauth`), byte-identical to never
+> arriving — the same determinism class as the queue's `OUT_OF_RANGE` reject.
+> **`BIND-001` IS TRANSPORT METADATA, NOT A SEALED WIRE:** modelled on the layer-7 framing envelope (a
+> Python ref + a byte-pin, but NOT a `rails.wire` block, and it took no seal). It carries no sim value,
+> feeds no hash. The determinism claim rests on the AUTHORIZATION FILTER, not this record ⇒ **no seal**.
+> **THE CLAIM:** when N clients each upstream ONLY their own seat's commands and the union is the whole
+> command set (delivered before each apply_tick), the produced frames are **byte-identical to
+> `build_server_frames`**, regardless of the seat permutation or upstream reorder/chunking; a foreign
+> command changes nothing.
+> **VERIFIED LOCALLY (gcc + clang), all green:**
+> - **BRIDGE `seads_netbound_test`** (ctest **23→24** `netbound_bridge`, native-x64 leg like 7–17):
+>   **LEG 1** — THREE clients each learn their seat from `BIND` and upstream ONLY that seat's commands
+>   (distinct scrambles: reversed@1 B, forward@7 B, reversed@3 B); each client's downstream is
+>   **byte-identical to `build_server_frames`**, distinct BIND seats in `[0,3)`, `cmds_unauth==0`.
+>   **LEG 2** — a seat-0 client upstreams EVERY aircraft's commands; only aircraft-0's take effect
+>   (`cmds_ok==3`, `cmds_unauth==3`) and the downstream is the **aircraft-0-only world byte-for-byte**
+>   (the foreign commands change NOTHING). **LEG 3** — seat policy (fill/spectator/reuse) +
+>   `seat_authorizes` + `BIND-001` codec pin `[0x01,0x02,0x06]` vs `bound_ref.py`, spectator -1
+>   round-trip, wrong-version reject.
+> - **Gates: full ctest 24/24 GCC + Clang; ALL 15 goldens byte-identical** (Sphere `6914a994…` via
+>   `seads_golden` on both toolchains); **property tests 224→232** (+8 `test_bound.py`: BIND round-trip
+>   + version + pin, SeatPolicy under a randomised join/leave interleaving, authorization composition);
+>   determinism lint + rails/roster + det_math oracle + tuning + ceiling PASS.
+> **TRANSPORT-ONLY: no `src/kernel/**`, `src/det_math/**`, `config/rails/**`, snapshot wire bytes,
+> protocol-7, session/event codec, or tuning touched ⇒ all 15 goldens byte-identical, sealed
+> session/event digests unmoved. No seal.** Diff: NEW `src/net/bind001.{h,cpp}` /
+> `boundserver.{h,cpp}` / `netbound_test_main.cpp`, `tools/bound_ref.py`, `tests/property/test_bound.py`;
+> MODIFIED `src/net/inputserver.h` (`Stats` +`cmds_unauth`, `InputProducer::n_aircraft()`),
+> `CMakeLists.txt` (+lib files, `seads_netbound_test` target, `netbound_bridge` ctest). guardian.yml
+> UNCHANGED (ctest-only bridge, like layers 13–17). Ledger:
+> **ADR-Step-Net-Layer18-MultiClientBinding-v1.26r0**.
+> **NEXT (free pick, none blocking):** a **bound + async server** (merge this binding with the layer-16
+> `broadcast_bidi` downstream hygiene — the two are orthogonal axes) and, on top of it, **bidirectional
+> late-join catch-up** (now UNBLOCKED — the binding it needed is settled: a replayed joiner gets a seat
+> + BIND, then the catch-up prefix); **authenticated** binding (identity, not just join-order position);
+> input prediction of REMOTE aircraft; or renderer polish (surface the assigned seat / the
+> predicted-vs-authoritative correction on the HUD).
+> **NOTE FOR THE NEXT AGENT:** authorization lives in the SERVER (`broadcast_bound`), NOT in
+> `CommandQueue` (which is a pure function of the command SET, blind to sockets — keep it that way). LEG
+> 1 is robust to accept-order nondeterminism because each client's rule is "given MY seat, send THAT
+> aircraft's commands" — it reads its BIND before deciding what to upstream, so it works under any seat
+> permutation. `BIND-001` is deliberately NOT a sealed rail (framing-envelope category); do not add a
+> `rails.wire.bind` block or reseal for it. `broadcast_input`/`broadcast_bidi` are untouched siblings —
+> `broadcast_bound` duplicates the loop on purpose (the codebase's layer discipline).
+>
+> ---
+>
+> ## ◄ PREVIOUS (2026-07-04): **NETCODE LAYER 17 — PREDICTIVE INPUT CLIENT (THE ROUND-TRIP LOOP CLOSED) DONE ✅** (no-seal, rides **ATM-Sphere v1.26r0**)
 > **The bidirectional loop is now complete end-to-end. Layer 15b/16 opened the UPSTREAM path (a
 > client's tick-stamped INPUT-001 commands drive the authoritative sealed kernel). Layer 17 is the
 > missing CLIENT half: the client predicts its OWN aircraft LOCALLY from the very commands it upstreams,

@@ -45,6 +45,10 @@ public:
     // snap_every ticks — and return true; false when the scenario is exhausted (outputs untouched).
     bool next(std::int64_t& emit_tick, std::vector<std::uint8_t>& payload);
 
+    // The world size (aircraft count). Additive accessor used by broadcast_bound (layer 18) to size
+    // its SeatPolicy; broadcast_input/bidi ignore it. The producer, queue, and seat pool share this n.
+    std::int64_t n_aircraft() const { return static_cast<std::int64_t>(sc_->n_aircraft); }
+
 private:
     const session::Scenario* sc_;
     CommandQueue* q_;
@@ -66,6 +70,8 @@ struct Stats {
                                  // cap_bytes (drop-slowest; also a leave). 0 for broadcast_input.
     std::size_t reaped = 0;      // layer-16 downstream hygiene: clients reaped for no receive progress
                                  // over liveness_frames produced frames (also a leave). 0 for broadcast_input.
+    std::size_t cmds_unauth = 0; // layer-18 binding: commands dropped for naming a foreign aircraft
+                                 // (not the sender's seat) or coming from a spectator. 0 for broadcast_input/bidi.
     bool ok = false;
 };
 
