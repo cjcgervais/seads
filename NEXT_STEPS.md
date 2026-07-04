@@ -41,8 +41,12 @@
 > broadcast_live param), `netserver_main.cpp` (the demo arg), `netheartbeat_test_main.cpp` (new
 > bridge), `CMakeLists.txt` (+ executable + `netheartbeat_bridge`), `guardian.yml` (+ bridge step),
 > `test_broadcast.py` (+2). Ledger: **ADR-Step-Net-Layer15-Heartbeat-v1.25r0**.
-> **GIT:** see the git line below (pushed; guardian CI GREEN reproduces all 15 goldens + the new
-> layer-15a bridge on the native-x64 legs).
+> **GIT: pushed to `origin/main` (code `c039aac` + receipt `2f94c0c`,
+> `receipt-ATM-Sphere_v1.25r0-c039aac.yml` — 15/15 gates PASS); guardian CI run
+> [28700252003](https://github.com/cjcgervais/seads/actions/runs/28700252003) GREEN** — Python
+> gates + MSVC + GCC/Clang × x64/AArch64 + the cross-toolchain hash aggregation gate all reproduce
+> all 15 v1.25r0 goldens bit-for-bit (nothing moved — transport-only), and the new layer-15a
+> heartbeat bridge (`netheartbeat_bridge`) passes on every native-x64 leg.
 > **NEXT (free pick, none blocking):** **layer 15b — input upstreaming** (the first bidirectional
 > layer: clients send `Command`s back, fed into the authoritative kernel via a canonical
 > tick-stamped queue — brushes the determinism rail, wants a careful ordering contract + ADR); or
