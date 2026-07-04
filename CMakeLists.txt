@@ -131,7 +131,7 @@ target_link_libraries(seads_broadcast PUBLIC seads_framing seads_socket seads_de
 # function of the canonically-ordered command set, so upstream reorder/chunking is bit-invariant.
 # TRANSPORT: outside the world_hash, no det_math (the wire quantize is the sealed geo001 pipeline).
 add_library(seads_netinput STATIC src/net/input001.cpp src/net/cmdqueue.cpp src/net/inputserver.cpp
-            src/net/bidiserver.cpp)
+            src/net/bidiserver.cpp src/net/inputclient.cpp)
 target_include_directories(seads_netinput PUBLIC src/net)
 target_link_libraries(seads_netinput PUBLIC seads_session seads_framing seads_socket seads_net
                       seads_kernel seads_replay seads_det_flags)
@@ -284,6 +284,18 @@ target_link_libraries(seads_netbidi_test PRIVATE seads_netinput seads_session se
                       seads_framing seads_socket seads_predict seads_net seads_kernel seads_replay
                       seads_det_math seads_det_flags)
 
+# --- layer-17 predictive-input-client bridge: the layer-4b predictor driven against the layer-15b/16
+# authoritative input server, closing the round-trip loop. Proves (LEG 1) a client that predicts its
+# own aircraft from the SAME commands it upstreams reconciles SEAMLESSLY against the canonical
+# authoritative frames (zero-correction, predicted == authoritative every tick); (LEG 2) over a real
+# socket the scrambled-upstream -> lossy-downstream round-trip reconstructs the own ship within the wire
+# quantum (bounded) with a reproducible cross-impl digest; (LEG 3) a stale-DROPPED command mispredicts
+# locally and is HEALED exactly at the next authoritative frame (negative control diverges forever) ---
+add_executable(seads_netpredict_test src/net/netpredict_test_main.cpp)
+target_link_libraries(seads_netpredict_test PRIVATE seads_netinput seads_session seads_event seads_broadcast
+                      seads_framing seads_socket seads_predict seads_net seads_kernel seads_replay
+                      seads_det_math seads_det_flags)
+
 # --- client presentation test (globe projection + .seadsrec container + playback interp) ---
 add_executable(seads_client_test src/client/client_test_main.cpp)
 target_link_libraries(seads_client_test PRIVATE seads_client seads_net seads_det_flags)
@@ -336,5 +348,6 @@ if(SEADS_SOCKET_TESTS AND NOT CMAKE_CROSSCOMPILING)
   add_test(NAME netheartbeat_bridge COMMAND seads_netheartbeat_test)
   add_test(NAME netinput_bridge COMMAND seads_netinput_test)
   add_test(NAME netbidi_bridge COMMAND seads_netbidi_test)
+  add_test(NAME netpredict_bridge COMMAND seads_netpredict_test)
 endif()
 # Golden hash compare is run in CI (guardian.yml) across the toolchain matrix.

@@ -1,6 +1,66 @@
 # SEADS 2026 — Next Steps (handoff)
 
-> ## ►► CURRENT STATE (2026-07-04): **NETCODE LAYER 15b — INPUT UPSTREAMING (THE FIRST BIDIRECTIONAL LAYER) SEALED ✅ — ATM-Sphere v1.26r0**
+> ## ►► CURRENT STATE (2026-07-04): **NETCODE LAYER 17 — PREDICTIVE INPUT CLIENT (THE ROUND-TRIP LOOP CLOSED) DONE ✅** (no-seal, rides **ATM-Sphere v1.26r0**)
+> **The bidirectional loop is now complete end-to-end. Layer 15b/16 opened the UPSTREAM path (a
+> client's tick-stamped INPUT-001 commands drive the authoritative sealed kernel). Layer 17 is the
+> missing CLIENT half: the client predicts its OWN aircraft LOCALLY from the very commands it upstreams,
+> and reconciles against the authoritative frames when they come back — so control is instant and the
+> correction is provably invisible when the loop is lossless and the input arrived in time.** This is
+> the layer-4b `predict::Predictor` finally driven against the layer-15b/16 authoritative INPUT server
+> (it had only ever run against a scripted server before).
+> **THE CLIENT (`src/net/inputclient.{h,cpp}`, folded into `seads_netinput`):** `run_predictive_client`
+> predicts the own aircraft each tick from the LOCAL command timeline (fire bit dropped — motion only;
+> hp/ammo are wire-sourced) and reconciles against the authoritative frames delivered under an integer
+> client `lag` + a downstream loss set. Two reconcile SOURCES, mirroring `predict_ref`:
+> - **CANONICAL** — snap to the authoritative full-precision own state ⇒ **SEAMLESS**: predicted ==
+>   authoritative EVERY tick, the reconcile a ZERO-correction no-op (the client's local sim IS the
+>   server's, offset only by latency — the round-trip theorem).
+> - **WIRE** — snap to the DECODED, lossy protocol-7 own state (what a real socket delivers) ⇒ bounded
+>   (within a few wire quanta, not bit-exact) but REPRODUCIBLE ⇒ its own-ship hash sequence is a
+>   cross-impl parity digest, like `session_ref`'s.
+> Both sources reconcile on the SAME cadence (the ticks a frame lands on). `authoritative_own_states`
+> gives the reference own(0) trajectory (own kinematics are independent of the other aircraft absent a
+> hit — INPUT-SK-001's P-47D is never hit, so its lossy wire bytes are identical alone or in the full
+> 3-ship frame; the Python ref judges the socket round-trip without rebuilding the whole world).
+> **VERIFIED LOCALLY (gcc + clang), C++ ≡ Python bit-for-bit (both digests pinned in both files):**
+> - **BRIDGE `seads_netpredict_test`** (ctest **22→23** `netpredict_bridge`, native-x64 CI legs like
+>   layers 7–16): **LEG 1 SEAMLESS** (in-process, canonical) — in sync all 150 ticks, `first_div=-1`,
+>   `max_pos_err=0.0`, digest `abecf117…`; **LEG 2 socket round-trip** — the whole scenario's commands
+>   sent UP SCRAMBLED (reversed, 1 B/send) through `broadcast_input`, the downstream frames stream back
+>   **byte-identical to `build_server_frames`** (the layer-15b invariant), and the client reconciles
+>   own(0) against the DECODED lossy wire within **4.6e-9 rad** (bounded), digest `007c4b9d…`; **LEG 3
+>   HEAL** — a locally-applied command the server DROPPED as STALE mispredicts ticks 31..59 and is
+>   HEALED at tick 60 (the first frame clearing the whole hold-last window), no-reconcile control
+>   diverges forever.
+> - **Gates green: ctest 23/23 GCC + 23/23 Clang; ALL 15 goldens byte-identical** (Sphere `6914a994…`
+>   via seads_golden + ref_kernel on both toolchains); **property tests 216→224** (+8
+>   `test_inputpredict.py`: seamless-in-sync + pinned digest, predicted==truth hashes, wire bounded +
+>   pinned + distinct, stale-drop heal, no-reconcile control never heals, and a Hypothesis
+>   perturbed-initial-state heals-under-canonical); `inputpredict_ref.py --check` PASS.
+> **TRANSPORT/CLIENT-ONLY: no `src/kernel/**`, `src/det_math/**`, `config/rails/**`, wire bytes,
+> protocol-7, or tuning touched ⇒ all 15 goldens byte-identical, sealed session/event digests unmoved.
+> No seal.** Diff: NEW `src/net/inputclient.{h,cpp}` / `netpredict_test_main.cpp`,
+> `tools/inputpredict_ref.py`, `tests/property/test_inputpredict.py`; MODIFIED `CMakeLists.txt`
+> (`inputclient.cpp` into `seads_netinput`, `seads_netpredict_test` target, `netpredict_bridge` ctest).
+> guardian.yml UNCHANGED (ctest-only bridge, like layers 13–16). Ledger:
+> **ADR-Step-Net-Layer17-InputPrediction-v1.26r0**.
+> **NEXT (free pick, none blocking):** a real multi-client binding (each client its OWN aircraft,
+> settling layer 15b's positional/unauthenticated binding) + bidirectional late-join catch-up on top of
+> it; input prediction of REMOTE aircraft (predict-others, not just interpolate layer-4a); or renderer
+> polish (surface the predicted-vs-authoritative correction on the HUD).
+> **NOTE FOR THE NEXT AGENT:** the SEAMLESS theorem is proven against the CANONICAL state, NOT the wire
+> (the wire is lossy — the wire path is reported bounded; the same honest split `predict_ref` drew).
+> `run_predictive_client` gates BOTH sources on an actual delivered frame so their reconcile cadence is
+> identical; `CLIENT_LAG` (10) is a multiple of `snap_every` (5) so a reconcile always lands on an emit
+> tick — a non-multiple lag would desync the C++/Python reconcile ticks. The two pinned digests
+> (`abecf117…` canonical, `007c4b9d…` wire) live in BOTH `inputpredict_ref.py` and
+> `netpredict_test_main.cpp`; any change to INPUT-SK-001, the predictor, or the wire quantize must
+> re-measure both. LEG 3's heal tick (60) is the window-clear tick for a persistent hold-last
+> misprediction (client banked 30..49, healed once the snapshot passes tick 49) — not a one-tick blip.
+>
+> ---
+>
+> ## ◄ PREVIOUS (2026-07-04): **NETCODE LAYER 15b — INPUT UPSTREAMING (THE FIRST BIDIRECTIONAL LAYER) SEALED ✅ — ATM-Sphere v1.26r0**
 > **Every layer 5→15a was server→client. Layer 15b closes the loop: a client sends tick-stamped
 > `Command`s UP into the authoritative sealed kernel.** It "brushes the determinism rail", so the
 > whole design is an ORDERING CONTRACT, not a transport trick.
