@@ -29,6 +29,11 @@ def _states():
     return states
 
 
+def _smooth_states():
+    _hashes, states = rp.pred.run_truth(rp.SMOOTH_SK)
+    return states
+
+
 def test_coast_beats_interpolation_at_now():
     """The coast's "now" error is far tighter than interpolation's render-lag error (the headline)."""
     states = _states()
@@ -99,3 +104,76 @@ def test_any_loss_set_stays_bounded_and_reproducible(drops):
     b = rp.run_remote_client(states, source="wire", drop_emit_ticks=tuple(drops))
     assert a["digest"] == b["digest"]
     assert a["max_pos_err"] < 5e-2     # even with gaps, reseeds keep it bounded (generous margin)
+
+
+# --- LAYER 25: reconcile smoothing (hide the maneuver-correction pop) on SMOOTH-SK-001 ------------
+
+def test_smoothing_shrinks_the_pop():
+    """The smoothed display's worst single-tick state jump is a fraction of the hard snap's (the
+    headline): blending spreads the correction over ~1/smooth ticks instead of landing it in one."""
+    st_ = _smooth_states()
+    snap = rp.run_remote_client_smoothed(st_, rp.SMOOTH_SK, source="canonical", smooth=1.0)
+    smooth = rp.run_remote_client_smoothed(st_, rp.SMOOTH_SK, source="canonical", smooth=0.25)
+    assert snap["max_jump"] > 0.0
+    assert smooth["max_jump"] < snap["max_jump"]     # smoothing genuinely hides the pop
+    assert snap["max_jump"] / smooth["max_jump"] > 2.0   # by a wide margin (~1/smooth = 4x)
+
+
+def test_smooth_one_is_exactly_the_coast():
+    """The degenerate identity: smooth=1 is the hard snap ⇒ its digest equals the layer-24 coast
+    bit-for-bit (the coast target is byte-identical; only the render blend differs for smooth<1)."""
+    st_ = _smooth_states()
+    coast = rp.run_remote_client(st_, rp.SMOOTH_SK, source="canonical")
+    snap = rp.run_remote_client_smoothed(st_, rp.SMOOTH_SK, source="canonical", smooth=1.0)
+    assert snap["digest"] == coast["digest"]
+
+
+def test_smoothed_digests_pinned_and_reproducible():
+    st_ = _smooth_states()
+    canon = rp.run_remote_client_smoothed(st_, rp.SMOOTH_SK, source="canonical")
+    wire = rp.run_remote_client_smoothed(st_, rp.SMOOTH_SK, source="wire")
+    assert canon["digest"] == rp.PIN_SMOOTH_CANON_DIGEST
+    assert wire["digest"] == rp.PIN_SMOOTH_WIRE_DIGEST
+    assert rp.PIN_SMOOTH_CANON_DIGEST != rp.PIN_SMOOTH_WIRE_DIGEST
+    # reproducible
+    assert rp.run_remote_client_smoothed(st_, rp.SMOOTH_SK, source="canonical")["digest"] == canon["digest"]
+
+
+def test_smoothing_trades_accuracy_for_smoothness():
+    """The honest bound: smoothing HIDES the pop but LAGS the truth during the transient — the
+    smoothed now-error is >= the hard snap's, yet still bounded (smoothness bought with lag)."""
+    st_ = _smooth_states()
+    coast = rp.run_remote_client(st_, rp.SMOOTH_SK, source="canonical")
+    smooth = rp.run_remote_client_smoothed(st_, rp.SMOOTH_SK, source="canonical", smooth=0.25)
+    assert smooth["max_pos_err"] >= coast["max_pos_err"]   # laggier ...
+    assert smooth["max_pos_err"] < 1e-1                    # ... but bounded
+
+
+def test_smoothing_is_monotone_in_the_factor():
+    """More smoothing (smaller factor) ⇒ a smaller worst pop but a larger transient lag — the two
+    move oppositely, exactly the accuracy/smoothness trade the factor dials."""
+    st_ = _smooth_states()
+    factors = [1.0, 0.5, 0.25, 0.125]
+    runs = [rp.run_remote_client_smoothed(st_, rp.SMOOTH_SK, source="canonical", smooth=s)
+            for s in factors]
+    jumps = [r["max_jump"] for r in runs]
+    lags = [r["max_pos_err"] for r in runs]
+    # smaller factor -> smaller pop (jumps strictly decrease as smoothing increases)
+    assert all(jumps[i] > jumps[i + 1] for i in range(len(jumps) - 1))
+    # smaller factor -> larger lag (now-error strictly increases)
+    assert all(lags[i] < lags[i + 1] for i in range(len(lags) - 1))
+
+
+@given(smooth=st.sampled_from([1.0, 0.5, 0.25, 0.125, 0.0625]),
+       drops=st.lists(st.sampled_from([20, 40, 60, 80, 100, 120]), min_size=0, max_size=4, unique=True))
+@settings(max_examples=16, deadline=None)
+def test_any_factor_and_loss_stays_bounded_and_reproducible(smooth, drops):
+    """For ANY smoothing factor and ANY loss set the smoothed display is bounded and its digest is
+    reproducible — smoothing never breaks determinism (pure IEEE blend) or the bound (reseeds land)."""
+    st_ = _smooth_states()
+    a = rp.run_remote_client_smoothed(st_, rp.SMOOTH_SK, source="wire", smooth=smooth,
+                                      drop_emit_ticks=tuple(drops))
+    b = rp.run_remote_client_smoothed(st_, rp.SMOOTH_SK, source="wire", smooth=smooth,
+                                      drop_emit_ticks=tuple(drops))
+    assert a["digest"] == b["digest"]
+    assert a["max_pos_err"] < 1e-1

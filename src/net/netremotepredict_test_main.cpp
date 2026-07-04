@@ -65,6 +65,12 @@ static const char* PIN_CANONICAL =
     "d28979c30e3c694fae0792d697cc7d3be79d9b965e342eb9e52030fefb6ab5e2";
 static const char* PIN_WIRE =
     "7468a4edacacddbfd13990646fb734271ca60c3a1c5a7ebf259b2b4d84fb2879";
+// Layer-25 SMOOTHED display digests over SMOOTH-SK-001 (200 ticks, snap/20, lag 20, smooth 0.25).
+static const char* PIN_SMOOTH_CANON =
+    "8fa8148481bf91e090c34f827c5c12d12a564c582771cf48c4cf22c8a1075e54";
+static const char* PIN_SMOOTH_WIRE =
+    "67db5c51a378e956de706a169b501d174ce07d990da3c60e9fd9bc774f0c1af3";
+static const double SMOOTH_FACTOR = 0.25;   // == remotepredict_ref.SMOOTH_FACTOR
 
 static const unsigned CLIENT_LAG = 10;      // ~100 ms; a multiple of snap_every -> reseed lands on emits
 static const unsigned RENDER_DELAY = 15;    // layer-4a interp render delay (lag + one frame)
@@ -111,6 +117,41 @@ static const session::Scenario& remote_scenario() {
     (void)built;
     static const session::Scenario sc = {
         RS_AC, 1u, /*ticks=*/200u, /*snap_every=*/5u, /*lag=*/0u, /*render=*/0u,
+        /*drops=*/nullptr, /*n_drops=*/0u};
+    return sc;
+}
+
+// ---------------------------------------------------------------------------------------------
+// SMOOTH-SK-001 (layer 25 demo) — the SAME Ki-61 under a harsher bad-network regime: SPARSE 5 Hz
+// snapshots (snap/20), a 200 ms lag (lag 20), and a VIOLENT break (bank 75deg, g 3.0). Here the coast
+// genuinely drifts across the long gaps and each reseed POPS the display — where the hard snap jerks
+// and smoothing earns its keep. Radians via the shared hex-float D2R (bit-matches the Python ref).
+// ---------------------------------------------------------------------------------------------
+static const unsigned SMOOTH_LAG = 20, SMOOTH_SNAP = 20;
+
+static const session::Phase SM_P[] = {
+    {0u,   0.0 * D2R,  1.0, 0.72, false},   // cruise
+    {60u,  75.0 * D2R, 3.0, 1.0,  false},   // VIOLENT break
+    {150u, 0.0 * D2R,  1.0, 0.72, false},   // roll out
+};
+
+static session::AircraftSpec SM_AC[1];
+static const session::Scenario& smooth_scenario() {
+    static bool built = [] {
+        SM_AC[0].env = &envtab::KI61;
+        SM_AC[0].lat = 0.0;
+        SM_AC[0].lon = 0.0;
+        SM_AC[0].psi = 90.0 * D2R;
+        SM_AC[0].phi = 0.0;
+        SM_AC[0].alt = 4000.0;
+        SM_AC[0].tas = 220.0;
+        SM_AC[0].sched = SM_P;
+        SM_AC[0].n_phase = 3;
+        return true;
+    }();
+    (void)built;
+    static const session::Scenario sc = {
+        SM_AC, 1u, /*ticks=*/200u, /*snap_every=*/SMOOTH_SNAP, /*lag=*/0u, /*render=*/0u,
         /*drops=*/nullptr, /*n_drops=*/0u};
     return sc;
 }
@@ -317,6 +358,74 @@ static int leg_socket(const Rails& rails, const session::Scenario& sc) {
     return fails;
 }
 
+// ---------------------------------------------------------------------------------------------
+// LEG 4 (LAYER 25 — SMOOTHING HIDES THE POP, in-process on SMOOTH-SK-001): the smoothed display's
+// worst single-tick state jump is a fraction of the hard snap's; smooth=1 reproduces the coast
+// EXACTLY (the degenerate identity — only the render blend differs); the smoothed canonical + wire
+// digests == the pinned reference values; and the smoothed display is bounded but LAGGIER than the
+// snap (the honest trade-off). The coast target is byte-identical to layer 24 throughout.
+// ---------------------------------------------------------------------------------------------
+static int leg_smoothing(const Rails& rails, const session::Scenario& sc) {
+    const auto states = netpredict::authoritative_own_states(rails, sc);
+    const auto frames = session::build_server_frames(rails, sc);
+
+    // the layer-24 coast on SMOOTH-SK (the reference the hard snap must reproduce)
+    netremote::RemoteResult coast = netremote::run_remote_client(
+        rails, states, frames, SMOOTH_LAG, /*drops=*/{}, /*reconcile=*/true,
+        netremote::Source::CANONICAL);
+    // smooth=1 hard snap, and the actual smoothed display (both canonical + wire)
+    netremote::SmoothResult snap = netremote::run_remote_client_smoothed(
+        rails, states, frames, SMOOTH_LAG, {}, true, netremote::Source::CANONICAL, /*smooth=*/1.0);
+    netremote::SmoothResult sc_canon = netremote::run_remote_client_smoothed(
+        rails, states, frames, SMOOTH_LAG, {}, true, netremote::Source::CANONICAL, SMOOTH_FACTOR);
+    netremote::SmoothResult sc_wire = netremote::run_remote_client_smoothed(
+        rails, states, frames, SMOOTH_LAG, {}, true, netremote::Source::WIRE, SMOOTH_FACTOR);
+    netremote::SmoothResult sc_canon2 = netremote::run_remote_client_smoothed(
+        rails, states, frames, SMOOTH_LAG, {}, true, netremote::Source::CANONICAL, SMOOTH_FACTOR);
+
+    int fails = 0;
+    // (a) smoothing shrinks the worst single-tick pop
+    if (!(snap.max_jump > 0.0) || !(sc_canon.max_jump < snap.max_jump)) {
+        ++fails;
+        std::printf("FAIL LEG4: smoothing did not shrink the pop (snap=%.3e smooth=%.3e)\n",
+                    snap.max_jump, sc_canon.max_jump);
+    }
+    // (b) degenerate identity: smooth=1 hard snap == the layer-24 coast, bit-for-bit
+    if (snap.digest != coast.digest) {
+        ++fails;
+        std::printf("FAIL LEG4: smooth=1 not identical to the coast (%s != %s)\n",
+                    snap.digest.c_str(), coast.digest.c_str());
+    }
+    // (c) smoothed digests reproduce the pinned reference values (canonical + wire), reproducibly
+    if (sc_canon.digest != PIN_SMOOTH_CANON) {
+        ++fails;
+        std::printf("FAIL LEG4: smoothed canonical digest %s != pin %s\n",
+                    sc_canon.digest.c_str(), PIN_SMOOTH_CANON);
+    }
+    if (sc_wire.digest != PIN_SMOOTH_WIRE) {
+        ++fails;
+        std::printf("FAIL LEG4: smoothed wire digest %s != pin %s\n",
+                    sc_wire.digest.c_str(), PIN_SMOOTH_WIRE);
+    }
+    if (sc_canon.digest != sc_canon2.digest) {
+        ++fails;
+        std::printf("FAIL LEG4: smoothed digest not reproducible\n");
+    }
+    // (d) honest trade-off: bounded, but laggier than the hard snap during the transient
+    if (!(sc_canon.max_pos_err >= coast.max_pos_err) || sc_canon.max_pos_err > 1e-1) {
+        ++fails;
+        std::printf("FAIL LEG4: trade-off broken (snap now-err %.3e smooth now-err %.3e)\n",
+                    coast.max_pos_err, sc_canon.max_pos_err);
+    }
+    if (fails == 0)
+        std::printf("  LEG4 PASS: smoothing shrinks the worst pop %.1fx (%.2e -> %.2e over the "
+                    "SMOOTH-SK break) with smooth=%.2f; smooth=1 == the coast digest; smoothed "
+                    "canonical %s + wire %s pinned; laggier now-err %.2e (bounded)\n",
+                    snap.max_jump / sc_canon.max_jump, snap.max_jump, sc_canon.max_jump, SMOOTH_FACTOR,
+                    sc_canon.digest.c_str(), sc_wire.digest.c_str(), sc_canon.max_pos_err);
+    return fails;
+}
+
 int main() {
     netsock::WsaGuard wsa;
     const Rails rails = sealed_rails();
@@ -325,12 +434,14 @@ int main() {
     fails += leg_beats_interp(rails, sc);
     fails += leg_reconcile_load_bearing(rails, sc);
     fails += leg_socket(rails, sc);
+    fails += leg_smoothing(rails, smooth_scenario());
     if (fails == 0) {
         std::printf("PASS: layer-24 remote-aircraft prediction — dead-reckoning coast tracks a remote "
                     "to NOW (far tighter than interpolation), stays BOUNDED across a maneuver via the "
-                    "reconcile, and reconstructs the pinned digest over a real lossy socket\n");
+                    "reconcile, reconstructs the pinned digest over a real lossy socket; and layer-25 "
+                    "reconcile SMOOTHING hides the maneuver pop (bounded, reproducible)\n");
         return 0;
     }
-    std::printf("RESULT: layer-24 remote-predict bridge FAIL (%d mismatches)\n", fails);
+    std::printf("RESULT: layer-24/25 remote-predict bridge FAIL (%d mismatches)\n", fails);
     return 1;
 }

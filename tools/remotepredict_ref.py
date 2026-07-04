@@ -49,6 +49,15 @@ bytes are faithful whether serialized alone or inside a full frame — exactly t
 the C++ LEG 3 ship these frames over a real socket (byte-identical to session::build_server_frames)
 and reconstruct the same wire digest.
 
+LAYER 25 — RECONCILE SMOOTHING (run_remote_client_smoothed): the coast SNAPS the display to each
+reseed; across a maneuver that snap POPS (bank / heading / altitude jump the moment an update lands).
+Layer 25 BLENDS the displayed remote a fraction toward each reseed instead — geometric error-decay
+smoothing that spreads the correction over ~1/smooth ticks. The COAST (target) is byte-identical to
+layer 24; smoothing touches only the rendered 7-tuple. smooth=1 is the exact hard snap (a degenerate
+identity: smoothed(1) == the coast). Its honest trade-off: it hides the pop but LAGS the truth during
+the transient (bounded, reproducible). Demonstrated on SMOOTH-SK-001 — a harsher bad-network regime
+(5 Hz snaps, 200 ms lag, a violent break) where the coast actually drifts and the snap actually jerks.
+
 Boundaries (doctrine, identical to predict_ref/inputpredict_ref): net code stays OUTSIDE the kernel;
 the client DRIVES a kernel copy through the public no-arg Kernel.step(); decoded bits feed the reseed,
 never the canonical sim. No kernel / det_math / rails / wire / golden change — this composes the
@@ -95,6 +104,31 @@ REMOTE_SK = {
 }
 
 REMOTE_ID = 0  # the (only) aircraft in REMOTE-SK-001
+
+# ---------------------------------------------------------------------------------------
+# SMOOTH-SK-001 — the LAYER-25 smoothing demo scenario. REMOTE-SK-001's coast is so good (3e-6 rad)
+# that there is nothing to hide; the pop only matters under a REALISTIC bad-network regime — SPARSE
+# snapshots (5 Hz), a big lag (200 ms), and a VIOLENT break — where the coast holds the old kinematics
+# through a long gap and each reseed pops the display hard. Same Ki-61, harsher conditions: this is
+# where hard-snap jerks and smoothing earns its keep. (REMOTE-SK-001 is untouched — its layer-24
+# digests stay pinned.)
+# ---------------------------------------------------------------------------------------
+SMOOTH_SK = {
+    "id": "SMOOTH-SK-001",
+    "ticks": 200,
+    "snap_every": 20,       # 5 Hz snapshots — sparse; the coast drifts a full 20 ticks between reseeds
+    "lag_ticks": 20,        # ~200 ms transport latency (a bad link)
+    "render_delay": 40,     # layer-4a interp render delay (lag + one 20-tick frame)
+    "envelope": "ki61",
+    "start": {"lat_deg": 0.0, "lon_deg": 0.0, "psi_deg": 90.0,
+              "phi_deg": 0.0, "alt_m": 4000.0, "tas_mps": 220.0},
+    "schedule": [
+        {"start_tick": 0,   "bank_deg": 0.0,  "g_cmd": 1.0, "throttle": 0.72},  # cruise
+        {"start_tick": 60,  "bank_deg": 75.0, "g_cmd": 3.0, "throttle": 1.0},   # VIOLENT break
+        {"start_tick": 150, "bank_deg": 0.0,  "g_cmd": 1.0, "throttle": 0.72},  # roll out
+    ],
+    "steady_window": (40, 55),
+}
 
 
 def _emit_ticks(scenario):
@@ -237,9 +271,126 @@ def coast_now_error(states, scenario=REMOTE_SK, source="canonical"):
     return worst
 
 
-# Pinned digests (regenerate by running this file; the C++ bridge asserts the SAME two values).
+# ---------------------------------------------------------------------------------------
+# LAYER 25 — RECONCILE SMOOTHING: hide the maneuver-correction POP.
+#
+# run_remote_client SNAPS the displayed remote hard to each reseed. Over steady flight the coast is
+# nearly exact, so the snap is invisible; but across a maneuver the coast holds the OLD kinematics
+# until a fresher snapshot arrives, and the reseed then POPS the display (position + bank + heading)
+# to the corrected state — a visible jerk each time an update lands. Layer 25 blends the DISPLAYED
+# remote a fraction toward each reseed instead of snapping: geometric error-decay smoothing.
+#
+# The COAST (the target) is byte-identical to layer 24 — the kernel copy still steps / reseeds
+# exactly as before. Smoothing touches ONLY the rendered 7-tuple `disp`, never the kernel (net code
+# stays OUTSIDE the kernel, doctrine). Each tick disp moves `smooth * (target - disp)` componentwise
+# toward the coast target; the correction is spread over ~1/smooth ticks instead of landing in one.
+#
+# Determinism: `_blend` is pure IEEE sub / mul / add (no transcendental, no FMA — the C++ mirror
+# compiles under -ffp-contract=off), so the smoothed display's per-tick world_hash sequence is a
+# cross-impl parity DIGEST, exactly like the coast digests. The corrections it operates on are small
+# (milliradians — the coast never drifts more than lag+snap ticks before a reseed), so a straight
+# componentwise blend is valid; wrap-around never engages in this near-equator, sub-degree regime.
+#
+# The honest TRADE-OFF (stated like every layer's bound): smoothing HIDES the pop but LAGS the truth
+# during the transient — the displayed remote's "now" error is LARGER than the hard snap's while a
+# correction decays, then converges. It buys smoothness with a bounded, reproducible transient lag.
+# ---------------------------------------------------------------------------------------
+
+# Smoothing factor in (0, 1]: 1.0 == run_remote_client (hard snap), smaller == smoother + laggier.
+SMOOTH_FACTOR = 0.25
+
+
+def _blend(disp, target, s):
+    """Move the displayed 7-tuple `disp` a fraction `s` toward the coast `target`, componentwise.
+    s == 1.0 is the exact hard snap (return `target` unchanged — a + 1*(b-a) is NOT bit-exactly b
+    in IEEE, so the degenerate case is special-cased to keep smoothed(s=1) == the layer-24 coast).
+    Otherwise: d + s*(t - d), pure sub/mul/add (no FMA under -ffp-contract=off ⇒ matches C++)."""
+    if s == 1.0:
+        return tuple(target)
+    return tuple(d + s * (t - d) for d, t in zip(disp, target))
+
+
+def run_remote_client_smoothed(states, scenario=REMOTE_SK, reconcile=True, source="canonical",
+                               drop_emit_ticks=(), smooth=SMOOTH_FACTOR):
+    """Layer 25: the layer-24 dead-reckoning coast, but the DISPLAYED remote is BLENDED toward each
+    reseed instead of SNAPPED — error-decay smoothing that hides the maneuver-correction pop.
+
+    The coast (`coaster`) is stepped / reseeded byte-identically to run_remote_client; only the
+    rendered 7-tuple `disp` differs. Returns dict: per_tick (DISPLAYED remote world_hash), digest,
+    max_pos_err (display vs true "now" — the transient lag we trade for smoothness), max_jump (worst
+    single-tick displayed-position change — the pop we shrink), delivered."""
+    ticks = int(scenario["ticks"])
+    lag = int(scenario["lag_ticks"])
+    frames = build_frames(states, scenario)
+    drops = set(int(d) for d in drop_emit_ticks)
+
+    coaster = _kernel_at(states[0])
+    disp = tuple(states[0])            # displayed 7-tuple starts at the known spawn state
+    per_tick, max_err, max_jump, delivered = [], 0.0, 0.0, 0
+    for t in range(1, ticks + 1):
+        st = t - lag
+        reseeded = False
+        if reconcile and st >= 0 and (st in frames) and (st not in drops):
+            base = states[st] if source == "canonical" else _decode_remote7(frames[st])
+            if base is not None:
+                coaster = _coast_to_now(base, lag)   # extrapolate st -> now = t (target)
+                delivered += 1
+                reseeded = True
+        if not reseeded:
+            coaster.step()
+        ac = coaster.aircraft[0]
+        target = (ac.lat, ac.lon, ac.psi, ac.phi, ac.alt, ac.tas, ac.gamma)
+        prev = disp
+        disp = _blend(disp, target, smooth)         # render-only blend toward the coast target
+        per_tick.append(pred.tick_hash(_kernel_at(disp), t))
+        tl = states[t]
+        max_err = max(max_err, abs(disp[0] - tl[0]), abs(disp[1] - tl[1]))
+        # the visible POP lives in attitude (bank/heading), not position — the coast holds the old
+        # bank then the reseed snaps it. Track the worst single-tick change across the full 7-tuple.
+        max_jump = max(max_jump, max(abs(d - p) for d, p in zip(disp, prev)))
+    return {"per_tick": per_tick, "digest": pred.sequence_digest(per_tick),
+            "max_pos_err": max_err, "max_jump": max_jump, "delivered": delivered}
+
+
+def maneuver_jump(states, scenario=REMOTE_SK, source="canonical", smooth=SMOOTH_FACTOR,
+                  drop_emit_ticks=()):
+    """The worst single-tick displayed-position JUMP over the MANEUVER window (from the break at the
+    2nd schedule phase onward) — the pop metric. Compared at smooth=1 (hard snap) vs smooth<1 to show
+    smoothing shrinks the worst correction landed in any one tick."""
+    lo = int(scenario["schedule"][1]["start_tick"])
+    hi = int(scenario["ticks"])
+    ticks = hi
+    lag = int(scenario["lag_ticks"])
+    frames = build_frames(states, scenario)
+    drops = set(int(d) for d in drop_emit_ticks)
+    coaster = _kernel_at(states[0])
+    disp = tuple(states[0])
+    worst = 0.0
+    for t in range(1, ticks + 1):
+        st = t - lag
+        reseeded = False
+        if st >= 0 and (st in frames) and (st not in drops):
+            base = states[st] if source == "canonical" else _decode_remote7(frames[st])
+            if base is not None:
+                coaster = _coast_to_now(base, lag)
+                reseeded = True
+        if not reseeded:
+            coaster.step()
+        ac = coaster.aircraft[0]
+        target = (ac.lat, ac.lon, ac.psi, ac.phi, ac.alt, ac.tas, ac.gamma)
+        prev = disp
+        disp = _blend(disp, target, smooth)
+        if lo <= t <= hi:
+            worst = max(worst, max(abs(d - p) for d, p in zip(disp, prev)))
+    return worst
+
+
+# Pinned digests (regenerate by running this file; the C++ bridge asserts the SAME values).
 PIN_CANONICAL_DIGEST = "d28979c30e3c694fae0792d697cc7d3be79d9b965e342eb9e52030fefb6ab5e2"
 PIN_WIRE_DIGEST = "7468a4edacacddbfd13990646fb734271ca60c3a1c5a7ebf259b2b4d84fb2879"
+# Layer 25 — the SMOOTHED display digests over SMOOTH-SK-001 (smooth=SMOOTH_FACTOR), canonical + wire.
+PIN_SMOOTH_CANON_DIGEST = "8fa8148481bf91e090c34f827c5c12d12a564c582771cf48c4cf22c8a1075e54"
+PIN_SMOOTH_WIRE_DIGEST = "67db5c51a378e956de706a169b501d174ce07d990da3c60e9fd9bc774f0c1af3"
 
 
 def _selftest(check=False):
@@ -279,21 +430,63 @@ def _selftest(check=False):
     if run_remote_client(states, source="wire", drop_emit_ticks=(20, 40, 60))["digest"] != lossy["digest"]:
         print("FAIL lossy-set digest not reproducible"); fails += 1
 
+    # 5) LAYER 25 — SMOOTHING HIDES THE POP (on SMOOTH-SK-001: sparse 5 Hz snaps, 200 ms lag, a
+    #    violent break — where the coast genuinely drifts between reseeds and the hard snap jerks).
+    #    The smoothed display's worst single-tick maneuver jump is a fraction of the hard-snap jump;
+    #    smoothing is deterministic; and smooth=1 reproduces the hard-snap coast EXACTLY (the
+    #    degenerate identity — the coast target is byte-identical, only the render blend differs).
+    _sh, sm_states = pred.run_truth(SMOOTH_SK)
+    smooth_canon = run_remote_client_smoothed(sm_states, SMOOTH_SK, source="canonical")
+    smooth_wire = run_remote_client_smoothed(sm_states, SMOOTH_SK, source="wire")
+    smooth_canon_digest = smooth_canon["digest"]
+    smooth_wire_digest = smooth_wire["digest"]
+    snap_coast = run_remote_client_smoothed(sm_states, SMOOTH_SK, source="canonical", smooth=1.0)
+    snap_jump = maneuver_jump(sm_states, SMOOTH_SK, source="canonical", smooth=1.0)
+    smooth_jump = maneuver_jump(sm_states, SMOOTH_SK, source="canonical", smooth=SMOOTH_FACTOR)
+    if not (smooth_jump < snap_jump):
+        print(f"FAIL smoothing did not shrink the pop (snap={snap_jump:.3e} smooth={smooth_jump:.3e})")
+        fails += 1
+    if run_remote_client_smoothed(sm_states, SMOOTH_SK, source="canonical")["digest"] != smooth_canon_digest:
+        print("FAIL smoothed canonical digest not reproducible"); fails += 1
+    if run_remote_client_smoothed(sm_states, SMOOTH_SK, source="wire")["digest"] != smooth_wire_digest:
+        print("FAIL smoothed wire digest not reproducible"); fails += 1
+    # degenerate: smooth=1 hard snap == the layer-24 coast on SMOOTH-SK, bit-for-bit
+    coast_ref = run_remote_client(sm_states, SMOOTH_SK, source="canonical")
+    if snap_coast["digest"] != coast_ref["digest"]:
+        print(f"FAIL smooth=1 not identical to the coast ({snap_coast['digest']} != {coast_ref['digest']})")
+        fails += 1
+    # honest trade-off: the smoothed display LAGS the truth more than the hard snap during transients
+    if not (smooth_canon["max_pos_err"] >= coast_ref["max_pos_err"]):
+        print("FAIL smoothing unexpectedly tighter than hard snap (should trade accuracy)"); fails += 1
+    if smooth_canon["max_pos_err"] > 1e-1:   # ... but still bounded (harsh scenario, generous margin)
+        print(f"FAIL smoothed now-error unbounded: {smooth_canon['max_pos_err']}"); fails += 1
+
     if check:
         if canon_digest != PIN_CANONICAL_DIGEST:
             print(f"FAIL canonical digest pin: {canon_digest} != {PIN_CANONICAL_DIGEST}"); fails += 1
         if wire_digest != PIN_WIRE_DIGEST:
             print(f"FAIL wire digest pin: {wire_digest} != {PIN_WIRE_DIGEST}"); fails += 1
+        if smooth_canon_digest != PIN_SMOOTH_CANON_DIGEST:
+            print(f"FAIL smoothed canonical pin: {smooth_canon_digest} != {PIN_SMOOTH_CANON_DIGEST}"); fails += 1
+        if smooth_wire_digest != PIN_SMOOTH_WIRE_DIGEST:
+            print(f"FAIL smoothed wire pin: {smooth_wire_digest} != {PIN_SMOOTH_WIRE_DIGEST}"); fails += 1
 
     if fails == 0:
         print(f"RESULT: REMOTE-PREDICT REFERENCE SELFTEST PASS "
               f"({REMOTE_SK['ticks']} ticks, snap/{REMOTE_SK['snap_every']}, lag {REMOTE_SK['lag_ticks']})")
-        print(f"  canonical_digest={canon_digest}")
-        print(f"  wire_digest     ={wire_digest}")
+        print(f"  canonical_digest    ={canon_digest}")
+        print(f"  wire_digest         ={wire_digest}")
+        print(f"  smooth_canon_digest ={smooth_canon_digest}")
+        print(f"  smooth_wire_digest  ={smooth_wire_digest}")
         print(f"  coast_now_err={coast_err:.3e}  interp_now_err={interp_err:.3e}  "
               f"(coast {interp_err / coast_err:.1f}x tighter)")
         print(f"  reconcile bounded={bounded:.3e}  no-reconcile drift={drifting:.3e}  "
               f"({drifting / bounded:.1f}x)")
+        print(f"  SMOOTH-SK maneuver pop (worst single-tick state jump, alt-dominated): "
+              f"snap={snap_jump:.3e}  smooth={smooth_jump:.3e}  "
+              f"(smoothing {snap_jump / smooth_jump:.1f}x smaller)  smooth={SMOOTH_FACTOR}")
+        print(f"  SMOOTH-SK trade-off: snap now-err={coast_ref['max_pos_err']:.3e}  "
+              f"smooth now-err={smooth_canon['max_pos_err']:.3e} (smoother = laggier, still bounded)")
         return 0
     print(f"RESULT: REMOTE-PREDICT REFERENCE SELFTEST FAIL ({fails})")
     return 1

@@ -1,6 +1,56 @@
 # SEADS 2026 — Next Steps (handoff)
 
-> ## ►► CURRENT STATE (2026-07-04): **NETCODE LAYER 24 — REMOTE-AIRCRAFT PREDICTION (PREDICT OTHERS, NOT JUST INTERPOLATE) DONE ✅** (no-seal, rides **ATM-Sphere v1.26r0**)
+> ## ►► CURRENT STATE (2026-07-04): **NETCODE LAYER 25 — REMOTE-PREDICTION RECONCILE SMOOTHING (HIDE THE MANEUVER POP) DONE ✅** (no-seal, rides **ATM-Sphere v1.26r0**)
+> **A remote is now drawn where it IS, and it gets there SMOOTHLY.** Layer 24 predicts a remote to "now" by
+> dead-reckoning coast, but it SNAPS the display to each reseed — across a maneuver on a bad link the coast
+> holds the old kinematics until a fresher snapshot lands, then POPS to the correction (a visible jerk in
+> bank / heading / altitude). Layer 25 BLENDS the displayed remote a fraction toward each reseed instead:
+> geometric error-decay smoothing that spreads the correction over ~`1/smooth` ticks.
+> **THE CLIENT (`src/net/remotepredict.{h,cpp}`, `netremote::run_remote_client_smoothed`):** the COAST (the
+> target) is stepped / reseeded **byte-identically to layer 24** — the kernel copy is untouched. Presentation
+> changes only: a separate rendered 7-tuple `disp` is nudged each tick `disp += smooth·(target − disp)`
+> componentwise (pure IEEE sub/mul/add — no transcendental, no FMA under `-ffp-contract=off`). `smooth∈(0,1]`:
+> **`smooth=1` is the exact hard snap** (special-cased `disp=target`) — a degenerate identity whose digest
+> equals the layer-24 coast bit-for-bit; smaller = smoother + laggier. Two reconcile sources carry over
+> (CANONICAL / WIRE), each a reproducible smoothed digest.
+> **THE HONEST TRADE-OFF:** smoothing HIDES the pop but LAGS the truth during the transient (bounded,
+> reproducible) — the deliberate accuracy↔smoothness dial, stated as the layer's bound. ZERO new det_math
+> (the blend is ±×÷, not a transcendental); net code stays OUTSIDE the kernel (touches only the rendered
+> 7-tuple, never the reseed).
+> **VERIFIED LOCALLY (gcc + clang), all green:**
+> - **BRIDGE `seads_netremotepredict_test`** gains **LEG 4** — in-process on **SMOOTH-SK-001** (the same
+>   Ki-61 under a harsher bad-network regime: 5 Hz snaps `snap/20`, 200 ms `lag 20`, a VIOLENT break bank 75°
+>   g 3.0 — where the coast actually drifts and the snap actually jerks; dominant pop = altitude). The ctest
+>   target + count are UNCHANGED (a new LEG, not a new target — `netremotepredict_bridge` stays test **30/30**):
+>   smoothing shrinks the worst single-tick state jump **4.0×** (2.61e+00 → 6.55e-01 rad, = `1/smooth` at
+>   `smooth=0.25`); `smooth=1` reproduces the layer-24 coast digest bit-for-bit; smoothed canonical
+>   `8fa81484…` + wire `67db5c51…` pinned + reproducible; laggier now-err 4.36e-4 rad (bounded).
+> - **Gates: full ctest 30/30 GCC + Clang; ALL 15 goldens byte-identical** (Sphere `6914a994…`); **property
+>   tests 268→274** (+6 `test_remotepredict.py`: pop shrinks, `smooth=1`==coast, smoothed digests pinned,
+>   accuracy-for-smoothness trade, monotone-in-factor, Hypothesis factor×loss sweep bounded+reproducible);
+>   determinism lint + rails monotone + det_math oracle PASS; `remotepredict_ref.py --check` asserts all four pins.
+> **TRANSPORT/CLIENT-ONLY: no `src/kernel/**`, `src/det_math/**`, `config/rails/**`, wire bytes, protocol-7,
+> session/event codec, or tuning touched ⇒ all 15 goldens byte-identical, sealed session/event digests unmoved.
+> No seal.** Diff: NEW `docs/adr/ADR-Step-Net-Layer25-RemoteSmoothing-v1.26r0.md`; MODIFIED
+> `src/net/remotepredict.{h,cpp}` (`SmoothResult` + `run_remote_client_smoothed` + `blend`/`coaster_state`),
+> `src/net/netremotepredict_test_main.cpp` (SMOOTH-SK-001 + LEG 4 + pins), `tools/remotepredict_ref.py`
+> (SMOOTH-SK-001 + `run_remote_client_smoothed` + `_blend`/`maneuver_jump` + pins),
+> `tests/property/test_remotepredict.py` (+6). **No `CMakeLists.txt` change (no new target), no shared-file/`Stats`
+> change. guardian.yml UNCHANGED** (ctest-only bridge, like layers 13–24). Ledger: **ADR-Step-Net-Layer25-RemoteSmoothing-v1.26r0**.
+> **GIT: committed locally on `main` (not yet pushed at handoff — see below).**
+> **NEXT (free pick, none blocking):** **stronger credentials** (a real MAC/signature the server verifies vs
+> the abstracted i64 token); or **renderer polish** (surface the assigned seat / auth state / the
+> predicted-vs-interpolated-vs-smoothed remote / the correction magnitude on the HUD).
+> **NOTE FOR THE NEXT AGENT:** the smoothing blend is IEEE ±×÷ in the NET layer (outside the kernel) — its
+> cross-impl bit-identity relies on `-ffp-contract=off` (carried by `seads_det_flags`, linked PUBLIC into
+> `seads_netinput`); do NOT let this arithmetic fuse into an FMA or it will diverge from the CPython ref.
+> `smooth=1` is special-cased to `disp=target` on purpose — `a + 1·(b−a)` is NOT bit-exactly `b` in IEEE, and
+> the degenerate identity (smoothed(1)==the coast) depends on the special case. SMOOTH-SK-001 is a NEW harsher
+> scenario; REMOTE-SK-001 (layer 24) is untouched so its pins stay valid.
+>
+> ---
+>
+> ## ◄ PREVIOUS (2026-07-04): **NETCODE LAYER 24 — REMOTE-AIRCRAFT PREDICTION (PREDICT OTHERS, NOT JUST INTERPOLATE) DONE ✅** (no-seal, rides **ATM-Sphere v1.26r0**)
 > **A remote is now drawn where it IS, not where it WAS.** The prediction story had two halves that never
 > met: layer 4b/17 predict the OWN ship (replay the LOCAL commands you upstream — instant, seamless over a
 > lossless loop), while layer 4a renders REMOTE ships by INTERPOLATION (~100 ms in the PAST, smooth but

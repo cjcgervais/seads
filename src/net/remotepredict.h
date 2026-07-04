@@ -56,6 +56,15 @@ struct RemoteResult {
     double max_pos_err = 0.0;           // worst |dlat|,|dlon| (radians) vs the authoritative "now"
 };
 
+// Layer 25 — the SMOOTHED display result (run_remote_client_smoothed).
+struct SmoothResult {
+    std::vector<std::string> per_tick;  // DISPLAYED (blended) remote world_hash after each tick
+    std::string digest;                 // SHA-256 over the concatenated hex — cross-impl parity
+    unsigned delivered = 0;             // authoritative frames reseeded from
+    double max_pos_err = 0.0;           // worst |dlat|,|dlon| (radians) vs "now" — the traded lag
+    double max_jump = 0.0;              // worst single-tick |Δstate| across the 7-tuple — the pop
+};
+
 // Predict the remote (id `remote_id` within the wire frames) to "now" each tick by dead-reckoning
 // the freshest delivered authoritative snapshot. `states[t]` is the authoritative 7-tuple AFTER t
 // ticks (states[0] = spawn). Each tick t: if the frame for server_tick st = t - lag is delivered
@@ -68,6 +77,20 @@ RemoteResult run_remote_client(const Rails& rails,
                                const session::ServerFrames& frames, unsigned lag,
                                const std::vector<std::int64_t>& drop_emit_ticks, bool reconcile,
                                Source src, std::int64_t remote_id = 0);
+
+// Layer 25 — the same dead-reckoning coast, but the DISPLAYED remote is BLENDED toward each reseed
+// target instead of SNAPPED: geometric error-decay smoothing that hides the maneuver-correction pop.
+// `smooth` in (0,1]: 1.0 == run_remote_client (hard snap, a degenerate identity — smoothed(1) hashes
+// the same coast state each tick); smaller == smoother + laggier. The coast (`coaster`) is stepped /
+// reseeded byte-identically to run_remote_client; only the rendered 7-tuple is blended (net code
+// stays OUTSIDE the kernel). The blend is pure IEEE sub/mul/add (no transcendental, no FMA under
+// -ffp-contract=off) ⇒ the displayed remote's per-tick hash sequence is a cross-impl parity digest.
+SmoothResult run_remote_client_smoothed(const Rails& rails,
+                                        const std::vector<predict::OwnState>& states,
+                                        const session::ServerFrames& frames, unsigned lag,
+                                        const std::vector<std::int64_t>& drop_emit_ticks,
+                                        bool reconcile, Source src, double smooth,
+                                        std::int64_t remote_id = 0);
 
 // The coast's "now" position error (worst |dlat|,|dlon| radians vs authoritative states[t]) over
 // the tick window [lo, hi] — the metric compared against interp_now_error to show the coast removes
