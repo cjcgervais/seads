@@ -43,8 +43,10 @@
 > (`remotepredict.cpp` into `seads_netinput`, `seads_netremotepredict_test` target, `netremotepredict_bridge`
 > ctest). No shared-file/`Stats` change. guardian.yml UNCHANGED (ctest-only bridge, like layers 13–23).
 > Ledger: **ADR-Step-Net-Layer24-RemotePrediction-v1.26r0**.
-> **GIT: committed locally on branch `net-layer24-remote-prediction` (code `2533c02` + receipt
-> `receipt-ATM-Sphere_v1.26r0-2533c02.yml` — 15/15 gates PASS, overall PASS, golden `6914a994…`); not yet pushed.**
+> **GIT: pushed to `origin/main` (code `2533c02` + receipt `a1f24fb`,
+> `receipt-ATM-Sphere_v1.26r0-2533c02.yml` — 15/15 gates PASS, overall PASS, golden `6914a994…`);
+> guardian CI (cross-toolchain matrix) triggered on the push — check
+> https://github.com/cjcgervais/seads/actions.**
 > **NEXT (free pick, none blocking):** predict-others reconciliation SMOOTHING (blend the coast toward each
 > reseed instead of snapping, to hide the maneuver correction — pure presentation on top of this);
 > **stronger credentials** (a real MAC/signature vs the abstracted i64 token); or **renderer polish** (draw
