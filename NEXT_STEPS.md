@@ -1,81 +1,76 @@
 # SEADS 2026 — Next Steps (handoff)
 
-> ## ►► CURRENT STATE (2026-07-04): **NETCODE LAYER 21 — AUTHENTICATED BINDING (SEAT BY IDENTITY, NOT JOIN-ORDER POSITION) DONE ✅** (no-seal, rides **ATM-Sphere v1.26r0**)
-> **The last honest-scope caveat every bidirectional layer since 15b flagged — the binding was
-> POSITIONAL and UNAUTHENTICATED — is now settled.** Layer 18 gave each client its own aircraft, but by
-> JOIN ORDER: first socket → seat 0, next → seat 1. A reconnecting player got a *different* aircraft
-> depending on who else was connected, and nothing tied a socket to an identity. Layer 21 makes the
-> binding a function of the client's IDENTITY.
-> **THE SERVER (`src/net/authserver.{h,cpp}`, `broadcast_auth`):** `broadcast_bound`'s single-thread
-> `select()` loop with the join-order `SeatPolicy` REPLACED by an identity handshake. A **SIBLING** —
-> owns its own `AuthClient` (identical to layer 18's `BoundClient`) + accept/loop code ⇒ sealed
-> `broadcast_bound`/`broadcast_input`/`broadcast_bidi`/the async & catch-up siblings are byte-for-byte
-> UNTOUCHED. **BIND-001 + `seat_authorizes` reused VERBATIM; NO shared-file change** (no `Stats`/accessor
-> edit — layer 18 already added `cmds_unauth`; the cleanest sibling yet, like layer 19). Three pieces:
-> (1) **HELLO-001** (`src/net/hello001.{h,cpp}` ↔ `tools/auth_ref.py`) — the client's FIRST upstream
-> framing frame, `[version 0x01][ZigZag+LEB128 token]`, the upstream mirror of BIND-001; reuses the
-> sealed GEO-001 i64 codec ⇒ **ZERO new det_math (fifteenth consecutive)**. Read at accept, BEFORE the
-> seat is assigned. (2) **CredentialTable** (`src/net/authserver`) — a pre-shared roster maps each token
-> to a DESIGNATED seat; `authenticate(token)` → that seat if free, else SPECTATOR (unknown token OR its
-> seat already held = double-login); `release` frees it so a reconnecting identity reclaims ITS OWN seat.
-> The seat for a token is a function of the ROSTER, invariant to join order. (3) **BIND-001 +
-> authorization** unchanged from layer 18.
-> **THE CLAIM (strictly stronger than layer 18):** authentication only decides WHICH seat (if any) each
-> identity holds — an admission filter, the OUT_OF_RANGE/`cmds_unauth` determinism class — it never
-> touches the CommandQueue. So N authenticated clients each upstreaming ONLY their own seat's commands
-> compose to `build_server_frames` BYTE-IDENTICAL, regardless of which identity connected in which order,
-> the byte reorder/chunking, or an unknown-token spectator also upstreaming (all dropped). Layer 18 could
-> only assert "distinct seats" (accept-order-dependent); here each identity draws its SPECIFIC designated
-> seat, pinned per token.
-> **HELLO-001 IS TRANSPORT METADATA, NOT A SEALED WIRE** (modelled on BIND-001 / the layer-7 framing
-> envelope — no sim value, no hash, not a `rails.wire` block) ⇒ **no seal**, rides v1.26r0. Byte parity
-> still pinned (shared `[0x01,0x0E]` for token 7).
+> ## ►► CURRENT STATE (2026-07-04): **NETCODE LAYER 22 — AUTHENTICATED + ASYNC SERVER (IDENTITY BINDING × DOWNSTREAM HYGIENE) DONE ✅** (no-seal, rides **ATM-Sphere v1.26r0**)
+> **Authentication and the production-grade downstream hygiene can finally be used TOGETHER.** Layer 21
+> gave identity-based seats but only on the BLOCKING base (`broadcast_bound`), so an authenticated server
+> still back-pressured on one slow client and never shed a dead peer. Layer 22 is the **18→19 step re-run
+> on the authenticated server (21→22)**: fold the layer-16/19 async/byte-cap/liveness hygiene onto the
+> layer-21 identity binding — the two axes (admission vs delivery) proven orthogonal.
+> **THE SERVER (`src/net/authasyncserver.{h,cpp}`, `broadcast_auth_async`):** `broadcast_bound_async`'s
+> async `select_rw()` loop (non-blocking per-client send buffers + opt-in byte-cap drop-slowest +
+> liveness reap) with the join-order seat assignment REPLACED by `broadcast_auth`'s identity handshake.
+> A **SIBLING of both** — owns its own `AuthAsyncClient` (layer 19's `BoundAsyncClient` exactly) +
+> flush/enqueue/cap/reap/drop helpers ⇒ sealed `broadcast.cpp`, `broadcast_bound`, `broadcast_bidi`,
+> `broadcast_bound_async`, `broadcast_bound_catchup`, `broadcast_auth` all byte-for-byte UNTOUCHED.
+> **`CredentialTable` + `seat_authorizes` + HELLO-001 + BIND-001 reused VERBATIM; NO shared-file/`Stats`
+> change** (layers 16+18 already added `capped`/`reaped`/`cmds_unauth`; the cleanest sibling class, like
+> layers 19 & 21). Three composed pieces: (1) **identity seat** — HELLO-001 read at accept
+> (bounded-blocking, `accept_deadline_ms`) → `CredentialTable::authenticate` → designated seat / spectator;
+> seat freed on EVERY drop path (EOF, flush, cap, reap) so a reconnecting identity reclaims ITS OWN seat.
+> (2) **BIND + authorization through the async buffer** — BIND-001 ENQUEUED as the first downstream bytes
+> (not layer 21's blocking `send_all` — the async flush delivers it first); own-seat authorization
+> (`cmds_unauth`) unchanged. (3) **async hygiene** — no back-pressure + byte-cap + liveness reap.
+> **THE CLAIM:** the two axes touch DISJOINT machinery (authentication = upstream admission, the
+> `cmds_unauth`/OUT_OF_RANGE class; hygiene = downstream delivery) — neither touches the CommandQueue. So N
+> authenticated clients each upstreaming ONLY their own seat compose to `build_server_frames`
+> BYTE-IDENTICAL regardless of which identity connected in which order, the upstream reorder/chunking, OR
+> any downstream cap/liveness drop. Headline over layer 19: a seat freed by a byte-cap shed / liveness reap
+> is reclaimed by its OWN identity (join-order could only promise *some* free seat).
 > **VERIFIED LOCALLY (gcc + clang), all green:**
-> - **BRIDGE `seads_netauth_test`** (ctest **26→27** `netauth_bridge`, native-x64 like 7–20):
->   **LEG 1** (identity seats, invariant to join order — the headline) — 3 clients present distinct
->   tokens with **token order ≠ seat order** (100→seat 2, 200→seat 0, 300→seat 1); each is bound to
->   EXACTLY its designated seat (asserted per token, not just "distinct"), upstreams ONLY that seat
->   (scrambled: reversed@1B / forward@7B / reversed@3B) ⇒ each downstream byte-identical to
->   `build_server_frames`, `cmds_ok=6, unauth=stale=oob=0, joins=3`.
->   **LEG 2** (auth + authorization boundary) — a valid seat-0 client's 3 foreign commands AND an
->   unknown-token (999) SPECTATOR's 6 commands ALL rejected (`cmds_unauth=9`); both see the aircraft-0-only
->   world byte-for-byte (no credential → no aircraft; own seat only). A's BIND seat 0, B's BIND seat -1.
->   **LEG 3** (in-process) — HELLO-001 codec pin `[0x01,0x0E]` vs `auth_ref.py` + negative-token round-trip
->   + wrong-version reject; CredentialTable (identity→seat invariant to auth order, unknown→spectator,
->   double-login→spectator, release-then-reclaim-OWN-seat); reused `seat_authorizes`.
-> - **Gates: full ctest 27/27 GCC + Clang; ALL 15 goldens byte-identical** (Sphere `6914a994…` via
->   `seads_golden` on both toolchains); **property tests 242→250** (+8 `test_auth.py`: HELLO round-trip +
->   version + pin, CredentialTable seat-is-a-function-of-identity under a shuffled auth order over a random
->   bijection, unknown→spectator, no-double-booking + reclaim under a randomised join/leave, reused
->   `seat_authorizes`, auth+authorization composition); `auth_ref.py` selftest PASS; determinism lint +
->   det_math oracle + rails monotone + tuning + ceiling PASS.
+> - **BRIDGE `seads_netauthasync_test`** (ctest **27→28** `netauthasync_bridge`, native-x64 gcc+clang):
+>   **LEG 1** (identity binding survives the async path) — 3 identities, token order ≠ seat order
+>   (100→2, 200→0, 300→1), each upstreams ONLY its seat (scrambled/chunked) through the FULL async path
+>   ⇒ each downstream (after BIND) byte-identical to `build_server_frames` (31 frames), each draws its
+>   SPECIFIC seat, `cmds_ok=6, unauth=stale=oob=capped=reaped=0, joins=3`.
+>   **LEG 2** (auth + authorization survive the async path) — a valid seat-0 client's 3 foreign commands
+>   + an unknown-token (999) SPECTATOR's 6 commands ALL rejected (`cmds_unauth=9`) through the async
+>   buffers; both see the aircraft-0-only world byte-for-byte.
+>   **LEG 3** (hygiene composes with identity) — long stream / pinned 16 KiB buffer: FAST (token 200 →
+>   seat 0, hook-drained) byte-identical to its reference + its commands drove the sim; DEAD (token 300 →
+>   seat 1, silent) dropped by the policy under test — **sub-leg A** liveness reap at cap=0 (`reaped=1`),
+>   **sub-leg B** byte-cap shed at liveness=0 (`capped=1`) — + its SEAT freed (`joins=2, leaves=1`),
+>   delivered `[BIND(seat 1) | strict prefix]`. Seats bound by identity ⇒ no accept-order ambiguity.
+> - **Gates: full ctest 28/28 GCC + Clang; ALL 15 goldens byte-identical** (Sphere `6914a994…` via
+>   `seads_golden` GCC + the Python reference); **property tests 250→255** (+5 `test_authasync.py`:
+>   authentication is downstream-blind, authenticated frames order-invariant, credential seat freed on ANY
+>   drop reason + reclaimed by its OWN identity, BIND-first prefix, dead-client-changes-nothing);
+>   rails monotone + det_math oracle PASS.
 > **TRANSPORT-ONLY: no `src/kernel/**`, `src/det_math/**`, `config/rails/**`, snapshot wire bytes,
 > protocol-7, session/event codec, or tuning touched ⇒ all 15 goldens byte-identical, sealed
-> session/event digests unmoved. No seal.** Diff: NEW `src/net/hello001.{h,cpp}`,
-> `src/net/authserver.{h,cpp}`, `src/net/netauth_test_main.cpp`, `tools/auth_ref.py`,
-> `tests/property/test_auth.py`, `docs/adr/ADR-Step-Net-Layer21-AuthenticatedBinding-v1.26r0.md`;
-> MODIFIED `CMakeLists.txt` (`hello001.cpp` + `authserver.cpp` into `seads_netinput`, `seads_netauth_test`
-> target, `netauth_bridge` ctest). **No shared-file/Stats change.** guardian.yml UNCHANGED (ctest-only
-> bridge, like layers 13–20). Ledger: **ADR-Step-Net-Layer21-AuthenticatedBinding-v1.26r0**.
-> **GIT: pushed to `origin/main` (code `dbc8b26` + receipt `c1b2ad8`,
-> `receipt-ATM-Sphere_v1.26r0-dbc8b26.yml` — 15/15 gates PASS, overall PASS, golden `6914a994…`);
-> guardian CI pending on the push.**
-> **NEXT (free pick, none blocking):** **authenticated bound+async/catch-up** — fold identity binding
-> onto the layer-19 async or layer-20 catch-up server (mechanical: authentication = admission is
-> orthogonal to hygiene = delivery and catch-up = replay-depth); **stronger credentials** (a real
-> MAC/signature the server verifies, vs the abstracted i64 token); **input prediction of REMOTE aircraft**
-> (predict-others, not just layer-4a interpolate); or **renderer polish** (assigned seat / auth state /
-> predicted-vs-authoritative correction on the HUD). The bidirectional server arc (15b→21) is now
-> multiplayer-complete: bound, async, hygienic, late-join-catch-up-capable, AND identity-authenticated.
-> **NOTE FOR THE NEXT AGENT:** `broadcast_auth` is a SIBLING — it duplicates `broadcast_bound`'s loop on
-> purpose (the codebase's layer discipline), so DON'T fold identity into `broadcast_bound`. The one real
-> difference from layer 18 is the ACCEPT path: the server now reads the client's HELLO-001 (a blocking
-> handshake read, guarded by `wait_readable(accept_deadline_ms)`) BEFORE assigning a seat, and submits any
-> command frames pipelined after the HELLO in the same read. Keep authentication in the SERVER (the
-> CommandQueue stays a pure function of the command SET, blind to identity). The credential is an opaque
-> i64 looked up in a roster — a production system verifies a MAC/signature; that's orthogonal crypto, out
-> of this cut's scope. HELLO-001 is deliberately NOT a sealed rail (framing-envelope category, like
-> BIND-001); do not add a `rails.wire.hello` block or reseal for it.
+> session/event digests unmoved. No seal.** Diff: NEW `src/net/authasyncserver.{h,cpp}`,
+> `src/net/netauthasync_test_main.cpp`, `tests/property/test_authasync.py`,
+> `docs/adr/ADR-Step-Net-Layer22-AuthAsyncServer-v1.26r0.md`; MODIFIED `CMakeLists.txt`
+> (`authasyncserver.cpp` into `seads_netinput`, `seads_netauthasync_test` target, `netauthasync_bridge`
+> ctest). **No shared-file/Stats change; no new `_ref.py`** (reference = `auth_ref.py`'s CredentialTable +
+> input001/framing/bound_ref, reused). guardian.yml UNCHANGED (ctest-only bridge, like layers 13–21).
+> Ledger: **ADR-Step-Net-Layer22-AuthAsyncServer-v1.26r0**.
+> **GIT: committed to `main` (see receipt). guardian CI runs on push.**
+> **NEXT (free pick, none blocking):** **authenticated bound + CATCH-UP** — the last rung of the
+> authenticated arc (21→22→23): fold layer-20's windowed catch-up onto `broadcast_auth_async` (mechanical:
+> catch-up = replay-depth, orthogonal to admission + delivery — this layer now owns the send buffers a
+> catch-up prefix enqueue builds on); **stronger credentials** (a real MAC/signature vs the abstracted i64
+> token); **input prediction of REMOTE aircraft** (predict-others, not just layer-4a interpolate); or
+> **renderer polish** (assigned seat / auth state / predicted-vs-authoritative correction on the HUD).
+> The bidirectional server arc is now bound, async, hygienic, late-join-catch-up-capable, AND identity-
+> authenticated — with identity now composed onto the async axis.
+> **NOTE FOR THE NEXT AGENT:** `broadcast_auth_async` is a SIBLING of BOTH `broadcast_auth` and
+> `broadcast_bound_async` — it duplicates the async loop + swaps in the identity accept on purpose (the
+> layer discipline), so DON'T edit `broadcast_bound_async` to take a `CredentialTable`. The merge is
+> mechanical because the axes are disjoint: authentication = upstream admission filter (never touches the
+> CommandQueue), hygiene = downstream delivery. For layer 23 (auth + catch-up), mirror layer 20 onto THIS
+> file: add a `history` vector + `accept_all` replay of `history[max(0,fi-W):]` right after the BIND
+> enqueue, and add `trimmed` to the reap accounting (the ONE additive shared-file change layer 20 made).
+> HELLO-001 stays transport metadata (framing-envelope category); do not add a `rails.wire.hello` block.
 >
 > ---
 >
