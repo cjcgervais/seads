@@ -62,6 +62,10 @@ struct Stats {
     std::size_t cmds_ok = 0;     // commands accepted into the queue
     std::size_t cmds_stale = 0;  // commands dropped: apply_tick already stepped past (the drop policy)
     std::size_t cmds_oob = 0;    // commands dropped: aircraft index out of range
+    std::size_t capped = 0;      // layer-16 downstream hygiene: clients shed for a pending backlog over
+                                 // cap_bytes (drop-slowest; also a leave). 0 for broadcast_input.
+    std::size_t reaped = 0;      // layer-16 downstream hygiene: clients reaped for no receive progress
+                                 // over liveness_frames produced frames (also a leave). 0 for broadcast_input.
     bool ok = false;
 };
 

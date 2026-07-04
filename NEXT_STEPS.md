@@ -55,9 +55,31 @@
 > + MSVC + GCC/Clang × x64/AArch64 + the cross-toolchain hash aggregation reproduce all 15 v1.26r0
 > goldens bit-for-bit (nothing moved — a wire reseal), and the new layer-15b bridge (`netinput_bridge`)
 > passes on every native-x64 leg.
-> **NEXT (free pick, none blocking):** a real bidirectional server merging the layer 11–15a output
-> hygiene (async / byte-cap / liveness) with the upstream input path; OR input prediction/
-> reconciliation against this authoritative input server; OR more renderer polish.
+> **NEXT (free pick, none blocking):** input prediction/reconciliation against this authoritative
+> input server (client applies its own commands locally, rewinds/replays on the authoritative frame);
+> OR bidirectional late-join catch-up once the client→aircraft binding is settled; OR renderer polish.
+> **↳ DONE since the seal: NETCODE LAYER 16 — bidirectional server (no-seal, rides v1.26r0).**
+> `broadcast_bidi` (`src/net/bidiserver.{h,cpp}`) merges layer 15b's UPSTREAM input path with the
+> layer-11/12/15a DOWNSTREAM output hygiene: `broadcast_input`'s loop + `broadcast_live`'s per-client
+> userspace send buffers (async, no back-pressure) + opt-in `cap_bytes` byte-cap (drop-slowest) +
+> `liveness_frames` reap (silently-dead peer). A **SIBLING** of both — owns its own `BidiClient`
+> (an UPSTREAM `StreamReassembler` beside a DOWNSTREAM send buffer + the liveness fields) and its own
+> flush/enqueue/cap/reap helpers — so sealed `broadcast.cpp` AND `inputserver.cpp`'s `broadcast_input`
+> are byte-for-byte untouched; `netinput::Stats` gains additive `capped`/`reaped`. The ONE place it
+> differs from `broadcast_live`: a readable client is USUALLY sending commands (drain the burst →
+> `CommandQueue`), only `recv≤0` is a leave (every `recv_some` is guarded by a positive readability
+> check ⇒ never the non-blocking `EWOULDBLOCK` `<0`). The merge changes only the downstream transport
+> ⇒ the kernel's output stays a pure function of the canonical command SET. BRIDGE `seads_netbidi_test`
+> (ctest **21→22** `netbidi_bridge`): LEG A — scrambled upstream (reversed@1B / rotate3@7B) through the
+> FULL async path reproduces `build_server_frames` byte-for-byte to a cooperative reader
+> (cap=0/liveness=0); LEG B — liveness reaps a never-reading DEAD client at cap=0 (reaped=1/leaves=1/
+> capped=0) while a hook-drained FAST stays byte-identical + its 6 commands drove the sim; LEG C —
+> byte-cap sheds DEAD (capped=1/leaves=1/reaped=0), FAST untouched, DEAD a strict byte-prefix. Honest
+> scope: no late-join catch-up (needs the positional client→aircraft binding settled first). +5
+> property tests (`test_bidi.py` — upstream canonicalization × downstream cap/liveness delivery are
+> ORTHOGONAL) ⇒ **216**. TRANSPORT-ONLY ⇒ all 15 goldens byte-identical (Sphere `6914a994…`), no
+> protocol/digest change, guardian.yml unchanged. Gates GREEN locally (ctest 22/22, 216 property
+> tests). ADR-Step-Net-Layer16-BidiServer-v1.26r0.
 > **NOTE FOR THE NEXT AGENT:** `broadcast_input` is a first cut — BLOCKING downstream, one `recv` per
 > readable event per iteration (fine for the tiny command volume; a large upstream burst spanning many
 > recvs would ingest across iterations). The rendezvous in the bridge (on_frame(0) blocks until the

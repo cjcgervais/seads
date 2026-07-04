@@ -130,7 +130,8 @@ target_link_libraries(seads_broadcast PUBLIC seads_framing seads_socket seads_de
 # producer/server. Reads client Commands UP into the sealed kernel; the kernel's output is a pure
 # function of the canonically-ordered command set, so upstream reorder/chunking is bit-invariant.
 # TRANSPORT: outside the world_hash, no det_math (the wire quantize is the sealed geo001 pipeline).
-add_library(seads_netinput STATIC src/net/input001.cpp src/net/cmdqueue.cpp src/net/inputserver.cpp)
+add_library(seads_netinput STATIC src/net/input001.cpp src/net/cmdqueue.cpp src/net/inputserver.cpp
+            src/net/bidiserver.cpp)
 target_include_directories(seads_netinput PUBLIC src/net)
 target_link_libraries(seads_netinput PUBLIC seads_session seads_framing seads_socket seads_net
                       seads_kernel seads_replay seads_det_flags)
@@ -274,6 +275,15 @@ target_link_libraries(seads_netinput_test PRIVATE seads_netinput seads_session s
                       seads_framing seads_socket seads_predict seads_net seads_kernel seads_replay
                       seads_det_math seads_det_flags)
 
+# --- layer-16 bidirectional bridge: the layer-15b upstream input path merged with the layer-11/12/15a
+# downstream output hygiene (async send buffers / byte-cap / liveness reap). Proves the async path
+# preserves the 15b determinism claim (scrambled upstream == build_server_frames to a cooperative
+# reader) and that a never-reading client is reaped/capped without disturbing that byte-identical stream ---
+add_executable(seads_netbidi_test src/net/netbidi_test_main.cpp)
+target_link_libraries(seads_netbidi_test PRIVATE seads_netinput seads_session seads_event seads_broadcast
+                      seads_framing seads_socket seads_predict seads_net seads_kernel seads_replay
+                      seads_det_math seads_det_flags)
+
 # --- client presentation test (globe projection + .seadsrec container + playback interp) ---
 add_executable(seads_client_test src/client/client_test_main.cpp)
 target_link_libraries(seads_client_test PRIVATE seads_client seads_net seads_det_flags)
@@ -325,5 +335,6 @@ if(SEADS_SOCKET_TESTS AND NOT CMAKE_CROSSCOMPILING)
   add_test(NAME netwindow_bridge COMMAND seads_netwindow_test)
   add_test(NAME netheartbeat_bridge COMMAND seads_netheartbeat_test)
   add_test(NAME netinput_bridge COMMAND seads_netinput_test)
+  add_test(NAME netbidi_bridge COMMAND seads_netbidi_test)
 endif()
 # Golden hash compare is run in CI (guardian.yml) across the toolchain matrix.
