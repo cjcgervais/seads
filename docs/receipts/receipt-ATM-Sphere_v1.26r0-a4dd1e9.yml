@@ -1,0 +1,36 @@
+seal: ATM-Sphere v1.26r0
+realm: ATM-only
+geometry:
+  radius_m: 15000
+  flattening: 0
+tick_dt_s: 0.01
+gravity_mps2: 9.80665
+ceiling:
+  atm_top_m: 8000
+  soft_band_m: 100
+wire_hash: GEO-001+KIN-002
+change_summary: "Netcode layer 16 — bidirectional server (broadcast_bidi): merges layer 15b upstream input with layer-11/12/15a downstream output hygiene (async send buffers / byte-cap drop-slowest / liveness reap). SIBLING of broadcast_live + broadcast_input (both byte-for-byte untouched); netinput::Stats +capped/reaped. Bridge seads_netbidi_test (ctest 21->22 netbidi_bridge): LEG A scrambled upstream through async path == build_server_frames byte-for-byte; LEG B liveness reap at cap=0 (FAST byte-identical + commands drove sim); LEG C byte-cap shed. +5 property tests (test_bidi.py) => 216. TRANSPORT-ONLY: all 15 goldens byte-identical, no protocol/digest change, guardian.yml unchanged. Rides v1.26r0. ADR-Step-Net-Layer16-BidiServer-v1.26r0."
+rail_change: false
+gates:
+  spec_monotone_check: PASS
+  det_math_oracle: PASS
+  tuning_probe: PASS
+  atm_top_probe: PASS
+  geo001_codec: PASS
+  snapshot_codec: PASS
+  weapon_codec: PASS
+  lockstep: PASS
+  interp: PASS
+  predict: PASS
+  session: PASS
+  event: PASS
+  validate_snapshot: PASS
+  validate_scenarios: PASS
+  property_tests: PASS
+golden_id: GOLDEN-SK-Sphere-001
+golden_sha256: "6914a99492897dd98af77bb4e4e1a32a71215d3ed380c658aa17ab842b13eb20"
+commit_sha: "a4dd1e931728c3ba065ab9db02e470a484c8e701"
+toolchain_matrix: [python-ref, MSVC2022, Clang18, GCC13, x64, AArch64]
+date: "2026-07-04"
+overall: PASS
+signoff: "Chronicler"
