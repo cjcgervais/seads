@@ -72,6 +72,8 @@ struct Stats {
                                  // over liveness_frames produced frames (also a leave). 0 for broadcast_input.
     std::size_t cmds_unauth = 0; // layer-18 binding: commands dropped for naming a foreign aircraft
                                  // (not the sender's seat) or coming from a spectator. 0 for broadcast_input/bidi.
+    std::size_t trimmed = 0;     // layer-20 catch-up: retained-history payloads EVICTED by catchup_window
+                                 // (mirror of netbcast::Stats.trimmed). 0 unless broadcast_bound_catchup with a window.
     bool ok = false;
 };
 

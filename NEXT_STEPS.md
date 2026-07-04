@@ -1,6 +1,74 @@
 # SEADS 2026 — Next Steps (handoff)
 
-> ## ►► CURRENT STATE (2026-07-04): **NETCODE LAYER 19 — BOUND + ASYNC SERVER (SEAT BINDING MEETS DOWNSTREAM HYGIENE) DONE ✅** (no-seal, rides **ATM-Sphere v1.26r0**)
+> ## ►► CURRENT STATE (2026-07-04): **NETCODE LAYER 20 — BIDIRECTIONAL LATE-JOIN CATCH-UP DONE ✅** (no-seal, rides **ATM-Sphere v1.26r0**)
+> **The capability every bidirectional layer since 15b flagged as deferred — now doubly unblocked and
+> shipped.** A client joining a running authoritative INPUT server mid-fight gets its seat + BIND, is
+> REPLAYED the frames it missed, then fed the live stream — reconstructing (up to its window) the whole
+> thing. Layer 19 declared it doubly unblocked: the binding is settled (a replayed joiner gets a seat +
+> BIND) AND the async server already owns the per-client send buffers a catch-up prefix enqueue builds on.
+> Layer 20 folds `broadcast_live`'s windowed catch-up (layers 10/14) into `broadcast_bound_async`.
+> **THE SERVER (`src/net/boundcatchupserver.{h,cpp}`, `broadcast_bound_catchup`):** `broadcast_bound_async`'s
+> async `select_rw()` loop (seats + BIND + authorization + byte-cap + liveness) with `broadcast_live`'s
+> history-retention + windowed replay folded in. A **SIBLING** — it owns its own `BoundCatchupClient`
+> (identical to layer 19's `BoundAsyncClient`; catch-up adds NO per-client state — the retained `history`
+> lives on the server) and its own `flush_client`/`over_cap`/`enqueue_bytes`/`drop_client`/`reap_dead`
+> helpers ⇒ sealed `broadcast.cpp`, `broadcast_bound`, `broadcast_bidi`, AND `broadcast_bound_async` are
+> byte-for-byte UNTOUCHED (all their bridges still pass). **ONE additive shared-file change:**
+> `netinput::Stats` gains a **`trimmed`** counter (window evictions, the mirror of `netbcast::Stats.trimmed`
+> — same additive pattern as layer 16's `capped`/`reaped`, layer 18's `cmds_unauth`). Two things differ
+> from layer 19, both lifted verbatim from `broadcast_live`: (1) a **`history` vector retains the produced
+> payloads** (the last `catchup_window`, or ALL when window==0; oldest evicted per new frame ⇒ `trimmed`);
+> (2) **`accept_all` replays the retained prefix after the BIND** — a joiner accepted at frame `fi` gets
+> `[BIND | frames[max(0,fi-W):fi]]` enqueued, then enters live at `fi` ⇒ whole delivery
+> `[BIND | frames[max(0,fi-W):]]`; the byte-cap applies PER replayed frame (a joiner whose replay backlog
+> trips the cap is shed during replay — `capped`, NOT a join/leave, seat returned).
+> **THE CLAIM:** catch-up is a FOURTH orthogonal axis (beside authorization = admission, hygiene =
+> delivery) — it decides only a joiner's REPLAY DEPTH, touching neither the `CommandQueue` nor any other
+> client's bytes. So the produced stream stays a pure function of the AUTHORIZED command SET and every
+> client's delivery is a byte-exact window of `[BIND | the produced stream]`.
+> **VERIFIED LOCALLY (gcc + clang), all green:**
+> - **BRIDGE `seads_netboundcatchup_test`** (ctest **25→26** `netboundcatchup_bridge`, native-x64 like 7–19):
+>   **LEG 1** (window regimes) — 3 seated clients (own-seat scrambled) ⇒ produced stream byte-identical to
+>   `build_server_frames`; a 4th SPECTATOR joins at `kJoin` and across **W ∈ {1, kJoin/2, retain-all}**
+>   receives EXACTLY `[BIND(spectator) | frames[max(0,kJoin-W):]]`, `trimmed == max(0,N-W)`; seated clients
+>   byte-identical to the WHOLE stream under every window; `joins=4, leaves=capped=reaped=unauth=0`.
+>   **LEG 2** (authorization composes) — the mid-stream spectator upstreams the WHOLE set; all rejected
+>   (`cmds_unauth=6`), produced stream unchanged, spectator STILL catches up the whole stream byte-for-byte.
+>   **LEG 3** (hygiene composes) — LONG (~1 MB, 20 000-tick) stream through a pinned 16 KiB buffer,
+>   cap=128 KiB: seated hook-drained FAST byte-identical to its seat reference + its commands drove the sim,
+>   a NON-READING mid-stream joiner's catch-up backlog SHED by the byte-cap (`capped=1, reaped=0`, seat
+>   freed), delivered `[BIND | strict prefix]`. Platform-invariant asserted (`leaves==joins-1, joins∈{1,2}`
+>   — shed-during-replay vs joined-then-capped is an OS loopback-buffering detail, same policy outcome).
+> - **Gates: full ctest 26/26 GCC + Clang; ALL 15 goldens byte-identical** (Sphere `6914a994…` via
+>   `seads_golden`); **property tests 237→242** (+5 `test_boundcatchup.py`: window suffix, trimmed count,
+>   catch-up ⟂ authorization, `[BIND | prefix | live]` ordering, cap sheds during replay); determinism lint
+>   + det_math oracle + rails monotone + ceiling PASS.
+> **TRANSPORT-ONLY: no `src/kernel/**`, `src/det_math/**`, `config/rails/**`, snapshot wire bytes,
+> protocol-7, session/event codec, or tuning touched ⇒ all 15 goldens byte-identical, sealed
+> session/event digests unmoved. No seal.** Diff: NEW `src/net/boundcatchupserver.{h,cpp}`,
+> `src/net/netboundcatchup_test_main.cpp`, `tests/property/test_boundcatchup.py`; MODIFIED
+> `src/net/inputserver.h` (additive `Stats.trimmed`), `CMakeLists.txt` (`boundcatchupserver.cpp` into
+> `seads_netinput`, `seads_netboundcatchup_test` target, `netboundcatchup_bridge` ctest). No new Python ref
+> (BIND-001 / INPUT-001 / SeatPolicy refs exist; catch-up introduces NO wire). guardian.yml UNCHANGED
+> (ctest-only bridge, like layers 13–19). Ledger: **ADR-Step-Net-Layer20-BoundCatchup-v1.26r0**.
+> **NEXT (free pick, none blocking):** **authenticated binding** (identity, not join-order position —
+> the last honest-scope caveat on the binding); **input prediction of REMOTE aircraft** (predict-others,
+> not just layer-4a interpolate); or **renderer polish** (assigned seat / predicted-vs-authoritative
+> correction / catch-up-in-progress on the HUD). The bidirectional server arc (15b→20) is now
+> feature-complete: bound, async, hygienic, AND late-join-catch-up-capable.
+> **NOTE FOR THE NEXT AGENT:** `broadcast_bound_catchup` is a SIBLING — it duplicates the loop on purpose
+> (the codebase's layer discipline), so DON'T fold catch-up into `broadcast_bound_async`. The catch-up
+> prefix MUST be enqueued (not blocking-burst like layer 10's `catch_up_client`) — a blocking replay on a
+> non-blocking client the loop must not wait on would wedge the accept; the byte-cap applies PER replayed
+> frame so a non-reading joiner is bounded before it becomes live (the `[BIND | strict prefix]` bridge
+> assertion + `test_boundcatchup.test_cap_sheds…` pin it). `catchup_window==0` = retain-all = O(stream)
+> memory — only for a BOUNDED run (layer 14's boundary, inherited). LEG 3's shed-during-replay vs
+> joined-then-capped split is OS-buffer timing (Linux may shed in replay, Windows joined-then-capped) —
+> assert the platform-invariant, not `joins==1`.
+>
+> ---
+>
+> ## ◄ PREVIOUS (2026-07-04): **NETCODE LAYER 19 — BOUND + ASYNC SERVER (SEAT BINDING MEETS DOWNSTREAM HYGIENE) DONE ✅** (no-seal, rides **ATM-Sphere v1.26r0**)
 > **The two most recent bidirectional servers, composed.** Layer 16 (`broadcast_bidi`) gave the UNBOUND
 > bidirectional server the async/byte-cap/liveness DOWNSTREAM hygiene; layer 18 (`broadcast_bound`) gave
 > each client its own aircraft (SeatPolicy + BIND-001 + authorization) but kept the BLOCKING downstream.
