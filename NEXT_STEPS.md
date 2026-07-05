@@ -67,9 +67,10 @@
 > transport SIBLING: the credential verify is reused verbatim, only the downstream loop differs. The four axes
 > (admission / delivery / replay-depth / — and per-seat authorization within admission) are provably disjoint.
 > Ed25519 is integer-only ⇒ no `-ffp-contract=off` dependence.
-> **GIT: NOT yet committed — code + ADR + docs staged on `main`. Commit the code, run
-> `tools/make_receipt.py`, then push to `origin/main` and fill this GIT line (guardian CI triggers on the
-> push).**
+> **GIT: merged to `origin/main` (fast-forward `f43d4f5..d2b4bb5`): code `0ac2757` + receipt `d2b4bb5`
+> (`receipt-ATM-Sphere_v1.26r0-0ac2757.yml` — overall PASS, golden `6914a994…`, all 15 gates PASS,
+> property 325→333). Guardian CI (cross-toolchain matrix) triggered on the main push —
+> check https://github.com/cjcgervais/seads/actions.**
 >
 > ---
 >
