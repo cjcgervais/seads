@@ -1,0 +1,36 @@
+seal: ATM-Sphere v1.26r0
+realm: ATM-only
+geometry:
+  radius_m: 15000
+  flattening: 0
+tick_dt_s: 0.01
+gravity_mps2: 9.80665
+ceiling:
+  atm_top_m: 8000
+  soft_band_m: 100
+wire_hash: GEO-001+KIN-002
+change_summary: "Netcode layers 31+32: CA-certificate credential folded onto the async (broadcast_authcert_async) and catch-up (broadcast_authcert_catchup) servers. Transport-only, no-seal, rides v1.26r0. All 15 goldens byte-identical; ctest 35 to 37 gcc+clang; property 325 to 333."
+rail_change: false
+gates:
+  spec_monotone_check: PASS
+  det_math_oracle: PASS
+  tuning_probe: PASS
+  atm_top_probe: PASS
+  geo001_codec: PASS
+  snapshot_codec: PASS
+  weapon_codec: PASS
+  lockstep: PASS
+  interp: PASS
+  predict: PASS
+  session: PASS
+  event: PASS
+  validate_snapshot: PASS
+  validate_scenarios: PASS
+  property_tests: PASS
+golden_id: GOLDEN-SK-Sphere-001
+golden_sha256: "6914a99492897dd98af77bb4e4e1a32a71215d3ed380c658aa17ab842b13eb20"
+commit_sha: "0ac275799a1c1a1a7f9c8557d0a4eabed9b645a1"
+toolchain_matrix: [python-ref, MSVC2022, Clang18, GCC13, x64, AArch64]
+date: "2026-07-04"
+overall: PASS
+signoff: "Forge"
