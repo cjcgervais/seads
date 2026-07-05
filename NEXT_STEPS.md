@@ -50,8 +50,9 @@
 > or move OFF netcode entirely — an end-to-end playable loop (wire a live client↔server against the
 > authoritative input server), or renderer/product polish. The user's stated intent was to complete the
 > netcode and then move on.
-> **GIT: not yet committed — implementation + gates + docs complete on `main` working tree; awaiting the
-> commit + receipt step.**
+> **GIT: committed to `main` — code `8cff243` + receipt `docs/receipts/receipt-ATM-Sphere_v1.26r0-8cff243.yml`
+> (overall PASS, golden `6914a994…`, all 15 gates PASS, property tests PASS). Not yet pushed to
+> origin/main.**
 >
 > ---
 >
