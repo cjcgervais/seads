@@ -56,6 +56,9 @@
 > `nonce_le ‖ token_le` (16 bytes, LE); the session key seeds the challenge nonce (a CSPRNG seed in prod, a
 > FIXED seed in the bridge for reproducibility). HELLO-002 is version `0x02` and HELLO-001 (`0x01`, layer 21)
 > is frozen — the two decoders reject each other's version, which the pins assert.
+> **GIT: pushed to `origin/main` (code `3a42c7a` + receipt `receipt-ATM-Sphere_v1.26r0-3a42c7a.yml` —
+> 15/15 gates PASS, overall PASS, golden `6914a994…`); guardian CI (cross-toolchain matrix) triggered on
+> the push — check https://github.com/cjcgervais/seads/actions.**
 >
 > ---
 >
