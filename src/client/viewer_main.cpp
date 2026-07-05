@@ -18,7 +18,11 @@
 // netcode layer 4b, running the REAL sealed kernel at a fixed 100 Hz from the wall clock. The
 // remotes keep coming from the recording on the layer-4a interpolation path (Playback), so
 // prediction (own, crisp, zero-latency) and interpolation (remote, ~100 ms in the past) are visible
-// on the same globe at once — the full 4a+4b loop. The remotes' WEAPON-001 gunnery state rides the
+// on the same globe at once — the full 4a+4b loop. The M key cycles the REMOTE render mode:
+// INTERP (layer 4a, the default), PREDICT (layer 24 — dead-reckon each remote to "now" by seeding
+// the sealed no-arg kernel tail from the freshest snapshot), or SMOOTH (layer 25 — blend the drawn
+// remote toward each reseed to hide the maneuver pop). The HUD shows the coast-vs-interp "now"
+// error live. Both replay and fly draw this; it is a render-only coast (never fed back to the sim). The remotes' WEAPON-001 gunnery state rides the
 // same decoded wire (seal v1.19r0 put every field on it): tracer rounds, per-aircraft hp + E/W/T
 // region damage bars, a kills/ammo scoreboard, and an attributed kill-feed ("#0 downed #1",
 // "#0 knocked out #1's ENGINE") derived from wire-frame transitions. Both HUDs also surface the
@@ -65,7 +69,9 @@
 
 #include "aircraft_mesh.h"
 #include "playback.h"
+#include "remote_coaster.h"   // seads::client::coast_to_now / RemoteCoasterSet (layer 24/25 on the HUD)
 #include "seadsrec.h"
+#include "snapshot.h"         // seads::netsnap (decode the freshest snapshot to seed the coast)
 #include "predict.h"          // seads::predict::Predictor (netcode layer 4b)
 #include "envelope_tables.h"  // seads::envtab::* tuning envelopes
 #include "golden_params.h"    // sealed rail constants (R, dt, g0, ceiling)
@@ -526,6 +532,92 @@ void draw_aircraft(FighterModel& fm, Vector3 od, double lat, double lon, double 
                    double pitch, Color c, float scale, const RenderHp* w, const RenderHp* base,
                    double spin_rad);
 
+// ---- Remote render mode: interpolate (layer 4a) / predict (layer 24) / smooth (layer 25) --------
+// The viewer draws remotes by INTERPOLATION ~100 ms in the past (smooth but structurally late).
+// PREDICT dead-reckons each remote to "now" by seeding the SEALED no-arg kernel tail from the
+// freshest received snapshot (netcode layer 24); SMOOTH additionally BLENDS the drawn remote toward
+// each reseed to hide the maneuver pop (layer 25). Cycled live with the M key; default INTERP keeps
+// the original behaviour. All downstream-only — a render-side coast, never fed back to the sim.
+enum class RemoteMode { INTERP, PREDICT, SMOOTH };
+const char* remote_mode_name(RemoteMode m) {
+    switch (m) {
+        case RemoteMode::PREDICT: return "PREDICT (layer24 coast-to-now)";
+        case RemoteMode::SMOOTH:  return "SMOOTH  (layer25 blended coast)";
+        default:                  return "INTERP  (layer4a ~100ms late)";
+    }
+}
+RemoteMode cycle_remote_mode(RemoteMode m) {
+    return m == RemoteMode::INTERP  ? RemoteMode::PREDICT
+         : m == RemoteMode::PREDICT ? RemoteMode::SMOOTH
+                                    : RemoteMode::INTERP;
+}
+constexpr double REMOTE_SMOOTH = 0.18;  // per-frame layer-25 blend fraction (hides the reseed pop)
+
+// Sealed rail constants -> Rails for the presentation coast (the same numbers the golden/fly use).
+Rails viewer_rails() {
+    Rails r;
+    r.R = golden::R_M; r.dt = golden::DT_S; r.g0 = golden::G0;
+    r.atm_top = golden::ATM_TOP_M; r.soft = golden::SOFT_M;
+    return r;
+}
+
+// What to draw for one remote this frame, plus the interp/coast "now" errors for the HUD readout.
+struct RemoteDraw {
+    Vec3 pos;                 // world position (metres, globe frame) to draw at
+    double lat_rad = 0, lon_rad = 0, psi_rad = 0, phi_rad = 0, gamma_rad = 0;  // attitude to draw
+    double interp_err = -1.0; // interp-vs-truth "now" position error (m); -1 if truth unknown
+    double coast_err = -1.0;  // coast-vs-truth "now" position error (m); INTERP mode leaves it -1
+};
+
+// Build a remote's display state. `interp_e` is the layer-4a sample at render_tick (now - lag) — the
+// INTERP-mode draw and the interp error baseline. PREDICT/SMOOTH seed the coast from the freshest
+// received snapshot at/behind now-lag and dead-reckon forward to now (layer 24); SMOOTH then blends
+// the drawn tuple toward it (layer 25). `truth_pos` (pb.sample(now_tick)) feeds the error readout.
+RemoteDraw remote_draw(const Playback& pb, const RenderEntity& interp_e, double now_tick, double lag,
+                       const Rails& rails, RemoteMode mode, RemoteCoasterSet& smoother, double R,
+                       const Vec3& truth_pos, bool have_truth) {
+    RemoteDraw rd;
+    rd.pos = interp_e.pos;
+    rd.lat_rad = interp_e.lat_deg * DEG2RAD_V;
+    rd.lon_rad = interp_e.lon_deg * DEG2RAD_V;
+    rd.psi_rad = interp_e.bearing_deg * DEG2RAD_V;
+    rd.phi_rad = interp_e.phi_deg * DEG2RAD_V;
+    rd.gamma_rad = interp_e.gamma_deg * DEG2RAD_V;
+    if (have_truth) rd.interp_err = length(interp_e.pos - truth_pos);
+    if (mode == RemoteMode::INTERP) return rd;
+
+    netsnap::EntityState es;
+    int64_t st = 0;
+    if (!pb.nearest_state(now_tick - lag, interp_e.id, es, st)) return rd;  // no snapshot -> interp
+    // NOTE: raylib #defines DEG2RAD, so use the viewer's DEG2RAD_V (not netsnap::DEG2RAD) here.
+    Coast7 seed{es.lat_deg * DEG2RAD_V, es.lon_deg * DEG2RAD_V,
+                es.bearing_deg * DEG2RAD_V, es.phi_deg * DEG2RAD_V, es.alt_m,
+                es.tas_mps, es.gamma_deg * DEG2RAD_V};
+    int steps = static_cast<int>(std::lround(now_tick - static_cast<double>(st)));
+    if (steps < 0) steps = 0;
+    Coast7 c = coast_to_now(rails, seed, static_cast<unsigned>(steps));
+    if (mode == RemoteMode::SMOOTH) c = smoother.update(interp_e.id, c, REMOTE_SMOOTH);
+    rd.lat_rad = c.lat; rd.lon_rad = c.lon; rd.psi_rad = c.psi; rd.phi_rad = c.phi;
+    rd.gamma_rad = c.gamma;
+    rd.pos = geo_to_cartesian(c.lat, c.lon, c.alt, R);
+    if (have_truth) rd.coast_err = length(rd.pos - truth_pos);
+    return rd;
+}
+
+// One HUD line summarising the active remote mode + the worst interp/coast "now" error this frame.
+void draw_remote_mode_hud(RemoteMode mode, double worst_interp, double worst_coast, int x, int y) {
+    char line[160];
+    if (mode == RemoteMode::INTERP)
+        std::snprintf(line, sizeof(line), "REMOTE: %s   now-lag ~%.0fm   [M] predict",
+                      remote_mode_name(mode), worst_interp < 0 ? 0.0 : worst_interp);
+    else
+        std::snprintf(line, sizeof(line),
+                      "REMOTE: %s   coast now-err %.0fm  vs interp %.0fm   [M] cycle",
+                      remote_mode_name(mode), worst_coast < 0 ? 0.0 : worst_coast,
+                      worst_interp < 0 ? 0.0 : worst_interp);
+    DrawText(line, x, y, 16, mode == RemoteMode::INTERP ? LIGHTGRAY : Color{140, 230, 160, 255});
+}
+
 // Headless data-path proof: advance render_tick across the recording, print sampled positions.
 int run_selfcheck(const Playback& pb, int n) {
     double t0 = static_cast<double>(pb.first_tick());
@@ -593,6 +685,46 @@ int run_selfcheck(const Playback& pb, int n) {
         }
         std::printf("  rounds=%zu\n", wv.rounds.size());
     }
+    // Remote coast vs interpolation "now" error (netcode layer 24, presentation-side). For each
+    // sample tick treated as "now", seed the coast from the freshest snapshot at now-lag and dead-
+    // reckon to now; compare its position error against the layer-4a interpolation baseline (drawn
+    // ~1.5 snapshot intervals late). This is exactly what the GUI's PREDICT/SMOOTH modes draw, so
+    // the data path is proven headless. On a turning remote coast-err << interp-err.
+    {
+        const Rails rails = viewer_rails();
+        const double lag = pb.delay_ticks();
+        const double R = pb.radius_m();
+        std::printf("remote coast (layer 24) vs interp, lag=%.1f ticks:\n", lag);
+        for (int i = 0; i < n; ++i) {
+            double a = (n > 1) ? static_cast<double>(i) / (n - 1) : 0.0;
+            double now_t = t0 + a * (t1 - t0);
+            std::vector<RenderEntity> truth = pb.sample(now_t);
+            std::vector<RenderEntity> interp = pb.sample(now_t - lag);
+            double worst_i = 0.0, worst_c = 0.0;
+            for (const auto& te : truth) {
+                for (const auto& ie : interp)
+                    if (ie.id == te.id) {
+                        double e = length(ie.pos - te.pos);
+                        if (e > worst_i) worst_i = e;
+                        break;
+                    }
+                netsnap::EntityState es;
+                int64_t st = 0;
+                if (pb.nearest_state(now_t - lag, te.id, es, st)) {
+                    // raylib #defines DEG2RAD -> use the viewer's DEG2RAD_V (not netsnap::DEG2RAD).
+                    Coast7 seed{es.lat_deg * DEG2RAD_V, es.lon_deg * DEG2RAD_V,
+                                es.bearing_deg * DEG2RAD_V, es.phi_deg * DEG2RAD_V,
+                                es.alt_m, es.tas_mps, es.gamma_deg * DEG2RAD_V};
+                    int steps = static_cast<int>(std::lround(now_t - static_cast<double>(st)));
+                    if (steps < 0) steps = 0;
+                    Coast7 c = coast_to_now(rails, seed, static_cast<unsigned>(steps));
+                    double e = length(geo_to_cartesian(c.lat, c.lon, c.alt, R) - te.pos);
+                    if (e > worst_c) worst_c = e;
+                }
+            }
+            std::printf("  t=%.1f  interp-err %6.2fm   coast-err %6.2fm\n", now_t, worst_i, worst_c);
+        }
+    }
     return 0;
 }
 
@@ -658,7 +790,7 @@ void draw_hud(const Playback& pb, double render_tick, const std::vector<RenderEn
         DrawText(line, 12, y, 16, dead ? GRAY : SKYBLUE);
         y += 22;
     }
-    DrawText("drag: orbit   wheel: zoom   space: pause   R: restart", 12,
+    DrawText("drag: orbit   wheel: zoom   space: pause   M: remote mode   R: restart", 12,
              GetScreenHeight() - 28, 16, GRAY);
 }
 
@@ -687,6 +819,12 @@ int run_gui(Playback& pb, double speed) {
     // otherwise fall back to the wire-state transition feed (v1 recordings have no journal).
     CombatFeed cfeed; cfeed.load(&pb.events());
     KillFeed feed;  // fallback: attributed kill/knock-out feed derived from wire-frame transitions
+    // Remote render mode (M cycles interp -> predict -> smooth). The coast drives a kernel copy from
+    // the sealed rails; the smoother holds per-aircraft blended display tuples (layer 25).
+    RemoteMode rmode = RemoteMode::INTERP;
+    const Rails coast_rails = viewer_rails();
+    const double lag_ticks = pb.delay_ticks();
+    RemoteCoasterSet smoother;
     bool paused = false;
     double sim_clock = 0.0;     // seconds of playback elapsed
     double last_wall = GetTime();
@@ -696,7 +834,10 @@ int run_gui(Playback& pb, double speed) {
         double dt = now - last_wall;
         last_wall = now;
         if (IsKeyPressed(KEY_SPACE)) paused = !paused;
-        if (IsKeyPressed(KEY_R)) { sim_clock = 0.0; trails.clear(); feed.reset(); cfeed.reset(); }
+        if (IsKeyPressed(KEY_M)) { rmode = cycle_remote_mode(rmode); smoother.reset(); }
+        if (IsKeyPressed(KEY_R)) {
+            sim_clock = 0.0; trails.clear(); feed.reset(); cfeed.reset(); smoother.reset();
+        }
         if (!paused) sim_clock += dt * speed;
 
         UpdateCamera(&cam, CAMERA_THIRD_PERSON);
@@ -710,9 +851,23 @@ int run_gui(Playback& pb, double speed) {
         std::vector<RenderEntity> ents = pb.sample(render_tick);
         WeaponView wv = pb.sample_weapons(render_tick);  // hp + live rounds (WEAPON-001 wire)
         if (!paused && !cfeed.active()) feed.update(wv, now);  // journal feed updates in the 2D pass
+        // "Now" (undelayed) truth for the error readout + the per-remote display state under rmode.
+        double now_tick = t0 + loop;
+        std::vector<RenderEntity> truth = pb.sample(now_tick);
+        if (loop < pb.delay_ticks() + 1.0) smoother.reset();  // re-seed the blend cleanly on loop
+        std::vector<RemoteDraw> rd(ents.size());
+        double worst_interp = -1.0, worst_coast = -1.0;
+        for (size_t i = 0; i < ents.size(); ++i) {
+            Vec3 tp{}; bool have = false;
+            for (const auto& te : truth) if (te.id == ents[i].id) { tp = te.pos; have = true; break; }
+            rd[i] = remote_draw(pb, ents[i], now_tick, lag_ticks, coast_rails, rmode, smoother,
+                                pb.radius_m(), tp, have);
+            if (rd[i].interp_err > worst_interp) worst_interp = rd[i].interp_err;
+            if (rd[i].coast_err > worst_coast) worst_coast = rd[i].coast_err;
+        }
         if (trails.size() < ents.size()) trails.resize(ents.size());
         for (size_t i = 0; i < ents.size(); ++i) {
-            Vector3 d = to_display(ents[i].pos, pb.radius_m());
+            Vector3 d = to_display(rd[i].pos, pb.radius_m());
             if (loop < pb.delay_ticks() + 1.0) trails[i].clear();  // reset trails on loop
             // A dead aircraft is frozen on the wire, so its trail naturally stops growing.
             trails[i].push_back(d);
@@ -732,15 +887,14 @@ int run_gui(Playback& pb, double speed) {
             // Trail.
             for (size_t k = 1; k < trails[i].size(); ++k)
                 DrawLine3D(trails[i][k - 1], trails[i][k], Fade(c, 0.6f));
-            Vector3 d = to_display(ents[i].pos, pb.radius_m());
+            Vector3 d = to_display(rd[i].pos, pb.radius_m());
             // Attitude-aware fighter mesh (same models as fly): wings roll with bank (phi), nose
-            // tilts with the flight-path angle (gamma) — both ride the KIN wire, snapped per
-            // Playback::sample. Region parts tint from the wire pools; the prop spin is visual.
-            // The silhouette is the aircraft's roster variant (.seadsrec v3 type trailer).
+            // tilts with the flight-path angle (gamma). Position + attitude come from rd[i] — the
+            // layer-4a interp (INTERP) or the layer-24/25 coast-to-now (PREDICT/SMOOTH). Region
+            // parts tint from the wire pools; the silhouette is the .seadsrec v3 roster variant.
             draw_aircraft(models.for_code(pb.type_code_of(ents[i].id)), d,
-                          ents[i].lat_deg * DEG2RAD_V, ents[i].lon_deg * DEG2RAD_V,
-                          ents[i].bearing_deg * DEG2RAD_V, ents[i].phi_deg * DEG2RAD_V,
-                          ents[i].gamma_deg * DEG2RAD_V, c, 1.2f, weap_for(wv.hp, ents[i].id),
+                          rd[i].lat_rad, rd[i].lon_rad, rd[i].psi_rad, rd[i].phi_rad, rd[i].gamma_rad,
+                          c, 1.2f, weap_for(wv.hp, ents[i].id),
                           weap_for(maxhp, ents[i].id), now * PROP_SPIN_RAD_S);
         }
         // WEAPON-001 tracer rounds: a yellow point cloud at each live round (from the decoded wire).
@@ -749,7 +903,7 @@ int run_gui(Playback& pb, double speed) {
         EndMode3D();
         // Per-aircraft damage state (hp bar + E/W/T region segments), projected above each marker.
         for (size_t i = 0; i < ents.size(); ++i) {
-            Vector2 sp = GetWorldToScreen(to_display(ents[i].pos, pb.radius_m()), cam);
+            Vector2 sp = GetWorldToScreen(to_display(rd[i].pos, pb.radius_m()), cam);
             if (sp.x < -50 || sp.x > GetScreenWidth() + 50 || sp.y < -50 ||
                 sp.y > GetScreenHeight() + 50)
                 continue;
@@ -760,12 +914,12 @@ int run_gui(Playback& pb, double speed) {
         }
         draw_scoreboard(pb, wv.hp, maxhp, GetScreenWidth());
         // Combat feed: journal-driven per-round events (numbers pinned to on-screen targets), or the
-        // transition fallback for a v1 recording.
+        // transition fallback for a v1 recording. Numbers pin to the DRAWN (rd) position under rmode.
         if (cfeed.active()) {
             auto screen_of = [&](int64_t id, Vector2& out) -> bool {
-                for (const auto& e : ents)
-                    if (e.id == id) {
-                        out = GetWorldToScreen(to_display(e.pos, pb.radius_m()), cam);
+                for (size_t i = 0; i < ents.size(); ++i)
+                    if (ents[i].id == id) {
+                        out = GetWorldToScreen(to_display(rd[i].pos, pb.radius_m()), cam);
                         return out.x >= -50 && out.x <= GetScreenWidth() + 50 && out.y >= -50 &&
                                out.y <= GetScreenHeight() + 50;
                     }
@@ -777,6 +931,7 @@ int run_gui(Playback& pb, double speed) {
             feed.draw(12, GetScreenHeight() - 190, now);
         }
         draw_hud(pb, render_tick, ents, wv, maxhp);
+        draw_remote_mode_hud(rmode, worst_interp, worst_coast, 12, 56);
         EndDrawing();
     }
     CloseWindow();
@@ -946,7 +1101,7 @@ void draw_fly_hud(const predict::Predictor& pred, uint32_t tick, size_t n_remote
                   rated ? "RATED" : "ABOVE CRIT");
     DrawText(line, 12, 106, 16, rated ? LIGHTGRAY : GOLD);
     DrawText("A/D bank  W/S pull/push g  Q/E yaw  Shift/Ctrl throttle   |   mouse: fine aim   hold "
-             "SPACE: free-look (keys only)   wheel: zoom   P: pause   R: reset", 12,
+             "SPACE: free-look   wheel: zoom   M: remote mode   P: pause   R: reset", 12,
              GetScreenHeight() - 28, 16, GRAY);
 }
 
@@ -1006,6 +1161,12 @@ int run_fly(Playback& pb, double speed) {
     const std::vector<RenderHp> maxhp = pb.sample_weapons(t0).hp;
     CombatFeed cfeed; cfeed.load(&pb.events());
     KillFeed feed;
+    // Remote render mode for the interpolated bandits (M cycles interp -> predict -> smooth). The
+    // OWN ship is always the layer-4b prediction; this only affects the remotes (layer 24/25).
+    RemoteMode rmode = RemoteMode::INTERP;
+    const Rails coast_rails = viewer_rails();
+    const double lag_ticks = pb.delay_ticks();
+    RemoteCoasterSet smoother;
 
     // Chase camera that rides behind/above the own ship. Free-look (hold SPACE) adds an azimuth/
     // elevation offset driven by the mouse; on release it lerps back to the stable behind view.
@@ -1030,10 +1191,11 @@ int run_fly(Playback& pb, double speed) {
         last_wall = now;
         if (dt > 0.25) dt = 0.25;  // clamp huge stalls (tab background) — no spiral of death
         if (IsKeyPressed(KEY_P)) paused = !paused;
+        if (IsKeyPressed(KEY_M)) { rmode = cycle_remote_mode(rmode); smoother.reset(); }
         if (IsKeyPressed(KEY_R)) {
             pred = predict::Predictor(rails, &kFlyEnv, start);
             own_tick = 0; accumulator = 0.0; sim_clock = 0.0;
-            own_trail.clear(); rem_trails.clear(); feed.reset(); cfeed.reset();
+            own_trail.clear(); rem_trails.clear(); feed.reset(); cfeed.reset(); smoother.reset();
         }
 
         // Mode: hold SPACE for free-look. Lock/hide the cursor in free-look so mouse delta is
@@ -1154,6 +1316,20 @@ int run_fly(Playback& pb, double speed) {
         // no weapons in this single-process loop — there is no server to adjudicate its fire).
         WeaponView wv = pb.sample_weapons(render_tick);
         if (!paused && !cfeed.active()) feed.update(wv, now);  // journal feed updates in the 2D pass
+        // Remote display state under rmode (interp / coast-to-now / smoothed) + the "now" errors.
+        double now_tick = t0 + loop;
+        std::vector<RenderEntity> truth = pb.sample(now_tick);
+        if (loop < pb.delay_ticks() + 1.0) smoother.reset();
+        std::vector<RemoteDraw> rd(rem.size());
+        double worst_interp = -1.0, worst_coast = -1.0;
+        for (size_t i = 0; i < rem.size(); ++i) {
+            Vec3 tp{}; bool have = false;
+            for (const auto& te : truth) if (te.id == rem[i].id) { tp = te.pos; have = true; break; }
+            rd[i] = remote_draw(pb, rem[i], now_tick, lag_ticks, coast_rails, rmode, smoother,
+                                pb.radius_m(), tp, have);
+            if (rd[i].interp_err > worst_interp) worst_interp = rd[i].interp_err;
+            if (rd[i].coast_err > worst_coast) worst_coast = rd[i].coast_err;
+        }
 
         Vector3 od = od_cam;  // own-ship display position (already computed for the chase cam)
         if (!paused) {
@@ -1162,7 +1338,7 @@ int run_fly(Playback& pb, double speed) {
         }
         if (rem_trails.size() < rem.size()) rem_trails.resize(rem.size());
         for (size_t i = 0; i < rem.size(); ++i) {
-            Vector3 d = to_display(rem[i].pos, pb.radius_m());
+            Vector3 d = to_display(rd[i].pos, pb.radius_m());
             if (loop < pb.delay_ticks() + 1.0) rem_trails[i].clear();
             rem_trails[i].push_back(d);
             if (rem_trails[i].size() > 400) rem_trails[i].erase(rem_trails[i].begin());
@@ -1178,13 +1354,12 @@ int run_fly(Playback& pb, double speed) {
             Color c = (hp <= 0.0) ? Color{90, 90, 96, 255} : pal[i % 4];  // kills grey out
             for (size_t k = 1; k < rem_trails[i].size(); ++k)
                 DrawLine3D(rem_trails[i][k - 1], rem_trails[i][k], Fade(c, 0.5f));
-            Vector3 d = to_display(rem[i].pos, pb.radius_m());
-            // Remotes now tilt with their true flight-path angle (gamma rides the KIN wire) instead
-            // of the old flat pitch=0 — a climbing/diving bandit reads correctly on the globe.
+            Vector3 d = to_display(rd[i].pos, pb.radius_m());
+            // Remotes tilt with their true flight-path angle (gamma). Position + attitude come from
+            // rd[i]: layer-4a interp (INTERP) or the layer-24/25 coast-to-now (PREDICT/SMOOTH).
             draw_aircraft(models.for_code(pb.type_code_of(rem[i].id)), d,
-                          rem[i].lat_deg * DEG2RAD_V, rem[i].lon_deg * DEG2RAD_V,
-                          rem[i].bearing_deg * DEG2RAD_V, rem[i].phi_deg * DEG2RAD_V,
-                          rem[i].gamma_deg * DEG2RAD_V, c, 1.0f, weap_for(wv.hp, rem[i].id),
+                          rd[i].lat_rad, rd[i].lon_rad, rd[i].psi_rad, rd[i].phi_rad, rd[i].gamma_rad,
+                          c, 1.0f, weap_for(wv.hp, rem[i].id),
                           weap_for(maxhp, rem[i].id), now * PROP_SPIN_RAD_S);
         }
         // WEAPON-001 tracer rounds — the remotes' gunfire, from the decoded wire.
@@ -1219,7 +1394,7 @@ int run_fly(Playback& pb, double speed) {
         }
         // Per-remote damage state (hp bar + E/W/T region segments), projected above each marker.
         for (size_t i = 0; i < rem.size(); ++i) {
-            Vector2 sp = GetWorldToScreen(to_display(rem[i].pos, pb.radius_m()), cam);
+            Vector2 sp = GetWorldToScreen(to_display(rd[i].pos, pb.radius_m()), cam);
             if (sp.x < -50 || sp.x > GetScreenWidth() + 50 || sp.y < -50 ||
                 sp.y > GetScreenHeight() + 50)
                 continue;
@@ -1231,9 +1406,9 @@ int run_fly(Playback& pb, double speed) {
         draw_scoreboard(pb, wv.hp, maxhp, GetScreenWidth());
         if (cfeed.active()) {
             auto screen_of = [&](int64_t id, Vector2& out) -> bool {
-                for (const auto& e : rem)
-                    if (e.id == id) {
-                        out = GetWorldToScreen(to_display(e.pos, pb.radius_m()), cam);
+                for (size_t i = 0; i < rem.size(); ++i)
+                    if (rem[i].id == id) {
+                        out = GetWorldToScreen(to_display(rd[i].pos, pb.radius_m()), cam);
                         return out.x >= -50 && out.x <= GetScreenWidth() + 50 && out.y >= -50 &&
                                out.y <= GetScreenHeight() + 50;
                     }
@@ -1245,6 +1420,7 @@ int run_fly(Playback& pb, double speed) {
             feed.draw(12, GetScreenHeight() - 190, now);
         }
         draw_fly_hud(pred, own_tick, rem.size(), wv.rounds.size(), paused, freelook, cmd);
+        draw_remote_mode_hud(rmode, worst_interp, worst_coast, 12, 128);
         EndDrawing();
     }
     CloseWindow();

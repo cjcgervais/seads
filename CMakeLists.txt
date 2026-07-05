@@ -153,6 +153,16 @@ add_library(seads_client STATIC src/client/seadsrec.cpp src/client/playback.cpp
 target_include_directories(seads_client PUBLIC src/client)
 target_link_libraries(seads_client PUBLIC seads_net seads_det_flags)
 
+# --- presentation-side remote coast (renderer polish): layer-24/25 prediction on the viewer ---
+# DOWNSTREAM-ONLY like seads_client, but it DRIVES a kernel copy through the public no-arg
+# Kernel::step() to dead-reckon a remote's DISPLAY position to "now" (netcode layer 24) + blends it
+# (layer 25), so unlike seads_client it links the kernel. Still outside the world_hash — a render-
+# only coast, never fed back to the sim. Kept its own lib so the headless client test proves the
+# data path (coast beats interp on a maneuver) with no socket harness. No seal (rides v1.26r0).
+add_library(seads_coaster STATIC src/client/remote_coaster.cpp)
+target_include_directories(seads_coaster PUBLIC src/client)
+target_link_libraries(seads_coaster PUBLIC seads_kernel seads_det_flags)
+
 # --- trajectory recorder (drives the real kernel -> .seadsrec wire stream + trajectory.js) ---
 add_executable(seads_record src/client/record_main.cpp)
 target_link_libraries(seads_record PRIVATE seads_client seads_net seads_kernel seads_replay seads_det_math seads_det_flags)
@@ -449,7 +459,7 @@ target_link_libraries(seads_netauthcert_catchup_test PRIVATE seads_netinput sead
 
 # --- client presentation test (globe projection + .seadsrec container + playback interp) ---
 add_executable(seads_client_test src/client/client_test_main.cpp)
-target_link_libraries(seads_client_test PRIVATE seads_client seads_net seads_det_flags)
+target_link_libraries(seads_client_test PRIVATE seads_client seads_coaster seads_net seads_det_flags)
 
 # --- OPTIONAL raylib viewer (Step 5). OFF by default so CI / headless gates never pull a GUI
 # lib; the determinism matrix stays kernel-only. Turn on with -DSEADS_CLIENT=ON locally. The
@@ -467,7 +477,7 @@ if(SEADS_CLIENT)
   # viewer now also links seads_predict (+ kernel/replay/det_math). Still read-only over the sim:
   # input feeds Commands into the Predictor, never the world_hash — no seal (rides v1.4r0).
   add_executable(seads_viewer src/client/viewer_main.cpp)
-  target_link_libraries(seads_viewer PRIVATE seads_client seads_net seads_predict
+  target_link_libraries(seads_viewer PRIVATE seads_client seads_coaster seads_net seads_predict
                         seads_kernel seads_replay seads_det_math raylib)
 endif()
 

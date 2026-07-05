@@ -34,6 +34,20 @@ const netsnap::Snapshot* Playback::nearest_frame(double render_tick) const {
     return fr;
 }
 
+bool Playback::nearest_state(double render_tick, int64_t id, netsnap::EntityState& out,
+                             int64_t& server_tick) const {
+    const netsnap::Snapshot* fr = nearest_frame(render_tick);
+    if (!fr) return false;
+    for (const auto& e : fr->entities) {
+        if (e.id == id) {
+            out = e;
+            server_tick = fr->server_tick;
+            return true;
+        }
+    }
+    return false;
+}
+
 std::vector<RenderEntity> Playback::sample(double render_tick) const {
     std::vector<RenderEntity> out;
     std::vector<netsnap::EntityState> states = buffer_.sample(render_tick);

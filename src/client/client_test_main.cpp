@@ -10,7 +10,9 @@
 #include "aircraft_mesh.h"
 #include "globe.h"
 #include "interp.h"
+#include "kernel.h"          // seads::Kernel, Rails (drive an authoritative turn for the coast test)
 #include "playback.h"
+#include "remote_coaster.h"  // seads::client::coast_to_now / RemoteCoasterSet (layer 24/25 mirror)
 #include "seadsrec.h"
 #include "snapshot.h"
 
@@ -460,6 +462,126 @@ static void test_type_trailer() {
     check(!read_recording(blob.data(), blob.size() - 1, bad), "truncated type trailer rejected");
 }
 
+// ---- Presentation-side remote coast (renderer polish: layer-24/25 prediction on the viewer) ------
+// The coaster mirrors netremote::coast_to_now + blend. Three claims, all headless: (1) the coast is
+// the pure no-arg kernel tail — composable (stepping a+b == stepping a then b); (2) the layer-25
+// smoothing blend seeds on first sight then nudges toward the target; (3) THE FEATURE — on a turning
+// remote, dead-reckoning the freshest wire snapshot to "now" tracks the truth far tighter than the
+// layer-4a interpolation (which draws the remote structurally late along the arc).
+static Rails coast_rails() {
+    Rails r;
+    r.R = 15000.0; r.dt = 0.01; r.g0 = 9.80665; r.atm_top = 8000.0; r.soft = 100.0;
+    return r;
+}
+
+static void test_remote_coaster() {
+    const Rails rails = coast_rails();
+
+    // (1) The coast is the pure no-arg kinematic tail: seeding a fresh kernel from an intermediate
+    // coasted tuple and stepping the remainder reproduces the whole coast BIT-FOR-BIT.
+    Coast7 base{0.10, -0.20, 0.6, 0.5, 3000.0, 200.0, 0.02};  // banked (turning), climbing slightly
+    check(coast_to_now(rails, base, 0).lat == base.lat &&
+              coast_to_now(rails, base, 0).psi == base.psi,
+          "coast_to_now(steps=0) returns the base unchanged");
+    Coast7 c10 = coast_to_now(rails, base, 10);
+    Coast7 c4 = coast_to_now(rails, base, 4);
+    Coast7 c46 = coast_to_now(rails, c4, 6);
+    check(c10.lat == c46.lat && c10.lon == c46.lon && c10.psi == c46.psi && c10.phi == c46.phi &&
+              c10.alt == c46.alt && c10.tas == c46.tas && c10.gamma == c46.gamma,
+          "coast is composable (a+b == a then b) — the pure kernel tail, bit-for-bit");
+    check(c10.psi != base.psi, "a banked coast actually turns (psi advances)");
+
+    // (2) Layer-25 smoothing blend. First sighting seeds (no spawn pop); hard-snap returns the
+    // target; a fractional blend lands exactly disp + s*(target-disp), strictly between the two.
+    RemoteCoasterSet set;
+    Coast7 A{0.0, 0.0, 0.0, 0.0, 1000.0, 100.0, 0.0};
+    Coast7 B{0.1, 0.2, 0.3, 0.4, 1400.0, 180.0, 0.05};
+    check(set.update(9, A, 0.25).lat == A.lat, "first sighting seeds the display to the target");
+    Coast7 blended = set.update(9, B, 0.25);
+    check(close(blended.lat, A.lat + 0.25 * (B.lat - A.lat), 0) &&
+              close(blended.alt, A.alt + 0.25 * (B.alt - A.alt), 0) &&
+              blended.alt > A.alt && blended.alt < B.alt,
+          "blend nudges disp += s*(target-disp), between previous and target");
+    check(set.update(9, B, 1.0).alt == B.alt, "smooth>=1 hard-snaps to the target (== layer 24)");
+    set.reset();
+    check(set.update(9, B, 0.25).lat == B.lat, "reset re-seeds the blend on the next sighting");
+
+    // (3) THE FEATURE. Drive an authoritative steady coordinated turn through the REAL kernel, record
+    // it at 20 Hz (every 5 ticks), and compare the coast's "now" position error to interpolation's.
+    Kernel truth(rails);
+    truth.add(0.0, 0.0, 0.0, 0.5, 3000.0, 200.0, 0.0);  // 0.5 rad bank -> a hard, steady turn
+    const int TICKS = 200, SNAP = 5;
+    std::vector<Coast7> states;                         // authoritative 7-tuple AFTER t ticks
+    states.push_back(Coast7{truth.lat(0), truth.lon(0), truth.psi(0), truth.phi(0), truth.alt(0),
+                            truth.tas(0), truth.gamma(0)});
+    std::vector<std::vector<uint8_t>> wires;
+    std::vector<int64_t> snap_ticks;
+    for (int t = 1; t <= TICKS; ++t) {
+        truth.step();
+        states.push_back(Coast7{truth.lat(0), truth.lon(0), truth.psi(0), truth.phi(0), truth.alt(0),
+                                truth.tas(0), truth.gamma(0)});
+        if ((t - 1) % SNAP == 0) {  // frames at t = 1, 6, 11, ... (>=2 frames, ascending server_tick)
+            netsnap::Snapshot s;
+            s.protocol = netsnap::SNAPSHOT_PROTOCOL;
+            s.server_tick = t;
+            const Coast7& k = states.back();
+            s.entities.push_back(netsnap::EntityState{
+                0, k.lat * netsnap::RAD2DEG, k.lon * netsnap::RAD2DEG, k.psi * netsnap::RAD2DEG,
+                k.alt, k.phi * netsnap::RAD2DEG, k.tas, k.gamma * netsnap::RAD2DEG});
+            std::vector<uint8_t> w;
+            netsnap::encode_snapshot(s, w);
+            wires.push_back(w);
+            snap_ticks.push_back(t);
+        }
+    }
+    RecordingMeta meta;
+    meta.radius_m = rails.R; meta.tick_hz = 100; meta.snap_hz = 20;
+    std::vector<uint8_t> blob;
+    write_recording(meta, wires, blob);
+    Recording rec;
+    check(read_recording(blob.data(), blob.size(), rec), "coast recording parses");
+    Playback pb;
+    check(pb.load(rec), "coast playback loads");
+
+    const double R = rails.R;
+    double lag = pb.delay_ticks();  // coast seeds from a snapshot this far back, same as interp's lag
+    double worst_ratio = 0.0;       // worst (interp_err / coast_err) across sampled "now" ticks
+    double min_interp = 1e18;
+    // Sample several "now" ticks well inside the turn (snapshots exist behind them).
+    for (int now = 60; now <= 180; now += 20) {
+        const Coast7& tru = states[now];
+        Vec3 tp = geo_to_cartesian(tru.lat, tru.lon, tru.alt, R);
+
+        // Interpolation baseline (what the viewer draws today): sample the wire `lag` ticks late.
+        std::vector<RenderEntity> interp = pb.sample(now - lag);
+        Vec3 ip = interp[0].pos;
+        double interp_err = length(ip - tp);
+
+        // Coast (layer 24, viewer path): seed from the freshest authoritative snapshot at or before
+        // now-lag and dead-reckon forward to now with the sealed no-arg kernel tail.
+        netsnap::EntityState es;
+        int64_t st = 0;
+        check(pb.nearest_state(now - lag, 0, es, st), "nearest_state finds the remote's snapshot");
+        Coast7 seed{es.lat_deg * netsnap::DEG2RAD, es.lon_deg * netsnap::DEG2RAD,
+                    es.bearing_deg * netsnap::DEG2RAD, es.phi_deg * netsnap::DEG2RAD, es.alt_m,
+                    es.tas_mps, es.gamma_deg * netsnap::DEG2RAD};
+        Coast7 c = coast_to_now(rails, seed, static_cast<unsigned>(now - st));
+        Vec3 cp = geo_to_cartesian(c.lat, c.lon, c.alt, R);
+        double coast_err = length(cp - tp);
+
+        check(coast_err < interp_err,
+              "coast tracks 'now' tighter than interpolation on a turn");
+        if (coast_err > 0.0 && interp_err / coast_err > worst_ratio)
+            worst_ratio = interp_err / coast_err;
+        if (interp_err < min_interp) min_interp = interp_err;
+    }
+    // Non-degeneracy: the turn is real (interp is meaningfully late) and the coast is a big win.
+    check(min_interp > 2.0, "the turn produces a real interpolation render-lag (not a straight line)");
+    check(worst_ratio > 3.0, "coast beats interpolation by a wide margin (>3x tighter at best)");
+    std::printf("  remote coast: best coast-vs-interp ratio %.1fx, min interp err %.2f m\n",
+                worst_ratio, min_interp);
+}
+
 int main() {
     test_globe();
     test_recording_and_playback();
@@ -467,6 +589,7 @@ int main() {
     test_event_journal();
     test_aircraft_mesh();
     test_type_trailer();
+    test_remote_coaster();
     if (g_fail) { std::printf("seads_client_test: FAILED\n"); return 1; }
     std::printf("seads_client_test: all checks passed\n");
     return 0;

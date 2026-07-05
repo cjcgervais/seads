@@ -74,6 +74,13 @@ public:
     // These ride the decoded snapshot wire — no interpolation (hp is discrete, rounds transient).
     WeaponView sample_weapons(double render_tick) const;
 
+    // The authoritative (NON-interpolated) wire 7-tuple + server_tick of the newest received frame
+    // with server_tick <= render_tick, for aircraft `id`. Returns false if no such frame carries
+    // `id`. Seeds the presentation-side remote coaster (layer-24 dead-reckoning): the coast must
+    // start from a real received snapshot, not the interpolated in-between of Playback::sample.
+    bool nearest_state(double render_tick, int64_t id, netsnap::EntityState& out,
+                       int64_t& server_tick) const;
+
     // The layer-6 combat event journal (empty for a v1 recording): one record per connecting round
     // at the FULL 100 Hz physics tick, for a precise-tick, per-round kill-feed / damage numbers.
     const std::vector<RecEvent>& events() const { return events_; }

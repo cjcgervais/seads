@@ -1,6 +1,54 @@
 # SEADS 2026 — Next Steps (handoff)
 
-> ## ►► CURRENT STATE (2026-07-04): **NETCODE LAYERS 31 + 32 — THE CA-CERTIFICATE CREDENTIAL FOLDED ONTO THE ASYNC & CATCH-UP SERVERS DONE ✅** (no-seal, rides **ATM-Sphere v1.26r0**)
+> ## ►► CURRENT STATE (2026-07-05): **RENDERER — REMOTE PREDICTION + SMOOTHING ON THE VIEWER HUD DONE ✅** (no-seal, rides **ATM-Sphere v1.26r0**)
+> **Netcode layers 24 (remote coast-to-now) + 25 (reconcile smoothing) are now DRAWN on the globe, not
+> just proven in the socket harness.** The viewer rendered remotes only by layer-4a INTERPOLATION (~100 ms
+> in the past). The `M` key now cycles a **`RemoteMode`**: INTERP (default, unchanged) → PREDICT (layer 24 —
+> dead-reckon each remote to "now" by seeding the SEALED no-arg `Kernel::step()` from the freshest snapshot)
+> → SMOOTH (layer 25 — blend the drawn remote toward each reseed to hide the maneuver pop). The HUD shows
+> the coast-vs-interp "now" error live.
+> **NEW LIB `seads_coaster` (`src/client/remote_coaster.{h,cpp}`):** a faithful presentation mirror of the
+> layer-24/25 core — `coast_to_now(rails, base7, steps)` (== `netremote::coast_to_now`: seed a 1-aircraft
+> kernel, dead-reckon the no-arg tail) + `RemoteCoasterSet::update(id,target,smooth)` (== `netremote::blend`;
+> `smooth>=1` hard-snaps, first sighting seeds). Its own tiny lib because, unlike the kernel-free
+> `seads_client`, it DRIVES a kernel copy ⇒ links `seads_kernel` — still outside the world_hash (a render-
+> only coast, never fed back to the sim).
+> **NEW `Playback::nearest_state(render_tick,id,EntityState&,server_tick&)`:** the authoritative (NON-
+> interpolated) nearest-frame 7-tuple + server_tick that seeds the coast (a coast must start from a real
+> received snapshot, not the interpolated in-between of `Playback::sample`).
+> **VIEWER (`viewer_main.cpp`, BOTH replay `run_gui` + fly `run_fly`):** `remote_draw()` builds each remote's
+> display state under the mode + the interp/coast errors; `draw_remote_mode_hud` shows mode + worst error;
+> trails / damage bars / combat-feed `screen_of` all follow the DRAWN (coasted) position. GOTCHA recorded:
+> raylib `#defines DEG2RAD/RAD2DEG/PI` ⇒ the coast seed uses the viewer's local `DEG2RAD_V`, never
+> `netsnap::DEG2RAD`.
+> **HONEST BOUND (layer 24's, surfaced not hidden):** the coast wins big on QUASI-STEADY flight
+> (`test_remote_coaster`'s pure no-arg-tail turn: ~exact, 3.2M× vs interp's 18 m lag) but is only BOUNDED
+> through hard maneuvers (`demo_dogfight --selfcheck`: coast ~21 m ≈ interp ~19–21 m — continuous hard turns).
+> The HUD shows both numbers live, so the viewer never over-promises.
+> **VERIFIED LOCALLY:**
+> - `seads_client_test` (ctest `client_presentation`) gains **`test_remote_coaster`**: (a) the coast is
+>   COMPOSABLE bit-for-bit (`coast(a+b)==coast(a) then coast(b)` ⇒ it IS the pure no-arg tail); (b) the blend
+>   seeds/nudges/hard-snaps; (c) on a steady kernel-driven turn recorded at 20 Hz the WIRE coast tracks "now"
+>   far tighter than interp. `--selfcheck` echoes per-tick interp-err vs coast-err.
+> - `seads_viewer` builds clean (`build-client`, raylib 5.5); headless `--selfcheck` runs the coast echo.
+> - **Golden `6914a994…` byte-identical** to the seal; **all 15 goldens unaffected** (downstream-only).
+> **TRANSPORT/PRESENTATION-ONLY: no `src/kernel/**`, `src/det_math/**`, `config/rails/**`, wire bytes,
+> protocol-7, or tuning touched ⇒ all 15 goldens byte-identical, no seal.** Diff: NEW
+> `src/client/remote_coaster.{h,cpp}`, `docs/adr/ADR-Renderer-RemotePredictionHUD-v1.26r0.md`; MODIFIED
+> `src/client/playback.{h,cpp}` (+`nearest_state`), `src/client/client_test_main.cpp` (+`test_remote_coaster`),
+> `src/client/viewer_main.cpp` (RemoteMode + coast wiring + selfcheck echo), `CMakeLists.txt` (`seads_coaster`
+> lib, linked into `seads_viewer` + `seads_client_test`). **guardian.yml UNCHANGED** (ctest-only, like every
+> renderer rider). Ledger: **ADR-Renderer-RemotePredictionHUD-v1.26r0**.
+> **NEXT (free pick, none blocking):** **certificate chains / intermediate CAs** (path validation up to a
+> trusted root — the still-open honest-scope follow-up to layer 30's single self-signed root); or more
+> renderer polish (surface the assigned seat / auth state / catch-up-in-progress on the HUD — the remaining
+> named items now that predicted-vs-interp-vs-smoothed + correction magnitude are done).
+> **GIT: not yet committed — implementation + gates + docs complete on `main` working tree; awaiting the
+> commit + receipt step.**
+>
+> ---
+>
+> ## ◄ PREVIOUS (2026-07-04): **NETCODE LAYERS 31 + 32 — THE CA-CERTIFICATE CREDENTIAL FOLDED ONTO THE ASYNC & CATCH-UP SERVERS DONE ✅** (no-seal, rides **ATM-Sphere v1.26r0**)
 > **Layer 30's CA-certificate binding now composes with the async downstream hygiene AND windowed late-join
 > catch-up** — the 27→28→29 signed-credential arc re-run on the CERTIFICATE credential (30→31→32), exactly as
 > layer 30's ADR named ("the async/catch-up folding is the natural follow-up, as 27→28/29").
