@@ -43,8 +43,9 @@
 > trusted root — the still-open honest-scope follow-up to layer 30's single self-signed root); or more
 > renderer polish (surface the assigned seat / auth state / catch-up-in-progress on the HUD — the remaining
 > named items now that predicted-vs-interp-vs-smoothed + correction magnitude are done).
-> **GIT: not yet committed — implementation + gates + docs complete on `main` working tree; awaiting the
-> commit + receipt step.**
+> **GIT: committed to `main` — code `6addb64` + receipt `docs/receipts/receipt-ATM-Sphere_v1.26r0-6addb64.yml`
+> (overall PASS, golden `6914a994…`, all 15 gates PASS, property tests PASS). Not yet pushed to
+> origin/main.**
 >
 > ---
 >
