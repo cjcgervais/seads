@@ -63,7 +63,10 @@
 > `[CHALLENGE | BIND | prefix]` (index 0 = CHALLENGE, 1 = BIND) — reassemble ALL bytes through ONE
 > reassembler (the first cut split it and misaligned; fixed). Ed25519 is integer-only ⇒ no
 > `-ffp-contract=off` dependence.
-> **GIT: committed locally (see receipt); NOT yet pushed — awaiting go-ahead.**
+> **GIT: pushed to `origin/main` (code `df5b45f` + receipt `6b265a5`,
+> `receipt-ATM-Sphere_v1.26r0-df5b45f.yml` — overall PASS, golden `6914a994…`); the layer-27 pair
+> (`0c30e7b` + `3894860`) rode the same push (`9f694ab..6b265a5`). Guardian CI (cross-toolchain matrix)
+> triggered — check https://github.com/cjcgervais/seads/actions.**
 >
 > ---
 >
@@ -139,7 +142,9 @@
 > layer 26 MAC'd. HELLO-003 is version `0x03`; HELLO-001 (`0x01`) and HELLO-002 (`0x02`) are frozen and
 > each decoder rejects the others' versions (pins assert it). The Python Ed25519 ref is SLOW (recursive
 > scalarmult) — the crypto-heavy property tests carry `@settings(deadline=None)`; keep it if you add more.
-> **GIT: committed locally (see receipt); NOT yet pushed — awaiting go-ahead.**
+> **GIT: pushed to `origin/main` (code `0c30e7b` + receipt `3894860`,
+> `receipt-ATM-Sphere_v1.26r0-0c30e7b.yml` — 15/15 gates PASS, golden `6914a994…`); rode the
+> `9f694ab..6b265a5` push alongside layers 28+29.**
 >
 > ---
 >
