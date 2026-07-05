@@ -137,7 +137,7 @@ add_library(seads_netinput STATIC src/net/input001.cpp src/net/cmdqueue.cpp src/
             src/net/remotepredict.cpp src/net/siphash.cpp src/net/authmac001.cpp
             src/net/authmacserver.cpp src/net/sha512.cpp src/net/ed25519.cpp
             src/net/authsig001.cpp src/net/authsigserver.cpp src/net/authsigasyncserver.cpp
-            src/net/authsigcatchupserver.cpp)
+            src/net/authsigcatchupserver.cpp src/net/cert001.cpp src/net/authcertserver.cpp)
 target_include_directories(seads_netinput PUBLIC src/net)
 target_link_libraries(seads_netinput PUBLIC seads_session seads_framing seads_socket seads_net
                       seads_kernel seads_replay seads_det_flags)
@@ -418,6 +418,18 @@ target_link_libraries(seads_netauthsig_catchup_test PRIVATE seads_netinput seads
                       seads_broadcast seads_framing seads_socket seads_predict seads_net seads_kernel
                       seads_replay seads_det_math seads_det_flags)
 
+# --- layer-30 CERTIFICATE-PKI bridge: the server trusts ONE certificate-authority public key (not a
+# per-client roster); each client presents a CA-signed CERT-001 certificate in HELLO-004 + an Ed25519
+# possession proof over a fresh challenge; CaTable verifies under the CA key with REVOCATION + key
+# ROTATION (epoch floor). broadcast_authcert is a sibling of broadcast_authsig. Proves (LEG 1) three
+# certified clients compose to build_server_frames byte-for-byte, (LEG 2) a self-signed/revoked/
+# stale-epoch credential are all rejected to spectator, (LEG 3) SHA-512 + Ed25519 pins + CERT-001/
+# HELLO-004 codec + CaTable verify/revoke/rotate in-process. ---
+add_executable(seads_netauthcert_test src/net/netauthcert_test_main.cpp)
+target_link_libraries(seads_netauthcert_test PRIVATE seads_netinput seads_session seads_event
+                      seads_broadcast seads_framing seads_socket seads_predict seads_net seads_kernel
+                      seads_replay seads_det_math seads_det_flags)
+
 # --- client presentation test (globe projection + .seadsrec container + playback interp) ---
 add_executable(seads_client_test src/client/client_test_main.cpp)
 target_link_libraries(seads_client_test PRIVATE seads_client seads_net seads_det_flags)
@@ -481,6 +493,7 @@ if(SEADS_SOCKET_TESTS AND NOT CMAKE_CROSSCOMPILING)
   add_test(NAME netauthsig_bridge COMMAND seads_netauthsig_test)
   add_test(NAME netauthsig_async_bridge COMMAND seads_netauthsig_async_test)
   add_test(NAME netauthsig_catchup_bridge COMMAND seads_netauthsig_catchup_test)
+  add_test(NAME netauthcert_bridge COMMAND seads_netauthcert_test)
   add_test(NAME netremotepredict_bridge COMMAND seads_netremotepredict_test)
 endif()
 # Golden hash compare is run in CI (guardian.yml) across the toolchain matrix.

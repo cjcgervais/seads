@@ -1,6 +1,78 @@
 # SEADS 2026 — Next Steps (handoff)
 
-> ## ►► CURRENT STATE (2026-07-04): **NETCODE LAYERS 28 + 29 — SIGNED CREDENTIAL FOLDED ONTO THE ASYNC & CATCH-UP SERVERS DONE ✅** (no-seal, rides **ATM-Sphere v1.26r0**)
+> ## ►► CURRENT STATE (2026-07-04): **NETCODE LAYER 30 — CERTIFICATE PKI (ONE CA KEY, REVOCATION, KEY ROTATION) DONE ✅** (no-seal, rides **ATM-Sphere v1.26r0**)
+> **The server now trusts ONE certificate-authority public key instead of a fixed per-client roster** —
+> layer 27's named honest-scope follow-up. Layer 27's `PubkeyTable` enrolled every client's public key
+> directly: no enrollment without a server change, no revocation, no key rotation. Layer 30 moves trust to a
+> CA: each client carries a **CA-signed certificate** binding its identity, and the server holds only the CA
+> public key to verify it — with **revocation** and **key rotation** as first-class controls.
+> **THE SERVER (`src/net/authcertserver.{h,cpp}`, `netinput::broadcast_authcert`):** a SIBLING of
+> `broadcast_authsig` (its `select()` loop, seat binding, BIND-001 reply, `seat_authorizes`, AND the
+> CHALLENGE-001 nonce + `derive_nonce` + the Ed25519 challenge proof `authsig001::{sign,verify}_challenge`
+> reused VERBATIM; every other server byte-for-byte UNTOUCHED; **NO shared-file/`Stats` change, NO new
+> det_math — 18th consecutive — NO new crypto or Python ref**, Ed25519/SHA-512 from layer 27 reused) with the
+> ENROLLED-public-key lookup replaced by a **CA-signed CERTIFICATE verify**.
+> **TWO NEW TRANSPORT RECORDS (`src/net/cert001.{h,cpp}` ↔ `tools/cert_ref.py`):**
+> - **CERT-001** = `[cert_version 0x01][ZigZag token][ZigZag seat][ZigZag epoch][32 client-pubkey]` +
+>   `[LEB ca_siglen][64 CA sig]`, `ca_sig = Ed25519_sign(ca_seed, cert_body)`. The CA vouches offline for the
+>   identity→seat→epoch→pubkey binding; token/seat/epoch ride the sealed GEO-001 codec, pubkey + sig raw ⇒ no
+>   new codec. `verify_cert` verifies the CA sig over the exact decoded `body` slice (never a re-encode).
+> - **HELLO-004** = `[version 0x04][LEB certlen][cert][LEB siglen][challenge sig]` — present the certificate +
+>   prove possession of the certified private key by signing the fresh challenge (layer 27's proof reused).
+>   Version 0x04 distinct from HELLO-001/002/003 (all frozen).
+> **THE VERIFYING `CaTable`:** holds the CA public key + a **revocation set** + a **per-token epoch floor**
+> (rotation; default 0) + seat occupancy — no per-client keys, no secret. `authenticate(cert, nonce,
+> challenge_sig)` binds the cert's designated seat only when: the cert verifies under the CA key, the token
+> is NOT revoked, `epoch ≥ floor`, the seat is in range + free, AND the challenge sig verifies under the
+> CERTIFIED client key; else SPECTATOR — a self-signed / tampered / revoked / stale-epoch / forged-possession
+> / unknown / double-login credential ALL reject into the SAME class ⇒ the layer-21/26/27 determinism story
+> composes verbatim (authentication is an admission filter that never touches the CommandQueue). `revoke`/
+> `unrevoke` + `set_min_epoch` are the CRL / rotation controls; `release` frees a seat (reconnect reclaims).
+> **THE HEADLINE over layer 27:** the server enrolls only ONE CA public key — new identities need no server
+> change (the CA issues a cert), a compromised identity is REVOKED, a client ROTATES its key by re-certifying
+> at a higher epoch. A real certificate PKI.
+> **VERIFIED LOCALLY (gcc + clang), all green:**
+> - **`seads_netauthcert_test`** (ctest **34→35** `netauthcert_bridge`): LEG 1 — 3 identities each present a
+>   CA cert + SIGN and fly the seat their cert designates (token order ≠ seat order 100→2/200→0/300→1;
+>   scrambled/chunked) ⇒ byte-identical to `build_server_frames` (31 frames), `cmds_ok=6` unauth/stale/oob=0;
+>   LEG 2 — a seat-0 client's foreign commands + a SELF-SIGNED (non-CA) cert + a REVOKED token + a STALE-epoch
+>   (post-rotation `set_min_epoch(100,5)`) cert ALL dropped (`cmds_unauth=21`), all four see the aircraft-0-only
+>   world byte-for-byte; LEG 3 — SHA-512(\"abc\") + Ed25519 fixed pin + CERT-001 body pin `[0x01,0x0E,0x02,0x00,
+>   0x11×32]` + HELLO-004 pin `[0x04,0x02,0xAA,0xBB,0x01,0xCC]` (vs `cert_ref.py`) + `CaTable` (CA-verify,
+>   self-signed/forged-possession/replay reject, revoke/un-revoke, epoch-floor rotation, unknown/double-login→
+>   spectator, reclaim-own-seat) in-process.
+> - **Gates: full ctest 35/35 GCC + Clang; ALL 15 goldens byte-identical** (Sphere `6914a994…`); sealed
+>   session + event digests unmoved (`966aca05…`, re-asserted by the passing session/event/lockstep bridges);
+>   `spec_monotone_check` + `det_math_oracle` PASS; `cert_ref.py` selftest PASS; **property tests 311→325**
+>   (+14 `test_cert.py`: CERT-001/HELLO-004 codec + version enforcement, CA-verify, self-signed reject,
+>   tampered reject, invariant-to-order binding, stolen-cert-wrong-key reject, replay reject, revocation
+>   targets one identity, key-rotation supersedes old epoch, no double-booking + reclaim, reused
+>   `seat_authorizes`).
+> **TRANSPORT-ONLY: no `src/kernel/**`, `src/det_math/**`, `config/rails/**`, wire bytes, protocol-7,
+> session/event codec, or tuning touched ⇒ all 15 goldens byte-identical, no seal.** Diff: NEW
+> `src/net/cert001.{h,cpp}`, `src/net/authcertserver.{h,cpp}`, `src/net/netauthcert_test_main.cpp`,
+> `tools/cert_ref.py`, `tests/property/test_cert.py`,
+> `docs/adr/ADR-Step-Net-Layer30-CertPKI-v1.26r0.md`; MODIFIED `CMakeLists.txt` (`cert001.cpp` +
+> `authcertserver.cpp` into `seads_netinput`, `seads_netauthcert_test` target, `netauthcert_bridge` ctest).
+> **No shared-file change** (no `Stats`/accessor edit); no new crypto/Python ref. **guardian.yml UNCHANGED**
+> (ctest-only bridge, like layers 13–29). Ledger: **ADR-Step-Net-Layer30-CertPKI-v1.26r0**.
+> **NEXT (free pick, none blocking):** **CA-certificate folded onto the async & catch-up servers** (re-run the
+> 27→28/29 step on the certificate credential: `broadcast_authcert_async` + `broadcast_authcert_catchup`); or
+> **certificate chains / intermediate CAs** (path validation to a trusted root — the honest-scope follow-up to
+> layer 30's single self-signed root); or **renderer polish** (surface the assigned seat / auth state /
+> predicted-vs-interpolated-vs-smoothed remote / correction magnitude / catch-up-in-progress on the HUD).
+> **NOTE FOR THE NEXT AGENT:** the certificate signs the SEAT into the identity binding (offline CA
+> authorization), so no per-client server roster remains. Revocation + epoch floors are in-memory `CaTable`
+> state — a production system distributes them (signed CRL/OCSP/short-lived certs). Epoch (not a wall-clock
+> validity window) is the rotation counter BECAUSE wall-clock is banned near the sim. The accept handshake is
+> the same challenge-response as layer 27 (CHALLENGE down → HELLO-004 up → verify → BIND); `verify_cert`
+> hashes the exact decoded body prefix, so re-encoding is never assumed. Ed25519 is integer-only ⇒ no
+> `-ffp-contract=off` dependence.
+> **GIT: uncommitted — implementation + docs staged locally, pending user approval to commit/push.**
+>
+> ---
+>
+> ## ◄ PREVIOUS (2026-07-04): **NETCODE LAYERS 28 + 29 — SIGNED CREDENTIAL FOLDED ONTO THE ASYNC & CATCH-UP SERVERS DONE ✅** (no-seal, rides **ATM-Sphere v1.26r0**)
 > **Layer 27's Ed25519 public-key binding now composes with the async downstream hygiene AND windowed
 > late-join catch-up** — the 21→22→23 authenticated arc re-run on the SIGNED credential (27→28→29), exactly
 > as layer 27's ADR named ("fold the verifying credential onto the async/catch-up servers … mechanical").
