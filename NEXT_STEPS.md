@@ -1,6 +1,73 @@
 # SEADS 2026 — Next Steps (handoff)
 
-> ## ►► CURRENT STATE (2026-07-04): **NETCODE LAYER 27 — ASYMMETRIC SIGNATURES (A PUBLIC-KEY IDENTITY; THE SERVER HOLDS ONLY A PUBLIC KEY) DONE ✅** (no-seal, rides **ATM-Sphere v1.26r0**)
+> ## ►► CURRENT STATE (2026-07-04): **NETCODE LAYERS 28 + 29 — SIGNED CREDENTIAL FOLDED ONTO THE ASYNC & CATCH-UP SERVERS DONE ✅** (no-seal, rides **ATM-Sphere v1.26r0**)
+> **Layer 27's Ed25519 public-key binding now composes with the async downstream hygiene AND windowed
+> late-join catch-up** — the 21→22→23 authenticated arc re-run on the SIGNED credential (27→28→29), exactly
+> as layer 27's ADR named ("fold the verifying credential onto the async/catch-up servers … mechanical").
+> **LAYER 28 — `broadcast_authsig_async` (`src/net/authsigasyncserver.{h,cpp}`):** `broadcast_auth_async`'s
+> async loop (non-blocking per-client send buffers + byte-cap drop-slowest + liveness reap) with the token
+> lookup replaced by the layer-27 CHALLENGE-001/HELLO-003 signature verify — a SIBLING of `broadcast_authsig`
+> AND `broadcast_auth_async`.
+> **LAYER 29 — `broadcast_authsig_catchup` (`src/net/authsigcatchupserver.{h,cpp}`):** layer 28 +
+> `broadcast_live`'s windowed catch-up (a `history` vector retains the produced payloads, last
+> `catchup_window`; `accept_all` replays `frames[max(0,fi−W):]` right after the BIND; `Stats.trimmed`
+> inherited from layer 20) — a SIBLING of `broadcast_authsig_async` AND `broadcast_auth_catchup`.
+> **BOTH** own their own client struct + flush/enqueue/cap/reap/drop helpers ⇒ the sealed `broadcast.cpp` and
+> EVERY prior server (bound/bidi/bound-async/bound-catchup/auth/auth-async/auth-catchup/authmac/authsig) are
+> byte-for-byte UNTOUCHED. `PubkeyTable` + `seat_authorizes` + CHALLENGE-001/`derive_nonce` + HELLO-003 +
+> BIND-001 are **reused VERBATIM**; **NO shared-file/`Stats` change, NO new det_math, NO new crypto or Python
+> ref** (Ed25519/SHA-512 from layer 27 reused). The one structural touch vs the token-auth siblings: the
+> accept handshake is a challenge-response — send CHALLENGE-001 DOWN (blocking, socket still blocking) → read
+> HELLO-003 (bounded-blocking) → verify the signature → go non-blocking → ENQUEUE the BIND-001 first (after
+> the already-sent CHALLENGE).
+> **THE CLAIM:** four orthogonal axes — admission (verified signature + per-seat authorization, never touches
+> the CommandQueue) × delivery (async byte-cap/liveness) × replay-depth (catch-up window) — ⇒ N signed clients
+> each upstreaming ONLY their own seat compose to `build_server_frames` byte-identical regardless of connect
+> order, upstream reorder/chunking, any downstream cap/liveness drop, OR any joiner's replay window; a forger
+> holding the whole public roster gets no seat.
+> **VERIFIED LOCALLY (gcc + clang), all green:**
+> - **`seads_netauthsig_async_test`** (ctest **32→33** `netauthsig_async_bridge`): LEG 1 — 3 identities SIGN
+>   and fly their designated seat (token order ≠ seat order 100→2/200→0/300→1; scrambled/chunked) THROUGH the
+>   async path ⇒ byte-identical to `build_server_frames`; LEG 2 — a seat-0 client's foreign commands + a
+>   FORGER's (right token, WRONG key → spectator) ALL dropped (`cmds_unauth=15`); LEG 3A/3B — a dead client
+>   reaped (cap=0) / byte-cap shed (liveness=0) + its seat freed, delivered `[CHALLENGE | BIND(seat 1) |
+>   strict prefix]`, FAST byte-identical + its commands drove the sim.
+> - **`seads_netauthsig_catchup_test`** (ctest **33→34** `netauthsig_catchup_bridge`): LEG 1 — 3 signed
+>   identities ⇒ byte-identical to `build_server_frames`; a 4th unknown-token SPECTATOR joins mid-stream and
+>   across W ∈ {1, kJoin/2, retain-all} receives EXACTLY `[CHALLENGE | BIND(spectator) |
+>   frames[max(0,kJoin−W):]]`, `trimmed`=30/24/0; LEG 2 — spectator upstreams the whole set, all rejected
+>   (`cmds_unauth=6`), still catches up the whole stream; LEG 3 — a dead identity's catch-up backlog shed by
+>   the byte-cap (`capped=1`) + seat freed, FAST byte-identical.
+> - **Gates: full ctest 34/34 GCC + Clang; ALL 15 goldens byte-identical** (Sphere `6914a994…`); sealed
+>   session + event digests unmoved (`966aca05…`); **property tests 304→311** (+7 `test_authsigservers.py`:
+>   signed admission is downstream/replay-blind, order-invariant, seat freed on any drop + reclaimed by own
+>   identity, forger admitted to nothing, BIND-first/dead-prefix, catch-up window-suffix + trimmed,
+>   catch-up authorization-blind).
+> **TRANSPORT-ONLY: no `src/kernel/**`, `src/det_math/**`, `config/rails/**`, wire bytes, protocol-7,
+> session/event codec, or tuning touched ⇒ all 15 goldens byte-identical, no seal.** Diff: NEW
+> `src/net/authsigasyncserver.{h,cpp}`, `src/net/authsigcatchupserver.{h,cpp}`,
+> `src/net/netauthsigasync_test_main.cpp`, `src/net/netauthsigcatchup_test_main.cpp`,
+> `tests/property/test_authsigservers.py`,
+> `docs/adr/ADR-Step-Net-Layers28-29-AsymmetricSignatureAsyncCatchup-v1.26r0.md`; MODIFIED `CMakeLists.txt`
+> (two servers into `seads_netinput`, two test targets, two ctest entries). **guardian.yml UNCHANGED**
+> (ctest-only bridges, like layers 13–27). Ledger:
+> **ADR-Step-Net-Layers28-29-AsymmetricSignatureAsyncCatchup-v1.26r0**.
+> **NEXT (free pick, none blocking):** **key rotation / revocation / a real PKI** (certificates over the
+> enrolled public keys — the asymmetric arc's named next hardening over layer 27's fixed roster); or
+> **renderer polish** (surface the assigned seat / auth state / predicted-vs-interpolated-vs-smoothed remote /
+> correction magnitude / catch-up-in-progress on the HUD).
+> **NOTE FOR THE NEXT AGENT:** the accept handshake for the async/catch-up authsig servers sends the CHALLENGE
+> **synchronously** (blocking `send_all` before `set_nonblocking`) then reads HELLO-003 bounded-blocking — the
+> two non-async touches, matching layer 27's blocking base + layer 22's HELLO read. In the BRIDGES, a
+> non-reading DEAD client must still read the CHALLENGE + send HELLO-003 to TAKE a seat; its downstream is
+> `[CHALLENGE | BIND | prefix]` (index 0 = CHALLENGE, 1 = BIND) — reassemble ALL bytes through ONE
+> reassembler (the first cut split it and misaligned; fixed). Ed25519 is integer-only ⇒ no
+> `-ffp-contract=off` dependence.
+> **GIT: committed locally (see receipt); NOT yet pushed — awaiting go-ahead.**
+>
+> ---
+>
+> ## ◄ PREVIOUS (2026-07-04): **NETCODE LAYER 27 — ASYMMETRIC SIGNATURES (A PUBLIC-KEY IDENTITY; THE SERVER HOLDS ONLY A PUBLIC KEY) DONE ✅** (no-seal, rides **ATM-Sphere v1.26r0**)
 > **A client now PROVES identity with a PRIVATE key the server never holds.** Layer 26 verified a keyed
 > MAC (SipHash) over a server challenge — strictly stronger than a bare token, but SYMMETRIC: the server
 > holds a shared secret per token, so the server itself (or anyone who leaks its roster) can FORGE any
