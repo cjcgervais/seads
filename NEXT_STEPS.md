@@ -1,6 +1,65 @@
 # SEADS 2026 — Next Steps (handoff)
 
-> ## ►► CURRENT STATE (2026-07-04): **NETCODE LAYER 25 — REMOTE-PREDICTION RECONCILE SMOOTHING (HIDE THE MANEUVER POP) DONE ✅** (no-seal, rides **ATM-Sphere v1.26r0**)
+> ## ►► CURRENT STATE (2026-07-04): **NETCODE LAYER 26 — STRONG CREDENTIALS (A VERIFYING KEYED MAC, NOT A BARE TOKEN) DONE ✅** (no-seal, rides **ATM-Sphere v1.26r0**)
+> **A client must now PROVE who it is, not merely NAME who it is.** Layer 21 bound a seat to an abstracted
+> i64 `token` the server merely LOOKED UP — a public identifier, like a username: anyone who observed or
+> guessed a token could take its seat. Every auth ADR (21/22/23) flagged the same words as scope — *"a
+> production system would carry a MAC/signature the server verifies against a secret."* Layer 26 closes it:
+> the credential becomes a **keyed MAC over a server-issued challenge that the server VERIFIES** against a
+> pre-shared secret.
+> **THE SERVER (`src/net/authmacserver.{h,cpp}`, `netinput::broadcast_authmac`):** a SIBLING of
+> `broadcast_auth` (its `select()` loop, seat binding, BIND-001 reply, and `seat_authorizes` authorization
+> reused verbatim; `broadcast_auth`/`broadcast_bound`/`broadcast_input` + every async/catch-up sibling
+> byte-for-byte untouched; NO shared-file/`Stats` change). The token LOOKUP is replaced by a
+> challenge-response: on accept the server sends a fresh **CHALLENGE-001** nonce DOWN (first downstream
+> frame, before BIND); the client answers **HELLO-002** = `[token, mac]`, `mac = SipHash(secret[token],
+> nonce‖token)`; **`SecretTable::authenticate` VERIFIES the mac before binding the designated seat** — a
+> forged / stale / unknown credential → SPECTATOR (the *same* reject class as layer 21's unknown token, so
+> the determinism story composes verbatim).
+> **THE PRIMITIVE (`src/net/siphash.{h,cpp}` ↔ `tools/siphash_ref.py`):** real, standard **SipHash-2-4** —
+> 100% 64-bit unsigned integer ops (add mod 2⁶⁴, xor, rotate) ⇒ byte-identical cross-toolchain/language,
+> pinned to the **OFFICIAL reference vector** (`0xa129ca6149be45e5`). It is TRANSPORT (outside the
+> kernel/world_hash), so the det_math ban does not apply — and there are no transcendentals anyway. **ZERO
+> new det_math.** CHALLENGE-001/HELLO-002 are transport metadata (like BIND-001/HELLO-001 — no seal); their
+> integers ride the sealed GEO-001 i64 codec.
+> **THE HEADLINE:** a client with the wrong secret is REJECTED — knowing the (public) token is no longer
+> enough. Freshness (a distinct per-connection nonce) defeats replay of a captured HELLO.
+> **VERIFIED LOCALLY (gcc + clang), all green:**
+> - **BRIDGE `seads_netauthmac_test`** (ctest **30→31** `netauthmac_bridge`): LEG 1 — 3 identities PROVE
+>   possession (challenge→MAC) and each flies the seat its TOKEN designates (token order ≠ seat order
+>   100→2/200→0/300→1; scrambled/chunked) ⇒ 31 frames **byte-identical to `build_server_frames`**; LEG 2 —
+>   a seat-0 client's foreign commands + a **FORGER's** (right token, WRONG secret → bad MAC → spectator) +
+>   an unknown token's are ALL dropped (`cmds_unauth=15`), all see the aircraft-0-only world byte-for-byte
+>   (the capability layer 21 could not deliver); LEG 3 — the SipHash official vector + CHALLENGE-001/HELLO-002
+>   codec pins + `SecretTable` (verify, forgery-reject, replay-reject, unknown/double-login→spectator,
+>   reclaim-own-seat) in-process.
+> - **Gates: full ctest 30/31 GCC + Clang; ALL 15 goldens byte-identical** (Sphere `6914a994…`, scenario
+>   goldens via `lockstep_equal`, WEAPON-001 protocol-7 via `weapon_byteexact`); sealed **session + event
+>   digests unmoved** (`966aca05…`); **property tests 274→288** (+14 `test_authmac.py`: SipHash vector +
+>   sensitivity, record round-trips + pins, verify gates the seat, forgery/replay rejected, invariant-to-order,
+>   fresh-per-accept, no double-book/reclaim); `siphash_ref.py` + `authmac_ref.py` selftests PASS.
+> **TRANSPORT-ONLY: no `src/kernel/**`, `src/det_math/**`, `config/rails/**`, wire bytes, protocol-7,
+> session/event codec, or tuning touched ⇒ all 15 goldens byte-identical, no seal.** Diff: NEW
+> `src/net/siphash.{h,cpp}`, `src/net/authmac001.{h,cpp}`, `src/net/authmacserver.{h,cpp}`,
+> `src/net/netauthmac_test_main.cpp`, `tools/siphash_ref.py`, `tools/authmac_ref.py`,
+> `tests/property/test_authmac.py`, `docs/adr/ADR-Step-Net-Layer26-StrongCredentials-v1.26r0.md`; MODIFIED
+> `CMakeLists.txt` (three sources into `seads_netinput`, `seads_netauthmac_test` target, `netauthmac_bridge`
+> ctest). **guardian.yml UNCHANGED** (ctest-only bridge, like layers 13–25). Ledger:
+> **ADR-Step-Net-Layer26-StrongCredentials-v1.26r0**.
+> **NEXT (free pick, none blocking):** **asymmetric signatures** (a real public-key identity — the server
+> holds only a public key, never the client's secret, so a roster leak can't impersonate a client — the
+> named next hardening over this symmetric MAC); **fold the verifying credential onto the async/catch-up
+> servers** (layer 22/23-style siblings of `broadcast_authmac`, mechanical); or **renderer polish** (surface
+> the assigned seat / auth state / predicted-vs-interpolated-vs-smoothed remote / correction magnitude on the HUD).
+> **NOTE FOR THE NEXT AGENT:** SipHash is integer-only — its cross-impl bit-identity does NOT depend on
+> `-ffp-contract=off` (no floats), unlike the layer-25 smoothing blend. The MAC message is
+> `nonce_le ‖ token_le` (16 bytes, LE); the session key seeds the challenge nonce (a CSPRNG seed in prod, a
+> FIXED seed in the bridge for reproducibility). HELLO-002 is version `0x02` and HELLO-001 (`0x01`, layer 21)
+> is frozen — the two decoders reject each other's version, which the pins assert.
+>
+> ---
+>
+> ## ◄ PREVIOUS (2026-07-04): **NETCODE LAYER 25 — REMOTE-PREDICTION RECONCILE SMOOTHING (HIDE THE MANEUVER POP) DONE ✅** (no-seal, rides **ATM-Sphere v1.26r0**)
 > **A remote is now drawn where it IS, and it gets there SMOOTHLY.** Layer 24 predicts a remote to "now" by
 > dead-reckoning coast, but it SNAPS the display to each reseed — across a maneuver on a bad link the coast
 > holds the old kinematics until a fresher snapshot lands, then POPS to the correction (a visible jerk in
