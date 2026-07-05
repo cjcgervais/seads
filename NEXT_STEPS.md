@@ -1,6 +1,82 @@
 # SEADS 2026 — Next Steps (handoff)
 
-> ## ►► CURRENT STATE (2026-07-04): **NETCODE LAYER 26 — STRONG CREDENTIALS (A VERIFYING KEYED MAC, NOT A BARE TOKEN) DONE ✅** (no-seal, rides **ATM-Sphere v1.26r0**)
+> ## ►► CURRENT STATE (2026-07-04): **NETCODE LAYER 27 — ASYMMETRIC SIGNATURES (A PUBLIC-KEY IDENTITY; THE SERVER HOLDS ONLY A PUBLIC KEY) DONE ✅** (no-seal, rides **ATM-Sphere v1.26r0**)
+> **A client now PROVES identity with a PRIVATE key the server never holds.** Layer 26 verified a keyed
+> MAC (SipHash) over a server challenge — strictly stronger than a bare token, but SYMMETRIC: the server
+> holds a shared secret per token, so the server itself (or anyone who leaks its roster) can FORGE any
+> client's proof. Every auth ADR (21/22/23/26) flagged the same next hardening: *"an asymmetric signature
+> (public-key identity: the server holds only a public key, never the client's secret) is the named next
+> hardening."* Layer 27 closes it: the credential becomes an **Ed25519 SIGNATURE over a server-issued
+> challenge that the server VERIFIES against an enrolled PUBLIC key**.
+> **THE SERVER (`src/net/authsigserver.{h,cpp}`, `netinput::broadcast_authsig`):** a SIBLING of
+> `broadcast_authmac` (its `select()` loop, seat binding, BIND-001 reply, `seat_authorizes`, AND the
+> CHALLENGE-001 nonce + `derive_nonce` reused VERBATIM; `broadcast_authmac`/`broadcast_auth`/
+> `broadcast_bound`/`broadcast_input` + every async/catch-up sibling byte-for-byte untouched; NO
+> shared-file/`Stats` change). Only the PROOF becomes asymmetric: on accept the server sends the fresh
+> **CHALLENGE-001** nonce DOWN (layer 26's, unchanged); the client answers **HELLO-003** = `[token,
+> signature]`, `signature = Ed25519_sign(private_seed[token], nonce‖token)`; **`PubkeyTable::authenticate`
+> VERIFIES the signature under the enrolled PUBLIC key before binding the designated seat** — a forged /
+> stale / unknown credential → SPECTATOR (the *same* reject class as layer 21/26, so the determinism story
+> composes verbatim).
+> **THE PRIMITIVES (`src/net/{sha512,ed25519}.{h,cpp}` ↔ `tools/{sha512_ref,ed25519_ref}.py`):** real,
+> standard **Ed25519 (RFC 8032)** on **SHA-512 (FIPS 180-4)**. The C++ side transcribes **TweetNaCl**'s
+> fixed 16-limb (`gf[16]`) bignum ⇒ 100% integer arithmetic (no float / libm / `__int128` / FMA-sensitive
+> path), byte-identical cross-toolchain; the Python side is the RFC-8032 reference. SHA-512 is pinned to
+> the OFFICIAL NIST `SHA-512("abc")` vector; Ed25519 is pinned to a fixed-seed public-key + signature
+> **independently confirmed against the `cryptography` library** (a widely-audited external impl). It is
+> TRANSPORT (outside the kernel/world_hash), so the det_math ban does not apply — and there are no
+> transcendentals. **ZERO new det_math (seventeenth consecutive).** CHALLENGE-001/HELLO-003 are transport
+> metadata (like BIND-001/HELLO-001/HELLO-002 — no seal); token + siglen ride the sealed GEO-001 i64
+> codec, the 64 signature bytes are raw.
+> **THE HEADLINE over layer 26:** the `PubkeyTable` holds NO secret capable of signing — only public keys.
+> A full ROSTER LEAK (every enrolled public key) still cannot impersonate any client, because a valid
+> HELLO-003 requires the private seed the server never sees. Real public-key identity. (Ed25519 signing is
+> deterministic, so the whole run is reproducible; the challenge nonce is fresh per connection ⇒ replay of
+> a captured HELLO fails.)
+> **VERIFIED LOCALLY (gcc + clang), all green:**
+> - **BRIDGE `seads_netauthsig_test`** (ctest **31→32** `netauthsig_bridge`): LEG 1 — 3 identities SIGN a
+>   fresh challenge and each flies the seat its TOKEN designates (token order ≠ seat order
+>   100→2/200→0/300→1; scrambled/chunked) ⇒ 31 frames **byte-identical to `build_server_frames`**; LEG 2 —
+>   a seat-0 client's foreign commands + a **FORGER's** (right token, WRONG private key → bad signature →
+>   spectator, *even holding the whole public roster*) + an unknown token's are ALL dropped
+>   (`cmds_unauth=15`), all see the aircraft-0-only world byte-for-byte (the capability layer 26 could not
+>   deliver — its server-held secret could forge); LEG 3 — the SHA-512("abc") vector + the Ed25519 fixed
+>   pin (pubkey+sig vs the `cryptography` lib) + a tamper reject + CHALLENGE-001/HELLO-003 codec pins +
+>   `PubkeyTable` (verify, forgery-reject, replay-reject, unknown/double-login→spectator, reclaim-own-seat)
+>   in-process.
+> - **Gates: full ctest 32/32 GCC + Clang; ALL 15 goldens byte-identical** (Sphere `6914a994…`, scenario
+>   goldens via `lockstep_equal`, WEAPON-001 protocol-7 via `weapon_byteexact`); sealed **session + event
+>   digests unmoved** (`966aca05…`); **property tests 288→304** (+16 `test_authsig.py`: SHA-512 vector +
+>   sensitivity, Ed25519 pin + round-trip + rejects tampered sig/message/key, HELLO-003 round-trips + pins,
+>   verify gates the seat, forgery/replay rejected, invariant-to-order, fresh-per-accept, no
+>   double-book/reclaim); `sha512_ref.py` / `ed25519_ref.py` / `authsig_ref.py` selftests PASS.
+> **TRANSPORT-ONLY: no `src/kernel/**`, `src/det_math/**`, `config/rails/**`, wire bytes, protocol-7,
+> session/event codec, or tuning touched ⇒ all 15 goldens byte-identical, no seal.** Diff: NEW
+> `src/net/sha512.{h,cpp}`, `src/net/ed25519.{h,cpp}`, `src/net/authsig001.{h,cpp}`,
+> `src/net/authsigserver.{h,cpp}`, `src/net/netauthsig_test_main.cpp`, `tools/sha512_ref.py`,
+> `tools/ed25519_ref.py`, `tools/authsig_ref.py`, `tests/property/test_authsig.py`,
+> `docs/adr/ADR-Step-Net-Layer27-AsymmetricSignatures-v1.26r0.md`; MODIFIED `CMakeLists.txt` (four sources
+> into `seads_netinput`, `seads_netauthsig_test` target, `netauthsig_bridge` ctest). **guardian.yml
+> UNCHANGED** (ctest-only bridge, like layers 13–26). Ledger:
+> **ADR-Step-Net-Layer27-AsymmetricSignatures-v1.26r0**.
+> **NEXT (free pick, none blocking):** **fold the verifying credential onto the async/catch-up servers**
+> (layer 22/23-style siblings of `broadcast_authsig`, mechanical — the async + catch-up axes over the
+> signed credential); **key rotation / revocation / a real PKI** (certificates over the enrolled public
+> keys — the honest-scope follow-up to this layer's fixed roster); or **renderer polish** (surface the
+> assigned seat / auth state / predicted-vs-interpolated-vs-smoothed remote / correction magnitude on the HUD).
+> **NOTE FOR THE NEXT AGENT:** Ed25519 + SHA-512 are integer-only — their cross-impl bit-identity does NOT
+> depend on `-ffp-contract=off` (no floats). The C++ `ed25519.cpp` is a TweetNaCl transcription (`gf[16]`
+> limbs); its correctness is anchored by the RFC-8032 output pins (independently confirmed vs the
+> `cryptography` library) — if you touch it, re-run `python tools/ed25519_ref.py` (prints the pin) and the
+> LEG-3 pin in the bridge. The signed message is `nonce_le ‖ token_le` (16 bytes, LE) — the SAME shape
+> layer 26 MAC'd. HELLO-003 is version `0x03`; HELLO-001 (`0x01`) and HELLO-002 (`0x02`) are frozen and
+> each decoder rejects the others' versions (pins assert it). The Python Ed25519 ref is SLOW (recursive
+> scalarmult) — the crypto-heavy property tests carry `@settings(deadline=None)`; keep it if you add more.
+> **GIT: committed locally (see receipt); NOT yet pushed — awaiting go-ahead.**
+>
+> ---
+>
+> ## ◄ PREVIOUS (2026-07-04): **NETCODE LAYER 26 — STRONG CREDENTIALS (A VERIFYING KEYED MAC, NOT A BARE TOKEN) DONE ✅** (no-seal, rides **ATM-Sphere v1.26r0**)
 > **A client must now PROVE who it is, not merely NAME who it is.** Layer 21 bound a seat to an abstracted
 > i64 `token` the server merely LOOKED UP — a public identifier, like a username: anyone who observed or
 > guessed a token could take its seat. Every auth ADR (21/22/23) flagged the same words as scope — *"a

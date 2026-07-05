@@ -135,7 +135,8 @@ add_library(seads_netinput STATIC src/net/input001.cpp src/net/cmdqueue.cpp src/
             src/net/boundasyncserver.cpp src/net/boundcatchupserver.cpp src/net/hello001.cpp
             src/net/authserver.cpp src/net/authasyncserver.cpp src/net/authcatchupserver.cpp
             src/net/remotepredict.cpp src/net/siphash.cpp src/net/authmac001.cpp
-            src/net/authmacserver.cpp)
+            src/net/authmacserver.cpp src/net/sha512.cpp src/net/ed25519.cpp
+            src/net/authsig001.cpp src/net/authsigserver.cpp)
 target_include_directories(seads_netinput PUBLIC src/net)
 target_link_libraries(seads_netinput PUBLIC seads_session seads_framing seads_socket seads_net
                       seads_kernel seads_replay seads_det_flags)
@@ -387,6 +388,19 @@ target_link_libraries(seads_netauthmac_test PRIVATE seads_netinput seads_session
                       seads_broadcast seads_framing seads_socket seads_predict seads_net seads_kernel
                       seads_replay seads_det_math seads_det_flags)
 
+# --- layer-27 ASYMMETRIC-SIGNATURE bridge: the binding is gated on a VERIFIED Ed25519 SIGNATURE and
+# the server holds ONLY public keys. On accept the server sends a fresh CHALLENGE-001 nonce (reused
+# from layer 26); the client answers HELLO-003 = [token, signature] with sig = Ed25519_sign(seed,
+# nonce||token); PubkeyTable verifies the signature under the enrolled PUBLIC key before binding the
+# designated seat (a forged/stale/unknown credential -> spectator, the layer-21/26 reject class).
+# Proves (LEG 1) three clients that SIGN compose to build_server_frames byte-for-byte, (LEG 2) a
+# forger who holds the whole public roster AND an unknown token are both rejected to spectator (all
+# commands dropped), (LEG 3) SHA-512 + Ed25519 pins + HELLO-003 codec + PubkeyTable verify in-process ---
+add_executable(seads_netauthsig_test src/net/netauthsig_test_main.cpp)
+target_link_libraries(seads_netauthsig_test PRIVATE seads_netinput seads_session seads_event
+                      seads_broadcast seads_framing seads_socket seads_predict seads_net seads_kernel
+                      seads_replay seads_det_math seads_det_flags)
+
 # --- client presentation test (globe projection + .seadsrec container + playback interp) ---
 add_executable(seads_client_test src/client/client_test_main.cpp)
 target_link_libraries(seads_client_test PRIVATE seads_client seads_net seads_det_flags)
@@ -447,6 +461,7 @@ if(SEADS_SOCKET_TESTS AND NOT CMAKE_CROSSCOMPILING)
   add_test(NAME netauthasync_bridge COMMAND seads_netauthasync_test)
   add_test(NAME netauthcatchup_bridge COMMAND seads_netauthcatchup_test)
   add_test(NAME netauthmac_bridge COMMAND seads_netauthmac_test)
+  add_test(NAME netauthsig_bridge COMMAND seads_netauthsig_test)
   add_test(NAME netremotepredict_bridge COMMAND seads_netremotepredict_test)
 endif()
 # Golden hash compare is run in CI (guardian.yml) across the toolchain matrix.
