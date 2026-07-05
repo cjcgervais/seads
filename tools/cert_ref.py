@@ -68,6 +68,7 @@ import ed25519_ref as ed
 
 CERT_VERSION = 0x01     # CERT-001 certificate body version
 HELLO4_VERSION = 0x04   # HELLO-004 handshake record version
+HELLO5_VERSION = 0x05   # HELLO-005 certificate-CHAIN handshake record version (layer 33)
 SPECTATOR = bnd.SPECTATOR  # -1
 
 # The challenge is identical to layers 26/27 — reuse it wholesale.
@@ -170,6 +171,57 @@ def decode_hello4(data, pos=0):
     return {"cert": cert, "sig": sig}, pos
 
 
+# ---- layer 33: HELLO-005 (certificate CHAIN) + path validation (mirror of src/net/cert001.cpp) --
+def encode_hello5(chain, challenge_sig):
+    """One HELLO-005 = [0x05][LEB n_certs] n×([LEB certlen][cert bytes]) [LEB siglen][challenge sig].
+    `chain` is a list of raw CERT-001 blobs, LEAF FIRST (up toward the root)."""
+    challenge_sig = bytes(challenge_sig)
+    out = bytearray([HELLO5_VERSION])
+    out += g.leb128_encode_u64(len(chain))
+    for c in chain:
+        c = bytes(c)
+        out += g.leb128_encode_u64(len(c))
+        out += c
+    out += g.leb128_encode_u64(len(challenge_sig))
+    out += challenge_sig
+    return bytes(out)
+
+
+def decode_hello5(data, pos=0):
+    """wire bytes -> ({certs, sig}, next_pos). `certs` is the list of raw CERT-001 blobs (leaf first).
+    Raises ValueError on a wrong/absent version byte or a truncated certificate/signature blob."""
+    if pos >= len(data) or data[pos] != HELLO5_VERSION:
+        raise ValueError("hello005: bad or missing version byte")
+    pos += 1
+    n, pos = g.leb128_decode_u64(data, pos)
+    certs = []
+    for _ in range(n):
+        certlen, pos = g.leb128_decode_u64(data, pos)
+        if pos + certlen > len(data):
+            raise ValueError("hello005: truncated certificate in chain")
+        certs.append(bytes(data[pos:pos + certlen]))
+        pos += certlen
+    siglen, pos = g.leb128_decode_u64(data, pos)
+    if pos + siglen > len(data):
+        raise ValueError("hello005: truncated challenge signature")
+    sig = bytes(data[pos:pos + siglen])
+    pos += siglen
+    return {"certs": certs, "sig": sig}, pos
+
+
+def verify_chain(root_pubkey, chain_fields, max_depth):
+    """True iff the certificate PATH validates: 1 <= len <= max_depth, each link is signed by the NEXT
+    link's key, and the TOP link is signed by `root_pubkey`. `chain_fields` is a list of decoded cert
+    dicts, LEAF FIRST. Pure signature-path check (no revocation/epoch/seat). Mirror of C++ verify_chain."""
+    if not chain_fields or len(chain_fields) > max_depth:
+        return False
+    for i, link in enumerate(chain_fields):
+        issuer = chain_fields[i + 1]["pubkey"] if i + 1 < len(chain_fields) else bytes(root_pubkey)
+        if not verify_cert(issuer, link):
+            return False
+    return True
+
+
 # ---- verifying CERTIFICATE-AUTHORITY roster (mirror of src/net/authcertserver.cpp) -----
 class CaTable:
     """A verifying server that trusts ONE CA public key. Holds NO per-client keys and NO secret. State:
@@ -220,6 +272,73 @@ class CaTable:
             return SPECTATOR                                  # proof-of-possession failed (forgery/replay)
         self._occupied[seat] = True
         return seat
+
+    def release(self, seat):
+        if 0 <= seat < self.n:
+            self._occupied[seat] = False
+
+    def occupied(self):
+        return [i for i in range(self.n) if self._occupied[i]]
+
+
+# ---- layer 33: verifying CERTIFICATE-CHAIN roster (mirror of src/net/authcertchainserver.cpp) ---
+class CaChainTable:
+    """A verifying server that trusts ONE ROOT CA public key and validates a certificate CHAIN up to
+    it. Holds NO per-client keys and NO secret. State: the root public key, a max chain depth, a set of
+    REVOKED tokens (leaves OR intermediates), a per-token EPOCH FLOOR (rotation), and seat occupancy.
+    authenticate(chain, nonce, challenge_sig) hands back the LEAF's designated seat only when the whole
+    PATH verifies to the root, NO link's token is revoked, EVERY link's epoch is current, the leaf's
+    seat is free, AND the challenge signature verifies under the LEAF key; else SPECTATOR. Revoking or
+    rotating an INTERMEDIATE token invalidates every leaf issued beneath it."""
+
+    def __init__(self, n_aircraft, root_pubkey, max_depth=4):
+        self.n = n_aircraft
+        self.root_pk = bytes(root_pubkey)
+        if len(self.root_pk) != 32:
+            raise ValueError("CaChainTable: root pubkey must be 32 bytes")
+        self.max_depth = max_depth
+        self._occupied = [False] * n_aircraft
+        self._revoked = set()
+        self._min_epoch = {}
+
+    def revoke(self, token):
+        self._revoked.add(int(token))
+
+    def unrevoke(self, token):
+        self._revoked.discard(int(token))
+
+    def set_min_epoch(self, token, epoch):
+        self._min_epoch[int(token)] = int(epoch)
+
+    def authenticate(self, chain, nonce, challenge_sig):
+        # Decode every link (leaf first); a malformed / trailing-garbage link rejects the whole chain.
+        links = []
+        for raw in chain:
+            try:
+                cf, pos = decode_cert(raw)
+            except ValueError:
+                return SPECTATOR
+            if pos != len(raw):
+                return SPECTATOR
+            links.append(cf)
+        # Validate the signature PATH to the trusted root (bounds the depth too).
+        if not verify_chain(self.root_pk, links, self.max_depth):
+            return SPECTATOR
+        # Revocation + epoch floor apply to EVERY link (a revoked/rotated intermediate kills its subtree).
+        for link in links:
+            if link["token"] in self._revoked:
+                return SPECTATOR
+            if link["epoch"] < self._min_epoch.get(link["token"], 0):
+                return SPECTATOR
+        leaf = links[0]
+        if not (0 <= leaf["seat"] < self.n):
+            return SPECTATOR
+        if self._occupied[leaf["seat"]]:
+            return SPECTATOR
+        if not verify_challenge(leaf["pubkey"], nonce, leaf["token"], challenge_sig):
+            return SPECTATOR
+        self._occupied[leaf["seat"]] = True
+        return leaf["seat"]
 
     def release(self, seat):
         if 0 <= seat < self.n:
@@ -371,8 +490,85 @@ def _selftest():
     if bnd.seat_authorizes(SPECTATOR, 0) or not bnd.seat_authorizes(2, 2) or bnd.seat_authorizes(2, 0):
         print("FAIL authorization predicate under certificate binding"); fails += 1
 
+    # --- layer 33: certificate CHAINS / intermediate CAs ---------------------------------
+    # The ROOT CA is `ca_seed`/`ca_pub` (reused). An INTERMEDIATE CA has its own key pair; the root
+    # certifies the intermediate, and the intermediate certifies each leaf.
+    int_seed = seed_of(0xA0)
+    int_pub = ed.public_key(int_seed)
+    # root -> intermediate (token 900, seat/epoch informational for a CA cert).
+    int_cert = issue_cert(ca_seed, 900, 0, 0, int_pub)
+
+    # HELLO-005 known encoding pin (asserted identically in the C++ bridge): two 1-byte "certs"
+    # [0xAA] and [0xBB], sig [0xCC] -> [0x05, 0x02, 0x01,0xAA, 0x01,0xBB, 0x01,0xCC].
+    _h5 = encode_hello5([bytes([0xAA]), bytes([0xBB])], bytes([0xCC]))
+    if _h5 != bytes([0x05, 0x02, 0x01, 0xAA, 0x01, 0xBB, 0x01, 0xCC]):
+        print("FAIL hello5 known encoding: " + _h5.hex()); fails += 1
+
+    # A leaf issued by the intermediate: chain [leaf, intermediate] validates to the root.
+    leaf_seed = seed_of(0x10)
+    leaf_cert = issue_cert(int_seed, 100, 2, 0, ed.public_key(leaf_seed))
+    lf, _ = decode_cert(leaf_cert)
+    itf, _ = decode_cert(int_cert)
+    if not verify_chain(ca_pub, [lf, itf], 4):
+        print("FAIL verify_chain: leaf<-intermediate<-root should validate"); fails += 1
+    # A self-signed leaf (no intermediate) does NOT chain to the root.
+    self_leaf = issue_cert(leaf_seed, 100, 2, 0, ed.public_key(leaf_seed))
+    slf, _ = decode_cert(self_leaf)
+    if verify_chain(ca_pub, [slf], 4):
+        print("FAIL verify_chain: self-signed leaf should NOT reach the root"); fails += 1
+    # A broken link (leaf issued by a DIFFERENT key than the presented intermediate) fails.
+    rogue_seed = seed_of(0xB0)
+    rogue_leaf = issue_cert(rogue_seed, 100, 2, 0, ed.public_key(leaf_seed))
+    rlf, _ = decode_cert(rogue_leaf)
+    if verify_chain(ca_pub, [rlf, itf], 4):
+        print("FAIL verify_chain: leaf not signed by the presented intermediate should fail"); fails += 1
+    # Depth limit: a chain longer than max_depth is rejected.
+    if verify_chain(ca_pub, [lf, itf], 1):
+        print("FAIL verify_chain: over-depth chain should be rejected"); fails += 1
+
+    # CaChainTable end-to-end: leaf via intermediate seats; the whole reject surface is SPECTATOR.
+    def present_chain(tbl, chain, leaf_seed, leaf_token, counter):
+        nonce = derive_nonce(*session_k, counter)
+        csig = sign_challenge(leaf_seed, nonce, leaf_token)
+        return tbl.authenticate(chain, nonce, csig)
+
+    cc = CaChainTable(3, ca_pub)
+    if present_chain(cc, [leaf_cert, int_cert], leaf_seed, 100, 40) != 2:
+        print("FAIL CaChainTable: certified leaf should seat"); fails += 1
+    # a self-signed leaf presented alone -> spectator (no path to root).
+    cc2 = CaChainTable(3, ca_pub)
+    if present_chain(cc2, [self_leaf], leaf_seed, 100, 41) != SPECTATOR:
+        print("FAIL CaChainTable: self-signed leaf should be spectator"); fails += 1
+    # forged possession: right chain, wrong signing key -> spectator.
+    nz = derive_nonce(*session_k, 42)
+    bad_csig = sign_challenge(seed_of(0x99), nz, 100)
+    if cc2.authenticate([leaf_cert, int_cert], nz, bad_csig) != SPECTATOR:
+        print("FAIL CaChainTable: forged possession should be spectator"); fails += 1
+    # REVOKE the INTERMEDIATE (token 900): every leaf beneath it -> spectator (subtree revocation).
+    cc3 = CaChainTable(3, ca_pub)
+    cc3.revoke(900)
+    if present_chain(cc3, [leaf_cert, int_cert], leaf_seed, 100, 43) != SPECTATOR:
+        print("FAIL CaChainTable: revoked intermediate should kill its leaf"); fails += 1
+    cc3.unrevoke(900)
+    if present_chain(cc3, [leaf_cert, int_cert], leaf_seed, 100, 44) != 2:
+        print("FAIL CaChainTable: un-revoking the intermediate should restore the leaf"); fails += 1
+    # ROTATE the INTERMEDIATE (raise token-900 epoch floor): the epoch-0 intermediate cert -> spectator.
+    cc4 = CaChainTable(3, ca_pub)
+    cc4.set_min_epoch(900, 5)
+    if present_chain(cc4, [leaf_cert, int_cert], leaf_seed, 100, 45) != SPECTATOR:
+        print("FAIL CaChainTable: stale-epoch intermediate should kill its leaf"); fails += 1
+    int_cert_v5 = issue_cert(ca_seed, 900, 0, 5, int_pub)  # re-certify the intermediate at epoch 5
+    leaf_v5 = issue_cert(int_seed, 100, 2, 5, ed.public_key(leaf_seed))
+    if present_chain(cc4, [leaf_v5, int_cert_v5], leaf_seed, 100, 46) != 2:
+        print("FAIL CaChainTable: rotated (epoch>=floor) chain should authenticate"); fails += 1
+    # a single-cert chain signed directly by the root still works (layer-30 case is a depth-1 chain).
+    cc5 = CaChainTable(3, ca_pub)
+    direct = issue_cert(ca_seed, 100, 2, 0, ed.public_key(leaf_seed))
+    if present_chain(cc5, [direct], leaf_seed, 100, 47) != 2:
+        print("FAIL CaChainTable: depth-1 (root-signed) leaf should seat"); fails += 1
+
     if fails == 0:
-        print("RESULT: CERT-001 / HELLO-004 / CaTable REFERENCE SELFTEST PASS")
+        print("RESULT: CERT-001 / HELLO-004 / HELLO-005 / CaTable / CaChainTable REFERENCE SELFTEST PASS")
         return 0
     print(f"RESULT: certificate-PKI REFERENCE SELFTEST FAIL ({fails})")
     return 1

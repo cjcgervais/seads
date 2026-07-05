@@ -1,6 +1,61 @@
 # SEADS 2026 — Next Steps (handoff)
 
-> ## ►► CURRENT STATE (2026-07-05): **RENDERER — REMOTE PREDICTION + SMOOTHING ON THE VIEWER HUD DONE ✅** (no-seal, rides **ATM-Sphere v1.26r0**)
+> ## ►► CURRENT STATE (2026-07-05): **NETCODE LAYER 33 — CERTIFICATE CHAINS / INTERMEDIATE CAs DONE ✅** (no-seal, rides **ATM-Sphere v1.26r0**)
+> **The last named honest-scope gap in the netcode is closed.** Layer 30 trusted ONE self-signed root CA
+> and each client presented a SINGLE certificate signed DIRECTLY by it (its caveat: "no intermediate
+> certificates / chain depth"). Layer 33 validates a certificate CHAIN [leaf ← intermediate ← … ← root]:
+> a delegated INTERMEDIATE CA (itself certified by the root) issues the leaf, and the server walks the
+> PATH up to the trusted root. With this, the authenticated/PKI arc (21→26→27→30→33) has no remaining
+> credential-level caveats.
+> **THE SERVER (`src/net/authcertchainserver.{h,cpp}`, `netinput::broadcast_authcertchain`):** a SIBLING
+> of `broadcast_authcert` — its `select()` loop, seat binding, BIND-001 reply, `seat_authorizes`, and the
+> CHALLENGE-001 nonce + `derive_nonce` reused VERBATIM; every prior server byte-for-byte UNTOUCHED. Only
+> the credential grows from a single certificate to a chain.
+> **TWO CODEC ADDITIONS (`src/net/cert001.{h,cpp}` ↔ `tools/cert_ref.py`):** **HELLO-005** =
+> `[version 0x05][LEB n_certs] n×([LEB certlen][cert])[LEB siglen][challenge sig]` (leaf-first; the root
+> is NOT in the chain, held by the server; version 0x05 distinct from 001–004, frozen; each link a reused
+> CERT-001; challenge sig = layer-27 proof under the LEAF key) + **`verify_chain(root, chain, max_depth)`**
+> (each link signed by the next, top signed by the root; 1 ≤ len ≤ max_depth). ZERO new det_math (19th
+> consecutive) — token/seat/epoch/lengths ride the sealed GEO-001 codec, keys+sigs raw.
+> **THE VERIFYING `CaChainTable`:** root key + max depth + revocation set + per-token epoch floors + seat
+> occupancy. `authenticate(chain, nonce, sig)` binds the LEAF's seat only when the whole path verifies,
+> NO link is revoked, EVERY link's epoch ≥ floor, the leaf seat is free, AND the leaf possession proof
+> verifies; else SPECTATOR. The checks apply to EVERY link ⇒ **revoking/rotating an INTERMEDIATE
+> invalidates every leaf beneath it** (real chain-of-trust); a depth-1 root-signed leaf is the layer-30
+> case (a valid degenerate chain).
+> **VERIFIED LOCALLY (gcc + clang), all green:**
+> - **`seads_netauthcertchain_test`** (ctest **37→38** `netauthcertchain_bridge`): LEG 1 — 3 depth-2
+>   chained identities (token order ≠ seat order 100→2/200→0/300→1; scrambled/chunked) ⇒ 31 frames
+>   byte-identical to `build_server_frames`, `cmds_unauth=0`; LEG 2 — a SELF-SIGNED leaf (no path) + a
+>   leaf under a REVOKED intermediate + a STALE-epoch (rotated) leaf + a seat-0 client's foreign commands
+>   ALL rejected (`cmds_unauth=21`), all four see the aircraft-0-only world byte-for-byte; LEG 3 —
+>   SHA-512 + Ed25519 pins + HELLO-005 codec pin (vs `cert_ref`) + `verify_chain` (self-signed/wrong-
+>   issuer/over-depth reject) + `CaChainTable` (chain seat, forged reject, intermediate subtree revoke,
+>   intermediate + leaf rotation, depth-1 root leaf, double-login→spectator, reclaim-own-seat).
+> - **`cert_ref.py` selftest PASS**; **layer-30 `netauthcert` bridge regression PASS** (cert001 additions
+>   purely additive); **golden `6914a994…` byte-identical**; **+15 property tests (`test_certchain.py`)**.
+> **TRANSPORT-ONLY: no `src/kernel/**`, `src/det_math/**`, `config/rails/**`, wire bytes, protocol-7,
+> session/event codec, or tuning touched ⇒ all 15 goldens byte-identical, no seal.** Diff: NEW
+> `src/net/authcertchainserver.{h,cpp}`, `src/net/netauthcertchain_test_main.cpp`,
+> `tests/property/test_certchain.py`, `docs/adr/ADR-Step-Net-Layer33-CertChains-v1.26r0.md`; MODIFIED
+> `src/net/cert001.{h,cpp}` (+HELLO-005 + verify_chain), `tools/cert_ref.py` (+chain codec/table/selftest),
+> `CMakeLists.txt` (authcertchainserver.cpp into `seads_netinput`; `seads_netauthcertchain_test` target +
+> `netauthcertchain_bridge` ctest). **No shared-file/`Stats` change; no new det_math or crypto ref.**
+> **guardian.yml UNCHANGED** (ctest-only bridge, like layers 13–32). Ledger:
+> **ADR-Step-Net-Layer33-CertChains-v1.26r0**.
+> **NETCODE STATUS: the roadmap's named netcode items are now COMPLETE.** The bidirectional + PKI stack
+> (layers 15b→33) has no remaining honest-scope gaps at the layer/credential level.
+> **NEXT (free pick, none blocking):** OPTIONAL arc-symmetry — fold the chain credential onto the async
+> (layer 34) + catch-up (layer 35) servers (mechanical siblings of 31/32, capability already delivered);
+> or move OFF netcode entirely — an end-to-end playable loop (wire a live client↔server against the
+> authoritative input server), or renderer/product polish. The user's stated intent was to complete the
+> netcode and then move on.
+> **GIT: not yet committed — implementation + gates + docs complete on `main` working tree; awaiting the
+> commit + receipt step.**
+>
+> ---
+>
+> ## ◄ PREVIOUS (2026-07-05): **RENDERER — REMOTE PREDICTION + SMOOTHING ON THE VIEWER HUD DONE ✅** (no-seal, rides **ATM-Sphere v1.26r0**)
 > **Netcode layers 24 (remote coast-to-now) + 25 (reconcile smoothing) are now DRAWN on the globe, not
 > just proven in the socket harness.** The viewer rendered remotes only by layer-4a INTERPOLATION (~100 ms
 > in the past). The `M` key now cycles a **`RemoteMode`**: INTERP (default, unchanged) → PREDICT (layer 24 —

@@ -75,5 +75,49 @@ bool decode_hello4(const std::uint8_t* data, std::size_t len, std::size_t& pos, 
     return true;
 }
 
+// ---- layer 33: HELLO-005 (certificate chain) + path validation ---------------------------------
+void encode_hello5(const Hello5Info& h, std::vector<std::uint8_t>& out) {
+    out.push_back(HELLO5_VERSION);
+    geo001::leb128_encode_u64(h.certs.size(), out);
+    for (const auto& c : h.certs) {
+        geo001::leb128_encode_u64(c.size(), out);
+        out.insert(out.end(), c.begin(), c.end());
+    }
+    geo001::leb128_encode_u64(h.sig.size(), out);
+    out.insert(out.end(), h.sig.begin(), h.sig.end());
+}
+
+bool decode_hello5(const std::uint8_t* data, std::size_t len, std::size_t& pos, Hello5Info& out) {
+    if (pos >= len || data[pos] != HELLO5_VERSION) return false;
+    ++pos;
+    std::uint64_t n = 0;
+    if (!geo001::leb128_decode_u64(data, len, pos, n)) return false;
+    out.certs.clear();
+    for (std::uint64_t i = 0; i < n; ++i) {
+        std::uint64_t certlen = 0;
+        if (!geo001::leb128_decode_u64(data, len, pos, certlen)) return false;
+        if (pos + certlen > len) return false;  // truncated certificate in the chain
+        out.certs.emplace_back(data + pos, data + pos + static_cast<std::size_t>(certlen));
+        pos += static_cast<std::size_t>(certlen);
+    }
+    std::uint64_t siglen = 0;
+    if (!geo001::leb128_decode_u64(data, len, pos, siglen)) return false;
+    if (pos + siglen > len) return false;  // truncated challenge signature
+    out.sig.assign(data + pos, data + pos + static_cast<std::size_t>(siglen));
+    pos += static_cast<std::size_t>(siglen);
+    return true;
+}
+
+bool verify_chain(const std::uint8_t root_pubkey[32], const std::vector<CertInfo>& chain,
+                  std::size_t max_depth) {
+    if (chain.empty() || chain.size() > max_depth) return false;
+    for (std::size_t i = 0; i < chain.size(); ++i) {
+        // Each link is signed by the NEXT link's key; the top link is signed by the trusted root.
+        const std::uint8_t* issuer = (i + 1 < chain.size()) ? chain[i + 1].pubkey : root_pubkey;
+        if (!verify_cert(issuer, chain[i])) return false;
+    }
+    return true;
+}
+
 }  // namespace cert001
 }  // namespace seads

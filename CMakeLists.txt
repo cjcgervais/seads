@@ -138,7 +138,8 @@ add_library(seads_netinput STATIC src/net/input001.cpp src/net/cmdqueue.cpp src/
             src/net/authmacserver.cpp src/net/sha512.cpp src/net/ed25519.cpp
             src/net/authsig001.cpp src/net/authsigserver.cpp src/net/authsigasyncserver.cpp
             src/net/authsigcatchupserver.cpp src/net/cert001.cpp src/net/authcertserver.cpp
-            src/net/authcertasyncserver.cpp src/net/authcertcatchupserver.cpp)
+            src/net/authcertasyncserver.cpp src/net/authcertcatchupserver.cpp
+            src/net/authcertchainserver.cpp)
 target_include_directories(seads_netinput PUBLIC src/net)
 target_link_libraries(seads_netinput PUBLIC seads_session seads_framing seads_socket seads_net
                       seads_kernel seads_replay seads_det_flags)
@@ -457,6 +458,16 @@ target_link_libraries(seads_netauthcert_catchup_test PRIVATE seads_netinput sead
                       seads_broadcast seads_framing seads_socket seads_predict seads_net seads_kernel
                       seads_replay seads_det_math seads_det_flags)
 
+# --- layer-33 CERTIFICATE-CHAIN bridge: path validation up to a trusted root (intermediate CAs) —
+# the honest-scope follow-up to layer 30's single self-signed root. broadcast_authcertchain is a
+# sibling of broadcast_authcert; HELLO-005 carries a chain [leaf..top] validated by cert001::verify_chain.
+# Proves (LEG 1) three chained identities compose to build_server_frames byte-for-byte, (LEG 2) a
+# self-signed leaf / revoked intermediate / stale-epoch leaf all reject, (LEG 3) codec + CaChainTable. ---
+add_executable(seads_netauthcertchain_test src/net/netauthcertchain_test_main.cpp)
+target_link_libraries(seads_netauthcertchain_test PRIVATE seads_netinput seads_session seads_event
+                      seads_broadcast seads_framing seads_socket seads_predict seads_net seads_kernel
+                      seads_replay seads_det_math seads_det_flags)
+
 # --- client presentation test (globe projection + .seadsrec container + playback interp) ---
 add_executable(seads_client_test src/client/client_test_main.cpp)
 target_link_libraries(seads_client_test PRIVATE seads_client seads_coaster seads_net seads_det_flags)
@@ -523,6 +534,7 @@ if(SEADS_SOCKET_TESTS AND NOT CMAKE_CROSSCOMPILING)
   add_test(NAME netauthcert_bridge COMMAND seads_netauthcert_test)
   add_test(NAME netauthcert_async_bridge COMMAND seads_netauthcert_async_test)
   add_test(NAME netauthcert_catchup_bridge COMMAND seads_netauthcert_catchup_test)
+  add_test(NAME netauthcertchain_bridge COMMAND seads_netauthcertchain_test)
   add_test(NAME netremotepredict_bridge COMMAND seads_netremotepredict_test)
 endif()
 # Golden hash compare is run in CI (guardian.yml) across the toolchain matrix.

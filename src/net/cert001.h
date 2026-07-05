@@ -33,6 +33,7 @@ namespace cert001 {
 
 constexpr std::uint8_t CERT_VERSION = 0x01;    // CERT-001 certificate body version
 constexpr std::uint8_t HELLO4_VERSION = 0x04;  // HELLO-004 handshake record version
+constexpr std::uint8_t HELLO5_VERSION = 0x05;  // HELLO-005 certificate-CHAIN handshake (layer 33)
 
 // A decoded certificate: the CA-vouched identity binding + the CA signature. `body` is the exact
 // byte slice the CA signed (so verify hashes the literal prefix, never a re-encoding).
@@ -63,6 +64,37 @@ bool verify_cert(const std::uint8_t ca_pubkey[32], const CertInfo& c);
 
 void encode_hello4(const Hello4Info& h, std::vector<std::uint8_t>& out);
 bool decode_hello4(const std::uint8_t* data, std::size_t len, std::size_t& pos, Hello4Info& out);
+
+// ---- layer 33: certificate CHAINS / intermediate CAs -------------------------------------------
+// Layer 30 trusted ONE self-signed root CA and each client presented a SINGLE certificate signed
+// directly by it — no delegation. A real PKI delegates: an intermediate CA (itself certified by the
+// root) issues the leaf. Layer 33 carries a CHAIN [leaf, intermediate, ..., top] and validates the
+// PATH: each certificate is signed by the NEXT one's key, and the TOP is signed by the trusted root.
+// Every link is an ordinary CERT-001 (reused verbatim) — an intermediate's certificate binds ITS OWN
+// (token, seat, epoch, pubkey), where the pubkey is the intermediate CA's signing key and the token
+// is the intermediate's identity (so a whole intermediate can be revoked / rotated). The LEAF's seat
+// governs the binding; possession is proven under the LEAF's key (HELLO-005's challenge signature).
+//
+//   HELLO-005 = [version:1 byte = 0x05] [LEB128 n_certs]
+//               n_certs × ( [LEB128 certlen] [cert bytes] )      -- leaf first, up toward the root
+//               [LEB128 siglen = 64] [64 raw challenge-signature bytes]
+//       challenge_sig = Ed25519_sign(leaf_seed, nonce_le || leaf_token_le) — layer 27's proof, reused.
+//       Version 0x05 is distinct from HELLO-001/002/003/004 (0x01..0x04), all frozen. The root CA is
+//       NOT in the chain — the server holds it, exactly as layer 30 held the single CA key.
+struct Hello5Info {
+    std::vector<std::vector<std::uint8_t>> certs;  // the chain (leaf first), each a raw CERT-001 blob
+    std::vector<std::uint8_t> sig;                 // Ed25519 challenge signature under the LEAF's key
+};
+
+void encode_hello5(const Hello5Info& h, std::vector<std::uint8_t>& out);
+bool decode_hello5(const std::uint8_t* data, std::size_t len, std::size_t& pos, Hello5Info& out);
+
+// Validate the certificate PATH: 1 <= chain.size() <= max_depth, each chain[i] is signed by the next
+// link's key (chain[i+1].pubkey), and the top link chain.back() is signed by `root_pubkey`. Pure
+// signature-path check (no revocation/epoch/seat — those are CaChainTable state). Mirror of
+// cert_ref.verify_chain. `chain` is leaf-first (chain[0] is the client's leaf certificate).
+bool verify_chain(const std::uint8_t root_pubkey[32], const std::vector<CertInfo>& chain,
+                  std::size_t max_depth);
 
 }  // namespace cert001
 }  // namespace seads
