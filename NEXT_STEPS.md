@@ -37,10 +37,10 @@
 > (SMOOTH-SK-001 + `run_remote_client_smoothed` + `_blend`/`maneuver_jump` + pins),
 > `tests/property/test_remotepredict.py` (+6). **No `CMakeLists.txt` change (no new target), no shared-file/`Stats`
 > change. guardian.yml UNCHANGED** (ctest-only bridge, like layers 13–24). Ledger: **ADR-Step-Net-Layer25-RemoteSmoothing-v1.26r0**.
-> **GIT: on branch `net-layer25-remote-smoothing` (code `a5492f0` + receipt `1256e14`,
-> `receipt-ATM-Sphere_v1.26r0-a5492f0.yml` — 15/15 gates PASS, overall PASS, golden `6914a994…`).
-> NOT yet merged to `main` or pushed — awaiting the go-ahead to fast-forward-merge + push (guardian CI
-> fires on the push).**
+> **GIT: pushed to `origin/main` (code `a5492f0` + receipt `1256e14`,
+> `receipt-ATM-Sphere_v1.26r0-a5492f0.yml` — 15/15 gates PASS, overall PASS, golden `6914a994…`);
+> guardian CI (cross-toolchain matrix) triggered on the push — check
+> https://github.com/cjcgervais/seads/actions.**
 > **NEXT (free pick, none blocking):** **stronger credentials** (a real MAC/signature the server verifies vs
 > the abstracted i64 token); or **renderer polish** (surface the assigned seat / auth state / the
 > predicted-vs-interpolated-vs-smoothed remote / the correction magnitude on the HUD).
