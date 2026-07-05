@@ -1,6 +1,79 @@
 # SEADS 2026 — Next Steps (handoff)
 
-> ## ►► CURRENT STATE (2026-07-04): **NETCODE LAYER 30 — CERTIFICATE PKI (ONE CA KEY, REVOCATION, KEY ROTATION) DONE ✅** (no-seal, rides **ATM-Sphere v1.26r0**)
+> ## ►► CURRENT STATE (2026-07-04): **NETCODE LAYERS 31 + 32 — THE CA-CERTIFICATE CREDENTIAL FOLDED ONTO THE ASYNC & CATCH-UP SERVERS DONE ✅** (no-seal, rides **ATM-Sphere v1.26r0**)
+> **Layer 30's CA-certificate binding now composes with the async downstream hygiene AND windowed late-join
+> catch-up** — the 27→28→29 signed-credential arc re-run on the CERTIFICATE credential (30→31→32), exactly as
+> layer 30's ADR named ("the async/catch-up folding is the natural follow-up, as 27→28/29").
+> **LAYER 31 — `broadcast_authcert_async` (`src/net/authcertasyncserver.{h,cpp}`):** `broadcast_authsig_async`'s
+> async loop (non-blocking per-client send buffers + byte-cap drop-slowest + liveness reap) with the
+> enrolled-public-key verify replaced by the layer-30 CHALLENGE-001/HELLO-004 CA-certificate + Ed25519
+> possession verify (`CaTable::authenticate` under the trusted CA key + revocation + epoch floor) — a SIBLING
+> of `broadcast_authcert` AND `broadcast_authsig_async`.
+> **LAYER 32 — `broadcast_authcert_catchup` (`src/net/authcertcatchupserver.{h,cpp}`):** layer 31 +
+> `broadcast_live`'s windowed late-join catch-up (a `history` vector retains the produced payloads; after the
+> BIND, `accept_all` ENQUEUES the retained prefix `frames[max(0,fi−W):]`; `Stats.trimmed` inherited from layer
+> 20) — a SIBLING of `broadcast_authcert_async` AND `broadcast_authsig_catchup`.
+> **SIBLING DISCIPLINE:** both own their own client struct (`AuthCertAsyncClient` / `AuthCertCatchupClient`) +
+> `flush`/`enqueue`/`over_cap`/`reap`/`drop` helpers ⇒ the sealed `broadcast.cpp` + EVERY prior server (incl.
+> `broadcast_authcert`) are byte-for-byte UNTOUCHED. `CaTable` + `seat_authorizes` + CHALLENGE-001/
+> `derive_nonce` + HELLO-004/CERT-001 + BIND-001 reused VERBATIM; **NO shared-file/`Stats` change, NO new
+> det_math, NO new crypto or Python ref** (Ed25519/SHA-512 + `cert_ref.py`'s `CaTable` from layer 30 reused).
+> The one structural touch (each): the accept handshake is a challenge-response — send CHALLENGE-001 DOWN
+> (blocking) → read HELLO-004 (bounded-blocking) → verify → go non-blocking → ENQUEUE BIND-001 first (then the
+> catch-up prefix, layer 32).
+> **FOUR ORTHOGONAL AXES:** admission (CA-certificate identity + authorization, never touches the CommandQueue)
+> × delivery (async byte-cap/liveness hygiene) × replay-depth (catch-up window) ⇒ N certified clients each
+> upstreaming ONLY their own seat compose to `build_server_frames` BYTE-IDENTICAL regardless of connect order,
+> upstream reorder/chunking, any downstream cap/liveness drop, or any joiner's replay window; a self-signed /
+> revoked / stale-epoch forger gets no seat, and each client's delivery is a byte-exact window of
+> `[CHALLENGE | BIND | the produced stream]`.
+> **VERIFIED LOCALLY (gcc + clang), all green:**
+> - **`seads_netauthcert_async_test`** (ctest **35→36** `netauthcert_async_bridge`): LEG 1 — 3 certified
+>   identities (token order ≠ seat order 100→2/200→0/300→1; scrambled/chunked) THROUGH the async path ⇒
+>   byte-identical to `build_server_frames` (31 frames), zero unauth/capped/reaped; LEG 2 — a seat-0 client's
+>   foreign commands + a SELF-SIGNED (non-CA) cert + a REVOKED token + a STALE-epoch (post-rotation) cert ALL
+>   dropped (`cmds_unauth=21`), all four see the aircraft-0-only world byte-for-byte; LEG 3A/3B — a dead
+>   certified client (token 300 → seat 1) reaped (cap=0) / byte-cap shed (liveness=0) + its SEAT freed while a
+>   hook-drained seated FAST (token 200 → seat 0) stays byte-identical to its aircraft-0-only reference, DEAD
+>   delivered `[CHALLENGE | BIND(seat 1) | strict prefix]`.
+> - **`seads_netauthcert_catchup_test`** (ctest **36→37** `netauthcert_catchup_bridge`): LEG 1 — 3 certified
+>   identities ⇒ byte-identical; a 4th SELF-SIGNED-cert SPECTATOR joins at kJoin and across W ∈ {1, kJoin/2,
+>   retain-all} receives EXACTLY `[BIND(spectator) | frames[max(0,kJoin−W):]]`, trimmed=30/24/0; LEG 2 — the
+>   spectator upstreams the WHOLE set, all rejected (`cmds_unauth=6`), produced stream unchanged, spectator
+>   STILL catches up the whole stream; LEG 3 — a dead certified client's catch-up backlog shed by the byte-cap
+>   (`capped=1`) + its seat freed, DEAD delivered `[CHALLENGE | BIND(seat 1) | strict prefix]`.
+> - **Gates: full ctest 37/37 GCC + Clang; ALL 15 goldens byte-identical** (Sphere `6914a994…`); sealed
+>   session + event digests unmoved (`966aca05…`); `cert_ref.py` selftest PASS; **property tests 325→333**
+>   (+8 `test_authcertservers.py`: certified admission downstream/replay-blind, order-invariant frames, seat
+>   freed on any drop + reclaimed by its own identity, BIND-first + dropped-client-is-prefix, dead client never
+>   changes a survivor's bytes, catch-up window suffix + trimmed count, catch-up authorization-blind,
+>   revocation/rotation reject into the spectator class).
+> **TRANSPORT-ONLY: no `src/kernel/**`, `src/det_math/**`, `config/rails/**`, wire bytes, protocol-7,
+> session/event codec, or tuning touched ⇒ all 15 goldens byte-identical, no seal.** Diff: NEW
+> `src/net/authcertasyncserver.{h,cpp}`, `src/net/authcertcatchupserver.{h,cpp}`,
+> `src/net/netauthcertasync_test_main.cpp`, `src/net/netauthcertcatchup_test_main.cpp`,
+> `tests/property/test_authcertservers.py`, `docs/adr/ADR-Step-Net-Layers31-32-CertPKIAsyncCatchup-v1.26r0.md`;
+> MODIFIED `CMakeLists.txt` (`authcertasyncserver.cpp` + `authcertcatchupserver.cpp` into `seads_netinput`;
+> `seads_netauthcert_async_test` + `seads_netauthcert_catchup_test` targets; `netauthcert_async_bridge` +
+> `netauthcert_catchup_bridge` ctests). **No shared-file change** (no `Stats`/accessor edit); no new
+> crypto/Python ref. **guardian.yml UNCHANGED** (ctest-only bridges, like layers 13–30). Ledger:
+> **ADR-Step-Net-Layers31-32-CertPKIAsyncCatchup-v1.26r0**.
+> **NEXT (free pick, none blocking):** **certificate chains / intermediate CAs** (path validation up to a
+> trusted root — the honest-scope follow-up to layer 30's single self-signed root, orthogonal to this hygiene
+> fold); or **renderer polish** (surface the assigned seat / auth state / predicted-vs-interpolated-vs-smoothed
+> remote / correction magnitude / catch-up-in-progress on the HUD).
+> **NOTE FOR THE NEXT AGENT:** the certificate-PKI arc is now feature-complete (30 blocking → 31 async → 32
+> catch-up), matching the authenticated arc (21→22→23) and the signed arc (27→28→29). Each fold is a pure
+> transport SIBLING: the credential verify is reused verbatim, only the downstream loop differs. The four axes
+> (admission / delivery / replay-depth / — and per-seat authorization within admission) are provably disjoint.
+> Ed25519 is integer-only ⇒ no `-ffp-contract=off` dependence.
+> **GIT: NOT yet committed — code + ADR + docs staged on `main`. Commit the code, run
+> `tools/make_receipt.py`, then push to `origin/main` and fill this GIT line (guardian CI triggers on the
+> push).**
+>
+> ---
+>
+> ## ◄ PREVIOUS (2026-07-04): **NETCODE LAYER 30 — CERTIFICATE PKI (ONE CA KEY, REVOCATION, KEY ROTATION) DONE ✅** (no-seal, rides **ATM-Sphere v1.26r0**)
 > **The server now trusts ONE certificate-authority public key instead of a fixed per-client roster** —
 > layer 27's named honest-scope follow-up. Layer 27's `PubkeyTable` enrolled every client's public key
 > directly: no enrollment without a server change, no revocation, no key rotation. Layer 30 moves trust to a

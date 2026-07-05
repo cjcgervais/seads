@@ -137,7 +137,8 @@ add_library(seads_netinput STATIC src/net/input001.cpp src/net/cmdqueue.cpp src/
             src/net/remotepredict.cpp src/net/siphash.cpp src/net/authmac001.cpp
             src/net/authmacserver.cpp src/net/sha512.cpp src/net/ed25519.cpp
             src/net/authsig001.cpp src/net/authsigserver.cpp src/net/authsigasyncserver.cpp
-            src/net/authsigcatchupserver.cpp src/net/cert001.cpp src/net/authcertserver.cpp)
+            src/net/authsigcatchupserver.cpp src/net/cert001.cpp src/net/authcertserver.cpp
+            src/net/authcertasyncserver.cpp src/net/authcertcatchupserver.cpp)
 target_include_directories(seads_netinput PUBLIC src/net)
 target_link_libraries(seads_netinput PUBLIC seads_session seads_framing seads_socket seads_net
                       seads_kernel seads_replay seads_det_flags)
@@ -430,6 +431,22 @@ target_link_libraries(seads_netauthcert_test PRIVATE seads_netinput seads_sessio
                       seads_broadcast seads_framing seads_socket seads_predict seads_net seads_kernel
                       seads_replay seads_det_math seads_det_flags)
 
+# --- layer-31 CERTIFICATE-PKI + ASYNC bridge: the layer-30 CA-certificate binding merged with the
+# layer-16/19 async/byte-cap/liveness downstream hygiene (the 27->28 step re-run on the certificate
+# credential). broadcast_authcert_async is a sibling of broadcast_authcert + broadcast_authsig_async. ---
+add_executable(seads_netauthcert_async_test src/net/netauthcertasync_test_main.cpp)
+target_link_libraries(seads_netauthcert_async_test PRIVATE seads_netinput seads_session seads_event
+                      seads_broadcast seads_framing seads_socket seads_predict seads_net seads_kernel
+                      seads_replay seads_det_math seads_det_flags)
+
+# --- layer-32 CERTIFICATE-PKI + ASYNC + CATCH-UP bridge: layer 31 + broadcast_live's windowed late-join
+# catch-up (the 28->29 step re-run on the certificate credential). broadcast_authcert_catchup is a sibling
+# of broadcast_authcert_async + broadcast_authsig_catchup. ---
+add_executable(seads_netauthcert_catchup_test src/net/netauthcertcatchup_test_main.cpp)
+target_link_libraries(seads_netauthcert_catchup_test PRIVATE seads_netinput seads_session seads_event
+                      seads_broadcast seads_framing seads_socket seads_predict seads_net seads_kernel
+                      seads_replay seads_det_math seads_det_flags)
+
 # --- client presentation test (globe projection + .seadsrec container + playback interp) ---
 add_executable(seads_client_test src/client/client_test_main.cpp)
 target_link_libraries(seads_client_test PRIVATE seads_client seads_net seads_det_flags)
@@ -494,6 +511,8 @@ if(SEADS_SOCKET_TESTS AND NOT CMAKE_CROSSCOMPILING)
   add_test(NAME netauthsig_async_bridge COMMAND seads_netauthsig_async_test)
   add_test(NAME netauthsig_catchup_bridge COMMAND seads_netauthsig_catchup_test)
   add_test(NAME netauthcert_bridge COMMAND seads_netauthcert_test)
+  add_test(NAME netauthcert_async_bridge COMMAND seads_netauthcert_async_test)
+  add_test(NAME netauthcert_catchup_bridge COMMAND seads_netauthcert_catchup_test)
   add_test(NAME netremotepredict_bridge COMMAND seads_netremotepredict_test)
 endif()
 # Golden hash compare is run in CI (guardian.yml) across the toolchain matrix.
