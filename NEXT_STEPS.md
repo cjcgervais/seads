@@ -68,7 +68,10 @@
 > the same challenge-response as layer 27 (CHALLENGE down → HELLO-004 up → verify → BIND); `verify_cert`
 > hashes the exact decoded body prefix, so re-encoding is never assumed. Ed25519 is integer-only ⇒ no
 > `-ffp-contract=off` dependence.
-> **GIT: uncommitted — implementation + docs staged locally, pending user approval to commit/push.**
+> **GIT: on branch `net-layer30-cert-pki` (code `acf23bc` + receipt `e73c7e1`,
+> `receipt-ATM-Sphere_v1.26r0-acf23bc.yml` — overall PASS, golden `6914a994…`, all 15 gates PASS,
+> property 311→325). Pushed to `origin/net-layer30-cert-pki`; open a PR to `main` and let the guardian CI
+> (cross-toolchain matrix) run — check https://github.com/cjcgervais/seads/actions.**
 >
 > ---
 >
