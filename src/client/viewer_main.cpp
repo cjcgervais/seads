@@ -73,6 +73,9 @@
 #include "seadsrec.h"
 #include "snapshot.h"         // seads::netsnap (decode the freshest snapshot to seed the coast)
 #include "predict.h"          // seads::predict::Predictor (netcode layer 4b)
+#include "client_frame.h"     // planesphere/local-up frame adapter (mouse-aim instructor graft)
+#include "aim_state.h"        // seads::client::AimState (WT-style world-frame aim + transport)
+#include "instructor.h"       // seads::client::instructor_step (SOLUTION outer loop -> Command)
 #include "envelope_tables.h"  // seads::envtab::* tuning envelopes
 #include "golden_params.h"    // sealed rail constants (R, dt, g0, ceiling)
 #include "raylib.h"
@@ -95,6 +98,7 @@ constexpr double G_GAIN    = 2.0;                     // pitch axis [-1,1] -> g 
 constexpr double G_MIN_CMD = -1.0;                    // full push-over (negative g)
 constexpr double G_MAX_CMD = 4.0;                     // full hard pull
 constexpr double YAW_RATE_RAD = 35.0 * DEG2RAD_V;     // Q/E direct heading (yaw) rate, rad/s
+constexpr double AIM_SENS = 0.0022;                  // mouse-aim sensitivity (rad of aim per pixel)
 
 // Chase camera (display units; DISPLAY_R = 10 is the globe radius on screen).
 constexpr double CHASE_DIST_DEF = 1.3;               // default distance behind the own ship
@@ -1180,7 +1184,20 @@ int run_fly(Playback& pb, double speed) {
     cam.fovy = 45.0f;
     cam.projection = CAMERA_PERSPECTIVE;
 
-    SetMousePosition(GetScreenWidth() / 2, GetScreenHeight() / 2);  // neutral reticle at start
+    // Mouse-aim instructor (SOLUTION outer loop grafted onto the kernel Command). The aim is a
+    // world-frame unit vector carried by parallel transport; the instructor turns it into a
+    // Command each tick. Seed it on the nose from the spawn frame.
+    AimState aim;
+    InstructorTuning instr_tune;
+    InstructorState instr_state;
+    {
+        AircraftFrame f0 = make_frame(start.lat, start.lon, start.psi, start.phi, start.alt,
+                                      start.tas, start.gamma, rails.R);
+        aim.seed(f0.nose, f0.up);
+        aim.carry(f0.up);   // prime last_up so the first tick's transport is a no-op
+    }
+
+    DisableCursor();  // WT-style locked cursor: raw mouse delta drives the aim (and free-look pan)
 
     std::vector<Vector3> own_trail;
     std::vector<std::vector<Vector3>> rem_trails;
@@ -1196,16 +1213,15 @@ int run_fly(Playback& pb, double speed) {
             pred = predict::Predictor(rails, &kFlyEnv, start);
             own_tick = 0; accumulator = 0.0; sim_clock = 0.0;
             own_trail.clear(); rem_trails.clear(); feed.reset(); cfeed.reset(); smoother.reset();
+            AircraftFrame f0 = make_frame(start.lat, start.lon, start.psi, start.phi, start.alt,
+                                          start.tas, start.gamma, rails.R);
+            aim.seed(f0.nose, f0.up); aim.carry(f0.up); instr_state = InstructorState{};
         }
 
-        // Mode: hold SPACE for free-look. Lock/hide the cursor in free-look so mouse delta is
-        // unbounded for panning; restore it (centered) for mouse-aim so the reticle starts neutral.
+        // Mode: hold SPACE for free-look (mouse pans the camera; the aim is HELD and the instructor
+        // keeps flying your last commanded turn). The cursor stays locked in both modes (WT-style):
+        // raw mouse delta drives the aim in mouse mode, the camera orbit in free-look.
         freelook = IsKeyDown(KEY_SPACE);
-        if (freelook && !prev_freelook) DisableCursor();
-        if (!freelook && prev_freelook) {
-            EnableCursor();
-            SetMousePosition(GetScreenWidth() / 2, GetScreenHeight() / 2);
-        }
         prev_freelook = freelook;
 
         // Zoom (both modes): wheel scrolls the chase distance.
@@ -1213,42 +1229,40 @@ int run_fly(Playback& pb, double speed) {
         if (chase_dist < CHASE_DIST_MIN) chase_dist = CHASE_DIST_MIN;
         if (chase_dist > CHASE_DIST_MAX) chase_dist = CHASE_DIST_MAX;
 
-        // Flight command + free-look camera offset.
-        double rx = 0.0, ry = 0.0;          // reticle offset (mouse-aim), for HUD draw
+        // Flight command via the mouse-aim INSTRUCTOR (SOLUTION outer loop grafted onto the kernel
+        // Command). Reconstruct the world-frame aircraft frame from the kernel tuple, carry the aim
+        // by parallel transport (every mode), route the mouse into aim (mouse mode) or camera
+        // (free-look), then let the instructor turn the aim into a bank-to-turn Command.
         Command cmd{0.0, 1.0};              // neutral = wings level, 1 g
-        if (freelook) {
-            // Mouse pans the camera around the plane; keyboard flies it.
-            Vector2 md = GetMouseDelta();
-            look_az = wrap_pi(look_az + md.x * 0.005);   // all the way around
-            look_el += md.y * 0.005;
-            if (look_el >  1.3) look_el =  1.3;          // up/down, short of straight over
-            if (look_el < -1.3) look_el = -1.3;
-            FlyAxes ax = fly_keyboard_axes();
-            cmd = Command{ax.bank_rad, g_from_pitch(ax.pitch)};
-        } else {
-            // Restabilize the chase cam toward the behind view.
-            double k = 1.0 - std::exp(-dt * 6.0);
-            look_az -= look_az * k;
-            look_el -= look_el * k;
-            // Mouse-aim reticle: cursor offset from screen center, clamped to the zone disk.
-            Vector2 mp = GetMousePosition();
-            double dx = mp.x - GetScreenWidth() * 0.5;
-            double dy = mp.y - GetScreenHeight() * 0.5;
-            rx = dx / RETICLE_ZONE_PX;
-            ry = -dy / RETICLE_ZONE_PX;                  // screen-up -> positive (pull g)
-            double m = std::sqrt(rx * rx + ry * ry);
-            if (m > 1.0) { rx /= m; ry /= m; }           // clamp into the unit disk
-            // Mouse = fine aim; keyboard = gross (full-deflection) input layered on top. Bank and
-            // the pitch axis are summed and clamped; the pitch axis maps to a g-command (kernel
-            // re-clamps to the structural envelope regardless).
+        {
+            const Kernel& kk = pred.kernel();
+            AircraftFrame frame = make_frame(kk.lat(0), kk.lon(0), kk.psi(0), kk.phi(0), kk.alt(0),
+                                             kk.tas(0), kk.gamma(0), rails.R);
+            aim.carry(frame.up);   // parallel transport EVERY tick, EVERY mode (SPEC §9.1)
+            if (freelook) {
+                // Mouse pans the camera around the plane; the aim is held (already carried).
+                Vector2 md = GetMouseDelta();
+                look_az = wrap_pi(look_az + md.x * 0.005);   // all the way around
+                look_el += md.y * 0.005;
+                if (look_el >  1.3) look_el =  1.3;          // up/down, short of straight over
+                if (look_el < -1.3) look_el = -1.3;
+            } else {
+                // Mouse-aim: raw delta rotates the world-frame aim (nothing smoothed on this path).
+                Vector2 md = GetMouseDelta();
+                aim.mouse(md.x * AIM_SENS, -md.y * AIM_SENS);  // screen-down -> aim down
+                // Restabilize the chase cam toward the behind view.
+                double k = 1.0 - std::exp(-dt * 6.0);
+                look_az -= look_az * k;
+                look_el -= look_el * k;
+            }
+            InstructorOut io = instructor_step(aim.forward(), frame, kk.phi(0), kk.gamma(0),
+                                               instr_tune, instr_state);
+            cmd = io.cmd;
+            // Keyboard OVERRIDE (slice-1: direct manual command while any of W/S/A/D is held; the
+            // mouse still owns the aim/reticle). Refined to an in-envelope nudge in a later slice.
             FlyAxes kb = fly_keyboard_axes();
-            double tphi = rx * MAX_BANK_RAD + kb.bank_rad;
-            double pitch = ry + kb.pitch;
-            if (tphi >  MAX_BANK_RAD) tphi =  MAX_BANK_RAD;
-            if (tphi < -MAX_BANK_RAD) tphi = -MAX_BANK_RAD;
-            if (pitch >  1.0) pitch =  1.0;
-            if (pitch < -1.0) pitch = -1.0;
-            cmd = Command{tphi, g_from_pitch(pitch)};
+            if (kb.bank_rad != 0.0 || kb.pitch != 0.0)
+                cmd = Command{kb.bank_rad, g_from_pitch(kb.pitch)};
         }
 
         // THROTTLE (Shift/Ctrl) is now a REAL kernel input (B1, seal v1.5r0): drive it into the
@@ -1379,18 +1393,24 @@ int run_fly(Playback& pb, double speed) {
                       pred.kernel().phi(0), own_pitch, RED, 1.6f, nullptr, nullptr,
                       now * PROP_SPIN_RAD_S);
         EndMode3D();
-        // Mouse-aim reticle (2D overlay, only when not in free-look).
+        // Mouse-aim reticle (2D overlay, only when not in free-look): the projection of the
+        // world-frame aim direction (SPEC §9.2). A faint center crosshair marks the nose reference;
+        // the gap between them is the instructor's live pointing error.
         if (!freelook) {
             float cx = GetScreenWidth() * 0.5f, cy = GetScreenHeight() * 0.5f;
-            DrawCircleLines(static_cast<int>(cx), static_cast<int>(cy), RETICLE_ZONE_PX,
-                            Fade(GREEN, 0.35f));
-            float ax = cx + static_cast<float>(rx) * RETICLE_ZONE_PX;
-            float ay = cy - static_cast<float>(ry) * RETICLE_ZONE_PX;  // ry up -> screen up
-            DrawCircleLines(static_cast<int>(ax), static_cast<int>(ay), 10.0f, GREEN);
-            DrawLine(static_cast<int>(ax) - 16, static_cast<int>(ay), static_cast<int>(ax) + 16,
-                     static_cast<int>(ay), Fade(GREEN, 0.8f));
-            DrawLine(static_cast<int>(ax), static_cast<int>(ay) - 16, static_cast<int>(ax),
-                     static_cast<int>(ay) + 16, Fade(GREEN, 0.8f));
+            DrawLine(static_cast<int>(cx) - 8, static_cast<int>(cy), static_cast<int>(cx) + 8,
+                     static_cast<int>(cy), Fade(GREEN, 0.30f));
+            DrawLine(static_cast<int>(cx), static_cast<int>(cy) - 8, static_cast<int>(cx),
+                     static_cast<int>(cy) + 8, Fade(GREEN, 0.30f));
+            Vec3 aim_pt = Vec3{od.x, od.y, od.z} + aim.forward() * (DISPLAY_R * 0.6);
+            Vector2 rp = GetWorldToScreen(Vector3{static_cast<float>(aim_pt.x),
+                                                  static_cast<float>(aim_pt.y),
+                                                  static_cast<float>(aim_pt.z)}, cam);
+            DrawCircleLines(static_cast<int>(rp.x), static_cast<int>(rp.y), 10.0f, GREEN);
+            DrawLine(static_cast<int>(rp.x) - 16, static_cast<int>(rp.y),
+                     static_cast<int>(rp.x) + 16, static_cast<int>(rp.y), Fade(GREEN, 0.8f));
+            DrawLine(static_cast<int>(rp.x), static_cast<int>(rp.y) - 16, static_cast<int>(rp.x),
+                     static_cast<int>(rp.y) + 16, Fade(GREEN, 0.8f));
         }
         // Per-remote damage state (hp bar + E/W/T region segments), projected above each marker.
         for (size_t i = 0; i < rem.size(); ++i) {
@@ -1443,10 +1463,27 @@ int main(int argc, char** argv) {
     }
     // Fly + headless needs neither a recording nor a GPU — run it before requiring a file.
     if (fly && selfcheck > 0) return run_fly_selfcheck(selfcheck);
+
+    // --fly with no recording: auto-discover a bundled one (for bandits to aim at); if none is
+    // found, fly a BARE GLOBE (just your ship). So `seads_viewer --fly` alone always works.
+    if (fly && path.empty()) {
+        const char* cands[] = {"demo_dogfight.seadsrec", "dogfight.seadsrec", "flight.seadsrec",
+                               "flight_demo.seadsrec", "gun.seadsrec",
+                               "build-client/dogfight.seadsrec"};
+        std::vector<uint8_t> b;
+        for (const char* c : cands) if (read_file(c, b)) { path = c; break; }
+    }
+
     if (path.empty()) {
+        if (fly) {  // truly no recording anywhere — bare globe, just your ship
+            std::printf("fly: no recording found — bare globe (your ship only)\n");
+            Playback empty;
+            return run_fly(empty, speed);
+        }
         std::fprintf(stderr,
                      "usage: seads_viewer <flight.seadsrec> [--fly] [--selfcheck N] [--speed S]\n"
-                     "       seads_viewer --fly --selfcheck N            (headless, no recording)\n");
+                     "       seads_viewer --fly                           (auto-loads a recording)\n"
+                     "       seads_viewer --fly --selfcheck N             (headless, no recording)\n");
         return 2;
     }
     std::vector<uint8_t> blob;

@@ -1,6 +1,39 @@
 # SEADS 2026 — Next Steps (handoff)
 
-> ## ►► CURRENT STATE (2026-07-05): **NETCODE LAYER 33 — CERTIFICATE CHAINS / INTERMEDIATE CAs DONE ✅** (no-seal, rides **ATM-Sphere v1.26r0**)
+> ## ►► CURRENT STATE (2026-07-05): **MOUSE-AIM INSTRUCTOR GRAFT — Slice A (single-player flyable core) DONE ✅** (no-seal, rides **ATM-Sphere v1.26r0**)
+> **New direction: turn SEADS into a playable mouse-aim dogfighting game** by grafting the WT-style
+> mouse-aim **instructor** (from the `D:\flight_sim2\seads` SPEC/SOLUTION feel docs) onto the sealed
+> kernel as a **client-side command producer**. We do NOT replace the kernel — the instructor's OUTER
+> loop produces `seads::Command{target_phi, target_g, throttle, fire}`, which is EXACTLY the kernel's
+> command abstraction, so its inner rate-PI is dropped (the sealed kernel IS the inner loop). Steering
+> is bank-to-turn (the coordinated point mass has β≡0, no independent yaw).
+> **WHAT LANDED (all `src/client`, downstream-only):** `client_frame.h` (planesphere/local-up adapter:
+> kernel `(lat,lon,psi,phi,alt,gamma)` → world body frame, reusing `local_basis`/`geo_to_cartesian`
+> conventions), `aim_state.h` (`AimState` — world-frame `targetDir`, parallel-transported every tick,
+> zenith-free raw mouse rotation), `instructor.h` (`instructor_step` — bank-to-turn + braking-law pull
+> mapped to `target_g = n_trim + Δn`, `n_trim = cos γ/cos φ` from the kernel's own γ̇/ψ̇; below-wing-line
+> = wings-held PUSH since bank is `phi_max`-clamped). `viewer_main.cpp` `run_fly` rewired: locked-cursor
+> mouse → AimState → instructor → Command → the existing `predict::Predictor`; floating aim reticle.
+> `main()` `--fly` now needs NO recording (auto-discovers one, else bare globe). `fly.bat` launcher.
+> **VERIFIED:** builds+links into `seads_viewer`; **AT-0 sign check GREEN** (right→+bank, up→+pull,
+> down→push, up-right→banked pull — all correct); headless selfcheck runs. **CLIENT-ONLY ⇒ golden
+> `6914a994…` untouched by construction, all 15 goldens byte-identical, no seal, no CMake/guardian
+> change.**
+> **CAVEATS (carry forward):** gains are HOT (15° error → ~max bank + ~8 g; tune `k_theta`/`a_brake`/
+> `n_max_adv`/`max_bank`/`AIM_SENS` by FLYING); camera is still the OLD chase cam; keyboard override is
+> the crude form; own ship carries no weapons single-process (needs the authoritative server).
+> **NEXT — THE PLAN IS WRITTEN: [`docs/PLAN-MouseAim-Game.md`](docs/PLAN-MouseAim-Game.md)** — Phase A
+> (finish single-player feel: A1 lagging/horizon-locked camera, A2 in-envelope override, A3 tuning-as-
+> config, A4 push/roll gate, A5 human feel-tuning, A6 reticle/HUD) → Phase B (end-to-end NETWORKED loop:
+> upstream Commands via INPUT-001 to an authoritative server, layer-17 predict/reconcile, seat binding,
+> own-ship guns) → Phase C (product polish). The next agent: read the plan, fly the current core, pick up
+> Slice A1 or A5. **GIT: graft is UNCOMMITTED on `main`** (commit is Chad's call, per the constitution).
+> **Governance: this whole arc is client/net-side, rides the seal — expect goldens byte-identical,
+> guardian green, throughout.**
+>
+> ---
+>
+> ## ◄ PREVIOUS (2026-07-05): **NETCODE LAYER 33 — CERTIFICATE CHAINS / INTERMEDIATE CAs DONE ✅** (no-seal, rides **ATM-Sphere v1.26r0**)
 > **The last named honest-scope gap in the netcode is closed.** Layer 30 trusted ONE self-signed root CA
 > and each client presented a SINGLE certificate signed DIRECTLY by it (its caveat: "no intermediate
 > certificates / chain depth"). Layer 33 validates a certificate CHAIN [leaf ← intermediate ← … ← root]:
