@@ -50,9 +50,10 @@
 > or move OFF netcode entirely — an end-to-end playable loop (wire a live client↔server against the
 > authoritative input server), or renderer/product polish. The user's stated intent was to complete the
 > netcode and then move on.
-> **GIT: committed to `main` — code `8cff243` + receipt `docs/receipts/receipt-ATM-Sphere_v1.26r0-8cff243.yml`
-> (overall PASS, golden `6914a994…`, all 15 gates PASS, property tests PASS). Not yet pushed to
-> origin/main.**
+> **GIT: merged to `origin/main` (fast-forward `3c1c1f9..6fa4704`) — code `8cff243` + receipt `6fa4704`
+> (`receipt-ATM-Sphere_v1.26r0-8cff243.yml`; overall PASS, golden `6914a994…`, all 15 gates PASS,
+> property tests PASS). Guardian CI (cross-toolchain matrix) triggered on the main push —
+> check https://github.com/cjcgervais/seads/actions.**
 >
 > ---
 >
@@ -99,9 +100,9 @@
 > trusted root — the still-open honest-scope follow-up to layer 30's single self-signed root); or more
 > renderer polish (surface the assigned seat / auth state / catch-up-in-progress on the HUD — the remaining
 > named items now that predicted-vs-interp-vs-smoothed + correction magnitude are done).
-> **GIT: committed to `main` — code `6addb64` + receipt `docs/receipts/receipt-ATM-Sphere_v1.26r0-6addb64.yml`
-> (overall PASS, golden `6914a994…`, all 15 gates PASS, property tests PASS). Not yet pushed to
-> origin/main.**
+> **GIT: merged to `origin/main` (fast-forward `3c1c1f9..6fa4704`) — code `6addb64` + receipt `4ebc924`
+> (`receipt-ATM-Sphere_v1.26r0-6addb64.yml`; overall PASS, golden `6914a994…`, all 15 gates PASS,
+> property tests PASS). Guardian CI triggered on the main push.**
 >
 > ---
 >
