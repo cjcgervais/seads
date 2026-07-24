@@ -33,6 +33,7 @@ Repo: `D:\flight_sim2\seads-feel` → origin (see that repo's remote)
 | `kernel-v5-rung-d` | `c0625ede1` | arcade energy model — k_induced 0.015, T_max 18000, n_max 32; "give me the power" |
 | `kernel-v5-rung-e` | `89447aba5` | push knife-edge 45° + off-screen aim arrow; nose-down needs deflection AND real down input |
 | `kernel-v5-recorder-graft` | `d1e7dbe6b` | felt-flight recorder graft, reviewed SOUND-WITH-ONE-FIX, gate 372/372 |
+| **`flight-kernel-v5`** | **`149a99c40`** | **THE SEAL (Chad, 2026-07-23/24: "okay perfect... committed glued screwed and tattooed and sealed as the v5 flight kernel ready to bring on to the main game"). Rungs A/A2/C/D/E + recorder + Bf 109 rig + aim-buddy ghost (fear = split-S proximity instrument, skin system = future cosmetics economy). Gate 372/372. Tag pushed to seads_sandbox1 origin. NEXT: the kernel reconciliation into the tunnel tree.** |
 
 Also pushed 2026-07-23: the full pre-existing seal ladder (`world-*`, `section-*-gate`,
 `golden-*`, `game-R*`, `spec-freeze`, ...) — previously local-only, now on origin.
