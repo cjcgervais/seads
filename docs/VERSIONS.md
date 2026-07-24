@@ -35,6 +35,8 @@ Repo: `D:\flight_sim2\seads-feel` → origin (see that repo's remote)
 | `kernel-v5-recorder-graft` | `d1e7dbe6b` | felt-flight recorder graft, reviewed SOUND-WITH-ONE-FIX, gate 372/372 |
 | **`flight-kernel-v5`** | **`149a99c40`** | **THE SEAL (Chad, 2026-07-23/24: "okay perfect... committed glued screwed and tattooed and sealed as the v5 flight kernel ready to bring on to the main game"). Rungs A/A2/C/D/E + recorder + Bf 109 rig + aim-buddy ghost (fear = split-S proximity instrument, skin system = future cosmetics economy). Gate 372/372. Tag pushed to seads_sandbox1 origin. NEXT: the kernel reconciliation into the tunnel tree.** |
 
+| *(pending seal)* | `46051ca23` | **THE KERNEL RECONCILIATION** (2026-07-24): `flight-kernel-v5` merged into the tunnel game — tunnels, ballistics, Sudbury world, Bf 109 fleet, bandits all on v5. Gate 793/793, branch `sandbox/kernel-v5-reconcile` pushed. Merge findings: wheel brakes re-derived upward for the fighter engine; bandits inherit v5 energy retention (turn wide, not slow); escape-sky gravity numbers flagged for retune (level cruise can now exceed old dive-only escape speeds). Fly build: `D:\flight_sim2\seads-recon\build\seads.exe`, stamp `KERNEL v5 [reconcile]`. Seals into `main` on Chad's fly verdict. |
+
 Also pushed 2026-07-23: the full pre-existing seal ladder (`world-*`, `section-*-gate`,
 `golden-*`, `game-R*`, `spec-freeze`, ...) — previously local-only, now on origin.
 
