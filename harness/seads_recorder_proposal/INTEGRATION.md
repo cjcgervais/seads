@@ -9,7 +9,29 @@ the kernel after a future change and diffed for feel drift.
 
 Files in this proposal:
 - `recorder.h` — header-only recorder + replayer + `.seadsrec` (de)serializer with
-  an fnv1a content signature. Written to drop in at `test/harness/recorder.h`.
+  an fnv1a content signature. Drops in at `test/harness/recorder.h`. Split into
+  SECTION 1 (glm-free data model + serializer, parses standalone) and SECTION 2
+  (in-tree glue referencing `app::`/`sim::`/`glm::`, guarded by
+  `SEADS_RECORDER_STANDALONE`).
+- `test_recorder_firewall.cpp` — the proposed differential + round-trip ctest
+  (drop in at `test/unit/`). See §7.
+
+---
+
+## 0. Reviewer acceptance checklist (pre-verified — each item is checkable)
+
+| # | Criterion | How it is met | Verify by |
+|---|---|---|---|
+| a | Every include & call site stays app/render-side; nothing enters `sim/` or `control/` | The hook lives in `app::step_frame` (`app/instructor_tick.h`) or `app/main.cpp`. `recorder.h` `#include`s `app/instructor_tick.h`, `sim/state.h`, `sim/params.h` only to NAME the read types — no `control/` include, no sim/control mutator call | walk the includes in `recorder.h` SECTION 2 + the one hook line |
+| b | Recording taps the fixed-dt accumulator seam at TICK level (aim vector + inputs per sim tick, never per-frame mouse deltas) | `on_tick` is called once per `app::tick` inside the accumulator loop; it stores the resolved `TickInput` (post-curve `aim_dx/aim_dy`, `frame_ticks`, overrides, throttle, flap/gear) | `test_recorder_firewall.cpp` captures exactly `kTicks` records |
+| c | Recorder is read-only — structurally cannot feed back into the loop | `on_tick(const app::TickInput&, const app::LoopState&)` — both **const refs**; the class holds only its own `std::vector`; it returns no mutable handle to engine state | differential test (§7): recorder-on vs recorder-off is bit-identical |
+| d | A differential test the reviewer RUNS, not trusts | `test_recorder_firewall.cpp` — same seed, recorder on vs off, `loopstate_eq` bit-identical; plus a round-trip leg (captured stream replays to the stored pins) and a signature check | add to the ctest gate and run |
+
+SECTION 1 of `recorder.h` was compiled and round-tripped **standalone** (with
+`-DSEADS_RECORDER_STANDALONE`, no glm/engine headers): a `TickRecord` serialized
+and re-read preserves full double precision (`px = 6382137.0` exact) and the
+fnv1a signature verifies. So the file format is self-contained; only the
+seam-glue needs the tree.
 
 ---
 
@@ -151,3 +173,23 @@ Pin recordings/baselines to `feel/kernel-v5 @ 89447aba5` (pushed to origin). Tha
 branch is a full generation **ahead of `main` (v4)** and diverges from it until
 reconciliation — anything diffed against `main` is a generation behind. See
 `../README.md`.
+
+---
+
+## 7. The differential + round-trip test (`test_recorder_firewall.cpp`)
+
+Drop it at `test/unit/`, wire into the ctest gate (it needs `SEADS_CONFIG_DIR`
+and a writable `SEADS_BUILD_TMP` define, matching the other unit tests' config
+access). Two legs:
+
+1. **Read-only (criteria (a),(c)):** the same seed + scripted flick schedule is
+   flown twice — once tapping the recorder after every tick, once not — and the
+   final `LoopState` is asserted bit-identical (`loopstate_eq`). A recorder with
+   any write-back path fails here.
+2. **Round-trip determinism:** the captured stream is flushed, re-read (signature
+   checked), and re-simulated tick-by-tick; each live state must equal the pin
+   the recorder stored — the AT-9 guarantee applied to a real capture, a natural
+   companion to `test_at9.cpp`.
+
+The driver mirrors `test_at9.cpp`'s shape (whole-tick loop, flicks at tick
+boundaries) so the review reads it against a file the session already trusts.
