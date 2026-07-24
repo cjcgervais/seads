@@ -68,6 +68,12 @@ struct TickRecord {
     // resolved app::TickInput, flattened to POD:
     int raw_mode = 0;
     double raw_pitch = 0.0, raw_yaw = 0.0, raw_roll = 0.0, raw_throttle = 0.0;
+    // REVIEW FIX (seads-feel graft review, 2026-07-23 P2): raw-mode flights
+    // command flaps/gear INSIDE raw_in (sim::Inputs carries them); dropping
+    // them replayed a raw flapped flight with a clean airframe — silent
+    // divergence. Instructor-mode flights carry them via flap_cmd/gear_cmd
+    // below either way.
+    double raw_flap = 0.0, raw_gear = 0.0;
     double throttle = 0.0;
     double flap_cmd = 0.0;
     double gear_cmd = 0.0;
@@ -102,7 +108,8 @@ inline std::uint64_t fnv1a(const std::string& s) {
 }
 
 inline const char* kRecColumns =
-    "tick raw_mode raw_pitch raw_yaw raw_roll raw_throttle throttle flap_cmd "
+    "tick raw_mode raw_pitch raw_yaw raw_roll raw_throttle raw_flap raw_gear "
+    "throttle flap_cmd "
     "gear_cmd freelook orient om0 om1 om2 os0 os1 os2 aim_dx aim_dy "
     "aim_gain_scale ffx ffy ffz frame_ticks "
     "px py pz vx vy vz qw qx qy qz wx wy wz pin_throttle";
@@ -118,7 +125,7 @@ inline std::string serialize_body(const std::vector<TickRecord>& recs,
     for (const TickRecord& r : recs) {
         o << r.tick << ' ' << r.raw_mode << ' ' << r.raw_pitch << ' '
           << r.raw_yaw << ' ' << r.raw_roll << ' ' << r.raw_throttle << ' '
-          << r.throttle << ' ' << r.flap_cmd << ' ' << r.gear_cmd << ' '
+          << r.raw_flap << ' ' << r.raw_gear << ' ' << r.throttle << ' ' << r.flap_cmd << ' ' << r.gear_cmd << ' '
           << r.freelook_held << ' ' << r.orient_cmd << ' ' << r.override_mask[0]
           << ' ' << r.override_mask[1] << ' ' << r.override_mask[2] << ' '
           << r.override_sign[0] << ' ' << r.override_sign[1] << ' '
@@ -178,7 +185,7 @@ inline bool read_records(const std::string& path, std::vector<TickRecord>& out,
         std::istringstream s(dl);
         TickRecord r;
         s >> r.tick >> r.raw_mode >> r.raw_pitch >> r.raw_yaw >> r.raw_roll >>
-            r.raw_throttle >> r.throttle >> r.flap_cmd >> r.gear_cmd >>
+            r.raw_throttle >> r.raw_flap >> r.raw_gear >> r.throttle >> r.flap_cmd >> r.gear_cmd >>
             r.freelook_held >> r.orient_cmd >> r.override_mask[0] >>
             r.override_mask[1] >> r.override_mask[2] >> r.override_sign[0] >>
             r.override_sign[1] >> r.override_sign[2] >> r.aim_dx >> r.aim_dy >>
@@ -228,6 +235,8 @@ inline TickRecord record_tick(long tick, const app::TickInput& in,
     r.raw_yaw = in.raw_in.yaw;
     r.raw_roll = in.raw_in.roll;
     r.raw_throttle = in.raw_in.throttle;
+    r.raw_flap = in.raw_in.flap_cmd;
+    r.raw_gear = in.raw_in.gear_cmd;
     r.throttle = in.throttle;
     r.flap_cmd = in.flap_cmd;
     r.gear_cmd = in.gear_cmd;
@@ -270,6 +279,8 @@ inline app::TickInput to_tick_input(const TickRecord& r) {
     in.raw_in.yaw = static_cast<float>(r.raw_yaw);
     in.raw_in.roll = static_cast<float>(r.raw_roll);
     in.raw_in.throttle = static_cast<float>(r.raw_throttle);
+    in.raw_in.flap_cmd = static_cast<float>(r.raw_flap);
+    in.raw_in.gear_cmd = static_cast<float>(r.raw_gear);
     in.throttle = r.throttle;
     in.flap_cmd = r.flap_cmd;
     in.gear_cmd = r.gear_cmd;

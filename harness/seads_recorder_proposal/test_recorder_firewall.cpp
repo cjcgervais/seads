@@ -122,8 +122,8 @@ TEST_CASE("recorder round-trip: the captured stream replays bit-identical") {
 
     seads_replay::Recorder rec;
     run(s0, &rec);
-    const std::string path =
-        std::string(SEADS_BUILD_TMP "/felt_roundtrip.seadsrec");
+    // ctest cwd = the build dir (the harness CSVs land there too).
+    const std::string path = "felt_roundtrip.seadsrec";
     REQUIRE(rec.flush(path, "test@89447aba5"));
 
     std::vector<seads_replay::TickRecord> recs;

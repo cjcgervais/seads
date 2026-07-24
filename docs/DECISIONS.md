@@ -104,3 +104,27 @@ its steering is suspended while it's active specifically so the FOV change can't
 through the camera-projection aim into pitch/bank.
 
 **Status:** standing, not a one-time decision. Applies to both EvC2026 and SEADS camera work.
+
+---
+
+## 2026-07-23 — Recorder graft landed: SOUND-WITH-ONE-FIX, schema gains raw_flap/raw_gear
+
+The felt-flight recorder proposal was grafted into seads-feel (`d1e7dbe6b` on
+`feel/kernel-v5`, gate 372/372) after a four-gate review run, not trusted: symbol walk,
+tick-level tap at the accumulator seam (AT-9), structural read-only, and the differential
+leg on the real spherical plant (same seed, recorder on/off, `LoopState` bit-identical;
+480-tick round-trip replay onto stored pins; tamper signature verified). Two new permanent
+tests in the gate.
+
+**The one fix, and the lesson:** the proposal flattened `raw_in` as
+pitch/yaw/roll/throttle, but `sim::Inputs` also carries `flap_cmd`/`gear_cmd`, which
+raw-mode flights command inside `raw_in`. A recorded raw-mode flight with flaps would have
+replayed with a clean airframe — bit-perfect divergence of exactly the silent kind this
+harness exists to kill. Schema now carries `raw_flap`/`raw_gear`. Changed while the
+`.seadsrec` format was still v1-unshipped, so it was free; a day later it would have been a
+migration. **Standing rule: when flattening a struct into a recording schema, walk every
+field of the source struct, not the fields you remember.** Proposal copies in
+`harness/seads_recorder_proposal/` are synced to the grafted versions
+(`test/harness/recorder.h`, `test/unit/test_recorder_firewall.cpp` at `d1e7dbe6b`), which
+are now authoritative. Deliberate scope note: the in-game record toggle (main.cpp key
+wiring) lands as its own small change at first real recorded flight.
