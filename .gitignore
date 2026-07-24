@@ -19,3 +19,6 @@ Thumbs.db
 *.swp
 .vscode/
 .idea/
+
+tools/backup_logs/
+tools/bundles/
