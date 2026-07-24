@@ -4,11 +4,12 @@ Standing decisions for the flight kernel. Each entry: date, decision, why, statu
 
 ---
 
-## RECONCILIATION WATCH-ITEM — `feel/kernel-v5` is unpushed and diverges from `main`
+## RECONCILIATION WATCH-ITEM — `feel/kernel-v5` diverges from `main` (pushed as backup only)
 
 **The active kernel Chad is flight-testing is NOT on `main`.** It's on
 `D:\flight_sim2\seads-feel`, branch `feel/kernel-v5`, HEAD `89447aba5` as of 2026-07-23,
-covering rungs A through E — and that branch is **unpushed** and diverges from `main`
+covering rungs A through E — pushed to origin later that evening (backup only, no workflow
+change), still diverging from `main`
 (which is still v4, `d68de7d91`). Every rung-A/A2/C/D/E decision below lives only on that
 branch until it merges.
 

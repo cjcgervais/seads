@@ -18,7 +18,8 @@ both directions.
 ## RECONCILIATION WATCH-ITEM — check branch state before trusting anything
 
 The kernel Chad is actually flight-testing lives on `D:\flight_sim2\seads-feel`, branch
-**`feel/kernel-v5`**, which is **unpushed and diverges from `main`** (still v4). Every
+**`feel/kernel-v5`**, which is **pushed to origin as backup (89447aba5) but still diverges
+from `main`** (still v4). Every
 session that touches this repo's docs, tuning captures, or reference snapshots **must check
 that branch's state first** (read-only `git log`/`git status` against
 `D:\flight_sim2\seads-feel` — never write there) before treating rung A–E as current, and

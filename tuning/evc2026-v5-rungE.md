@@ -142,8 +142,9 @@ constants, from the actual C++ kernel.
 
 Source: `D:\flight_sim2\seads-feel`, branch `feel/kernel-v5`, `git log`; shipped values from
 `config/controller.toml` / `config/aircraft.toml`; attribution from
-`reference/seads-feel/docs/v5_kernel_handoff.md`. **This branch is unpushed and diverges
-from `main` (still v4)** — see the reconciliation watch-item in `docs/DECISIONS.md`.
+`reference/seads-feel/docs/v5_kernel_handoff.md`. **This branch is pushed to origin as
+backup (`89447aba5`) but diverges from `main` (still v4)** — see the reconciliation
+watch-item in `docs/DECISIONS.md`.
 
 Each rung: dial, shipped value, the "walk it back" OFF/pre-rung value, and Chad's ruling
 where the commit message carries one.
