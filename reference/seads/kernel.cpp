@@ -1,0 +1,522 @@
+#include "kernel.h"
+#include "../det_math/det_math.h"
+#include <cstring>
+
+namespace seads {
+using namespace seads::detm;
+
+static inline double clampd(double v, double lo, double hi) {
+    if (v < lo) return lo;
+    if (v > hi) return hi;
+    return v;
+}
+
+// B1 longitudinal-energy model constants (ATM-Sphere v1.5r0). Exact hex-float literals shared
+// bit-for-bit with tools/ref_kernel.py (RHO0/V_MIN). RHO0: SEA-LEVEL ISA air density (the
+// reference rho for the B5 density ratio below). V_MIN: hard speed floor (real stall = B3).
+static constexpr double RHO0  = 0x1.399999999999ap+0;   // 1.225 kg/m^3
+static constexpr double V_MIN = 0x1.e000000000000p+4;   // 30.0 m/s
+
+// B5 ISA atmosphere: density ratio sigma(alt) (ATM-Sphere v1.21r0). The air THINS with altitude:
+// sigma(h) = rho(h)/rho0, a sealed 17-node LUT (500 m spacing over the whole ATM realm
+// [0, 8000 m]) interpolated by the SAME deterministic lut_eval as the envelope tables — pure
+// +,-,*,/ at runtime, ZERO new det_math (the power law runs OFFLINE in tools/gen_isa_lut.py;
+// the sealed spec is this table itself). Node provenance: ICAO ISA troposphere,
+// sigma(h) = ((T0 - L*h)/T0)^(g0/(Rs*L) - 1), T0=288.15 K, L=0.0065 K/m, Rs=287.05287 J/(kg K),
+// g0 = the gravity rail. sigma scales BOTH aero forces (q — so drag falls and the n_aero stall
+// ceiling drops aloft) AND engine power (T — sea-level power is NOT held to altitude), so no
+// airframe exceeds its sealed B4 top speed anywhere in the band. The no-arg kinematic path
+// (advance_ — the Sphere golden) is deliberately untouched. v1.24r0: the projectile advance now
+// rides the SAME sigma (PROJ_DRAG_K scaled by air_sigma(round alt) — B5 deferred this; a bullet
+// finally flies in the same thin air). Hex-floats shared bit-for-bit with tools/ref_kernel.py.
+// See ADR-Step8-FlightModel-B5-v1.21r0 + ADR-Step7-Guns-ProjectileSigmaDrag-v1.24r0.
+static constexpr int ISA_SIGMA_N = 17;
+static constexpr double ISA_SIGMA_ALT[ISA_SIGMA_N] = {
+    0x0.0p+0,                  //    0 m
+    0x1.f400000000000p+8,      //  500 m
+    0x1.f400000000000p+9,      // 1000 m
+    0x1.7700000000000p+10,     // 1500 m
+    0x1.f400000000000p+10,     // 2000 m
+    0x1.3880000000000p+11,     // 2500 m
+    0x1.7700000000000p+11,     // 3000 m
+    0x1.b580000000000p+11,     // 3500 m
+    0x1.f400000000000p+11,     // 4000 m
+    0x1.1940000000000p+12,     // 4500 m
+    0x1.3880000000000p+12,     // 5000 m
+    0x1.57c0000000000p+12,     // 5500 m
+    0x1.7700000000000p+12,     // 6000 m
+    0x1.9640000000000p+12,     // 6500 m
+    0x1.b580000000000p+12,     // 7000 m
+    0x1.d4c0000000000p+12,     // 7500 m
+    0x1.f400000000000p+12,     // 8000 m
+};
+static constexpr double ISA_SIGMA[ISA_SIGMA_N] = {
+    0x1.0000000000000p+0,      // sigma(0)    = 1.0
+    0x1.e7dee7742131ap-1,      // sigma(500)  = 0.9528724984416812
+    0x1.d09f05fc701a4p-1,      // sigma(1000) = 0.9074632521297201
+    0x1.ba3a9a8f8e957p-1,      // sigma(1500) = 0.8637283611526908
+    0x1.a4abf95589a58p-1,      // sigma(2000) = 0.821624557201015
+    0x1.8fed8b97c2a68p-1,      // sigma(2500) = 0.7811092016939485
+    0x1.7bf9cfb0b4917p-1,      // sigma(3000) = 0.742140283890225
+    0x1.68cb58fb94924p-1,      // sigma(3500) = 0.704676418982022
+    0x1.565ccfc3cd27ap-1,      // sigma(4000) = 0.6686768461718906
+    0x1.44a8f13453073p-1,      // sigma(4500) = 0.634101426732299
+    0x1.33aa8f46d2eedp-1,      // sigma(5000) = 0.6009106420474076
+    0x1.235c90b2b78c0p-1,      // sigma(5500) = 0.5690655916366936
+    0x1.13b9f0dc0699dp-1,      // sigma(6000) = 0.5385279911600268
+    0x1.04bdbfc2144a5p-1,      // sigma(6500) = 0.5092601704037817
+    0x1.ecc643dc18156p-2,      // sigma(7000) = 0.4812250712475551
+    0x1.d14aa0c29b568p-2,      // sigma(7500) = 0.45438624561105323
+    0x1.b6ff31073bca1p-2,      // sigma(8000) = 0.428707853380681
+};
+
+// G1 ballistic-projectile constants (Step 7 guns, ATM-Sphere v1.9r0). Exact hex-float literals
+// shared bit-for-bit with tools/ref_kernel.py. A round is the n=0/thrust=0 specialization of the
+// aircraft 3-DOF step (gravity along the path + lumped quadratic drag), so NO new det_math. Global
+// for G1 (a generic gun); per-airframe weapon rosters are G3. See ADR-Step7-Guns-G1.
+// G3 (v1.11r0): muzzle velocity and damage-per-round are PER-AIRFRAME (Envelope::muzzle_v_mps /
+// damage_per_round); drag and ttl stay GLOBAL (a bullet is a bullet). Shared hex-floats with
+// tools/ref_kernel.py. v1.24r0: the GLOBAL coefficient is sigma-scaled at run time
+// (Vdot -= k*sigma(alt)*V^2) — sigma(0) = 1.0 exactly, so a sea-level round is bit-identical
+// to the pre-v1.24r0 round.
+static constexpr double        PROJ_DRAG_K    = 0x1.a36e2eb1c432dp-13;   // 2.0e-4 quadratic drag decel coeff (x sigma)
+static constexpr std::uint32_t PROJ_TTL_TICKS = 250u;                    // 2.5 s lifetime, then despawn
+
+// G2 hit detection + per-aircraft hitpoints (Step 7 guns, ATM-Sphere v1.10r0). Shared hex-floats
+// with ref_kernel.py. Horizontal hit test is the spherical law of cosines vs COS_HIT_ANGLE (=
+// det_cos(HIT_RADIUS/R), precomputed once) — acos is monotone so no det_acos is needed; with the
+// |Δalt| gate it is a cylinder test using det_sin/det_cos only (NO new det_math). G3 (v1.11r0):
+// hp_start / damage are per-airframe; START_HP remains the GLOBAL default for the no-arg/Sphere path.
+static constexpr double START_HP         = 0x1.9000000000000p+6;   // 100.0 default hitpoints (no-arg/Sphere)
+// G4 finite ammunition (Step 7 guns, ATM-Sphere v1.13r0). START_AMMO is the GLOBAL default magazine
+// for the no-arg/Sphere path (per-airframe ammo_start comes from the envelope). Firing is gated on
+// ammo > 0 (one round consumed per shot); at 0 the gun falls silent ("Winchester"). No new det_math
+// (a pure integer-valued counter, like fire_cd). Shared hex-float with tools/ref_kernel.py.
+static constexpr double START_AMMO       = 0x1.f400000000000p+8;   // 500.0 default magazine (no-arg/Sphere)
+// Attacker attribution (Step 7 guns, ATM-Sphere v1.16r0). last_hit_by names the aircraft whose round
+// most recently damaged a given aircraft (NO_ATTACKER == -1 == never hit), set at hit time from the
+// striking round's owner — the kernel-side event hook the guns arc deferred. Persists through death, so
+// at hp<=0 it is the KILLER. A pure integer-valued state (like fire_cd/ammo) ⇒ NO new det_math. Shared
+// hex-float with tools/ref_kernel.py. See ADR-Step7-Guns-Attribution-v1.16r0.
+static constexpr double NO_ATTACKER      = -0x1.0000000000000p+0;  // -1.0 sentinel: never hit
+// Region damage + kill tally (Step 7 guns, ATM-Sphere v1.18r0). Each airframe carries ENGINE/WING/
+// TAIL sub-pools (PER-AIRFRAME fractions of starting hp since v1.20r0 — the envelope's
+// engine_frac/wing_frac/tail_frac, passed into add(); the v1.18r0 global values survive as add()'s
+// defaults for envelope-less callers. Independent thresholds, NOT a partition; damage books into
+// the total hp AND the struck region). A connecting round's region comes purely from its APPROACH
+// ASPECT: rel = wrap_pi(round psi - target psi); |rel| < pi/4 == astern -> TAIL, |rel| > 3pi/4 ==
+// head-on -> ENGINE, else beam -> WING. wrap_pi + compares + *,- only => NO new det_math. A dead
+// region degrades a LIVING plane: engine out -> thrust forced 0; wing out -> n_aero halved; tail
+// out -> commanded (bank, g) forced to (0, 1) — a straight 1-g mush. kills is the per-aircraft
+// victory tally (+1 on the attacker per killing round; survives death). Cone edges are exact
+// hex-floats shared bit-for-bit with tools/ref_kernel.py.
+// See ADR-Step7-Guns-RegionDamage-v1.18r0 + ADR-Step7-Guns-RegionToughness-v1.20r0.
+static constexpr std::int64_t REGION_ENGINE = 0;
+static constexpr std::int64_t REGION_WING   = 1;
+static constexpr std::int64_t REGION_TAIL   = 2;
+static constexpr double QUARTER_PI       = 0x1.921fb54442d18p-1;    // pi/4: astern cone (TAIL)
+static constexpr double THREE_QUARTER_PI = 0x1.2d97c7f3321d2p+1;    // 3pi/4: head-on edge (ENGINE)
+static constexpr double HIT_ALT_GATE_M   = 0x1.e000000000000p+5;   // 60.0 m vertical hit gate
+static constexpr double COS_HIT_ANGLE    = 0x1.fffef3909d697p-1;   // cos(HIT_RADIUS/R); horizontal hit test
+
+// B3 limits & stall (ATM-Sphere v1.7r0): the B2 global placeholder clamp (N_MIN=-3, N_MAX=+9) is
+// RETIRED. The achievable load factor n is now bounded per-airframe by BOTH a structural limit
+// (Envelope::n_min_struct/n_max_struct) AND the C_Lmax aerodynamic ceiling
+// n_aero = cl_max*qS/(m*g0) (the most lift the wing can make at the current dynamic pressure;
+// below the corner speed this is binding and the turn collapses = accelerated stall). No new
+// det_math (+,-,*,/ only). Mirrors tools/ref_kernel.py step_scenario. See ADR-Step8-FlightModel-B3.
+
+// Closed-form intrinsic-S2 great-circle step. det_math only. Mirrors ref_kernel.py.
+static void great_circle_step(double lat, double lon, double bearing, double s, double R,
+                              double* lat2_out, double* lon2_out) {
+    double alpha = s / R;
+    double sinlat1 = det_sin(lat);
+    double coslat1 = det_cos(lat);
+    double ca = det_cos(alpha);
+    double sa = det_sin(alpha);
+    double cb = det_cos(bearing);
+    double sb = det_sin(bearing);
+    double sin_lat2 = sinlat1 * ca + coslat1 * sa * cb;
+    sin_lat2 = clampd(sin_lat2, -1.0, 1.0);
+    double lat2 = det_asin(sin_lat2);
+    double y = sb * sa * coslat1;
+    double x = ca - sinlat1 * sin_lat2;
+    double lon2 = wrap_pi(lon + det_atan2(y, x));
+    *lat2_out = lat2;
+    *lon2_out = lon2;
+}
+
+static double ceiling_climb_rate(double req, double alt, double atm_top, double soft) {
+    if (req <= 0.0) return req;
+    double band_lo = atm_top - soft;
+    if (alt >= band_lo) {
+        double frac = (atm_top - alt) / soft;
+        frac = clampd(frac, 0.0, 1.0);
+        return req * frac;
+    }
+    return req;
+}
+
+// Clamped piecewise-linear interpolation over an n-point LUT. det_math: only + - * / and exact
+// IEEE comparisons (no FMA). Op order MUST match detmath_ref.lut_eval bit-for-bit. B5 (v1.21r0):
+// generalized from the hard-coded 5-point form to take the node count so the 17-node ISA sigma
+// table shares it — the op sequence for any given (xs, ys, x) is IDENTICAL to the old body
+// (the last-node index is the only thing parameterized), so every sealed envelope-LUT product
+// is bit-for-bit unchanged.
+static inline double lut_eval(const double* xs, const double* ys, int n, double x) {
+    int last = n - 1;
+    if (x <= xs[0]) return ys[0];
+    if (x >= xs[last]) return ys[last];
+    int i = 0;
+    while (x >= xs[i + 1]) ++i;
+    double t = (x - xs[i]) / (xs[i + 1] - xs[i]);
+    return ys[i] + (ys[i + 1] - ys[i]) * t;
+}
+
+// B5 (v1.21r0): ISA density ratio rho(alt)/rho0 via the sealed LUT. alt is already inside
+// [0, ATM_TOP] (the kernel clamps it every tick), and lut_eval clamps at the end nodes anyway.
+// MUST match ref_kernel.air_sigma bit-for-bit (same lut_eval, same sealed nodes).
+static inline double air_sigma(double alt) {
+    return lut_eval(ISA_SIGMA_ALT, ISA_SIGMA, ISA_SIGMA_N, alt);
+}
+
+std::size_t Kernel::add(double lat, double lon, double psi, double phi, double alt, double tas,
+                        double gamma, double hp, double ammo,
+                        double engine_frac, double wing_frac, double tail_frac) {
+    lat_.push_back(lat); lon_.push_back(lon); psi_.push_back(psi);
+    phi_.push_back(phi); alt_.push_back(alt); tas_.push_back(tas); gamma_.push_back(gamma);
+    hp_.push_back(hp);                           // G2 hitpoints (G3: per-airframe hp_start passed in)
+    fire_cd_.push_back(0.0);                     // G3 (v1.11r0): fire-rate cooldown starts ready
+    ammo_.push_back(ammo);                       // G4 (v1.13r0): magazine (per-airframe ammo_start)
+    last_hit_by_.push_back(NO_ATTACKER);         // v1.16r0: never hit yet
+    engine_hp_.push_back(engine_frac * hp);      // v1.18r0: region sub-pools sized from starting hp
+    wing_hp_.push_back(wing_frac * hp);          // (v1.20r0: per-airframe fractions; mirrors
+    tail_hp_.push_back(tail_frac * hp);          //  ref_kernel.Aircraft / build_scenario)
+    kills_.push_back(0.0);                       // v1.18r0: victory tally (integer-valued f64)
+    return lat_.size() - 1;
+}
+
+void Kernel::advance_(std::size_t i, double req) {
+    const double dt = rails_.dt, R = rails_.R, g0 = rails_.g0;
+    double V = tas_[i];
+    double psi_dot = g0 * det_tan(phi_[i]) / V;
+    psi_[i] = wrap_2pi(psi_[i] + psi_dot * dt);
+    double s = V * dt;
+    double nlat, nlon;
+    great_circle_step(lat_[i], lon_[i], psi_[i], s, R, &nlat, &nlon);
+    lat_[i] = nlat;
+    lon_[i] = nlon;
+    double rate = ceiling_climb_rate(req, alt_[i], rails_.atm_top, rails_.soft);
+    alt_[i] = clampd(alt_[i] + rate * dt, 0.0, rails_.atm_top);
+}
+
+// G2 (v1.10r0): index of the first ALIVE enemy aircraft the round p_idx hits this tick, else -1.
+// Horizontal great-circle within HIT_RADIUS via the law of cosines (cosc > COS_HIT_ANGLE; acos is
+// monotone so no det_acos) AND |Δalt| < HIT_ALT_GATE_M, excluding the firer. Array order. det_sin/
+// det_cos + (+,-,*,/) only. MUST match ref_kernel._projectile_hit bit-for-bit.
+std::ptrdiff_t Kernel::projectile_hit_(std::size_t i) const {
+    double psin = det_sin(p_lat_[i]);
+    double pcos = det_cos(p_lat_[i]);
+    for (std::size_t j = 0; j < lat_.size(); ++j) {
+        if (hp_[j] <= 0.0 || j == p_owner_[i]) continue;
+        double cosc = psin * det_sin(lat_[j]) + pcos * det_cos(lat_[j]) * det_cos(lon_[j] - p_lon_[i]);
+        if (cosc > COS_HIT_ANGLE) {
+            double dalt = p_alt_[i] - alt_[j];
+            if (dalt < 0.0) dalt = -dalt;
+            if (dalt < HIT_ALT_GATE_M) return static_cast<std::ptrdiff_t>(j);
+        }
+    }
+    return -1;
+}
+
+// G1 (v1.9r0): step every live round one tick (ballistic n=0/thrust=0 point mass), then despawn the
+// expired/grounded ones via in-place forward compaction (array order = deterministic, no pointer
+// dependence). G2 (v1.10r0): also resolve hits — a round that strikes an alive enemy deals damage
+// and despawns. Op order MUST match ref_kernel._advance_projectiles bit-for-bit.
+void Kernel::advance_projectiles_() {
+    const double dt = rails_.dt, R = rails_.R, g0 = rails_.g0, atm_top = rails_.atm_top;
+    std::size_t w = 0;                              // write cursor for the survivors (w <= i always)
+    for (std::size_t i = 0; i < p_lat_.size(); ++i) {
+        double V = p_tas_[i];
+        double sg = det_sin(p_gamma_[i]);
+        double cg = det_cos(p_gamma_[i]);
+        // v1.24r0: the round finally flies in the SAME thin air as the airframes — the lumped
+        // PROJ_DRAG_K is scaled by the sealed ISA density ratio at the round's PRE-step altitude
+        // (one air_sigma per round per tick, mirroring the aircraft step's pre-step sigma
+        // convention). Same sealed LUT + lut_eval => ZERO new det_math. MUST match
+        // ref_kernel._advance_projectiles op-for-op.
+        double sigma = air_sigma(p_alt_[i]);
+        double Vdot = -PROJ_DRAG_K * sigma * V * V - g0 * sg;   // sigma-scaled drag + gravity along path
+        double Vnew = V + Vdot * dt;
+        if (Vnew < V_MIN) Vnew = V_MIN;
+        double gdot = (g0 / Vnew) * (-cg);              // n=0 -> gamma bends down under gravity
+        double ngamma = p_gamma_[i] + gdot * dt;
+        // psi unchanged (ballistic: no turn force)
+        double cgN = det_cos(ngamma);
+        double s = Vnew * cgN * dt;
+        double nlat, nlon;
+        great_circle_step(p_lat_[i], p_lon_[i], p_psi_[i], s, R, &nlat, &nlon);
+        double sgN = det_sin(ngamma);
+        double wv = Vnew * sgN;
+        double nalt = p_alt_[i] + wv * dt;
+        bool hit_ground = nalt <= 0.0;
+        if (nalt < 0.0) nalt = 0.0;
+        if (nalt > atm_top) nalt = atm_top;
+        std::uint32_t nttl = p_ttl_[i] - 1u;            // ttl >= 1 on entry (despawned at 0)
+        // commit the moved round into slot i, then resolve a hit against the NEW position
+        p_lat_[i] = nlat; p_lon_[i] = nlon; p_alt_[i] = nalt;
+        p_tas_[i] = Vnew; p_gamma_[i] = ngamma; p_ttl_[i] = nttl;
+        std::ptrdiff_t hit_ac = projectile_hit_(i);     // G2: first alive enemy struck, else -1
+        if (hit_ac >= 0) {
+            const std::size_t t = static_cast<std::size_t>(hit_ac);
+            double before = hp_[t];
+            double nhp = before - p_damage_[i];         // G3: carried damage
+            if (nhp < 0.0) nhp = 0.0;
+            hp_[t] = nhp;
+            last_hit_by_[t] =
+                static_cast<double>(p_owner_[i]);   // v1.16r0: attribute the hit to the firing aircraft
+            // Region damage (v1.18r0): assign the round to an airframe region from its APPROACH
+            // ASPECT — astern (< pi/4) -> TAIL, head-on (> 3pi/4) -> ENGINE, beam (incl. exactly
+            // pi/4) -> WING; drain the struck region's sub-pool (clamped at 0, like hp). Mirrors
+            // ref_kernel._advance_projectiles op-for-op.
+            double rel = wrap_pi(p_psi_[i] - psi_[t]);
+            if (rel < 0.0) rel = -rel;
+            std::int64_t region;
+            if (rel < QUARTER_PI) {
+                region = REGION_TAIL;
+                tail_hp_[t] = tail_hp_[t] - p_damage_[i];
+                if (tail_hp_[t] < 0.0) tail_hp_[t] = 0.0;
+            } else if (rel > THREE_QUARTER_PI) {
+                region = REGION_ENGINE;
+                engine_hp_[t] = engine_hp_[t] - p_damage_[i];
+                if (engine_hp_[t] < 0.0) engine_hp_[t] = 0.0;
+            } else {
+                region = REGION_WING;
+                wing_hp_[t] = wing_hp_[t] - p_damage_[i];
+                if (wing_hp_[t] < 0.0) wing_hp_[t] = 0.0;
+            }
+            // Per-round hit queue: one event PER CONNECTING ROUND (projectile array order).
+            // Observable output only — never hashed (see HitEvent in kernel.h). Mirrors
+            // ref_kernel._advance_projectiles.
+            const std::int64_t killed =
+                (before > 0.0 && nhp <= 0.0) ? std::int64_t{1} : std::int64_t{0};
+            if (killed) {
+                // v1.18r0 kill tally: credit the ATTACKER on exactly the crossing round (a
+                // posthumous kill still counts — the tally, like last_hit_by, survives death).
+                kills_[p_owner_[i]] = kills_[p_owner_[i]] + 1.0;
+            }
+            hit_events_.push_back(HitEvent{
+                static_cast<std::int64_t>(hit_ac),
+                static_cast<std::int64_t>(p_owner_[i]),
+                p_damage_[i], before, nhp, killed, region});
+        }
+        if (nttl > 0u && !hit_ground && hit_ac < 0) {   // survivor: write compacted into slot w
+            p_lat_[w] = p_lat_[i]; p_lon_[w] = p_lon_[i]; p_psi_[w] = p_psi_[i];
+            p_alt_[w] = p_alt_[i]; p_tas_[w] = p_tas_[i]; p_gamma_[w] = p_gamma_[i];
+            p_damage_[w] = p_damage_[i]; p_ttl_[w] = p_ttl_[i]; p_owner_[w] = p_owner_[i];
+            ++w;
+        }
+    }
+    p_lat_.resize(w); p_lon_.resize(w); p_psi_.resize(w); p_alt_.resize(w);
+    p_tas_.resize(w); p_gamma_.resize(w); p_damage_.resize(w); p_ttl_.resize(w); p_owner_.resize(w);
+}
+
+void Kernel::spawn_projectile_(std::size_t owner, const Envelope& e) {
+    const double v = tas_[owner] + e.muzzle_v_mps;    // muzzle speed (firer TAS + per-airframe muzzle, G3)
+    p_lat_.push_back(lat_[owner]);   p_lon_.push_back(lon_[owner]);   p_psi_.push_back(psi_[owner]);
+    p_alt_.push_back(alt_[owner]);   p_tas_.push_back(v);
+    // Convergence / harmonization (v1.15r0): a single centerline battery is zeroed VERTICALLY —
+    // aim the round UP by the flat-fire drop-compensation angle so its ballistic trajectory crosses
+    // the aim (sight) line at the per-airframe convergence range. Pure +-*/ (no new det_math).
+    const double delta = 0.5 * rails_.g0 * e.convergence_m / (v * v);
+    p_gamma_.push_back(gamma_[owner] + delta);
+    p_damage_.push_back(e.damage_per_round);          // G3: carried per-round damage from the firer's gun
+    p_ttl_.push_back(PROJ_TTL_TICKS); p_owner_.push_back(static_cast<std::uint32_t>(owner));
+}
+
+void Kernel::step() {                       // straight golden: req=0, phi unchanged -> byte-identical
+    hit_events_.clear();                    // queue holds the CURRENT step's hits only (none: no guns)
+    for (std::size_t i = 0; i < lat_.size(); ++i) advance_(i, 0.0);
+}
+
+void Kernel::step(const std::vector<Command>& cmd, const std::vector<const Envelope*>& env) {
+    // B3 (v1.7r0): the commanded load factor n is bounded per-airframe by the structural g limits
+    // AND the C_Lmax aerodynamic ceiling (n_aero); below the corner speed the turn collapses as
+    // speed bleeds (accelerated stall). Retires the B2 global [-3,9] clamp. No new det_math.
+    // B2 (v1.6r0): full 3-DOF point-mass step. Pitch is real — flight-path angle gamma is a stored
+    // state, driven by the commanded load factor n (g-command) through the lift vector; altitude is
+    // earned (alt = V*sin gamma). Op order MUST match tools/ref_kernel.step_scenario bit-for-bit.
+    // Strictly generalizes B1: wings level n=1 gamma=0 -> level; n=1/cos(phi) gamma=0 -> the old
+    // coordinated-turn law psi_dot=g0*tan(phi)/V. cos(gamma)->0 (vertical) is a documented
+    // singularity in psi_dot (scenarios/viewer stay well inside +/-90 deg). See ADR-Step8-B2.
+    hit_events_.clear();   // per-round hit queue: this step's hits only (see HitEvent in kernel.h)
+    const double dt = rails_.dt, g0 = rails_.g0;
+    const double R = rails_.R, atm_top = rails_.atm_top, soft = rails_.soft;
+    for (std::size_t i = 0; i < lat_.size(); ++i) {
+        if (hp_[i] <= 0.0) continue;            // G2 (v1.10r0): a DEAD aircraft freezes (no integration)
+        double V = tas_[i];
+        const Envelope& e = *env[i];
+        // --- region-damage effects (v1.18r0): a dead TAIL region strips control authority —
+        // the commanded bank/load-factor are overridden to a straight 1-g mush (0.0, 1.0).
+        // Throttle is untouched (that is the ENGINE region's failure, below). ---
+        double cmd_phi = cmd[i].target_phi;
+        double cmd_g = cmd[i].target_g;
+        if (tail_hp_[i] <= 0.0) {
+            cmd_phi = 0.0;
+            cmd_g = 1.0;
+        }
+        // --- bank dynamics (unchanged from B1): slew toward commanded bank at roll_rate(V) ---
+        double phimax = lut_eval(e.phi_max.x, e.phi_max.y, 5, V);
+        double rollrate = lut_eval(e.roll_rate.x, e.roll_rate.y, 5, V);
+        double cmdphi = clampd(cmd_phi, -phimax, phimax);
+        double step_max = rollrate * dt;
+        double delta = cmdphi - phi_[i];
+        delta = clampd(delta, -step_max, step_max);
+        phi_[i] = phi_[i] + delta;
+        phi_[i] = clampd(phi_[i], -phimax, phimax);
+        // --- dynamic pressure (B5, v1.21r0: the air thins with altitude — sigma(alt) scales
+        // rho, so drag falls AND the n_aero stall ceiling drops aloft; alt is the pre-step
+        // value, matching the V the ceiling/drag solve uses) ---
+        double sigma = air_sigma(alt_[i]);              // ISA density ratio (sealed LUT)
+        double q = 0.5 * RHO0 * sigma * V * V;          // dynamic pressure
+        double qS = q * e.wing_area_m2;
+        // --- commanded load factor n, bounded by structural g AND C_Lmax (B3, v1.7r0) ---
+        // n_aero = most |n| the wing can lift at this q; below the corner speed it is the binding
+        // limit and the turn collapses (accelerated stall). Retires the B2 [-3,9] placeholder.
+        double n_aero = e.cl_max * qS / (e.mass_kg * g0);
+        if (wing_hp_[i] <= 0.0) n_aero = 0.5 * n_aero;  // v1.18r0: wing out — half the surface remains
+        double n_hi = e.n_max_struct;
+        if (n_aero < n_hi) n_hi = n_aero;
+        double n_lo = e.n_min_struct;
+        double neg_aero = -n_aero;
+        if (neg_aero > n_lo) n_lo = neg_aero;
+        double n = clampd(cmd_g, n_lo, n_hi);
+        // --- trig of NEW phi and OLD gamma (single eval, fixed order) ---
+        double cphi = det_cos(phi_[i]);
+        double sphi = det_sin(phi_[i]);
+        double cg = det_cos(gamma_[i]);
+        double sg = det_sin(gamma_[i]);
+        // --- drag/thrust with current V and load factor n (B1 algebra; reuses q, qS above) ---
+        double L = n * e.mass_kg * g0;                  // lift = n * weight
+        double CL = L / qS;
+        double Dp = qS * e.cd0;                         // parasitic drag
+        double Di = e.induced_k * CL * CL * qS;         // induced drag (rises with n -> g bleeds speed)
+        double D = Dp + Di;
+        double thr = clampd(cmd[i].throttle, 0.0, 1.0);
+        // Supercharger critical altitude (v1.22r0): below crit_alt_m the supercharger holds RATED
+        // power (lapse = 1); above it power falls with the density ratio (sigma/sigma_crit). One
+        // comparison + one divide — no new det_math. crit_alt_m = 0 gives sigma_crit = 1.0 and
+        // reproduces the B5 T *= sigma bit-for-bit. MUST mirror ref_kernel.step_scenario op-for-op.
+        double sig_c = air_sigma(e.crit_alt_m);         // exact LUT node (crit is a 500 m multiple)
+        double lapse = sigma / sig_c;
+        if (lapse > 1.0) lapse = 1.0;
+        // Two-speed blower schedule (v1.25r0): airframes with a two-speed supercharger carry
+        // crit_lo_alt_m (LOW/MS-gear full-throttle height) + gear2_frac (HIGH/FS-gear rated-power
+        // fraction). The lapse becomes the gear the pilot would pick:
+        //   max(min(1, sigma/sigma(crit_lo)), gear2_frac * min(1, sigma/sigma(crit_alt)))
+        // — rated to crit_lo, falling to the gear-shift altitude, FLAT at gear2_frac to crit_alt,
+        // then falling (flat-fall-flat-fall). One divide + multiply + comparisons — no new
+        // det_math. crit_lo_alt_m = 0 (single-speed) NEVER enters this branch, so the v1.22r0
+        // lapse above is reproduced bit-for-bit. MUST mirror ref_kernel.step_scenario op-for-op.
+        if (e.crit_lo_alt_m > 0.0) {
+            double sig_lo = air_sigma(e.crit_lo_alt_m); // exact LUT node (crit_lo is a 500 m multiple)
+            double lo_gear = sigma / sig_lo;
+            if (lo_gear > 1.0) lo_gear = 1.0;
+            double hi_gear = e.gear2_frac * lapse;
+            lapse = (lo_gear > hi_gear) ? lo_gear : hi_gear;
+        }
+        double T = thr * e.thrust_static_n * (1.0 - V / e.v_max_mps) * lapse;
+        if (T < 0.0) T = 0.0;
+        if (engine_hp_[i] <= 0.0) T = 0.0;              // v1.18r0: engine out — no thrust at any throttle
+        // --- speed: gravity now acts along the flight path (uses OLD gamma) ---
+        double Vdot = (T - D) / e.mass_kg - g0 * sg;
+        double Vnew = V + Vdot * dt;
+        if (Vnew < V_MIN) Vnew = V_MIN;
+        tas_[i] = Vnew;
+        // --- flight-path angle integrates (uses Vnew, OLD gamma), then track heading turns ---
+        double gdot = (g0 / Vnew) * (n * cphi - cg);
+        gamma_[i] = gamma_[i] + gdot * dt;
+        double psidot = (g0 / Vnew) * (n * sphi / cg);
+        psi_[i] = wrap_2pi(psi_[i] + psidot * dt);
+        // --- horizontal great-circle advance: ground speed = Vnew*cos(NEW gamma) ---
+        double cgN = det_cos(gamma_[i]);
+        double s = Vnew * cgN * dt;
+        double nlat, nlon;
+        great_circle_step(lat_[i], lon_[i], psi_[i], s, R, &nlat, &nlon);
+        lat_[i] = nlat;
+        lon_[i] = nlon;
+        // --- altitude EARNED: vertical rate Vnew*sin(NEW gamma), ceiling predamp + clamp ---
+        double sgN = det_sin(gamma_[i]);
+        double w = Vnew * sgN;
+        double w_eff = ceiling_climb_rate(w, alt_[i], atm_top, soft);
+        alt_[i] = clampd(alt_[i] + w_eff * dt, 0.0, atm_top);
+    }
+    // G1/G2/G3 guns: advance live rounds (resolving hits), then spawn newly-fired ones from the
+    // post-step muzzle, gated by the per-airframe fire-rate. Order (step+hit+despawn, THEN appends)
+    // and the decrement-then-fire cooldown mirror ref_kernel.step_scenario exactly.
+    advance_projectiles_();
+    for (std::size_t i = 0; i < lat_.size(); ++i) {
+        if (fire_cd_[i] > 0.0) fire_cd_[i] = fire_cd_[i] - 1.0;
+        // G4 (v1.13r0): also gate on ammo > 0 — an empty magazine ("Winchester") falls silent (no
+        // spawn, no cooldown reset). One round is consumed per shot. Mirrors ref_kernel.step_scenario.
+        if (cmd[i].fire && hp_[i] > 0.0 && fire_cd_[i] == 0.0 && ammo_[i] > 0.0) {  // ready, alive, loaded
+            spawn_projectile_(i, *env[i]);
+            ammo_[i] = ammo_[i] - 1.0;                            // G4: one round consumed
+            fire_cd_[i] = env[i]->rof_interval_ticks;             // G3: reset to the per-airframe interval
+        }
+    }
+}
+
+void Kernel::run(std::uint32_t ticks) {
+    for (std::uint32_t t = 0; t < ticks; ++t) step();
+}
+
+static void put_u16(std::vector<std::uint8_t>& b, std::uint16_t v) {
+    b.push_back(static_cast<std::uint8_t>(v & 0xFF));
+    b.push_back(static_cast<std::uint8_t>((v >> 8) & 0xFF));
+}
+static void put_u32(std::vector<std::uint8_t>& b, std::uint32_t v) {
+    for (int i = 0; i < 4; ++i) b.push_back(static_cast<std::uint8_t>((v >> (8 * i)) & 0xFF));
+}
+static void put_f64(std::vector<std::uint8_t>& b, double d) {
+    std::uint8_t tmp[8];
+    std::memcpy(tmp, &d, 8);  // little-endian target (x64/AArch64)
+    for (int i = 0; i < 8; ++i) b.push_back(tmp[i]);
+}
+
+std::vector<std::uint8_t> Kernel::snapshot(std::uint32_t tick_count) const {
+    std::vector<std::uint8_t> b;
+    b.reserve(32 + 120 * lat_.size() + 8 + 64 * p_lat_.size());  // hdr + 15f64/ac + projblock(7f64+2u32)
+    put_u16(b, 1);                 // mode = ATM
+    put_u16(b, 0);                 // pad
+    put_u32(b, tick_count);        // tick_count
+    put_f64(b, rails_.dt);         // dt_s
+    put_f64(b, rails_.R);          // R_m
+    put_u32(b, static_cast<std::uint32_t>(lat_.size()));  // n_aircraft
+    put_u32(b, 0);                 // pad
+    for (std::size_t i = 0; i < lat_.size(); ++i) {
+        put_f64(b, lat_[i]); put_f64(b, lon_[i]); put_f64(b, psi_[i]);
+        put_f64(b, phi_[i]); put_f64(b, alt_[i]); put_f64(b, tas_[i]); put_f64(b, gamma_[i]);
+        put_f64(b, hp_[i]);                          // G2 (v1.10r0): 8th per-aircraft f64
+        put_f64(b, fire_cd_[i]);                     // G3 (v1.11r0): 9th per-aircraft f64 (fire cooldown)
+        put_f64(b, ammo_[i]);                        // G4 (v1.13r0): 10th per-aircraft f64 (magazine)
+        put_f64(b, last_hit_by_[i]);                 // v1.16r0: 11th per-aircraft f64 (attacker attribution)
+        put_f64(b, engine_hp_[i]);                   // v1.18r0: 12th-14th per-aircraft f64s (region
+        put_f64(b, wing_hp_[i]);                     //   sub-pools: engine / wing / tail)
+        put_f64(b, tail_hp_[i]);
+        put_f64(b, kills_[i]);                       // v1.18r0: 15th per-aircraft f64 (victory tally)
+    }
+    // G1 (v1.9r0): projectile block — u32 n_projectiles, u32 pad, then per round 7 x f64
+    // [lat, lon, psi, alt, tas, gamma, damage] + u32 ttl + u32 owner (damage added in G3 v1.11r0).
+    // Always present (n=0 for gun-less scenarios). Mirrors ref_kernel.snapshot byte-for-byte.
+    put_u32(b, static_cast<std::uint32_t>(p_lat_.size()));
+    put_u32(b, 0);
+    for (std::size_t i = 0; i < p_lat_.size(); ++i) {
+        put_f64(b, p_lat_[i]); put_f64(b, p_lon_[i]); put_f64(b, p_psi_[i]);
+        put_f64(b, p_alt_[i]); put_f64(b, p_tas_[i]); put_f64(b, p_gamma_[i]); put_f64(b, p_damage_[i]);
+        put_u32(b, p_ttl_[i]); put_u32(b, p_owner_[i]);
+    }
+    return b;
+}
+
+}  // namespace seads

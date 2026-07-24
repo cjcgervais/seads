@@ -1,0 +1,140 @@
+# SEADS airframe — Bf 109 F-4 / P-51 class (SPEC Appendix starting values).
+# Hypotheses to tune, not truth. Single source of truth for BOTH the plant
+# and the controller's plant inversion (H1) — never fork these numbers.
+# Units: SI, angles in radians only via slopes (degrees never appear here).
+
+[world]
+R = 15000.0        # planet radius [m] — the feel knob
+g = 9.81           # gravity magnitude [m/s^2]; direction is always -local_up
+rho = 1.0          # air density [kg/m^3], constant v1
+sim_dt = 0.008333333333333333   # 1/120 s fixed tick (SPEC §7)
+
+[atmosphere]       # MB-atm (SPEC §0, 2026-07-08): the SOFT ceiling, calculated.
+# atm_frac(h) = exp(-max(0, h - taper_alt)^2 / (2*taper_sigma^2)) scales BOTH
+# density (lift/drag via q) and thrust (prop-like lapse) -- one number,
+# everywhere, single-sourced in sim/aero.h. Exactly 1 at/below taper_alt with
+# ZERO gradient at the taper start (no felt line in the sky); Gaussian falloff
+# above. The calculated envelope at T_max = 9000 (Chad: "the ideal envelope
+# and the ideal loss of lift gradient by altitude... keep the game honest and
+# playable"):
+#   0-4 km  f = 1.00  the fight band, untouched (all goldens fly here)
+#   5 km    f = 0.91  barely perceptible mush
+#   6 km    f = 0.69  stall +20%, turns widen -- fights degrade honestly
+#   7 km    f = 0.44  stall +51%, climb ~7 m/s -- perch, not turn-fighting
+#   8 km    f = 0.23  SERVICE CEILING: T_max*f == minimum drag (2081 N);
+#                     level flight only at best-glide speed; zooms poke above
+#                     and fall back slow -- self-limiting, no wall.
+# taper_sigma = 0 disables the whole mechanism structurally.
+taper_alt   = 4000.0   # [m] full performance at/below this
+taper_sigma = 2340.0   # [m] falloff width (service ceiling ~8 km; smaller =
+                       #   lower/harder ceiling: 1750 puts T=D_min at ~7 km)
+
+[airframe]
+mass = 3000.0      # [kg]
+S = 16.0           # wing area [m^2]
+Cl_max = 1.8       # hard stall cap  (§7 tune 2026-07-05: 1.4->1.8 for a tighter carve /
+                   #   lower corner speed; stall AoA now 1.8/5.0 = 0.36 rad ~20.6 deg, so
+                   #   controller aoa_max <= that still holds. NOTE: at normal speeds the
+                   #   n_max G-limit binds before Cl_max — raise [g_limits] n_max / [aoa]
+                   #   aoa_max to carve HARDER; Cl_max mainly lowers the corner speed.)
+Cl_alpha = 5.0     # lift slope [/rad]
+Cd0 = 0.025        # parasitic drag
+k_induced = 0.015  # induced factor: Cd = Cd0 + k*Cl^2. v5 RUNG D (Chad
+                   # 2026-07-23, THE ARCADE ENERGY RULING: "energy drops
+                   # massively in turns for an arcade fighter... give me the
+                   # power, the airframe is being underserved"): 0.05 -> 0.015.
+                   # At 0.05 a hard turn rode Cd 0.187 = 36.7 kN of drag vs a
+                   # 9 kN engine -- the turn out-spent thrust 4:1, bleeding
+                   # ~9 m/s^2 and paying with altitude (measured 2609 m lost
+                   # in a 20 s sustained turn). Walk-back 0.05 = the trainer.
+T_max = 18000.0    # [N] v5 RUNG D (Chad 2026-07-23): 9000 -> 18000, T/W
+                   # 0.31 -> 0.61 -- the arcade fighter's engine. SUPERSEDES
+                   # the 2026-07-08 MB E1 "ideal envelope" ruling AT 9000 by
+                   # Chad's own ruling today; the altitude-taper envelope
+                   # table above is now CONSERVATIVE (service ceiling rises
+                   # ~1 km -- T_max*f meets min drag higher); taper_sigma
+                   # retune deferred to the fly if the ceiling matters.
+                   #   craft!"): 5800->9000, level T = D moves ~600 -> ~740-750
+                   #   km/h (~205-210 m/s); power/weight x1.55 transforms zoom
+                   #   and sustained climb (~20+ m/s at combat speed). Pairs
+                   #   with the [compression] knee below (Q3b ruling).
+# S-wvane (SPEC §0, Chad RULED 2026-07-11: "forget the crabbing, I don't want
+# the cocking — the goal is to make it snap to the centre of the mouse aim
+# every time"): fuselage side-force from sideslip + its drag price. A crabbed
+# airframe straightens FLAT (the flight path rotates to the nose) while the
+# instructor's pointing holds the nose on the aim — the crab-bleed channel the
+# plant never had (lift can only rotate the path by banking).
+#   F_side = -q*S*Cy_beta*sin(b)*cos(b) perpendicular to v (workless — AT-12
+#   untouched); Cd += Cd_beta*sin^2(b) (a held full skid is an honest brake,
+#   not a dragless 5-g flat turn — plan-audit P1-2).
+#   tau_beta = 2m/(rho*V*S*Cy_beta): 1.07 s @V140 (a 9 deg jut crab gone in
+#   ~2 s — Chad's ruled speed), 1.9 s @V80, 0.6 s @V250. The straighten is a
+#   lateral path snap scaling with V^2: ~2 g @V140, ~6.6 g @V250 at beta 9 deg
+#   (the HUD G meter is lift-only and will NOT show it) — if a fast jut's
+#   recovery reads violent, dial Cy_beta DOWN (1.5 next), never the
+#   instructor. Per-tick stability ceiling (the ZOH discipline applied to the
+#   plant): Cy_beta <= 2m/(rho*V_redline*S*dt*0.5) ~ 92 at this table — far
+#   above any felt value, named so a future crank has a wall.
+#   0.0 = structurally OFF, both (bit-identical pre-S-wvane expressions).
+Cy_beta = 2.5      # side-force slope (sin2b/2 shape) — the crab-bleed rate
+Cd_beta = 0.6      # sideslip drag: full skid ~4x Cd0, 9-deg transient ~0.6x
+                   #   Cd0 for ~1 s, normal tracking (<2 deg) invisible
+throttle_slew_rate = 2.0   # [1/s] plant-side slew toward commanded throttle (SPEC §9.8): full sweep 0.5 s
+
+[inertia]          # diagonal, body axes (SPEC §7): x = pitch, y = yaw, z = roll
+I_pitch = 9000.0   # [kg m^2] plausible-fighter, tune to taste
+I_yaw = 12000.0
+I_roll = 6000.0
+
+[authority]        # tau = c * max(q, q_att_floor) * delta_max_eff(V) * Input  (SPEC §7)
+c_pitch = 13.0     # §7 2026-07-06: 7->11 — more elevator authority so the pitch
+                   #   snaps harder on mouse movement (the nose drives onto the aim
+                   #   faster). Plant authority; controller inverts the same c.
+c_yaw = 16.0       # yaw authority (plant). §7 4->12->16 for more instructor
+                   #   rudder (the nose crabs onto the aim harder). Pairs with the
+                   #   reduced K_coord (skid) + yaw POINTING; high-G bank kept.
+c_roll = 24.0      # §7 2026-07-06: 15->24 — more roll authority so the bank
+                   #   reaches the raised p_max (260 deg/s) for a faster bank.
+q_att_floor = 280.0   # [Pa] ~2% of cruise q (167 m/s); floor crossover sqrt(2*280/rho) ~ 23.7 m/s
+damp_pitch = 4.7   # light per-axis damping: tau_d = -damp * max(q,floor) * omega
+damp_yaw = 8.0     #   sized so full-input steady rates ~ 85/23/180 deg/s (pitch/yaw/roll)
+damp_roll = 4.8
+
+[compression]      # delta_max_eff(V): a PLANT property (SPEC §7)
+# MB knee stretch (Chad RULED Q3b + 2026-07-08: "stretch out the effect of
+# compression... further up the speed scale"): the knee scales with the new
+# T_max envelope — full control effectiveness to ~500 km/h (the whole low/mid
+# combat band, the chickadee-dip zone), ~0.62 effective at the new level top
+# (~205-210 m/s — lively, noticeable), bottoming out only in steep dives
+# toward ~880 km/h. Arcade-scaled ("a little less than realistic"): the dive-
+# judgement game — a steep diver pays in control compression and can miss the
+# pull-up; the smart play is a shallower dive that keeps turning ability.
+# (S8 gunsight loader tripwire re-checked: muzzle 850 >= 2*245 + g*tmax.)
+v_full = 140.0     # [m/s] full deflection at/below ~500 km/h (was 111.1/400)
+v_redline = 245.0  # [m/s] ramp bottoms out at ~880 km/h (was 208.3/750)
+min_frac = 0.4     # effective deflection fraction at/after redline
+
+[flaps]            # MB-flaps (SPEC §0): combat + landing flaps — FORCE-ONLY
+# 3 positions at the key: clean (0) / combat (combat_frac) / landing (1). The
+# plant slews the actual deflection at `slew` per second (deploy is physics).
+# Lift shift dCl_flap*flap (added AFTER the stall clamp: stall AoA unchanged,
+# stall/corner SPEED lowered — combat flaps = the turn-fight dial); drag tax
+# dCd0_flap*flap^2 (combat detent cheap, landing expensive). The LIFT shift
+# washes out smoothly over wash_lo..wash_hi; the DRAG stays — over-speed
+# flaps are speed brakes (deliberate default; if the felt behavior should be
+# auto-retract instead, say so — one-line change). Landing full: stall speed
+# ~45 -> ~37 m/s; combat: sustained-turn Cl headroom +~0.36 below the wash.
+dCl_flap    = 0.8  # Cl shift at full (landing) flap
+dCd0_flap   = 0.06 # parasitic drag at full flap (landing ~3.4x Cd0; combat ~+60%)
+slew        = 0.7  # [1/s] deploy rate (~1.4 s clean->landing)
+combat_frac = 0.5  # the combat detent's deflection fraction
+wash_lo     = 130.0 # [m/s] lift shift full at/below (~470 km/h)
+wash_hi     = 200.0 # [m/s] lift shift gone at/above (~720 km/h)
+
+[gear]             # MB-flaps: landing gear — pure drag device (no landing v1;
+                   # a big honest speed brake + the slow-flight/landing prep)
+dCd0_gear = 0.05   # parasitic drag at gear down (~3x Cd0)
+slew      = 0.5    # [1/s] extension rate (~2 s cycle)
+
+[limits]
+v_dir_eps = 1.0    # [m/s] below this the sim holds last-valid v-hat (SPEC §7)

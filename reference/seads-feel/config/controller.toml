@@ -1,0 +1,880 @@
+# SEADS controller — gains + thresholds (SPEC §9, §13, Appendix).
+# Data, not code: no bare numeric gain lives in control/ (CLAUDE.md). These
+# are STARTING values — stable by construction (K_w >= 4*I*K_theta, and under
+# the ZOH ceiling K_w*sim_dt/I <= 0.5), overdamped on purpose. Section 7 tunes
+# for FEEL against the flight log; 4b only proves oscillation dies.
+#
+# Angles are DEGREES here (the config boundary, SPEC); the loader converts to
+# radians once. Rates in deg/s. The loader cross-checks against aircraft.toml:
+#   AoA_max <= plant stall alpha (Cl_max/Cl_alpha), K_w >= 4*I*K_theta,
+#   K_w*sim_dt/I <= 0.5 — a table that would oscillate cannot load.
+
+[outer]
+K_theta = 3.2   # [1/s] pitch+yaw pointing (shared, SOLUTION §5.5). 3.2 is the
+                #   HARD ceiling: above it level flight's nose HUNTS in the deadzone
+                #   re-engage AND the step rings (AT-2), even with a wider deadzone
+                #   and the raised c_pitch. Small-deflection SNAP comes from c_pitch
+                #   (authority) instead; more K_theta needs a tighter feedforward.
+K_phi   = 5.0   # [1/s] roll. §7 2026-07-06: 4->5 (7 needed K_w_roll up, which
+                #   saturated the roll override — AT-8 — and over-rolled the banked
+                #   spawn — AT-13). Faster bank comes from p_max/c_roll instead.
+k_b     = 0.7   # braking margin: alpha_brake = k_b * alpha_max(q)
+
+[rate_clamps]
+yaw_max   = 55.0    # [deg/s] THE shared rudder ceiling (MB-rud; Chad RULED 65
+                    #   2026-07-07, then 65->55 after the fly: "top end of the
+                    #   yaw is still a bit too much"): the sqrt_law cap on yaw
+                    #   pointing AND
+                    #   the override yaw rate — one number, so "highest
+                    #   deflection ALWAYS keyboard" holds by construction on
+                    #   the POINTED yaw path (the K_coord*(-beta) coordination
+                    #   term rides ABOVE the ceiling on the cascade side —
+                    #   documented exemption, ~4-5 deg/s in a hard skid;
+                    #   yaw_scale now multiplies INSIDE the law's gain slot,
+                    #   never past this cap). History: 60->90 ("plant caps ~23
+                    #   deg/s anyway" — STALE: that was c_yaw=4; at c_yaw=16
+                    #   the plant delivers ~114 deg/s at full deflection, so 90
+                    #   DID bind and was Chad's "gross rudder"); 90->65 is the
+                    #   ruled "little nerfing" of the keyboard top end.
+p_max     = 260.0   # [deg/s] roll rate ceiling. §7 2026-07-06: 180->260 —
+                    #   FASTER bank (Chad). Needs c_roll raised so the plant can
+                    #   actually reach it (else it just clamps at the plant limit).
+omega_bal = 30.0    # [deg/s] BALLISTIC attitude-hold clamp
+
+[inner]              # rate-PI, per axis (SPEC §9.4). K_w [N m s]; K_wi [N m]
+K_w_pitch  = 150000.0
+K_w_yaw    = 200000.0
+K_w_roll   = 120000.0
+K_wi_pitch = 60000.0 # MB step-1 (Chad 2026-07-08 "chickadee dips"): 20k->60k,
+                     #   the flight-log step-1 procedure run for real. Slight
+                     #   rate overshoot appears at ~400k (4.5%), back-off lands
+                     #   280k — but the CONSTITUTION caps lower: AT-2 reversals
+                     #   at ~120k+, the deadzone REST-hunt (level parking taps
+                     #   out) at ~80k+, and AT-11a's sustained pull at 60k+
+                     #   attains the full AoA-max pull so hard it exhausts
+                     #   energy into ballistic (its stale no-ballistic premise
+                     #   re-scoped, test_acceptance AT-11a). 60k = the max that
+                     #   parks clean at rest; sustained-pull attainment 3x.
+K_wi_yaw   = 25000.0
+K_wi_roll  = 15000.0
+integ_cap  = 2.0     # [rad s] error-integral clamp. §7 feel 2026-07-05: 0.5->2.0
+                     #   — at 0.5 the integral capped ~30% short of the demanded
+                     #   pitch rate (esp. nose-down), so the achieved rate lagged
+                     #   the G-budget. 2.0 lets the sustained rate actually reach
+                     #   the (now higher) n_max/n_min budget.
+                     #   ⚠ that rationale is SUPERSEDED on any damp_ff'd axis
+                     #   (S-dampff below): the ff sources the sustained-rate
+                     #   torque, the integral no longer needs the headroom.
+# S-dampff (SPEC §0, 2026-07-11 — the pitch-thread attribution): damping
+# feedforward, per axis. tau_cmd += damp_ff * damp_axis * q_eff * omega_des —
+# the OTHER half of the plant inversion (plant_invert inverts only authority,
+# so the integrator had to source the plant's damping torque during every
+# sustained rotation, then carried the nose PAST the aim at capture, draining
+# at tau = K_w/K_wi = 2.5 s: measured +0.86 deg park-above-aim on a 20-deg
+# pitch-up step at V=250, settle >10 s — Chad's "sitting high a degree+ after
+# a deflection"; also why a keypress dip only reached 32.6 of its 40.7 deg/s
+# budget at V=140). 0 = structurally OFF (bit-identical legacy), 1 = full
+# inversion. PITCH ONLY first (plan audit P1-2): the yaw ladder (yaw_scale vs
+# the AT-16 beta wall) and roll ladder (auto_level/lean, wallow sentinels)
+# were tuned against SAGGED axes — flipping them is two later rungs, each
+# Chad-flown with its wall pre-checked. ⚠ P1-1: removing the sag raises the
+# EFFECTIVE outer pointing response (x1.31 @V140, x1.98 @V250) — the K_theta
+# 3.2 "hard ceiling" above was measured in sagged units; if cruise pointing
+# ever hunts/rings post-ff, the honest re-parameterization is K_theta down
+# (~2.4-2.6 band), and E2 (K_theta 3.6 pair) is STALE. Fly fallback: 0.0.
+damp_ff_pitch = 1.0  # [0..1] pitch damping-ff fraction (full inversion — the fly)
+damp_ff_yaw   = 1.0  # [0..1] Rung Y3 (2026-07-12, the yaw ladder session): FLIP-ONLY,
+                     #   K_w_yaw stays 200k. The earlier "47-49 reversals BLOCKED"
+                     #   ruling was 100% INSTRUMENT ARTIFACT (deadzone park taps in
+                     #   the 20 s counter; deadzone-kill arm: 47 -> 2; amplitude-
+                     #   gated transient reversals 1-3 at every K_w; no ring at any
+                     #   amplitude). Honest damping model (plan-audit P0): with ff
+                     #   the pair's zeta = sqrt((K_w+dQ)/(4*I*K_theta*yaw_scale)),
+                     #   dQ = damp_yaw*q_eff — at 200k that is 0.91@V140 / 1.15@V250,
+                     #   already near-critical; the K_w ladder {200k..300k} probed
+                     #   FLAT (raise unmotivated; higher K_w slightly widens the
+                     #   park). NOTE this supersedes the yaw_scale comment's
+                     #   "zeta ~0.77 / raise K_w_yaw first" note (that model dropped
+                     #   dQ). Measured buys: peak yaw rate +35%@V140 / +90%@V250
+                     #   (the fade-at-speed gone, V-flat), V250 capture carry-past
+                     #   0.21 -> 0.02 deg, integ_y at trim 0.924 -> 0.030. Trade:
+                     #   max-rate-turn transient peak |beta| 17.9 -> 21.3 deg
+                     #   (faster crab-on into the roll-in — Chad's stick judges).
+                     #   Walls green at flip (AT-16/AT-2/MB-rud/smoke). Fly
+                     #   fallback: 0.0 = bit-identical legacy (K_w_yaw untouched
+                     #   either way).
+damp_ff_roll  = 1.0  # [0..1] Rung R1 (2026-07-12, twin A/B clean): reversals/settle/
+                     #   overshoot unchanged, roll's own park FIXED (V250 0.0436
+                     #   hanging-OUTSIDE -> 0.0070 CROSSED+latched), peak roll rate
+                     #   187->244 deg/s @V140 (the sagged axis now delivers p_max).
+                     #   Fly fallback: 0.0 (bit-identical legacy).
+
+[g_limits]           # ALSO the pitch-rate ceiling: pitch has no separate rate
+                     # clamp, so w_max/min_pitch = (n - cosPhiTheta)*g/V IS the
+                     # max pitch rate. §7 feel 2026-07-05: raised "a lot" for
+                     # snappier pitch (6->10 pull, -3->-6 push). Cl_max=1.8
+                     # supports 10 G to ~150 m/s (Cl 1.64 < 1.8).
+n_max = 32.0     # v5 RUNG D (Chad 2026-07-23): 16 -> 32 -- the wing-rip G-cap
+                 #   is "not applicable to arcade" (his founding objection,
+                 #   now ruled): at 32 the LIFT (Cl_max*q) owns the pitch
+                 #   ceiling at every fighting speed; the clamp survives only
+                 #   as a far-field sanity bound. Old comment: §7 feel 2026-07-05: 10->16. Pitch rate = (n-cos)*g/V, so at
+                 #   250-300 m/s n_max=10 gave only ~13-17 deg/s; target is 90 deg
+                 #   in ~4 s = 22.5 deg/s. 16 gives ~26 deg/s at 300 m/s. Arcade
+                 #   G (fun, not fidelity); lift supports it above ~200 m/s.
+n_min = -9.0     # push/nose-down floor. §7: -4->-8 so nose-DOWN also hits
+                 #   ~22.5 deg/s (90 deg in 4 s) at combat speed. -10 was so
+                 #   violent it looped the airframe (unsustainable, broke AT-11);
+                 #   -8 was snappy nose-down without that. Deeper -G leans on the
+                 #   raised integ_cap (the preload that sources the rate) below.
+                 #   PITCH THREAD Rung P1 2026-07-11 (Chad: "more top end in
+                 #   keypress... pitch down a bit faster... quick dip of my
+                 #   nose"): -8 -> -9 — full-key pitch-down ~36 -> ~40 deg/s at
+                 #   V=140 (+11% top end). S7-ovr clamps the override to this
+                 #   same budget, so keypress AND cascade downward travel rise
+                 #   together. -10 stays the flown-rejected wall (pre-S-wvane;
+                 #   re-derive before ever stepping there). Ladder back: -8.
+
+[aoa]                # SPEC §9.3b. aoa_max <= stall alpha = 1.8/5.0 = 20.6 deg
+aoa_max     = 20.0   # [deg] (§7: 18->20, nearer the 20.6 deg stall AoA, so more
+                     #   G is usable at low speed both ways). Still < stall.
+aoa_max_neg = 20.0   # [deg] inverted-stall limit (magnitude)
+K_aoa       = 10.0   # [1/s] v5 rung C1 (hold-the-line): 5.0 -> 10.0 — the proportional pushback DROOP demand/K_aoa was ~4.2 deg at full pull (alpha pinned ~16 vs aoa_max 20, the measured early surrender); 10 rides p95 ~17.7 with the low-V capture rim restored 0.84 -> 0.97 and the certified envelope bounds (AT-11 ovr guard, AT-12 anti-glide, AT-8 compose) all holding — 15 tripped all three (ride 18.4 but hot arrivals + a 0.68 g mush moment). Walk-back 5.0 = pre-C1; the hotter 15 is a Chad-ruled step AFTER the fly.
+filter_tau  = 0.05   # [s] AoA low-pass (the sole smoothing exception)
+
+[deadzone]           # holds trim (SPEC §9.3); the on-target reticle CIRCLE (§7).
+                     # Inside it the pointing is zeroed (nose on-target, no
+                     # direction change induced). Kept SMALL — a bigger circle
+                     # rests the nose further off centre.
+# Halved 0.10/0.25 -> 0.05/0.12 (Chad 2026-07-08, with MB-lean: "attracted like
+# a magnet... right to the centre"). Resting offset ~2 px at 1080p. NOTE the
+# K_wi_pitch ceiling (its rest-hunt boundary, [inner] comment) was calibrated
+# against the OLD 0.10/0.25 circle — if level parking ever taps audibly, that
+# coupling is the first suspect, not this dial alone.
+lo = 0.03            # [deg] enter: pointing term -> 0 (the on-target circle)
+hi = 0.05            # [deg] re-arm (hysteresis). RUDDER-FLICK Fly 4
+                     #   2026-07-10: 0.12 -> 0.08 (Chad: zoomed slow mouse-up
+                     #   gave "little micro boosts... ascending jitter" — the
+                     #   re-arm threshold IS the boost amplitude of the
+                     #   deadzone relaxation cycle; ~9 -> ~6 px at 4x zoom).
+                     #   HISTORY: 0.03/0.06 was tried (Fly 5) and REJECTED
+                     #   PRE-FLY — at THAT time the MB-lean magnet equilibrium
+                     #   (~0.076 deg lateral) sat ABOVE the whole circle, so
+                     #   shrinking bought nothing (theater) and the park just
+                     #   fragmented. SUPERSEDED at Rung M1: with center_frac 0
+                     #   the lateral equilibrium is ~0 and the honest floor
+                     #   moved. The slow-tracking stair fix is still the
+                     #   aim-motion gate (rest_dwell below).
+                     #   RUNG M1 2026-07-11 (Chad RULED: "forget the crabbing,
+                     #   I just want that nose to snap and stay right in the
+                     #   middle of the mouse aim"): 0.05/0.08 -> 0.03/0.05.
+                     #   Rest offset mean 0.06 -> 0.034 deg (the 9 px reticle
+                     #   ring is FIXED size — the nose-dot visibly moves into
+                     #   its middle). THE NEW FLOOR is the V-scaled VERTICAL
+                     #   pointing equilibrium (the ~18%-of-V/R ff-deficit
+                     #   standoff the PARK instrument exposed: 0.031 deg @V80,
+                     #   0.028 @140, 0.048 @220, 0.050 @250) — lo sits just
+                     #   above it at combat V, so park episodes are SHORT
+                     #   (27% occupancy, 0.33 s) and at V>200 the nose HOVERS
+                     #   at its equilibrium with live pointing instead of
+                     #   latching (stable, 0 reversals; trim lives in the
+                     #   integrator either way). Shrinking below ~0.03 makes
+                     #   the latch vestigial at cruise (AT-14a ff_n=0 caught
+                     #   exactly that at 0.02/0.035). The remaining "middle"
+                     #   unlock is the VERTICAL DEFICIT itself (own thread —
+                     #   attribute the 18% before dialing anything at it).
+# Aim-motion gate (rudder-flick Fly 6, SPEC §9.3 as amended 2026-07-10, Chad's
+# "both now" ruling): the deadzone may LATCH only after the hand has been at
+# rest this long, and any aim-moved tick unlatches it INSTANTLY — so slow
+# zoomed tracking is CONTINUOUS (the relaxation-cycle stairs are
+# unrepresentable while the hand moves) and the at-rest trim hold is
+# untouched. Hysteretic in TIME (instant out, dwell in — a strobing hand
+# cannot cycle it faster than the dwell). The unlatched pointing at sub-lo
+# error is bounded PER AXIS (red-team P2-2): pitch K_theta*lo (~0.16 deg/s,
+# assumes [pursuit] step = 0 — a step retune makes it the step rate), yaw
+# K_theta*yaw_scale*lo (~0.35 deg/s); valid below aoa_max — near stall the
+# AoA pushback legitimately runs while unlatched (protection, deliberate).
+# 0 = LEGACY latch (aim motion ignored) — the A/B kill-switch for
+# attribution. FLOOR 0.1 s (loader-enforced): below it the fixed-dt
+# accumulator's (N-1) at-rest ticks per frame relatch mid-drag at low fps
+# and the stairs RETURN with the gate "on" (0.05 breaks at ~20 fps).
+# FLY-7/8 A/B RESULT (Chad 2026-07-10, both states flown same day): the
+# GATED build WINS — "there are bigger steps now [legacy], could we go to
+# the smaller steps... smooth curves should feel smooth not stepped." The
+# boost-was-the-snap hypothesis was REFUTED by the A/B: the yaw hang near
+# center exists in BOTH builds (it is the near-center pointing equilibrium,
+# not the deadzone). Steps smaller than this = the per-pixel-event quantum
+# (aim_sensitivity per count): hardware DPI up N× + aim_sensitivity down N×
+# gives finer quanta at identical hand feel — a Chad hardware call.
+rest_dwell = 0.15    # [s] hand-at-rest dwell before the deadzone can latch
+
+[pursuit]            # nose (pitch) seek shaping (§7 Chad 2026-07-06). The pitch
+# pursuit rate rises PARABOLICALLY with the pointing error (K*e*(1+expo*e)) so a
+# bigger deflection off centre pulls progressively harder — the "smooth parabolic
+# rise in gain as deflection increases". Braking still caps a big flick for a
+# clean stop.
+#   `step` — a NEAR-CENTRE rate FLOOR (the "snap to centre"). LEFT AT 0: any
+#   floor keeps body-rate up as the nose reaches centre, so it COASTS past and
+#   RINGS (AT-2 went 1->7 reversals at 4 deg/s — the braking law exists precisely
+#   to null the rate INTO centre). A true snap-to-exact-centre is not reachable
+#   without that ring; the parabolic is the ring-free half. Raise only knowingly.
+#   NAMED WALL 2026-07-11 (Fable audit P0-1, Chad ruled skip): the wall extends
+#   DOWN to ALL felt values, not just the 4 deg/s ring — the floor is a sign
+#   RELAY across e=0, and S-dz-motion keeps pointing UNLATCHED while the hand
+#   moves, so slow tracking overtakes the aim and buzzes at +/-step (the Fly 4-8
+#   jitter class; static-aim probes are structurally blind to it). Also trips
+#   the strobe bound (test_cascade, 1.5*K_theta*lo). Do not raise; near-centre
+#   closure is owned by S-yaw-magnet (rudder) + MB-lean (lift).
+step = 0.0           # [deg/s] near-centre rate floor — 0 (NAMED WALL, see above)
+expo = 3.0           # [1/rad] parabolic gain rise with deflection. 2->3 (MB
+                     #   Chad 2026-07-08): more pull at MODERATE deflection —
+                     #   "easier to ascend or dive... with moderate mouse
+                     #   deflection" (+26% at 15 deg, +39% at 25 deg; near-nose
+                     #   tracking and the braking cap unchanged).
+
+[aim_ff]             # S-aimff (v4 rung 1): aim-rate feedforward (docs/v4_research.md §6 c1)
+# omega_des(pitch, yaw) += gain * (the aim's own mouse-induced angular velocity,
+# body frame) — the nose LEADS the moving mouse instead of chasing its error
+# (Chad ask 1/4: "more of a responsive elevator when aiming at enemies"). Acts
+# ONLY while the aim moves; steady state untouched (feedforward adds no
+# error-loop gain, so it cannot cause oscillation). The signal is frame-smeared
+# in app::step_frame — the applied mouse rotation over N*sim_dt, forwarded to
+# every tick of the frame — so it is frame-rate independent in the INTEGRAL
+# sense (the AT-9 / S7-mouselevel ban on frame-quantized control signals). AoA/G
+# protection clamps pitch AFTER the add; the shared yaw_max ceiling bounds the
+# POINTED+FF yaw sum ONLY (red-team P1) — coordination keeps its documented
+# above-the-ceiling exemption ([rate_clamps]), and at zero aim rate the clamp
+# is an identity (a still mouse is untouched — the steady-state contract).
+# 0 = structurally OFF (bit-identical legacy). Research start 0.3; the
+# PN framing (N <= 2) says stay <= 1.0 (loader wall 2.0).
+gain = 0.3   # [-] ff demand per unit aim rate (0 = off; 0.3 = the fly value)
+tau  = 0.01  # [s] low-pass on the DERIVED rate demand (0 = unfiltered; the raw
+             #   mouse->aim path is untouched either way — SPEC §9.1)
+
+[capture]  # S-rimshot v3 "POOL BALL" (v4 rung 2): the UNIVERSAL rebound capture
+# Chad's spec (v3, 2026-07-17): "the nose tracks straight toward the centre of
+# the circle, goes THROUGH the centre aim, past the centre only so much as it
+# glances the centre of the inside of the rim at the point opposite the
+# direction of travel, then like a dead blow hammer snaps straight to the
+# middle — immediate, no ease in. Direct. The behavior should be predictably
+# the same every time" — PLUS the universality correction ("any deflection at
+# all... Always, even mid-track") and the four v3 rulings: Q1 FULL SPEED
+# through center (no pre-braking outside/before the circle); Q2 the glance
+# lands DEAD ON the inside wall (rim_frac 1.0); Q3 gentle arrivals DIRECT-SEEK
+# center briskly (the lateral "one attempt then regroup to legacy" is DEAD);
+# Q4 the snap home is the physical maximum (return_w effectively uncapped).
+# This is the pointing law's ARRIVAL behavior, not an event that arms on a
+# condition — no size threshold, no park gate, aim_moved never read.
+# ENGAGE fires whenever the nose is genuinely arriving: the seek taper is the
+# BINDING branch of the law AND the pointed demand dips below engage_frac x
+# the net closing rate (net of curvature ff, the coordination demand, and the
+# mouse-frame aim rate — so level trim and glued lockstep tracking sit at
+# ratio ~1 and never engage: no catching-up = nothing to carry), then FORKS on
+# the projected glance depth w_rel^2/(2*alpha) vs glance_frac x the circle:
+# glance-worthy -> CARRY holds carry x the incoming net rate at full speed
+# through the crossing until the PREDICTIVE BRAKE SURFACE (remaining-to-rim <=
+# w^2/(2*(alpha+damp_assist)) + 0.5*w*dt, recomputed live) fires RETURN, whose
+# rim-TARGETED servo-fed constant-decel law (alpha_req = w^2/(2*(rim-d)), fed
+# through the servo pole tau = I/(K_w+damp*q)) lands the apex ON the wall —
+# self-correcting across V/deflection/angle (measured rim 0.99-1.00 across the
+# grid; the v2 rim-DETECT overran variably 1.48-1.59 = the bug). Sub-glance ->
+# DIRECT-SEEK enters RETURN at once. The return home: the sqrt(2*alpha*d)
+# ceiling + the mirrored alpha_req brake INTO center, completing on the
+# predicted-landing dead-blow (|d - servo coast| inside the park band
+# deadzone_hi with the coast itself bounded 2x that) — rate and distance die
+# together, no free-coast hot recross, no taper creep, no second overshoot.
+# ENGAGE is gated to the FINE endgame (err < blend_lo): in the MANEUVER
+# blend band a banked/lateral arrival is flown by the ROLL channel while the
+# faded yaw/pitch pointed demands under-read the arrival — an ungated ratio
+# fires on that lie and carries a near-zero rate (measured: multi-engage
+# 1.4 s stalls on yaw flicks). Every arrival passes THROUGH the endgame on
+# its way to center, so the universal contract holds at every deflection.
+# ONE BOUNCE PER ARRIVAL: the COMPLETION exits (the arrest and its family)
+# set a refractory latch cleared only once the error grows past max(circle,
+# handback_frac x the exit err, the latter bounded by the event's own apex
+# allowance). Measured honest releases land INSIDE the circle, so the clear
+# is the circle edge in practice ("aim leaves the reticle = new arrival");
+# the stored term fences low-authority pathologies where a release lands
+# outside and the closing coast would re-engage at ~7 Hz (the AT-4 hunt).
+# A re-flick mid-event abandons and chases THAT tick with NO latch (Chad's
+# ruling — the next arrival re-bounces fresh): pre-crossing via the
+# error-domain hand-back (|demand| > handback_frac x its engage value),
+# after the crossing via the apex-allowance yank exits (|demand| >
+# break_frac x the event's own rim + w^2/2*alpha allowance, which a parked
+# aim physically cannot trip; in RETURN the yank is tested BEFORE the
+# completion legs — a cross-nose re-flick otherwise reads as "crossed").
+# APEX-DEATH (the closing died pre-crossing) transitions to RETURN — the
+# active direct capture of whatever error remains (v3 POOL BALL: Chad
+# REJECTED the old exit-to-legacy regroup; the refractory latch now belongs
+# ONLY to the completion exits, fencing the post-arrest coast at ~7 Hz).
+# AoA/G clamps + the shared yaw_max ceiling bound every event demand
+# (protection never bypassed).
+# carry = 0 is the STRUCTURAL OFF (machine never engages, every expression
+# tree bit-identical legacy — the S-hrz rate = 0 pattern). Fly fallback: 0.0.
+carry    = 1.0   # [-] fraction of the incoming net rate carried through center
+                 #   (0 = OFF; 1 = full "no slow-in"). THE dial: physics makes
+                 #   the far apex = rim + w^2/(2*alpha_avail) — lower carry
+                 #   trades carry-through for a tighter rim (see rim note).
+rim_frac = 1.0   # [0..1] the glance target: the apex lands at this fraction
+                 #   of the circle past center. 1.0 = DEAD ON the inside wall
+                 #   of the ring (Chad's v3 POOL BALL Q2 ruling — supersedes
+                 #   the old "nearly touches" 0.70-0.95 band). The v3
+                 #   PREDICTIVE BRAKE SURFACE fires the RETURN brake EARLY by
+                 #   the live stopping distance w^2/(2*alpha) + w*tau, so the
+                 #   apex lands ON the target instead of overrunning it by a
+                 #   V/deflection-variable stopping distance (the v2 bug:
+                 #   measured rim 1.48-1.59 across the V/step grid; v3
+                 #   measures 0.90-1.10 — "predictably the same every time").
+circle_deg = 0.55 # [deg] the on-screen aim-circle angular RADIUS at 1x zoom.
+                 #   Derived from the ACTUAL render reticle: DrawCircleLinesV
+                 #   radius 9.0 px (render/draw.cpp) at 1080p with
+                 #   kChaseFovyDeg = 60 -> px/rad = 540/tan(30 deg) = 935.3,
+                 #   9 px = 0.551 deg. (The rung-2 spec's ~0.27 deg presumption
+                 #   halved this — it treated the 9 px radius as a diameter.)
+                 #   At 4x RMB zoom (fovy 15) the same ring spans ~0.13 deg of
+                 #   world — circle_deg is the 1x number by contract. Also the
+                 #   refractory clear radius (a new ARRIVAL = the error left
+                 #   the circle).
+return_w = 400.0 # [deg/s] the return rate CAP — effectively UNCAPPED (Chad's
+                 #   v3 Q4 ruling: the snap home is the absolute physical
+                 #   maximum). The demand is min(return_w, sqrt(2*alpha*
+                 #   d_remaining)) so at 400 the sqrt IS the law everywhere:
+                 #   the time-optimal no-overshoot ceiling (alpha = derived
+                 #   ang_accel_max at live V/alt, NOT k_b-scaled — braking is
+                 #   physics), still bounded by the AoA/G clamps + yaw_max
+                 #   downstream (protection never bypassed). No linear floor
+                 #   under the sqrt: rate ~ d IS the taper creep the event
+                 #   kills. The dead-blow tau-surface arrest at center is
+                 #   unchanged.
+engage_frac = 0.95 # [-] ENGAGE when pointed < this x net closing rate (AND
+                 #   the taper binds). The closed-loop decay ratio is MONOTONE
+                 #   down to its asymptote K_theta/lambda_slow ~ 0.86 pitch
+                 #   V220 / 0.69 yaw / 0.74 pitch V80 — one crossing per
+                 #   approach, no chatter; at 0.7 the pitch trigger is
+                 #   STILLBORN (never crosses). 1.0 = the rung-2 onset.
+handback_frac = 1.1 # [-] pre-crossing re-flick hand-back: |demand| grows past
+                 #   this x its ENGAGE value -> the pilot re-aimed, abandon
+                 #   and chase that tick. Error-domain (a rate-domain base
+                 #   saturates against w_max at every knee-engage and the
+                 #   re-flick contract silently dies — plan red-team R2-F9).
+                 #   DUAL USE (named coupling, diff red-team P2-2): also the
+                 #   refractory clear margin above the stored exit err — a
+                 #   re-flick-feel retune of this dial widens the post-bounce
+                 #   clear threshold with it (second-order after the
+                 #   allowance bound; split the knob if a tune ever fights).
+break_frac = 1.25 # [-] yank exits (post-crossing CARRY + RETURN): |demand| >
+                 #   this x the event's apex allowance (rim + w^2/(2*alpha),
+                 #   floored on the MEASURED apex at RETURN entry) -> the aim
+                 #   was yanked, abandon and chase. A parked aim cannot trip
+                 #   it (d <= allowance by physics).
+w_eps    = 0.4   # [deg/s] net-closing-rate floor to engage — sits ABOVE the
+                 #   coordination demand-vs-achieved residual (~0.27 deg/s in
+                 #   a post-flick beta bleed); below it a noise-engage crawls
+                 #   the nose across the circle for seconds.
+glance_frac = 0.25 # [-] (0,1] DIRECT-SEEK classifier (v3 POOL BALL, Chad's
+                 #   Q3): at ENGAGE, if the projected glance depth
+                 #   w_rel^2/(2*alpha_u) is under this fraction of the
+                 #   circle, the arrival has no glance-worthy momentum —
+                 #   skip the glance and enter RETURN directly: an ACTIVE
+                 #   full-authority sqrt capture to center + the dead-blow
+                 #   (BRISK — ~60-70 deg/s from 2-4 deg out), never the old
+                 #   lazy taper creep. This is the universal terminal
+                 #   capture: banked/lateral arrivals (closing 1-3 deg/s
+                 #   through the bank/lean standoff) take this path — the
+                 #   "one attempt then regroup to legacy" behavior is DEAD
+                 #   (Chad's universality ruling).
+depth_frac = 1.5
+                 #   the glance depth an event EARNS is its OWN stopping
+                 #   distance under full trackable braking, never deeper
+                 #   than the wall — rim_live = (depth_frac > 0) ?
+                 #   min(rim_frac*circle, depth_frac*glance) : rim_frac*circle,
+                 #   with glance = w_ev^2/(2*alpha_u) already computed at
+                 #   ENGAGE. A small smooth adjustment (a slow-in arrival
+                 #   whose own stopping depth is a fraction of a degree)
+                 #   used to be driven the FULL rim_frac*circle regardless —
+                 #   a slow ball does not reach the far cushion, and the v4
+                 #   fixed-rim law manufactured a wall-deep bounce on every
+                 #   small correction (Chad's "small adjustments... treating
+                 #   them like they are big deflections" report). 1.0 = PURE
+                 #   PHYSICS (the momentum's own honest depth, capped at the
+                 #   wall for fast arrivals — v4 bit-behavior preserved
+                 #   there). <= 0 = v4 FIXED-RIM, structurally OFF (the fly
+                 #   fallback — rim_live always rim_frac*circle, ignoring
+                 #   momentum). > 1 = a deeper glance per unit momentum,
+                 #   still wall-capped (never past rim_frac*circle). In (0,1)
+                 #   the CARRY hold clamps BELOW the arriving rate (w_wall =
+                 #   w_ev*sqrt(depth_frac) < w_ev) — sound, apex still lands
+                 #   on rim_live, just a softer carry-through; not a bug.
+                 #   NAMED TRADE (v5 red-team P1): momentum-earned depth is
+                 #   V-DEPENDENT — alpha grows with V faster than the engage
+                 #   rate, so a committed 45 deg flick glances ~0.94 rim at
+                 #   V140 but ~0.76 rim at V220 (v4 was rim-uniform by
+                 #   TARGET). Chad's stick rules whether high-speed "(or
+                 #   near it)" is right; this dial trades that against the
+                 #   small-adjustment bounce (higher = wall-ier at speed but
+                 #   bouncier small corrections: nudge V100 amp5 apex 0.229
+                 #   deg at 1.5 vs 0.464 at 3.0 vs 0.543 v4).
+depth_pow = 2.0  # [-] rung A2 (Chad's fly-1 "a little more"): the sub-wall
+                 #   CURVE — rim_live = rim * s^pow on the saturation
+                 #   s = min(1, depth_frac*glance/rim). s = 1 is a FIXED
+                 #   POINT at every pow, so wall-earning committed arrivals
+                 #   are untouched; pow > 1 presses small events
+                 #   quadratically shallower (the V100 amp5 symptom case:
+                 #   0.229 deg at pow 1 -> ~0.10 at pow 2). 1.0 = rung A
+                 #   bit-identically (the fly fallback); loader rejects
+                 #   pow <= 0 (s^0 = 1 would weld every small event back
+                 #   to the full wall).
+
+[auto_level]         # smooth wings auto-level at rest (§7 Item-2 Part B)
+# When the mouse is at REST (in the deadzone, aim on the nose) and upright, the
+# wings gently level: the held bank (the wings-hold setpoint) DECAYS toward 0 at
+# this exponential rate, and the wings follow it down. Because it starts from the
+# CAPTURED bank, a banked spawn fires no lurch (roll ~0 on the first tick, AT-13)
+# and then eases to level with decelerating roll (no overshoot). Suspended by a
+# keyboard override (the "unless a key is pressed" rule) and off when inverted
+# (the phi fold). Raise for a quicker level, lower for a lazier one.
+rate = 5.5           # [1/s] exponential rate the held bank decays to level
+                     #   (§7: 1.0->2.0->3.0 — wings go level "fairly soon" when the
+                     #   mouse pull stops, for a coordinated straight trajectory).
+                     #   RUDDER-FLICK Fly 2 2026-07-10: 3.0 -> 4.5 (Chad: post-
+                     #   flick the nose "stays offset... quickly settle back into
+                     #   the centre" — the MB-lean magnet arrives ~1.5x sooner,
+                     #   tau 0.33 -> 0.22 s). COUPLED (same constant): rest auto-
+                     #   level + lean release quicken identically; MB-right decay
+                     #   clamp-masked by inverted_rate. ⚠ lean_gain stayed 8 (the
+                     #   drafted 6 was dropped), so this is the FULL 1.5x raise of
+                     #   the az->held_bank->K_phi loop gain — slow-flight WALLOW
+                     #   (<~80 m/s) is the fly sentinel; fallback 3.5, or revert.
+                     #   RUNG B1 2026-07-11 (Chad: bank activated quicker, incl.
+                     #   near-center small aims): 4.5 -> 5.5 — the Fly-10 rate
+                     #   finally ISOLATED (Fly 10 coupled it with lean_gain 16;
+                     #   the rejection was the gain — lean_gain stays 6, lean
+                     #   loop gain 33 vs approved-27 / rejected-88, tau 0.22 ->
+                     #   0.18 s). Series lag to the leaned bank 0.42 -> 0.38 s;
+                     #   K_phi's 0.2 s wings-chase is now the BINDING stage, so
+                     #   a null felt read selects the K_phi escalation (AT-8/
+                     #   AT-13 gates), not more rate. Fly sentinel: near-center
+                     #   centering must still feel like RUDDER (bank closing
+                     #   the circle before the 0.15-relieved coordination gets
+                     #   its turn is the Fly-10 rejection vector).
+# MB-lean (Chad 2026-07-08: "attracted like a magnet... hold a shallower angle
+# of bank with use of rudder at moments of moderate deflection"). In FINE the
+# held bank decays toward lean_gain * (de-rolled signed lateral aim error),
+# capped at lean_max — lift closes the last fraction of a degree the rudder/
+# coordination standoff parked at (~0.5 deg), and a moderate lateral aim holds
+# a shallow proportional bank instead of the 5-9 deg blend slamming to ~90 deg
+# bank and auto-leveling back (the felt back-and-forth). Centered aim -> 0
+# (level at rest unchanged). lean_gain = 0 reproduces decay-to-level exactly.
+# SIDE SCOPES (SPEC §0 MB-lean): freelook now CARVES a held lateral aim
+# (16-30 deg bank, ~2 deg/s turn — the plane chases the raw aim); a FINE-rest
+# ballistic entry attitude-holds up to the leaned bank (omega_bal-clamped).
+lean_gain = 6.0   # [deg bank per deg lateral error] ~6 deg lean at 1 deg off.
+                  #   FLY 13 2026-07-10: 10 -> 6 — the ORIGINAL plan's Fly-2
+                  #   number, finally landable (Chad: "still too much bank
+                  #   gain early messing up with the aiming... I want more
+                  #   rudder close to centre and the banking to come on more
+                  #   slowly and smoothly as I move away — crabbing? yes!").
+                  #   The lean no longer does centering double-duty (the
+                  #   S-yaw-magnet relief owns it), so the bank can be as
+                  #   shallow as his hands asked. NOTE at 6 the lean_max cap
+                  #   is UNREACHABLE inside FINE (knee 30/6 = 5° = blend_lo)
+                  #   — vestigial by design, the blend takes over first.
+                  #   History: 8 (MB-lean) -> 10 -> 12 -> 16 (flown+REJECTED
+                  #   bank-eager) -> 10 (revert) -> 6. Fallback 8 if turn
+                  #   entry from FINE reads too flat.
+                  #   RUDDER-FLICK Fly 3 2026-07-10: 8 -> 10 (Chad: "make the
+                  #   yaw magnet just a little bit stronger — it's still
+                  #   staying outside of the circle"). Fly 9 rung 2 same day:
+                  #   10 -> 12 (Chad: "it needs to go right into the middle,
+                  #   it hangs — this matters for lining up my shots"; rung 1
+                  #   K_coord 0.8 AND its 0.9 fallback both breached the
+                  #   AT-16 β wall — the magnet closes what the rudder is
+                  #   walled from closing). ⚠ cumulative lean-loop gain with
+                  #   rate 4.5 = 2.25x the flown-good MB-lean point — wallow
+                  #   + roll busy-ness sentinels at their most loaded;
+                  #   fallback 11, then 10.
+lean_max  = 30.0  # [deg] cap (Chad ruling); saturated by ~3.75 deg lateral
+# Inverted auto-righting (MB-right, Chad 2026-07-07: "need to roll over on bank
+# after about 2 s no gross inputs if belly up... slow roll off ailerons").
+# Scoped amendment of S7-loop-invert's "inverted rest stays inverted": it still
+# stays inverted, but only for inverted_delay seconds of REST (mouse near the
+# nose, no override) while genuinely belly-up (past the knife-edge band) — then
+# the wings slow-roll upright, rate-clamped to inverted_rate (ailerons only;
+# pitch keeps holding the aim, so it reads as a lazy coordinated roll), handing
+# off to the normal auto-level at the knife-edge. Canceled by any override key,
+# a real mouse deflection (err past blend_hi), or push engagement.
+# inverted_rate = 0 disables the mechanism structurally.
+# Dialed 2026-07-08 (Chad: "the delay for when belly up... is too long and
+# the roll to level is too slow... after one second of straight flying and
+# take only one second to right itself"): delay 2.0 -> 1.0, rate 45 -> 180
+# (a 180 in ~1 s — a brisk committed roll; the 120 fallback is one line).
+# NOTE at 180 deg/s the DONE handoff carries real plant coast (~10-20 deg
+# past knife-edge before the rate-PI arrests it — momentum the 45 tune
+# never had; feel item, flight-log row).
+inverted_delay = 1.0    # [s] belly-up rest time before the righting roll arms
+inverted_rate  = 180.0  # [deg/s] the righting roll rate clamp (a 180 in ~1 s)
+
+[regime]             # blend smoothstep(lo,hi,e); latch gates heldBank + telem
+blend_lo = 5.0       # [deg]
+blend_hi = 9.0       # [deg] §7 2026-07-06: 12->9 — full bank-to-turn (roll) kicks
+                     #   in a bit SOONER on a lateral deflection (Chad: "roll a
+                     #   little sooner").
+# Bank-to-turn align power (S7-turn2): up-elevator ~ cos(bankErr)^power, so a
+# HIGHER power holds the pull until the ROLL aligns the bank toward the aim — the
+# roll leads (flip first), then the pull turns instead of climbing. 1 = old
+# (pull engages while still rolling -> climbs / chases by pitch). Chad: "roll
+# first, don't get pushed up in a turn."
+bank_align_power = 6.0  # §7 2026-07-06: 3->6 (Chad) — hold the pull even longer
+# Kernel v5 rung C2b (S-holdline sag SERVO, docs/v5_kernel_handoff.md "RUNG C",
+# Chad fly-2: "it should hold the line of my mouse inputs ... even as it dives
+# and gains energy"). SUPERSEDES the rung-C2 align_f floor: a pull_floor*w_push
+# floor paid out the FULL g-budget at large bank misalignment to fix a modest
+# sag, slingshotting the nose past vertical (AT-12 measured n_min -2.7 g at
+# the apex). Instead, once the nose has sagged BELOW the aim's world-
+# elevation line, a dedicated proportional servo on the sag itself (through
+# the same sqrt_law braking-law family every pointing demand uses) keeps
+# fighting regardless of bank alignment, continuous from zero sag (no
+# floor-slingshot momentum). pull_floor scales the servo demand: 1.0 = the
+# full K_theta line-hold, 0.0 = the STRUCTURAL OFF arm (the fly fallback —
+# bit-identical expression path, see controller.cpp).
+pull_floor = 1.0      # [frac of the sag-servo demand] 1.0 = full line-hold
+# Wings-leveling fade band (S7-loop-invert): the wings-leveling roll (auto-level
+# + FINE/deadzone wings-hold) fades to 0 as the plane goes inverted, over
+# smoothstep(-band, +band, cos_phi_theta). 1 above +band (upright -> golden
+# bit-identical), 0 below -band (inverted stays inverted); the small band keeps
+# the ~90 deg knife-edge from chattering (CLAUDE.md "every gate hysteretic")
+# without touching real banked turns (which are MANEUVER, roll_hold ~ 0 anyway).
+wings_level_band = 0.05  # [cos units] ~ +/-2.9 deg of bank around vertical
+
+[push_gate]          # push-vs-roll (SPEC §9.3, S7-push); every leg hysteretic.
+# GEOMETRY-based (not the -G budget): push (nose down) while the below-nose aim
+# is within `down_enter` deg of the nose, roll into the loop once it goes past
+# `down_exit` deg (a little past straight-down, 90 deg). This is THE knob for
+# "nose down without banking over" — raise to push further past vertical before
+# rolling, lower to roll sooner. The old ratio_lo/hi rolled at ~7 deg below.
+bank_hi    = 120.0   # [deg] enter above |bankErr| (down-dominant guard)
+bank_lo    = 100.0   # [deg] exit below
+down_enter = 88.0    # [deg] push while the below-nose aim's pitch-down angle <= this
+down_exit  = 96.0    # [deg] roll (loop) once it exceeds this — turnover ~92 deg,
+                     #   just past straight-down (was 100/110; user pref 2026-07-05)
+# World-horizon gate (§7 Item 2): push (nose-down) ONLY when the aim is at least
+# `horizon_enter` deg BELOW the world horizon — so a LATERAL flick (aim near the
+# horizon, only body-below because you're banked) ROLLS to the aim instead of
+# pushing its belly at it. THE knob for "never chase a level/lateral aim by
+# elevator-down". Raise to demand a steeper nose-down before pushing; lower
+# toward 0 to push for shallower dives. (negative exit = a bit ABOVE horizon.)
+horizon_enter = 45.0  # [deg below horizon] push only when the aim is deeper
+                      #   than this. v5 RUNG E (Chad 2026-07-23, the knife-edge
+                      #   ruling: "not go nose down with the bank over unless
+                      #   it's past like 45 degrees downward"): 1.0 -> 45.0.
+                      #   At 1 deg, a long lateral drag whose aim dipped a hair
+                      #   below the horizon became push-eligible exactly at big
+                      #   deflections (the side cone DEGENERATES near-astern --
+                      #   the vertical plane contains the astern direction, so
+                      #   aim_side shrinks as the deflection grows): committed
+                      #   nose-down from a lateral hold, his repeated dive.
+                      #   Nose-down commitment now requires deflection AND real
+                      #   down input; the split-S survives past 45 down.
+horizon_exit  = 40.0  # [deg below horizon] exit push once the aim rises above
+                      #   this (5 deg hysteresis band, was 1.0/-1.5).
+# Sideways cone (§7 Item 2 refinement, Chad 2026-07-06): pure pitch-down (no
+# rollover) is confined to a cone around LOCAL-down — the aim must be within this
+# many deg of the plane's own VERTICAL plane (nose + local_up). A flick "left and
+# a bit down" sits OUTSIDE the cone and ROLLS over to track the aim instead of
+# nosing the belly at it; only a near-straight-down (in-plane) aim pure-pitches.
+# WIDEN the cone for more push-down territory (more off-axis down-aims PITCH);
+# narrow it to roll over sooner. (The old comment here had it backwards.)
+side_cone_enter = 27.5   # [deg off the vertical plane] push only when inside
+                         #   this. MB (Chad fly verdict 2026-07-07): 22.5->27.5
+                         #   — "the knife edge on nose down maneuvers needs a
+                         #   little widening... I got thrown over once when
+                         #   nosing down": a slightly off-axis down-flick now
+                         #   PUSHES instead of rolling over (band kept 5 deg).
+side_cone_exit  = 32.5   # [deg] roll over once the aim swings past this
+
+[latches]            # direction latches (SPEC §9.3), every leg hysteretic
+roll_on    = 135.0   # [deg] latch roll direction above |bankErr|
+roll_off   = 120.0   # [deg] unlatch below
+astern_on  = 170.0   # [deg] latch elev sign above |e|
+astern_off = 160.0   # [deg] unlatch below
+
+[floors]             # SPEC §9.6 (v_dir_eps is an aircraft param — plant-owned)
+v_min           = 10.0   # [m/s] every G-clamp V-division floor
+v_ballistic     = 30.0   # [m/s] BALLISTIC entry
+v_ballistic_exit = 40.0  # [m/s] BALLISTIC exit (hysteretic ~1.3x)
+
+[coordination]
+K_coord   = 1.0   # [1/s] null-sideslip gain. §7: 2.0->3.0 (tighter) then 3.0->1.0
+                  #   (2026-07-06) — LESS coordination = the banked turn SLIPS,
+                  #   adding the skid Chad wants (nose crabs onto the aim in the
+                  #   bank). ~2 deg steady / ~9 deg through roll-in at 1.0; LOWER
+                  #   for more skid (0.5 ~ 10 deg but breaks AT-16 + Dutch-roll
+                  #   risk). Fly 9 2026-07-10: 0.8 AND 0.9 both breached the
+                  #   AT-16 β wall PRE-FLY — the GLOBAL dial is walled; the
+                  #   near-center relief below is the sanctioned path. Pairs
+                  #   with the strong yaw pointing (yaw_scale + gate).
+# S-yaw-magnet (SPEC §0, Chad ruling 2026-07-10 — "the magnet for yaw isn't
+# strong enough to pull it into the middle... [the lean is] more ready to
+# bank than it does allow me to do rudder flicking"): the anti-crab pull
+# FADES near center — scale = center_frac at zero pointing error, rising
+# smoothly (smoothstep, no latch) to full K_coord by center_band — so the
+# RUDDER's own pointing finishes into the aim circle instead of parking at
+# the coordination standoff (~0.076°, just outside the 0.05° circle). A
+# sustained banked turn (err >> band) keeps FULL coordination: AT-16's skid
+# wall is untouched by construction (this is why the relief exists — both
+# global dials, yaw_scale up and K_coord down, breach it). Expected hang at
+# 0.25: ~0.02° — INSIDE the circle, closed by RUDDER, flat-flick character
+# preserved. center_frac = 1.0 = relief OFF, bit-identical legacy (the A/B).
+# Loader walls: frac in [0,1]; armed band in (0, blend_lo/2].
+center_frac = 0.0   # coordination floor at zero error (1.0 = off).
+                     #   RUNG M1 2026-07-11 (with the deadzone shrink; Chad
+                     #   RULED "forget the crabbing — I just want that nose
+                     #   to snap and stay right in the middle"): 0.02 -> 0.0 —
+                     #   coordination fully SILENT at dead center; the rudder
+                     #   pointing finishes, period. Rest-park LATERAL
+                     #   component measures 0.0000 at every probed V.
+                     #   ⚠ SUPERSEDED SAME DAY by S-wvane (SPEC §0): the
+                     #   "beta has no decay channel" consequence is DEAD —
+                     #   the plant's new fuselage side-force bleeds the crab
+                     #   flat in ~1 s (tau = 2m/(rho*V*S*Cy_beta)), so frac 0
+                     #   now costs nothing: the nose stays planted during
+                     #   the bleed and the airframe straightens itself.
+                     #   Post-jut park residual beta measures 0.00-0.02 deg
+                     #   (was 7.5-9.4). Do NOT size this dial against the
+                     #   old crab-persistence premise.
+                     #   RUNG Y2 2026-07-11 (Chad flew Y1: "after a big
+                     #   lateral jut the nose comes back short of the circle
+                     #   staying cocked... about 5mm outside... in the top
+                     #   corner of whichever side I jutted to"): 0.05 -> 0.02.
+                     #   PARK-direction readout attributed the report: a big
+                     #   jut leaves beta 7.5-9.4 deg of crab, and the park
+                     #   rides at frac*K_coord*beta/(K_theta*yaw_scale) just
+                     #   outside lo for the WHOLE window (V=80 worst: 0.0718,
+                     #   never crosses in 12 s). At 0.02 every probed jut
+                     #   (2-20 deg, V=80/140) CROSSES and LATCHES (10 deg jut:
+                     #   919 latched ticks vs 407; 20 deg: e_min 0.001); the
+                     #   remaining tail ride is the VERTICAL trim-band cycle
+                     #   (~0.06 deg, the accepted at-rest park character).
+                     #   beta-gating the relief instead would re-create the
+                     #   original hang at ~1.3 deg for big juts — structurally
+                     #   wrong. TRADE at its extreme: near-center beta-nulling
+                     #   is now 1/50th full strength — post-jut crab decays
+                     #   over tens of seconds (visible sideways attitude while
+                     #   the NOSE stays on aim); if that reads wrong, the
+                     #   walk-back is 0.05, and the choice is Chad's ruling
+                     #   between nose-on-aim and crab-clean.
+                     #   ⚠ that Y2 trade note is SUPERSEDED by S-wvane (SPEC
+                     #   §0, same day): the PLANT now bleeds crab in ~1 s via
+                     #   the fuselage side-force — the coordination term is
+                     #   no longer the only beta channel, and the S-yaw-magnet
+                     #   relief's remaining job is the ~1 s bleed window (its
+                     #   centering leg was re-scoped accordingly).
+                     #   FLY 13: 0.25 -> 0.15 WITH lean_gain 6 + band 1.5 —
+                     #   the shallow lean + crabbier approach retain more
+                     #   sideslip near center, and at 0.25 the park missed
+                     #   the circle by a hair (0.0527 > 0.05, the closed-loop
+                     #   leg caught it pre-fly); 0.15 restores the crossing.
+                     #   RUNG Y1 2026-07-11 (Chad: tiny deflection centers,
+                     #   "a little bit more and it goes back to the outside
+                     #   of the circle... quickly go where I need it
+                     #   especially at the last little bit"): 0.15 -> 0.05.
+                     #   The park equilibrium scales with the flick's residual
+                     #   crab: at 0.15 a 4° flick hung OUTSIDE lo (harness
+                     #   PARK readout: e_min 0.0545 @V140 / 0.0692 @V80, 0
+                     #   latch ticks). 0.10/0.08 cross by a hair (0.0486/
+                     #   0.0470 — the Fly-13-class razor margin that re-ran
+                     #   this complaint); 0.05 crosses with margin at every
+                     #   V probed (0.0407 @140, 0.0476 @80, 0.0385 @220) and
+                     #   parks latched MORE (448 vs 0 ticks @140). TRADE:
+                     #   near-center β-nulling is now 1/20th full strength
+                     #   (was 1/6.7) — the big-jut lingering-crab and
+                     #   vertical-tracking lateral-looseness sentinels are at
+                     #   their most loaded; dial back = 0.08, then 0.15.
+center_band = 1.5    # [deg] full coordination returns by this error.
+                     #   FLY 13 2026-07-10: 0.5 -> 1.5 (Chad: "more rudder
+                     #   authority... crabbing? yes!" — the rudder-first
+                     #   crabby zone now spans most of the flick range, not
+                     #   just the last half-degree; full coordination by
+                     #   1.5° keeps turns coordinated and AT-16 untouched by
+                     #   construction). Loader cap blend_lo/2 = 2.5°.
+yaw_scale = 2.2   # rudder pointing GAIN scale (MB-rud: now multiplies K_theta
+                  #   INSIDE sqrt_law — capped by yaw_max, never past it). The
+                  #   old 1.2 CEILING (split-S corkscrew, AT-15) is OBSOLETE:
+                  #   the bank-aligned gate below disarms the corkscrew by
+                  #   geometry. MB-4 EXECUTED 2026-07-08: 1.5 -> 2.0 in ONE
+                  #   step (Chad's ruling — no 1.8 data point). RUDDER-FLICK
+                  #   Fly 1 2026-07-10: 2.0 -> 2.2 (Chad: "rudder strong at
+                  #   the bottom end... lil flicks that do go far are just
+                  #   rudder"; +10% linear-region gain, 2° flick demand 12.8
+                  #   -> 14.1 deg/s). The drafted 2.4 BREACHED the AT-16 β
+                  #   wall (peak sideslip 5.02° > 5.0° in the sustained
+                  #   coordinated turn) — 2.2 is the wall-respecting step;
+                  #   past it the honest path is the K_coord/coordination
+                  #   trade, a Chad ruling, not a bigger yaw_scale. yaw_max
+                  #   stays 55 (the ruled top-end nerf holds; this raises the
+                  #   LINEAR-region gain only). Instruments at each flip: see
+                  #   flight-log rows. K_theta*yaw_scale = 7.04; yaw's own PIO
+                  #   wall has never been measured — the dwell probe + Chad's
+                  #   fly are the sentinels. ζ ~0.77 (K_w_yaw 200k vs 337,920
+                  #   critical) — buzz => RAISE K_w_yaw first (the
+                  #   constitutional order), then back toward 2.0.
+# Bank-aligned rudder gate (MB-rud 2026-07-07; supersedes S7-yaw's
+# yaw_maneuver_frac blend fade). Yaw pointing in the bank-to-turn branch is
+# scaled by (1-blend) + blend*yaw_gate, with
+#   yaw_gate = yaw_min_frac + (1-yaw_min_frac)*smoothstep(-yaw_align_band, 0,
+#              cos(bankErr))
+# = FULL rudder while the bank is within 90 deg of aligned (the nose crabs
+# onto the aim immediately and through the whole roll-in — Chad's Q1b ruling),
+# fading to yaw_min_frac only past knife-edge, which is where the split-S
+# corkscrew lives (AT-15 budget_frac). Even in bankErr (no latch-sign or
+# +/-180-wrap sensitivity); blend-composed like the pitch align gate so the
+# FINE->MANEUVER boundary is continuous (plan red-team P0-1).
+yaw_align_band = 0.15  # [cos units] fade width just past knife-edge (~8.6 deg
+                  #   of bank). Wider = gentler rudder fade into a roll-through.
+yaw_min_frac = 0.1     # [0..1] rudder floor past knife-edge. 0.8-at-blend=1 was
+                  #   the OLD global fade; the gate keeps 1.0 when aligned and
+                  #   drops to this floor only in the roll-through window.
+
+[override]           # keyboard override (SPEC §9.5), per-axis mask
+ramp_time = 0.080    # [s] engage ramp to full deflection (~80 ms, SPEC §9.5)
+
+[horizon_recovery]   # S7-hrz (docs/horizon_recovery_plan.md, D3/D6 RULED)
+# On a FREELOOK RELEASE, the carried aim/camera frame rolls its horizon back
+# upright: the misalignment angle is captured ONCE at the release edge and
+# rolled OPEN-LOOP about the aim direction — "not too much of a snap, just a
+# quick uniform movement that is eased at the end" (Chad). The aim direction
+# never moves (the instructor cannot see the roll) and the mouse basis rolls
+# WITH the camera, so mouse-up == screen-up throughout. Canceled by a freelook
+# re-press or any override key (D9). rate = 0 disables the mechanism entirely.
+rate   = 150.0       # [deg/s] uniform roll rate (0 = off). ~1 s for a split-S 180.
+settle = 5.0         # [1/s] terminal ease: the last rate/settle rad decays
+                     #   exponentially into alignment (no overshoot), ~0.6 s tail.
+
+[freelook]           # freelook aim state machine (SPEC §9.5 / §16 CQ2)
+# After a freelook release the camera eases back to behind the nose; during
+# that window mouse->aim is SUSPENDED (CQ2) so no easing-frame (smoothed
+# camera) basis ever feeds the aim. The loader caps this at 300 ms (CQ2's
+# "<=300 ms") — a bare number here would be a feel knob hidden in code.
+easeback_time = 0.30 # [s] post-release mouse->aim suspension (<= 0.30, CQ2)
+# S-orient (docs/comfort program Q3): the ORIENT verb — double-tap Space to
+# "put me back together". If a SECOND freelook press-edge lands within this
+# window of the first, the caller snaps aim := guarded velocity, captures the
+# S7-hrz up-debt roll, and hard-cuts the lagged camera-forward behind the flight
+# path. 0 disables the mechanism structurally (never fires) — the AWAITING-FLY
+# default is OFF; Chad flips it on to fly. 0.30 s is the recommended fly value
+# (a natural double-tap cadence); Chad's stick tunes the window from there.
+orient_double_tap_s = 0.30 # [s] max gap between the two taps (0 = off; 0.30 = fly value — COMFORT MODE ON, Chad 2026-07-17)
+# S-globelook (v4 rung 3, Chad: freelook "like it has some inertia, move it
+# like a globe with the hand"): while freelook is HELD the orbit carries an
+# angular velocity — INSTANT GRAB while the mouse moves (the hand owns the
+# globe; the held-motion path is unchanged), exponential COAST while
+# held-and-still (v decays exp(-dt/tau)), capped at inertia_cap so a violent
+# flick can never spin the view fast enough to trigger vection. Release still
+# eases home exactly as today (the coast dies with it — S-freelook360
+# short-way-home preserved); coasting respects the same yaw wrap/clamp and
+# pitch floor/cap as the hand, and clamp contact zeroes that axis's coast.
+# inertia_tau = 0 switches the whole mechanism OFF structurally (the orbit
+# block is the bit-identical legacy tree).
+inertia_tau = 0.2   # [s] coast decay ("a heavier globe": research band 150-250 ms); 0 = off
+inertia_cap = 90.0  # [deg/s] coast/seed velocity cap
+# Rung-3 red-team P1 (the S-dz-motion rest_dwell pattern): the coast ENGAGES
+# only after inertia_dwell of TRUE stillness — still frames inside the dwell
+# stay PEND (no coast motion; the rate window keeps accruing wall time, so the
+# next count seeds delta/true-window). Without it an integer-mouse SLOW drag's
+# 0-count gap frames reseeded the coast to the instantaneous per-step rate and
+# glided on it: measured ~2x drag amplification at 1 count/2 frames, ~3.7x at
+# 1 count/4, and a lone 1-px nudge glid 2.4 deg vs the 0.2 commanded (the
+# quantizer, not the hand, had left the globe). COST: coast onset lands ~4-5
+# frames (~80 ms) after the hand stops — masked by the flick itself. 0 = the
+# pre-dwell coast-immediately arm (bit-identical) — 0 RE-OPENS the staircase
+# amplification above.
+inertia_dwell = 0.075 # [s] stillness before the coast engages; 0 = coast-immediately
+
+[ui]                 # mouse sensitivities (SPEC §9.1/§9.2 UI boundary), deg/px
+# The aim path is RAW (no smoothing) — this is a pure gain on the mouse delta,
+# not a filter. Starting values; Section 7 tunes for feel against the log.
+# 0.15 -> 0.18 (Chad 2026-07-08, with the MB-4 yaw_scale retune): faster
+# reticle. Then 0.18 -> 0.16 (Chad, same day, post-fly with MB-lean landed:
+# "turn down the mouse movement sensitivity a little bit" — the magnet/lean
+# now does the closing work, so the hand needs less gain; 0.15 is the old
+# known point if 0.16 is still hot). Then 0.16 -> 0.15 (Chad 2026-07-12,
+# post the aim-on-screen saga: "reduce the mouse sensitivity a bit because
+# it moves fast and maybe that's why there is some trouble tracking it" —
+# the flown-known step; 0.16 is the return path, 0.14 the next rung down).
+# Then 0.15 -> 0.14 (Chad, same session: "lets try 0.14" — first sub-0.15
+# point; 0.15 is the flown-known return path).
+# GLOBAL gain — at flick speed it
+# compounds with the curve's gain_max; ~0.0024 rad/px, inside the 0.01 cap.
+aim_sensitivity            = 0.14  # [deg per mouse pixel] mouse -> aim rotation
+# MB-aim rate-keyed acceleration curve (input/aim_curve.h, docs/mb_aim_plan.md):
+# below the knee the mapping is EXACTLY today's linear aim_sensitivity (fine
+# tracking untouched); between knee and rate_hi the gain ramps 1 -> gain_max
+# with shape expo; capped at gain_max above. Applied per FRAME at the device
+# accrual on the frame-rate-normalized rate |delta|/frame_dt, so the same hand
+# motion curves identically at any fps (AT-9-legal; test_aim_curve pins it).
+# NOTE the rates are DEVICE px/s: a mouse-DPI change rescales every threshold
+# (800 -> 1600 DPI halves the hand speed each number means). Chad's mouse is
+# the tuning target. quant_px: deltas <= this never curve (1-2 px frames at
+# high fps carry fps-scaled rate noise, not flick speed). The freelook ORBIT
+# consumes the same curved deltas (one hand feel; its sweep now reaches up to
+# gain_max x farther on a fast throw). gain_max = 1.0 switches the curve OFF
+# (bit-identical pure linear).
+aim_curve_knee     = 400.0  # [px/s] precision zone ceiling (pure linear below)
+aim_curve_rate_hi  = 2500.0 # [px/s] flick rate at which the gain tops out
+aim_curve_gain_max = 2.5    # [x] flick acceleration ceiling (1.0 = OFF)
+aim_curve_expo     = 1.5    # [-] ramp shape (1 = linear ramp in rate)
+aim_curve_quant_px = 3.0    # [px] per-frame deltas <= this never curve
+freelook_orbit_sensitivity = 0.20  # [deg per mouse pixel] mouse -> camera orbit
+# Freelook camera-orbit swing limits (caller-side/cosmetic, SPEC §9.2). Yaw 180
+# = swing fully around to the front (look straight back over the tail / straight
+# at your own nose). Pitch is the EYE-BELOW (belly-view) cap; the OVERHEAD side
+# is capped tighter and automatically in app/main.cpp (the camera-up pole sits
+# at ~90 - atan(height/distance) ~ 75 deg because the resting view is already
+# tilted down — freelook_overhead_pitch_cap derives it from the chase geometry).
+freelook_orbit_yaw_max     = 0     # [deg] 0 = UNLIMITED (S-freelook360: orbit wraps, keeps going around forever); 1..180 = legacy swing stop
+freelook_orbit_pitch_max   = 89    # [deg] max eye-below swing; overhead auto-capped near straight-down
+
+[camera]             # decoupled lagging chase camera (SPEC §9.2, S7-cam Phase 1)
+# The camera is NO LONGER welded to the aim (that was "camera = raw aim 1:1").
+# It rests behind the VELOCITY vector and eases toward the aim with lag, so the
+# aim reticle floats on screen and a keyboard yank never snaps the view. This is
+# a DOWNSTREAM consumer of the aim — the aim never reads the camera, so the RA9
+# rubber-band cannot form. Caller-side/cosmetic (off the mouse->aim loop), here
+# as tune data (the [ui] precedent), so it tunes without a recompile.
+lead     = 1.0   # [0..1] how far the rest target leans from velocity -> aim.
+                 #   1.0 = the camera's rest target IS the aim, so when it CATCHES
+                 #   UP the reticle CENTERS ("the reticle follows up" when you stop).
+                 #   The FLOAT while moving comes from the LAG below, not from lead.
+lag_base = 0.2   # [1/s] base follow rate (catch rate when barely deflected). The
+                 #   FLOOR: the reticle only floats when the mouse moves the aim
+                 #   FASTER than this. §7: 6->1.5->0.3->0.2 (~11 deg/s) so even
+                 #   gentle moves float; "a tad looser, we're close" (Chad).
+lag_gain = 0.7   # [1/(s*rad)] extra catch rate per rad of aim deflection — the
+                 #   camera TRAILS the mouse while you move (reticle floats off
+                 #   center), then closes the gap when you STOP, faster the more you
+                 #   deflected. §7: 30->15->6->3->1->0.7. Raise if catch too slow.
+# Camera-up = the CARRIED aim-frame up (S7-cam3, 2026-07-07 — reverses the
+# S7-cam2 horizon-lock): the camera shows the world from the aim/mouse frame's
+# orientation, so mouse-up == screen-up at any attitude and the horizon rolls
+# with the aim through a loop. No re-level rate — there is no horizon-lock.
+
+[comfort]  # S-cues: peripheral, world-stable orientation cues (pure HUD, default OFF)
+# Two disorientation-recovery cues from the comfort program (auto/comfort-orient,
+# REC-3 ghost horizon + REC-4 bank arc). BOTH default alpha 0.0 = structurally
+# OFF (alpha 0 SKIPS the draw entirely, so the committed tree is a strict
+# superset — bit-identical to no-cues). These are the AWAITING-FLY fly values:
+#   Cue A ghost horizon: cue_horizon_alpha 0.20, Cue B bank arc: cue_bank_arc_alpha 0.35.
+cue_horizon_alpha    = 0.20  # [0..1] ghost-horizon line opacity; 0 = OFF. COMFORT MODE ON (Chad 2026-07-17)
+cue_horizon_gap_frac = 0.30  # [0..1) center exclusion disk radius (NDC) — no
+                             #   cue where the pilot aims (S-retclamp lesson)
+cue_bank_arc_alpha   = 0.35  # [0..1] bank-arc opacity; 0 = OFF. COMFORT MODE ON (Chad 2026-07-17)
+# S-carets (REC-2): screen-edge threat indicators for OFF-SCREEN drones/bandits
+# — a small peripheral caret pointing where to TURN to face the threat, so
+# multi-bogey awareness needs no disorienting freelook excursion. Pure HUD;
+# 0.0 = structurally OFF (skips the draw, strict superset). AWAITING-FLY value 0.5.
+cue_caret_alpha      = 0.5   # [0..1] edge-caret opacity; 0 = OFF. COMFORT MODE ON (Chad 2026-07-17)
+# REC-6: the STYLIZED COCKPIT FRAME — a subtle, screen-anchored peripheral canopy
+# interior (the steady-state REST FRAME, docs/comfort_research.md §3.3). Suppresses
+# vection with a static peripheral reference. 0.0 = structurally OFF (skips the
+# draw); Chad wants to SEE it, so it ships 0.35 (not 0 like the other cues).
+cue_cockpit_alpha    = 0.35  # [0..1] cockpit-frame opacity; 0 = OFF. SHIPS ON (Chad wants to see it)

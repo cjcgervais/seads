@@ -1,0 +1,21 @@
+# captures are raw run data, regenerable — never commit
+captures/*.jsonl
+
+# goldens ARE kept (they're the sacred reference outputs)
+!goldens/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Node (in case tooling shows up)
+node_modules/
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+*.swp
+.vscode/
+.idea/
