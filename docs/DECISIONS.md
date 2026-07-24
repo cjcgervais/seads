@@ -7,9 +7,9 @@ Standing decisions for the flight kernel. Each entry: date, decision, why, statu
 ## RECONCILIATION WATCH-ITEM — `feel/kernel-v5` diverges from `main` (pushed as backup only)
 
 **The active kernel Chad is flight-testing is NOT on `main`.** It's on
-`D:\flight_sim2\seads-feel`, branch `feel/kernel-v5`, HEAD `89447aba5` as of 2026-07-23,
-covering rungs A through E — pushed to origin later that evening (backup only, no workflow
-change), still diverging from `main`
+`D:\flight_sim2\seads-feel`, branch `feel/kernel-v5`, HEAD `d1e7dbe6b` as of late 2026-07-23
+(rungs A through E plus the grafted felt-flight recorder, gate 372/372) — pushed to origin
+(backup only, no workflow change), still diverging from `main`
 (which is still v4, `d68de7d91`). Every rung-A/A2/C/D/E decision below lives only on that
 branch until it merges.
 
@@ -76,7 +76,8 @@ below-horizon curve of an off-screen lateral drag visible, while the 45° gate m
 harmless even when unnoticed.
 
 **Status:** LANDED on `feel/kernel-v5` (commit `89447aba5`, 2026-07-23) — this is real,
-committed code, not a proposal. **Unpushed**, and **not reflected** in either the
+committed code, not a proposal. **Pushed to origin** (as of the same evening), and **not
+reflected** in either the
 `reference/evc2026/` snapshot (a different, prior-generation Luau kernel that never had this
 mechanism) or in `main` (still v4). See `docs/cascade/push-gate-knife-edge.md` and the
 reconciliation watch-item above.
