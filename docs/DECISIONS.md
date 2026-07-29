@@ -29,7 +29,86 @@ past v6 at any time:
 
 ---
 
-## 2026-07-29 — FLOWN-APPROVED: the camera ANCHOR (S-keychase) — "precisely perfect"
+## 2026-07-29 — RULED + SEALED v8: override keys have NO camera authority (S-keyprec) — AWAITING FLY
+
+**Supersedes S-keychase (v7) in full.** Chad, flying v7: *"When I am flying in mouse aim the
+snap back to chase is occurring with every hard key press… if I input some aileron to cut into
+their path sooner, I get a disorienting snap to the chase cam which throws off my aim and feels
+unnatural."* His rule, verbatim: **"Only the precedence of the freelook push shall do that."**
+
+**Decision.** There is exactly **one** camera automation — the snap to chase on freelook
+release (`release_orient` / `release_orient_with_keys`, fires with or without keys held,
+untouched). After it the camera lags the **aim** under mouse authority alone, permanently.
+**Override keys reach the trajectory and never the camera.** The whole law, in Chad's words,
+now identical in `SPEC.md` §9.2 and the cascade entry so the three cannot fork:
+
+> **freelook** — aim carried, camera free.
+> **mouse-aim** — aim free, camera bound to the aim.
+> **keys** — affect neither.
+
+**S-keychase is removed, not gated.** `key_anchor_rate = 0.0` reaches the same behaviour in one
+line and was rejected: the ruling is categorical, so a live knob at zero is a loaded gun — a
+future tuner raising it silently re-breaks a flown ruling. Precedent: S-aimclamp and S-retclamp,
+the other flown-rejected camera/aim mechanisms, were fully reverted with code preserved on a
+branch. **Walk-back is therefore a revert, not a dial** — `sandbox/s-keychase-retired`, or the
+`flight-kernel-v7-2026-07-29` tag. A real downgrade from a one-line knob, accepted deliberately;
+it is why the sandbox branch was mandatory.
+
+**Accepted trade, ruled by Chad:** with the mechanism gone, flying on keys without touching the
+mouse leaves the camera ~16.3° oblique in a sustained key turn — the camera showing where he is
+pointing; the cure is to move the mouse. ⚠ **Not yet confirmed on the stick — fly card 3.**
+
+**Status:** sealed `flight-kernel-v8-2026-07-29` (`ae7ae8f23` — the handoff brief names
+`49e5f93da`, which is the mechanism commit; the seal includes the docs and review-bar commits on
+top). Gate 387/387 (−2 retired cases, +1 new leg), zero moved goldens, red-team clean (no P0/P1,
+gate re-run and every comfort number reproduced independently). **NOT YET FLOWN**, not grafted.
+⚠ **First kernel seal made before Chad flew it.** The convention permits it (a seal is tagged +
+pushed + gate-green at seal time), but v5/v6/v7 all carried his verdict in the tag message and
+this one does not. Do not read v8 as carrying a stick verdict.
+
+### Two lessons, both generalizable
+
+1. **Two fixes for one defect; the second was the bug.** The original oblique complaint was
+   caused by the **D9 exception** (releasing freelook with keys held fired no snap at all).
+   Retiring D9 fixed it, and that fix stands. S-keychase was stacked on top to also flatten the
+   *standing* state — an over-correction, and the second mechanism is the one that fought his
+   mouse. When a fix lands and the symptom persists, re-attribute before stacking.
+2. **A flown approval didn't hold, for a structural reason.** S-keychase was approved "precisely
+   perfect" against `comfort_turnsteady_keys`, which **parks the aim and flies on keys alone.**
+   Chad flies mouse-aim **and** keys simultaneously and no scenario modeled that, so the defect
+   was structurally unmeasurable — his approval was genuine but scoped to a case he doesn't fly.
+   Third camera mechanism in a row validated against a case he doesn't fly (cf. S-aimclamp,
+   S-retclamp). **The rule: a feel mechanism's instrument must model both hands at once.**
+
+### The evasion no test can close — a review bar, not a pin
+
+The red-team built a working evasion: re-adding key→camera coupling as a **defaulted parameter**
+on `MiniCamera::advance`, wired only from `app/main.cpp`, reproduces the retired anchor and
+**passes the entire suite** — no ctest runs `seads.exe`. No unit test can close it. The
+countermeasure is recorded where it can act rather than as prose: **`main.cpp`'s
+`ease_chase_forward` call stays branch-free on key state; a conditional there is a ruling
+violation on sight** (review bar at the call site and in `SPEC.md` §0). Read that call site first
+when reviewing any camera change.
+
+### Correction to an earlier finding in this file
+
+The audit claimed `comfort_turnsnap_ovr` had been measuring the wrong camera law because
+`comfort_detail::drive()` dropped `keys_flying`. **The latent defect was real** — the flag had to
+be threaded by hand and the convenience wrapper silently took the `false` default, the exact
+instrument fork `chase_anchor`'s purity existed to prevent, and it would have caused a **false
+abort** of the v8 investigation by showing no snap on v7. **But there was no existing damage:**
+`turnsnap_ovr` holds its override only while freelook is *also* held, which the selector
+excluded, and when the wrapper was fixed **no comfort number moved.** A real defect with zero
+measured consequence; v8 removes the class outright, since the seam no longer takes key state.
+
+---
+
+## 2026-07-29 — SUPERSEDED BY v8 — FLOWN-APPROVED: the camera ANCHOR (S-keychase) — "precisely perfect"
+
+⚠ **Retired in v8 (entry above). Do not implement from this entry.** Kept because the reasoning
+trail matters: the measurement-provenance error, the gunnery reclassification, and the
+"never blend the handback" corollary are all instructive, and all three were superseded when the
+mechanism was removed.
 
 **Chad's verdict on the stick, 2026-07-29: "now it is precisely perfect… It's the right
 set up for my camera now."** Approved as the camera's finished state, and the trigger for

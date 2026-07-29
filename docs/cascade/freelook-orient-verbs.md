@@ -49,10 +49,16 @@ state. The oblique Chad was describing came from the chase camera's rest target 
 anchored to his **parked aim** (`[camera] lead = 1.0`) while the override keys flew the
 plane out from under it. Not lag against the plane — and not a *stale* target either: the
 parked aim is deliberate, the pilot's pre-placed plan for when the keys come up. The defect
-was spending the **eye** on that plan at the moment he needed to see his **shot**. That took
-a second mechanism, **S-keychase**: while keys fly and freelook is not held, the rest target
-becomes the flight path, where the nose-versus-velocity angle — the gun line — is legible.
-The two together are what he flew as "precisely perfect."
+was spending the **eye** on that plan at the moment he needed to see his **shot**. A second
+mechanism, **S-keychase**, was added for it — the rest target became the flight path while
+keys flew — and Chad flew the pair as "precisely perfect."
+
+⚠ **S-keychase was then retired in full in v8** (`flight-kernel-v8-2026-07-29`). It turned out
+to be an over-correction: **retiring D9 alone was the fix**, and the second mechanism fought
+the mouse during mouse-aim-plus-keys flying, which no scenario had modeled. **Everything in
+this entry — the D9 retirement and the release-edge orient verb — stands unchanged and is what
+v8 keeps.** The standing-state half is gone; see
+`docs/cascade/camera-anchor-mode-duality.md`.
 
 **This entry governs the release *edge*; the *standing* state between releases belongs to
 `docs/cascade/camera-anchor-mode-duality.md`** — including why the control-surface keys must

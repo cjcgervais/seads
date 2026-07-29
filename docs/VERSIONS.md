@@ -39,6 +39,29 @@ Repo: `D:\flight_sim2\seads-feel` → origin (see that repo's remote)
 
 | **`flight-kernel-v7-2026-07-29`** | **`51eb5b9e3`** | **THE V7 SEAL (Chad, 2026-07-29: "now it is precisely perfect… it's the right set up for my camera now"). The freelook-release camera, finished. Three commits over v6: `35e31695f` S-relorient ADDENDUM (retire the D9 exception — a release with override keys held now fires the full orient verb), `13631ba92` red-team folds (no P0/P1), `5ea20d8c7` S-keychase (while keys fly and freelook is not held, the chase camera's rest target becomes the flight path instead of the parked aim, caught at 6.0 /s). Gate 388/388, zero moved goldens, tree clean. Both mechanisms are optional-with-default-off knobs (`[freelook] release_orient_with_keys`, `[camera] key_anchor_rate`), so v6 is reachable one line at a time. Tag + branch pushed to origin same day.** |
 
+| **`flight-kernel-v8-2026-07-29`** | **`ae7ae8f23`** | **THE V8 SEAL — S-keyprec: override keys have NO camera authority. Retires S-keychase (v7) **in full**, by excision rather than by knob. Chad, flying v7: "if I input some aileron to cut into their path sooner, I get a disorienting snap to the chase cam which throws off my aim" — rule: "only the precedence of the freelook push shall do that." One camera automation remains (the freelook-release snap, untouched); the camera is aim-bound at all other times. Gate 387/387 (−2 retired cases, +1 new leg), zero moved goldens, red-team clean (no P0/P1, gate and comfort numbers independently reproduced). Tag + branch + `sandbox/s-keychase-retired` pushed. ⚠ **SEALED BUT NOT FLOWN** — the first kernel seal made before Chad's stick verdict; `docs/v8_fly_cards.md` is outstanding. ⚠ **Walk-back is a REVERT, not a dial** (`sandbox/s-keychase-retired`, or the v7 tag) — deliberate, because the ruling is categorical and a knob at zero is a loaded gun.** |
+
+**Notes for `flight-kernel-v8-2026-07-29`.** Measured v7 → v8: `comfort mouseaim_keys`
+lag-behind-aim with keys down **67.781° → 10.492°**; max per-tick step at the keypress edge
+3.222° → 0.378°; `comfort turnsteady_keys` standing oblique **0.000° → 16.341°** (the accepted,
+Chad-ruled drift — the camera showing where he points; the cure is to move the mouse).
+⚠ **Do not cite `max_step` as the headline** — it is bounded by construction (v7's swap eased at
+`key_anchor_rate·dt = 6.0/120 ≈ 2.9°/tick`, so the peak saturates there however bad it feels);
+the evidence is the before-vs-during divergence. The v8 residual 10.492° is ordinary chase lag
+against a faster-swinging aim, not an anchor effect.
+**Process worth preserving:** the new `comfort_mouseaim_keys` scenario — the first to model
+mouse-aim *and* keys simultaneously — was built and shown **failing on v7 before anything
+changed.** That ordering was mandatory because this is the **third** camera mechanism validated
+against a case Chad does not fly (cf. S-aimclamp, S-retclamp); the generalizable rule is that a
+feel mechanism's instrument must model **both hands at once**. The red-team's one finding was an
+evasion no test can close (re-adding key→camera coupling as a defaulted parameter wired only from
+`main.cpp` passes the whole suite, since no ctest runs `seads.exe`) — recorded as a **review bar**
+at the call site and in `SPEC.md` §0 instead of as prose. Full reasoning:
+`docs/DECISIONS.md` and `docs/cascade/camera-anchor-mode-duality.md`.
+⚠ `reference/seads-feel/` deliberately **not** re-snapshotted at v8 — sealed but unflown, and the
+walk-back is a revert, so a snapshot could enshrine code that gets reverted. It stays at the v7
+seal until Chad flies the cards.
+
 Reconciliation notes for `game-kernel-v5`: reconcile merge was `46051ca23` (gate 793/793),
 fly-round fixes through `36ee936e9`. Brakes approved — "good enough for the field in front
 of your house when you were five." First landing ever put down on Sudbury clay (the v1
