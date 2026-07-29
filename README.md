@@ -9,7 +9,8 @@ Right now your actual, flyable kernel still lives in three other places:
 - `D:\EvC2026` — the Roblox eagle/crow game (an earlier draft of the same ideas).
 - `D:\SEADS_2026` — the spherical-earth dogfighting physics.
 - `D:\flight_sim2\seads-feel` (branch `feel/kernel-v5`) — **the one you're actually flying
-  right now**, including tonight's rung-E fix (the 45° knife edge + the red arrow).
+  right now**. The v5 kernel is sealed and reconciled into the main game (2026-07-24);
+  new feel work (the rudder trim, release-orient) still lands on this branch first.
 
 This repo doesn't touch any of those — it only takes dated copies of the relevant files
 (`reference/`) and writes them up in plain language at four levels: how it should **feel**,

@@ -15,18 +15,21 @@ builds by flying and reporting what he feels, not by reading code. Everything in
 `docs/cascade/` exists to translate between his feel-language and the actual mechanism, in
 both directions.
 
-## RECONCILIATION WATCH-ITEM — check branch state before trusting anything
+## LIVE-BRANCH WATCH-ITEM — check branch state before trusting anything
 
-The kernel Chad is actually flight-testing lives on `D:\flight_sim2\seads-feel`, branch
-**`feel/kernel-v5`**, which is **pushed to origin as backup (89447aba5) but still diverges
-from `main`** (still v4). Every
-session that touches this repo's docs, tuning captures, or reference snapshots **must check
-that branch's state first** (read-only `git log`/`git status` against
-`D:\flight_sim2\seads-feel` — never write there) before treating rung A–E as current, and
-before assuming `main` reflects the live kernel. A live tuning session may move the branch
-forward (new rungs, a merge to `main`, or a rebase) at any time; anything in this repo dated
-2026-07-23 is a snapshot of one moment, not a live feed. See `docs/DECISIONS.md`'s
-reconciliation watch-item for the full detail and the rung ladder as of that snapshot.
+The v4→v5 reconciliation is DONE: `main` in the game trees is `game-kernel-v5`
+(`36ee936e9`, merged by Chad's word 2026-07-24, gate 797/797) — the whole game flies
+kernel v5. The live risk is now the other direction: the feel branch **moves past the
+seal**. `D:\flight_sim2\seads-feel`, branch **`feel/kernel-v5`**, is where new feel work
+lands first, and as of 2026-07-28 it sits several Chad-approved commits past the
+`flight-kernel-v5` seal (`149a99c40`) — the rudder trim + S-relorient session, tip
+`b2019cf43` — with origin's backup lagging at the seal. Every session that touches this
+repo's docs, tuning captures, or reference snapshots **must check that branch's state
+first** (read-only `git log`/`git status` against `D:\flight_sim2\seads-feel` — never
+write there) before treating any snapshot, dial value, or rung as current. A live tuning
+session may move the branch at any time — mid-command, even. Dated files here are
+snapshots of one moment, not a live feed. See `docs/DECISIONS.md`'s watch-item for the
+full detail.
 
 ## The four-level cascade doc convention (`docs/cascade/`)
 

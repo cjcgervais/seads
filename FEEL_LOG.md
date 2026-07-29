@@ -7,6 +7,31 @@ knowledge belongs in `docs/cascade/`.
 
 ---
 
+## 2026-07-28 — rudder trim + release-orient fly ("okay we have a winner")
+
+**What changed since last test:** `yaw_scale 2.2 → 2.0` (the rudder-bias trim) and
+S-relorient (every freelook release now fires the orient verb — instant chase-behind on
+release). Both on `feel/kernel-v5`, tip `b2019cf43`. See `docs/DECISIONS.md` 2026-07-28.
+
+**Result — APPROVED, both.** Chad, verbatim:
+
+> "The banking and rudder combo is better balanced. Now that the flight kernel was given a
+> more sufficient engine per weight ratio, the mouse aim and nose is responding better
+> without the need of so much rudder. I believe this is because it feels much better now to
+> not have to chase the mouse with so much rudder but now the plant is able to respond."
+
+The load-bearing feel insight: **rung D's power (T/W 0.61) is upstream of the rudder
+feel.** Chad had "been intuiting all along that the airframe is being underserved" — with
+the plant now able to respond, the yaw pointing no longer has to drag the nose onto the
+aim, and 2.0 reads balanced where it once read weak. Neither pre-agreed fallback rung
+(`Cy_beta`, `center_frac`) was needed.
+
+**Next ask (same session, in flight with the seads-feel agent):** auto-upright /
+roll-to-level time with no deflection while inverted, currently ~1 s of banking 180° to
+restore orientation — Chad wants 0.5 s.
+
+---
+
 ## 2026-07-23 — rung-E flight test (45° knife-edge gate)
 
 **What changed since last test:** the push/split-S commitment gate moved from

@@ -4,22 +4,73 @@ Standing decisions for the flight kernel. Each entry: date, decision, why, statu
 
 ---
 
-## RECONCILIATION WATCH-ITEM — `feel/kernel-v5` diverges from `main` (pushed as backup only)
+## LIVE-BRANCH WATCH-ITEM — `feel/kernel-v5` moves past the seal (reconciliation is DONE)
 
-**The active kernel Chad is flight-testing is NOT on `main`.** It's on
-`D:\flight_sim2\seads-feel`, branch `feel/kernel-v5`, HEAD `d1e7dbe6b` as of late 2026-07-23
-(rungs A through E plus the grafted felt-flight recorder, gate 372/372) — pushed to origin
-(backup only, no workflow change), still diverging from `main`
-(which is still v4, `d68de7d91`). Every rung-A/A2/C/D/E decision below lives only on that
-branch until it merges.
+**Resolved 2026-07-24:** the v4→v5 reconciliation merged. `main` in the game trees is
+**`game-kernel-v5` (`36ee936e9`)** — the full game (tunnels, ballistics, Sudbury, Bf 109)
+flies kernel v5, gate 797/797, first landing ever put down, Golden Felt Flight #1 flown on
+that build. The old "feel branch diverges from a v4 main" danger no longer exists.
 
-**Every future session must check `feel/kernel-v5`'s branch/merge state first** (`git -C
-D:\flight_sim2\seads-feel log --oneline main..feel/kernel-v5`, or check whether it's merged)
-before treating anything in this file, `docs/cascade/push-gate-knife-edge.md`, or
-`tuning/evc2026-v5-rungE.md` §2 as shipped-to-main. Any work baselining off `main` alone is a
-full generation behind. Re-verify against a fresh snapshot of `D:\flight_sim2\seads-feel`
-before assuming these rungs are still current — a live session may have moved past rung E
-already.
+**The live risk now:** `feel/kernel-v5` keeps moving PAST the `flight-kernel-v5` seal
+(`149a99c40`). As of 2026-07-28 the branch tip is `b2019cf43` — the Chad-approved
+rudder-trim + S-relorient session (see the 2026-07-28 entry below) — and **origin's backup
+of the branch lags at the seal**; a further change (auto-upright timing) was in flight the
+same day. Consequences for this repo:
+
+- `reference/seads-feel/` is snapshotted at `89447aba5` (pre-seal) — it does not contain
+  the recorder graft, S-relorient, or the yaw_scale 2.0 trim. Re-snapshot is queued for
+  when the 2026-07-28 micro-session settles; until then the live tree is ground truth.
+- **Every future session must check the branch state first** (read-only `git -C
+  D:\flight_sim2\seads-feel log --oneline` / `git status` — never write there) before
+  treating any dial value, snapshot, or cascade Code section as current. The branch has
+  been observed to move between two commands of the same session.
+
+---
+
+## 2026-07-28 — Rudder-bias trim + S-relorient, Chad-approved ("okay we have a winner")
+
+Two changes landed on `feel/kernel-v5` in one session, both flown and approved on Chad's
+stick. Commits: `274432f35` (S-relorient), `385a43dbd` (yaw_scale), `468f2b352` (red-team
+folds), `b2019cf43` (flight-log rows). Gate 380/380 at each step.
+
+**1. Rudder trim: `yaw_scale` 2.2 → 2.0.** Chad's ask: "a little too much rudder bias in
+the equation" — confirmed symptoms: nose sits crabbed / rudder always working, plus
+violent snap-back at speed. No v5 commit had touched the yaw ladder; the pre-v5 tuning was
+being exercised harder by v5's stronger energy model (higher V ⇒ the q-scaled yaw terms
+bite more). 2.0 is the previously-flown MB-4 value, away from the AT-16 β wall.
+**Chad's verdict carries a causal insight worth keeping:** "Now that the flight kernel was
+given a more sufficient engine per weight ratio, the mouse aim and nose is responding
+better without the need of so much rudder... it feels much better now to not have to chase
+the mouse with so much rudder but now the plant is able to respond." — i.e. rung D's T/W
+0.61 is *why* less rudder authority is needed: the airframe can now follow the aim with
+lift instead of skidding onto it with yaw. Pre-agreed fallback rungs (NOT taken — symptom
+resolved): `Cy_beta 2.5 → 1.5` if speed snap-back survived; `center_frac 0.0 → 0.3` if
+crab-at-rest survived (⚠ that one walks back the Rung-M1 "nose in the MIDDLE" ruling and
+was flagged as such). Walk-back: 2.2. Full ladder history:
+`docs/cascade/rudder-coordination-ladder.md`.
+
+**2. S-relorient: every freelook release fires the ORIENT verb.** Chad's ask: releasing
+freelook should auto-orient (the double-tap behavior, automatic). Mechanism: on the
+freelook release edge, the aim snaps to guarded velocity and the camera hard-cuts behind
+the flight path — the same tested path the S-orient double-tap runs. Deliberate
+exceptions: sub-stall/ballistic releases land on the nose (velocity lies there), and a
+release while an override key is still held keeps legacy behavior (pilot is actively
+maneuvering). Knob: `release_orient` in `[freelook]` — **optional-with-default-false in
+the loader** (fixtures untouched, knob-off bit-identical legacy), `true` in the shipped
+toml. Walk-back: one line, `release_orient = false`. The double-tap still works and is now
+redundant; retiring it is an open question for Chad.
+
+**Process notes worth preserving:** the plan-stage audit (this repo's session) caught a
+real ordering defect — the snap must fire BEFORE the S7-hrz horizon-recovery capture so
+the up-righting measures against the new forward on the same tick (release-orient
+therefore rights the horizon slightly *better* than the double-tap did). The fresh-context
+diff red-team came back SOUND-WITH-FIXES; its one real find (nothing pinned the fire as
+one-shot — a re-fire-every-tick mutant survived the whole suite) was folded and
+mutation-verified. 7 new test legs + 4 loader legs.
+
+**Status:** LANDED and Chad-approved on `feel/kernel-v5`; not yet in `reference/`
+(snapshot predates it) and not yet reconciled to the game trees. Cascade entry:
+`docs/cascade/freelook-orient-verbs.md`.
 
 ---
 
