@@ -29,6 +29,49 @@ past v6 at any time:
 
 ---
 
+## 2026-07-29 (later still) — RULING: in freelook the aim is WELDED to the nose, ALWAYS — the no-keys "parked carve" is retired
+
+**Status: RULING. Chad's answer to the seads-feel agent's direct question ("nested always /
+keep the carve / other"). He wrote option 3 himself. Verbatim, typo-fixes bracketed:**
+
+> "In freelook, keys are the only means of aiming as the nose aim becomes welded to the nose
+> directionality since mouse inputs now control camera during the freelook phase. Upon
+> release the camera snaps back to chase and the mouse aim authority is instantly
+> re[e]stablished. The camera is at that instant in chase view and is now subject to and
+> dependent on mouse aim inputs, the nose following the cascade."
+
+> "If I were to be mid turn and press freelook, then I am in freelook and my nose holds the
+> last directionality it had before the spacebar press and hold (freelook). Then my mouse has
+> no control over the plane and snaps around the nose. The nose maintains its heading and
+> stops whatever input i[t] was giving it via mouse as the mouse can no longer influence the
+> nose because we are in freelook. I have only the keyboard over[r]ide gross inputs to
+> control the plane as my mouse is now controlling my camera for situational awareness. My
+> nose is controlled by my careful qweasd inputs."
+
+> "Releasing the space (freelook) allows the camera to snap back into alignment camera →
+> tail → nose → nose indicator dot nested inside center of mouse aim... I now having released
+> the space bar given back mouse aim authority and the nose and camera follow
+> deterministically."
+
+**What this rules:**
+
+1. **Freelook ENTRY welds aim := nose — every freelook, keys or not.** The pre-freelook
+   mouse-aim command stops driving the plane at the spacebar press. The nose *holds its
+   heading*; it does not keep carving the old commanded turn. This retires today's no-keys
+   "parked aim keeps the carve" behavior — a deliberate behavior change, ruled by Chad in
+   answer to a direct either/or, not an incidental side effect of v9.
+2. During freelook: mouse → camera only; qweasd keys are the sole control of the plane.
+3. Release: mouse-aim authority is instantly re-established; the camera snaps to the chase
+   alignment **camera → tail → nose → nose-indicator dot nested inside the mouse-aim
+   center** (and upright, per the ruling below). The aim does not move — it was welded to
+   the nose the whole time. Release must be a no-op on the aim **in all cases**, by
+   construction, because entry did the welding.
+4. This closes the code-vs-model gap flagged in the previous entry (§5b nesting observed
+   only in the keys-held path): the nesting is now spec for ALL freelook, implemented at
+   entry as a weld, not per-tick only when keys are held.
+
+---
+
 ## 2026-07-29 (later) — CHAD CORRECTS THE v9 "LAW" QUOTE: the aim NEVER snaps, and the release snap IS upright
 
 **Status: RULING. Amends the model statement inside the pre-registered v9 entry below. The
