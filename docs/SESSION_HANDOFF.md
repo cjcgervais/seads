@@ -22,7 +22,7 @@ You two hand off through Chad, and through `docs/*_handoff.md` files in the live
 | repo | branch | tip | note |
 |---|---|---|---|
 | `mandalark-kernel` | `main` | `433038d` | pushed, clean |
-| `seads-feel` | `feel/kernel-v5` | `e23653042` | clean. Seal `flight-kernel-v8-2026-07-29` = `ae7ae8f23`; tip is docs-only past it |
+| `seads-feel` | `feel/kernel-v5` | `a307a8a69` | clean, **6 ahead of origin (unpushed)**. **v9 S-nosesnap LANDED 2026-07-29 evening, gate 388/388, NOT yet flown by Chad.** v8 seal `flight-kernel-v8-2026-07-29` = `ae7ae8f23` |
 | `seads-recon` | `sandbox/kernel-v5-reconcile` | `cdf65753d` | clean, **flying v7** — v8 is NOT grafted |
 
 Kernel seals: v5 → v6 (`cfe1bd7fe`) → v7 (`51eb5b9e3`) → **v8 (`ae7ae8f23`)**.
@@ -84,7 +84,9 @@ input.
 
 | item | owner | state |
 |---|---|---|
-| **v9 implementation** | seads-feel agent | in progress; plan approved with 2 amendments |
+| **v9 implementation** | — | **LANDED** @ `a307a8a69` (see DECISIONS.md "v9 MEASURED AND LANDED"); awaiting Chad's fly (`docs/v9_fly_cards.md` in seads-feel) |
+| **CQ2 0.30 s easeback window** — mouse dead-zone after release contradicts "instantly re-established" | Chad | open; one-line flip waits on his ruling |
+| **Card-1 deflection trade** — key-only turning post-snap re-opens ~17° view | Chad | open; genuine tension, sustain stays dead absent a ruling |
 | **Fly card 3 (v8)** — does the aim-bound camera still let Chad read a deflection shot? | Chad | **open, independent of v9** |
 | **Graft v8/v9 to seads-recon** | seads-feel agent | blocked until v9 flies |
 | **Golden Felt Flight #3** | you (goldens are yours) | not flown. Needs a clean tree; `KERNEL_SEAL` + build-info now track the build |

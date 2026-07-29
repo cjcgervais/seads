@@ -29,6 +29,60 @@ past v6 at any time:
 
 ---
 
+## 2026-07-29 (evening) — v9 MEASURED AND LANDED: the pre-registered prediction was RIGHT, both terms were real
+
+**v9 "S-nosesnap" is implemented and green** on `feel/kernel-v5` @ `a307a8a69` (gate
+388/388, zero moved goldens, red-team SOUND-WITH-FIXES, no P0). **NOT yet flown by Chad;
+not yet pushed to origin (tip is 6 ahead) as of this entry.** Commit order verified from
+the live tree: rulings registered alone → instrument + v8 baseline → mechanism → mutation
+hardening → docs → red-team folds. The discipline held.
+
+**The measurement, graded against the pre-registration below** (v8 unchanged baseline →
+after v9), from the new `comfort_freelook_release_keys` instrument:
+
+| metric | v8 baseline | after v9 |
+|---|---|---|
+| `nose_at_fire_deg` (term A) | **18.552** — at its `aoa_max` cap | 0.578 |
+| `vel_at_fire_deg` | 0.272 — proves the old velocity-referenced metric was blind | 17.956 |
+| `nose_after_1s_deg` | 23.098 | **40.861** ⚠ see below |
+| `nose_after_3s_deg` | 18.824 | 16.783 |
+| `updebt_after_release_deg` (term B) | **44.904** | 0.003 |
+
+**Verdict under the pre-registered rule: COMPARABLE — both terms real.** A capped and
+persistent (~18.6°), B larger but transient (44.9°). The pre-registration's named
+repeat-risk happened in the data exactly as written: A read ~18° and looked like solid
+confirmation while B sat 2.4× larger. A threshold test on A alone would have bought a
+fifth round. Both halves were implemented unconditionally per Chad's ruling anyway — the
+rule ended up grading the diagnosis, which is what survives of it by design.
+
+**Honest attribution, recorded as reported:** term B **predates v8** — S-keychase had been
+masking a long-standing up-debt by re-anchoring forward. The up half of the felt oblique
+was never a v8 regression.
+
+**The one number that got worse — expected, and why:** `nose_after_1s_deg` rose 23.1° →
+40.9°. This is the pre-named Card-1 trade, not a defect: post-snap, hard key-only turning
+walks the nose away from the parked aim, and the lag camera follows the aim, re-opening a
+~17°+ deflection view until the mouse takes over. The pre-registration's "honest reading
+2" called this in advance: ordinary lag against a parked aim cannot stay behind a plane
+turning on keys. **Chad's call after flying; the sustain stays dead unless he rules it
+back.**
+
+**Also retired, per the weld ruling:** no-keys mid-turn freelook drift 75.5° → 1.46°
+(the carve is gone); out-of-a-loop orient rolled-world 178.7° → 0.000° (instant upright).
+`comfort_mouseaim_keys` — the v8 win — bit-identical.
+
+**Open on Chad (from the fly cards):**
+1. **CQ2 easeback window** — for 0.30 s after any release, mouse deltas are dropped
+   (`[freelook] easeback_time`, ruled 2026-07-03). This contradicts "mouse aim authority
+   is instantly re-established," and its original rationale is reported dead twice over.
+   If the first third-second of mouse feels dead after release, it's this window, not the
+   snap. One-line flip, **waits on Chad's ruling**.
+2. **Card-1 deflection trade** (above) — genuine physical tension, Chad's call.
+3. Walk-back scope: `release_orient_with_keys = false` disables the with-keys snap ONLY;
+   the true walk-back for v9 is the v8 seal tag `flight-kernel-v8-2026-07-29`.
+
+---
+
 ## 2026-07-29 (later still) — RULING: in freelook the aim is WELDED to the nose, ALWAYS — the no-keys "parked carve" is retired
 
 **Status: RULING. Chad's answer to the seads-feel agent's direct question ("nested always /
