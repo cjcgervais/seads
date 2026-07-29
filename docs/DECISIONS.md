@@ -79,6 +79,27 @@ the plane.** The 2026-07-07 "eased" ruling is superseded for the freelook-releas
 B dominates or is comparable, the seads-feel agent implements upright-in-the-snap — **it
 does not re-ask.** Chad has now stated this three times.
 
+**Second addendum (same day) — Chad removes the measurement GATE on the up fix entirely.
+Verbatim:**
+
+> "No, for 2B nothing to measure!! Use my words here not a previous ruling. Snap to view
+> upon release of freelook, no eased anything as I need to immediately view the back of my
+> plane, the aim, the nose, everything — making it lag there is going to disorient."
+
+**What this rules:** the instant full snap — camera behind the plane, upright to the
+horizon, aim and nose in view, in one un-eased step — is **spec unconditionally**. It does
+not wait on the A-vs-B comparison; there is no "if B dominates" branch for it. This
+partially supersedes the pre-registered decision rule below **by direct ruling**, which is
+the one legitimate way to supersede a pre-registration: the rule existed to stop an agent
+rationalising numbers into a preferred fix, not to stop Chad specifying the behavior.
+
+**What survives of the pre-registration:** the instrument is still built first and the
+baseline numbers still recorded on unchanged v8 — as *evidence* (before/after, and proof of
+which term carried the felt oblique), not as a *gate*. The "both small → STOP and
+re-attribute" arm survives for the forward term's diagnosis. The golden tripwire survives
+untouched. v9 therefore implements BOTH halves: aim law (nose, unconditional weld) and
+camera law (one instant snap — forward AND up together).
+
 ---
 
 ## 2026-07-29 (later) — CHAD CORRECTS THE v9 "LAW" QUOTE: the aim NEVER snaps, and the release snap IS upright
