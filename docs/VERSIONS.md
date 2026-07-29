@@ -60,7 +60,9 @@ ticks, full-marks coverage of all three v6 mechanisms — rebalanced rudder (mou
 31% of ticks, 144–282 m/s), 20 freelook releases all via the new auto-orient (zero
 double-taps), 13 inverted episodes exercising the 0.5 s auto-right (longest dwell
 1.68 s), ~45 s of overrides, no raw-mode ticks, clean exit flush. Awaiting harness-agent
-signing + mirror into `goldens/` — that closes the v6 books.
+signing + mirror into `goldens/` — that closes the v6 books. Until then a byte-verified
+**safety copy is pushed at `tools/safety/felt_flight_2.seadsrec`** (SHA-256 in
+`tools/safety/README.md`; delete it once the signed authoritative copy is on a remote).
 **Provenance flag for signing (do NOT edit the header in place — the fnv1a signature
 covers it; the correction belongs in the signing metadata):** the file header says
 `tag=v5-reconcile@46051ca23`, a hardcoded `kFeltFlightVersionTag` constant in `main.cpp`
