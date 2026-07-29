@@ -84,9 +84,10 @@ input.
 
 | item | owner | state |
 |---|---|---|
-| **v9 implementation** | — | **LANDED** @ `a307a8a69` (see DECISIONS.md "v9 MEASURED AND LANDED"); awaiting Chad's fly (`docs/v9_fly_cards.md` in seads-feel) |
-| **CQ2 0.30 s easeback window** — mouse dead-zone after release contradicts "instantly re-established" | Chad | open; one-line flip waits on his ruling |
-| **Card-1 deflection trade** — key-only turning post-snap re-opens ~17° view | Chad | open; genuine tension, sustain stays dead absent a ruling |
+| **v9** | — | **FLOWN AND APPROVED by Chad 2026-07-29 night** — all 3 fly cards pass. CQ2 window KEPT by ruling (new cockpit rationale); Card-1 trade accepted. See DECISIONS.md |
+| **Seal v9 + push** (branch 6 ahead of origin) | seads-feel agent | next |
+| **Re-snapshot `reference/seads-feel/` at the v9 seal** | you | unblocked once the seal tag exists — v9 is a FLOWN seal |
+| **Golden Felt Flight #3** | you | unblocked once v9 seals; fly on the sealed build |
 | **Fly card 3 (v8)** — does the aim-bound camera still let Chad read a deflection shot? | Chad | **open, independent of v9** |
 | **Graft v8/v9 to seads-recon** | seads-feel agent | blocked until v9 flies |
 | **Golden Felt Flight #3** | you (goldens are yours) | not flown. Needs a clean tree; `KERNEL_SEAL` + build-info now track the build |

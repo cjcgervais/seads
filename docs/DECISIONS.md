@@ -29,6 +29,41 @@ past v6 at any time:
 
 ---
 
+## 2026-07-29 (night) — v9 FLOWN AND APPROVED: all three conditions pass; CQ2 window KEPT by ruling
+
+**Chad flew v9 (`a307a8a69` build) and approved all three fly-card conditions. Verbatim:**
+
+> "All 3 conditions are settled on this session. Instant snap on release of space — check.
+> Keys dont override the cam and snap back to oblique view — check. Nose was always welded
+> to the aim and vice versa in this kernel — it was the camera only that needed
+> modification; the aim wedded to nose was a default behavior in freelook. Keys dont affect
+> camera — check. We're all good on this one."
+
+**CQ2 ruled — the 0.30 s easeback window STAYS. Verbatim:**
+
+> "The .3 seconds mouse dead time is not noticeable as I need that .4s to observe / orient
+> myself and am able to respond in time without noticing."
+
+The window's mechanism rationale may be dead, but Chad has given it a *new*, current
+rationale from the cockpit: it covers the orientation beat after the snap. It is no longer
+a contradiction of "instantly re-established" — authority returns before he reaches for
+it. **Do not flip it; do not treat it as debt.** If it ever surfaces again, this entry is
+the ruling of record.
+
+**Card-1 deflection trade: accepted as flown.** No sustain, no further mechanism. Closed.
+
+**Chad's framing of what v9 actually was, worth keeping:** the aim-to-nose weld was the
+kernel's default freelook behavior all along — *the camera was the only thing that needed
+modification.* The fourth camera round succeeded when the fix finally matched that shape:
+camera-only, one instant snap, aim untouched.
+
+**Now unblocked (standing decisions permitting):** the seads-feel agent seals v9 and pushes
+(branch was 6 ahead, unpushed); graft to seads-recon proceeds per its open item. On this
+side, once the v9 seal exists: `reference/seads-feel/` may be re-snapshotted at it (it is
+now a FLOWN seal), and Golden Felt Flight #3 can be scheduled on the sealed build.
+
+---
+
 ## 2026-07-29 (evening) — v9 MEASURED AND LANDED: the pre-registered prediction was RIGHT, both terms were real
 
 **v9 "S-nosesnap" is implemented and green** on `feel/kernel-v5` @ `a307a8a69` (gate
