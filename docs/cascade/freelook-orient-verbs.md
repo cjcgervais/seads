@@ -75,7 +75,7 @@ suite; a one-shot pin now kills it.
 - **Double-tap (S-orient):** two freelook taps within `orient_double_tap_s = 0.30 s`
   fire the same snap + cut on the second-tap *press*; `0` disables structurally.
 
-## 4. Code — grounded in `reference/seads-feel/` (snapshot @ `89447aba5`)
+## 4. Code — grounded in `reference/seads-feel/` (snapshot @ `cfe1bd7fe`, 2026-07-28)
 
 - `input/aim_state.h` — `struct Freelook`: latches `override_used`, `freelook_prev`,
   `easeback`; `Freelook::step` returns `Step{snap_to_nose, mouse_aim_live, released}` —
@@ -92,13 +92,12 @@ suite; a one-shot pin now kills it.
 - `config/controller.toml` `[freelook]` + `config/load_controller.cpp` — `easeback_time`,
   `orient_double_tap_s`, `horizon_recovery_rate/settle` knobs and their loader walls.
 
-**Snapshot drift flag — S-relorient is NOT in this snapshot.** The snapshot predates it;
-it shows the double-tap-era code (rules 1–3, CQ2, S7-hrz, S-orient are all present). The
-mechanism itself lives on the live branch: `feel/kernel-v5` commits `274432f35`
-(mechanism, gate 380/380) and `468f2b352` (red-team folds: one-shot pin + honest
-banners), 2026-07-28, Chad-approved. The `release_orient` knob and its
-optional-with-default-false loader read exist only there until re-snapshot (see the
-watch-item in `docs/DECISIONS.md`).
+**Snapshot status:** current. The 2026-07-28 re-snapshot includes S-relorient
+(`app/instructor_tick.h` release handling, the `release_orient` knob and its
+optional-with-default-false read in `config/load_controller.cpp`, and the shipped-on
+value in `config/controller.toml` `[freelook]`), landed as `feel/kernel-v5` commits
+`274432f35` (mechanism, gate 380/380) and `468f2b352` (red-team folds: one-shot pin +
+honest banners), Chad-approved on the stick.
 
 ## Lineage
 

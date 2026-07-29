@@ -4,6 +4,7 @@
 #include <array>
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <glm/geometric.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <glm/gtc/type_ptr.hpp>
@@ -13,6 +14,7 @@
 #include "render/orient_cues.h"  // S-cues (comfort): ghost horizon + bank arc
 #include "render/planet.h"
 #include "render/readout.h"
+#include "render/rig.h"  // Fleet Rig (rig-D port): Bf 109 F-4 node table + law
 #include "rlgl.h"
 #include "sim/world.h"
 
@@ -75,40 +77,1075 @@ void draw_planet(const sim::AircraftParams& params, const glm::dvec3& eye) {
                  Color{72, 108, 58, 255});
 }
 
+// --- Fleet Rig (ported from seads-tunnel render/rig.{h,cpp} + the rig-D
+// D.3 ingestion in that tree's draw.cpp, 2026-07-23, PLANE-MODEL-ONLY) -----
+// The node table, rest transforms, and cosmetic control-surface deflection
+// law are PURE (render/rig.h/.cpp, glm + sim/state.h only — no tunnel-only
+// systems to trim there). This block is the raylib ingestion: load the 30
+// Bf 109 F-4 GLBs once, then per-frame pose + draw them through the shared
+// mirror/glass/matte material passes.
+//
+// TRIM vs the source tree: seads-tunnel's planet build produces a real
+// world-albedo CUBEMAP that the mirror shader samples for env reflections
+// (render/planet.h there: Planet::cubemap). seads-feel's planet (this
+// tree's render/planet.h) is a flat equirectangular-textured cubesphere —
+// no cubemap exists to reuse, and building one is a planet-build change,
+// out of scope for a render-only plane port. ensure_fleet() instead builds
+// a tiny flat NEUTRAL-GRAY stub cubemap (1x1 px x6 faces) once, so the
+// UNMODIFIED mirror shader (rig.cpp) still compiles and samples cleanly;
+// the mirror reads as a flat lit sheen (sun lambert + Fresnel rim in the
+// plane's own chroma) rather than the real planet reflected in the
+// fuselage. Cosmetic trim only — the geometry/rig/deflection law is
+// byte-identical to the source tree.
+struct FleetDrawParams {
+    glm::vec3 sun_dir{0.0f};       // world light-travel dir (sun -> scene)
+    float reflectivity = 0.45f;    // env-reflection strength [0,1]
+    float fresnel_power = 3.0f;    // Fresnel rim exponent (>0)
+    glm::vec3 player_color{1.0f};  // hero plane chroma
+    glm::vec3 bandit_color{1.0f};  // bandit plane chroma
+    DeflectGains gains{};
+    float prop_disc_alpha = 0.30f;
+    float prop_idle_alpha = 0.06f;
+};
+
+// The FIXED world-space sun used for the mirror shading — the SAME literal
+// draw_planet() uses (kept as a separate constant, not shared, to keep this
+// port a minimal diff off draw_planet's existing static local).
+constexpr glm::vec3 kFleetSunRaw{-0.45f, -0.75f, -0.48f};
+// rig-B deflection magnitudes are config DEGREES -> radians at this render
+// boundary (angles are radians internally elsewhere in the codebase).
+constexpr float kFleetD2R = static_cast<float>(3.14159265358979323846 / 180.0);
+
+struct FleetRig {
+    bool ok = false;
+    bool tried = false;
+    Mesh meshes[kNodeCount] = {};
+    // The loaded GLB Models are kept alive for the program lifetime —
+    // meshes[i] aliases models[i].meshes[0], so UnloadModel would free the
+    // GPU buffers we draw from.
+    Model models[kNodeCount] = {};
+    bool model_loaded[kNodeCount] = {};
+    Shader shader = {};
+    Material mat = {};        // Mirror: pop-art monochrome-saturation finish
+    Material glass_mat = {};  // Glass: translucent canopy
+    Material matte_mat = {};  // Matte: non-mirror diffuse (pilot, tyres)
+    Material prop_mat = {};   // translucent prop blur-disc material
+    Texture env_cubemap = {};  // the flat neutral-gray stub (see block note)
+    int loc_color = -1, loc_sun = -1, loc_fresnel = -1, loc_refl = -1;
+    Rig rig;
+};
+FleetRig g_fleet;
+
+// The material a node draws with, routed by its authored MaterialClass.
+Material& fleet_material(MaterialClass cls) {
+    switch (cls) {
+        case MaterialClass::Glass:
+            return g_fleet.glass_mat;
+        case MaterialClass::Matte:
+            return g_fleet.matte_mat;
+        case MaterialClass::Mirror:
+        default:
+            return g_fleet.mat;
+    }
+}
+
+void ensure_fleet() {
+    if (g_fleet.tried) return;
+    g_fleet.tried = true;
+    g_fleet.rig = build_aircraft_rig();
+    const auto& specs = aircraft_node_specs();
+    // Load the real Bf 109 F-4 mesh per node from assets/bf109/. Each GLB
+    // was exported with the SEADS frame preserved (nose on -Z, identity node
+    // transform), so model.meshes[0] is already in the node's local frame.
+    // A missing/empty GLB falls back to the placeholder GenMeshCube for
+    // THAT node only, so a single bad asset can't blank the aircraft.
+    for (int i = 0; i < kNodeCount; ++i) {
+        const char* key = specs[i].mesh_key;
+        bool loaded = false;
+        if (key != nullptr && key[0] != '\0') {
+            char path[256];
+            std::snprintf(path, sizeof path, "%s/bf109/%s.glb", SEADS_ASSET_DIR,
+                          key);
+            if (FileExists(path)) {
+                Model m = LoadModel(path);
+                if (m.meshCount >= 1 && m.meshes != nullptr) {
+                    g_fleet.models[i] = m;
+                    g_fleet.model_loaded[i] = true;
+                    g_fleet.meshes[i] = m.meshes[0];
+                    loaded = true;
+                } else {
+                    UnloadModel(m);  // empty/degenerate GLB
+                }
+            }
+        }
+        if (!loaded) {
+            const glm::vec3 d = specs[i].box_dims;  // shape in mesh (scl==1)
+            g_fleet.meshes[i] = GenMeshCube(d.x, d.y, d.z);
+            TraceLog(LOG_WARNING,
+                     "FLEET: node %d ('%s') GLB missing; cube fallback", i,
+                     key);
+        }
+    }
+    g_fleet.shader = LoadShaderFromMemory(mirror_vs_source(), mirror_fs_source());
+    g_fleet.loc_color = GetShaderLocation(g_fleet.shader, "u_planeColor");
+    g_fleet.loc_sun = GetShaderLocation(g_fleet.shader, "u_sunDir");
+    g_fleet.loc_fresnel = GetShaderLocation(g_fleet.shader, "u_fresnelPower");
+    g_fleet.loc_refl = GetShaderLocation(g_fleet.shader, "u_reflectivity");
+    // A compile failure leaves raylib's default program (our uniforms
+    // absent): loc_color == -1 => fall back to DrawCube.
+    if (g_fleet.shader.id == 0 || g_fleet.loc_color < 0) {
+        TraceLog(LOG_WARNING,
+                 "FLEET: mirror shader unavailable; DrawCube fallback");
+        return;
+    }
+    g_fleet.shader.locs[SHADER_LOC_MAP_CUBEMAP] =
+        GetShaderLocation(g_fleet.shader, "env");
+    g_fleet.mat = LoadMaterialDefault();
+    g_fleet.mat.shader = g_fleet.shader;
+    // The neutral-gray stub env cubemap (see the block note above): 1x1 px,
+    // RGBA8, six faces of the identical mid-gray texel, built once.
+    {
+        const unsigned char px[4] = {130, 130, 130, 255};
+        unsigned char data[6 * 4];
+        for (int f = 0; f < 6; ++f)
+            std::memcpy(data + f * 4, px, 4);
+        const unsigned int id = rlLoadTextureCubemap(
+            data, 1, RL_PIXELFORMAT_UNCOMPRESSED_R8G8B8A8, 1);
+        g_fleet.env_cubemap =
+            Texture{id, 1, 1, 1, RL_PIXELFORMAT_UNCOMPRESSED_R8G8B8A8};
+    }
+    // Matte (default shader): the pilot bust + rubber tyres read as form,
+    // not chrome — a mid-dark neutral so they sit INSIDE the mirror airframe.
+    g_fleet.matte_mat = LoadMaterialDefault();
+    g_fleet.matte_mat.maps[MATERIAL_MAP_DIFFUSE].color = Color{38, 40, 44, 255};
+    // Glass (default shader, translucent): the canopy — a cool tint at low
+    // alpha, drawn in the back-to-front translucent pass so the pilot shows
+    // through.
+    g_fleet.glass_mat = LoadMaterialDefault();
+    g_fleet.glass_mat.maps[MATERIAL_MAP_DIFFUSE].color =
+        Color{150, 175, 195, 90};
+    // Prop disc: default-shader material, neutral gray; per-draw alpha is
+    // set on its diffuse color (throttle-scaled). Symmetric disc, no spin.
+    g_fleet.prop_mat = LoadMaterialDefault();
+    g_fleet.prop_mat.maps[MATERIAL_MAP_DIFFUSE].color = Color{40, 44, 50, 255};
+    g_fleet.ok = true;
+    TraceLog(LOG_INFO, "FLEET: Bf 109 rig built (%d nodes, real meshes)",
+             kNodeCount);
+}
+
+// glm::mat4 -> raylib Matrix. to_ray_fields returns raylib FIELD-DECLARATION
+// order; designated initializers pin field<-value so a raylib struct
+// reorder can't silently transpose the matrix.
+Matrix to_ray(const glm::mat4& g) {
+    const std::array<float, 16> f = to_ray_fields(g);
+    return Matrix{.m0 = f[0],
+                  .m4 = f[1],
+                  .m8 = f[2],
+                  .m12 = f[3],
+                  .m1 = f[4],
+                  .m5 = f[5],
+                  .m9 = f[6],
+                  .m13 = f[7],
+                  .m2 = f[8],
+                  .m6 = f[9],
+                  .m10 = f[10],
+                  .m14 = f[11],
+                  .m3 = f[12],
+                  .m7 = f[13],
+                  .m11 = f[14],
+                  .m15 = f[15]};
+}
+
+// The landing-gear group: struts + wheels + doors + tailwheel. Hidden
+// together when the gear is retracted (state.gear <= eps). Doors parent to
+// the fuselage (bay-edge hinge), so membership is by index, not subtree.
+bool is_gear_node(int i) {
+    switch (i) {
+        case kLeftGearDoor:
+        case kLeftGearStrut:
+        case kLeftWheel:
+        case kRightGearDoor:
+        case kRightGearStrut:
+        case kRightWheel:
+        case kTailWheel:
+            return true;
+        default:
+            return false;
+    }
+}
+
 // Body-frame primitives (SPEC §7: +X right, +Y up, -Z forward), drawn under
 // the aircraft's model matrix. `enemy` swaps to the saturated bandit livery
-// (S8-drone): the world art direction wants the planes as the only chroma —
-// the player stays neutral gunmetal + red nose, the bandit is a saturated warm
-// scheme so it reads as hostile at a glance (full complementary liveries are
-// the world thread). Defaulted false => the player draw is bit-unchanged.
+// (S8-drone). `deflect` are the COMMANDED control Inputs that pose the
+// ailerons/elevator/rudder (render-only, RA9); the gear unfolds from
+// state.gear. The PROP is NOT drawn here — see draw_prop, a second
+// translucent pass after ALL opaque bodies. Falls back to the flat DrawCube
+// aircraft if the mirror shader/rig is unavailable, so the sim stays flyable.
 void draw_aircraft(const sim::SimState& state, const glm::dvec3& eye,
-                   bool enemy = false, double scale = 1.0) {
+                   const FleetDrawParams& fp, const sim::Inputs& deflect = {},
+                   bool enemy = false, double scale = 1.0,
+                   float wheel_roll_rad = 0.0f) {
+    ensure_fleet();
+    const Vector3 p = rel(state.position, eye);
+
+    if (!g_fleet.ok) {
+        // Fallback: the flat DrawCube aircraft — keeps the sim flyable with
+        // no floating geometry if the mirror shader/GLBs are unavailable.
+        const glm::mat4 body_to_world =
+            glm::mat4_cast(glm::quat(state.orientation));
+        rlPushMatrix();
+        rlTranslatef(p.x, p.y, p.z);
+        rlMultMatrixf(glm::value_ptr(body_to_world));
+        const float s = static_cast<float>(scale);
+        rlScalef(s, s, s);
+        const Color fuse =
+            enemy ? Color{188, 74, 42, 255} : Color{90, 96, 104, 255};
+        const Color wing =
+            enemy ? Color{158, 58, 32, 255} : Color{70, 76, 84, 255};
+        const Color tail =
+            enemy ? Color{158, 58, 32, 255} : Color{70, 76, 84, 255};
+        const Color fin =
+            enemy ? Color{206, 96, 54, 255} : Color{104, 110, 118, 255};
+        const Color nose =
+            enemy ? Color{240, 208, 72, 255} : Color{190, 60, 50, 255};
+        DrawCube(Vector3{0.0f, 0.0f, -0.8f}, 1.2f, 1.3f, 8.5f, fuse);
+        DrawCube(Vector3{0.0f, -0.1f, 0.2f}, 11.0f, 0.25f, 2.3f, wing);
+        DrawCube(Vector3{0.0f, 0.2f, 3.6f}, 4.2f, 0.2f, 1.3f, tail);
+        DrawCube(Vector3{0.0f, 1.0f, 3.7f}, 0.2f, 1.8f, 1.4f, fin);
+        DrawCube(Vector3{0.0f, 0.0f, -5.2f}, 0.7f, 0.7f, 1.0f, nose);
+        rlPopMatrix();
+        return;
+    }
+
+    // Eye-relative body-to-world: translate(pos - eye) * R(orientation) *
+    // scale. Children are metre-scale local, so this float composition is
+    // precision-safe (the big ~km translation is done in rel(), in double,
+    // before the cast).
+    const glm::mat4 body_to_world =
+        glm::translate(glm::mat4(1.0f), glm::vec3(p.x, p.y, p.z)) *
+        glm::mat4_cast(glm::quat(state.orientation)) *
+        glm::scale(glm::mat4(1.0f), glm::vec3(static_cast<float>(scale)));
+
+    // Per-plane uniforms. env is the flat stub cubemap built in ensure_fleet
+    // (see the block note) — read-only, sampled once per plane.
+    g_fleet.mat.maps[MATERIAL_MAP_CUBEMAP].texture = g_fleet.env_cubemap;
+    const glm::vec3 col = enemy ? fp.bandit_color : fp.player_color;
+    const float c3[3] = {col.x, col.y, col.z};
+    const float s3[3] = {fp.sun_dir.x, fp.sun_dir.y, fp.sun_dir.z};
+    SetShaderValue(g_fleet.shader, g_fleet.loc_color, c3, SHADER_UNIFORM_VEC3);
+    SetShaderValue(g_fleet.shader, g_fleet.loc_sun, s3, SHADER_UNIFORM_VEC3);
+    SetShaderValue(g_fleet.shader, g_fleet.loc_fresnel, &fp.fresnel_power,
+                   SHADER_UNIFORM_FLOAT);
+    SetShaderValue(g_fleet.shader, g_fleet.loc_refl, &fp.reflectivity,
+                   SHADER_UNIFORM_FLOAT);
+
+    // Pose the driven surfaces from the commanded Inputs + the actual gear
+    // extension, then recompute the node world matrices. The shared rig is
+    // fully re-posed per call (player, then each drone), so single-threaded
+    // reuse is safe — no leakage between planes.
+    apply_deflection(g_fleet.rig, deflect, static_cast<float>(state.gear),
+                     fp.gains, wheel_roll_rad);
+
+    const auto& specs = aircraft_node_specs();
+    for (int i = 0; i < kNodeCount; ++i) {
+        // The prop BLADES draw as a translucent disc in draw_prop's 2nd pass;
+        // the solid spinner still draws here.
+        if (i == kPropBlades) continue;
+        // The GLASS canopy is translucent — deferred to the back-to-front
+        // pass (draw_prop) so the mirror body behind it composites correctly.
+        if (specs[i].material == MaterialClass::Glass) continue;
+        // The whole gear group is drawn only while extended (state.gear
+        // slews 0->1); at 0 it is tucked in-bay and hidden.
+        if (is_gear_node(i) && state.gear <= 1e-3) continue;
+        const glm::mat4 m = body_to_world * g_fleet.rig[i].world;
+        DrawMesh(g_fleet.meshes[i], fleet_material(specs[i].material),
+                 to_ray(m));
+    }
+}
+
+// The per-plane TRANSLUCENT surfaces — the propeller blur disc AND the glass
+// canopy — drawn in a SEPARATE pass AFTER all opaque bodies (a depth-write-
+// off surface would otherwise be overwritten by a farther plane's later
+// opaque body). Alpha blending on, depth-WRITE off (caller wraps the whole
+// pass in BeginBlendMode/rlDisableDepthMask). The prop is a throttle-scaled
+// opacity (time-free: opacity, not a spinning phase).
+void draw_prop(const sim::SimState& state, const glm::dvec3& eye,
+               const FleetDrawParams& fp, double scale = 1.0) {
+    if (!g_fleet.ok) return;  // fallback aircraft has no prop
     const Vector3 p = rel(state.position, eye);
     const glm::mat4 body_to_world =
-        glm::mat4_cast(glm::quat(state.orientation));
-
-    rlPushMatrix();
-    rlTranslatef(p.x, p.y, p.z);
-    rlMultMatrixf(glm::value_ptr(body_to_world));  // glm + rlgl: column-major
-    const float s = static_cast<float>(scale);     // cosmetic size (S8-drone)
-    rlScalef(s, s, s);
-
-    const Color fuse =
-        enemy ? Color{188, 74, 42, 255} : Color{90, 96, 104, 255};
-    const Color wing = enemy ? Color{158, 58, 32, 255} : Color{70, 76, 84, 255};
-    const Color tail = enemy ? Color{158, 58, 32, 255} : Color{70, 76, 84, 255};
-    const Color fin =
-        enemy ? Color{206, 96, 54, 255} : Color{104, 110, 118, 255};
-    const Color nose =
-        enemy ? Color{240, 208, 72, 255} : Color{190, 60, 50, 255};
-
-    DrawCube(Vector3{0.0f, 0.0f, -0.8f}, 1.2f, 1.3f, 8.5f, fuse);    // fuselage
-    DrawCube(Vector3{0.0f, -0.1f, 0.2f}, 11.0f, 0.25f, 2.3f, wing);  // wing
-    DrawCube(Vector3{0.0f, 0.2f, 3.6f}, 4.2f, 0.2f, 1.3f, tail);   // tailplane
-    DrawCube(Vector3{0.0f, 1.0f, 3.7f}, 0.2f, 1.8f, 1.4f, fin);    // fin
-    DrawCube(Vector3{0.0f, 0.0f, -5.2f}, 0.7f, 0.7f, 1.0f, nose);  // nose cap
-    rlPopMatrix();
+        glm::translate(glm::mat4(1.0f), glm::vec3(p.x, p.y, p.z)) *
+        glm::mat4_cast(glm::quat(state.orientation)) *
+        glm::scale(glm::mat4(1.0f), glm::vec3(static_cast<float>(scale)));
+    // Glass canopy first (it sits behind the prop disc from most angles; the
+    // depth-write-off pass makes intra-plane order cosmetic, front-lit
+    // anyway).
+    const glm::mat4 gm = body_to_world * g_fleet.rig[kCanopy].world;
+    DrawMesh(g_fleet.meshes[kCanopy], fleet_material(MaterialClass::Glass),
+             to_ray(gm));
+    // Opacity fills in with throttle (idle floor .. full-throttle disc).
+    const float t = static_cast<float>(glm::clamp(state.throttle, 0.0, 1.0));
+    const float a =
+        fp.prop_idle_alpha + (fp.prop_disc_alpha - fp.prop_idle_alpha) * t;
+    Color& c = g_fleet.prop_mat.maps[MATERIAL_MAP_DIFFUSE].color;
+    c.a = static_cast<unsigned char>(glm::clamp(a, 0.0f, 1.0f) * 255.0f);
+    const glm::mat4 m = body_to_world * g_fleet.rig[kPropBlades].world;
+    DrawMesh(g_fleet.meshes[kPropBlades], g_fleet.prop_mat, to_ray(m));
 }
+
+// --- v5 HUD RESTYLE (Chad 2026-07-23): the neon aim reticle, the red
+// crosshair nose marker, and the "scared mouse" off-screen/near-screen aim
+// marker. Pure 2D overlay, render-only (reads FrameInfo/state, draws
+// pixels) — no sim/control/config coupling except the documented
+// [push_gate] horizon_enter constant pair below (a NAMED, not derived,
+// coupling — render has no ControllerParams to read it live).
+namespace aim_buddy {
+
+// --- SKIN SYSTEM (Chad 2026-07-23: "Lets make it a little green caspery
+// ghost guy translucent with sunglasses and bald head. It will become an
+// economy item when game is published."). Mascot skins are a PLANNED
+// published-game economy item — the shape exists in code today even though
+// only one skin ships: `kAimBuddySkin` is the one-line swap an artist/design
+// pass will later drive from a player selection instead of a compile-time
+// constant. Every retired skin is kept FULLY compilable (never deleted) so
+// swapping back, or adding a skin picker later, is a one-line change, not an
+// archaeology dig.
+enum class BuddySkin { kMouse, kGhost };
+constexpr BuddySkin kAimBuddySkin = BuddySkin::kGhost;  // the SHIPPED skin
+
+// --- FEAR SOURCE (render-side, read-only): how close the TRUE aim is to
+// diving through the split-S knife edge. Two hardcoded elevation
+// thresholds — render cannot read [push_gate] live (no ControllerParams
+// here), so these are a DOCUMENTED constant pair coupled to
+// config/controller.toml's [push_gate] horizon_enter (45 deg below horizon
+// today): if that knife edge is ever retuned, move kMouseFearCommitDeg with
+// it. kMouseFearStartDeg is a render-only "getting nervous" lead-in, not a
+// kernel dial.
+constexpr double kMouseFearStartDeg = 15.0;   // [deg below horizon] nervous
+constexpr double kMouseFearCommitDeg = 45.0;  // [deg below horizon] the
+                                              // commit line == [push_gate]
+                                              // horizon_enter
+const double kMouseFearStart = -std::sin(kMouseFearStartDeg * PI / 180.0);
+const double kMouseFearCommit = -std::sin(kMouseFearCommitDeg * PI / 180.0);
+
+// Linear-parameter smoothstep between two edges that need not be ordered
+// low->high (kMouseFearStart > kMouseFearCommit: elevation DECREASES as the
+// dive deepens) — the usual t=(x-e0)/(e1-e0) formula is direction-agnostic,
+// only the clamp+cubic-ease need the explicit form (glm::smoothstep assumes
+// edge0<edge1).
+double smoothstep01(double edge0, double edge1, double x) {
+    const double denom = edge1 - edge0;
+    double t = std::abs(denom) > 1e-12 ? (x - edge0) / denom
+                                       : (x >= edge1 ? 1.0 : 0.0);
+    t = std::clamp(t, 0.0, 1.0);
+    return t * t * (3.0 - 2.0 * t);
+}
+
+// --- SPLASH one-shot (the FleetRig static-persistent-state pattern): the
+// ~2 s panic transformation the first time fear01 commits to the knife
+// edge, re-arming only after fear relaxes back below kSplashRearm. Kept as
+// its own tiny struct + constants so a future artist pass can swap the
+// splash BODY (the panic-form draw below) without touching this trigger.
+constexpr float kSplashFear = 0.95f;
+constexpr float kSplashRearm = 0.5f;
+constexpr double kSplashDuration = 2.0;  // [s]
+
+// --- RELIEF one-shot (Chad 2026-07-23: "also relief at safety"): a ~1.5 s
+// exhale/sag beat that plays once fear01 has fallen back below
+// kReliefFear having previously exceeded kReliefHighWater, re-arming only
+// after fear01 climbs back above kReliefRearm. Same hysteretic-latch shape
+// as the splash above, folded into the same persistent struct (the
+// FleetRig static-persistent-state pattern — one glyph, one state block).
+constexpr float kReliefHighWater = 0.7f;
+constexpr float kReliefFear = 0.25f;
+constexpr float kReliefRearm = 0.5f;
+constexpr double kReliefDuration = 1.5;  // [s]
+struct SplashState {
+    float last_fear = 0.0f;
+    double splash_start_s = -1e18;  // far past = never fired
+    bool armed = true;
+
+    // Relief tracking (independent latch, shares nothing with the splash
+    // trigger above so a panic-splash and a later relief beat can never
+    // fight over one bit of state).
+    float fear_high_water = 0.0f;
+    double relief_start_s = -1e18;  // far past = never fired
+    bool relief_armed = true;
+};
+SplashState g_splash;
+
+// Outline-then-fill helpers: draw the shape slightly larger in BLACK first
+// (the "embossed... outlined in black" ask), then the real color on top.
+void circle_outlined(Vector2 c, float r, Color col, float outline_px) {
+    DrawCircleV(c, r + outline_px, BLACK);
+    DrawCircleV(c, r, col);
+}
+void ellipse_outlined(Vector2 c, float rx, float ry, Color col,
+                      float outline_px) {
+    DrawEllipse(static_cast<int>(c.x), static_cast<int>(c.y),
+                rx + outline_px, ry + outline_px, BLACK);
+    DrawEllipse(static_cast<int>(c.x), static_cast<int>(c.y), rx, ry, col);
+}
+
+// The scared-mouse glyph itself (Chad: "a little mouse... bright green and
+// easy to see embossed in white outlined in black and stylish accents like
+// sunglasses and buckteeth" + the split-S fear ramp + the 2 s splash).
+// Drawn UPRIGHT always — `dir_unit` feeds ONLY the short pointer tick (a
+// legible "which way" cue), never a rotation of the mouse itself (Chad
+// asked for a legible glyph, not a spinning one). `scale` is an ADDITIVE
+// parameter beyond the ask's literal 4-arg signature (default 1.0 = the
+// ~32 px off-screen size) so the SAME function serves the smaller on-screen
+// docked variant (~22 px, scale ~0.69) without duplicating the art.
+// RETIRED (2026-07-23, superseded by kGhost) — kept fully compilable and
+// selectable as skin kMouse; every mechanism it defined (fear bands, splash,
+// tremble, pointer tick) is shared/mirrored by draw_aim_ghost below.
+void draw_aim_mouse(Vector2 anchor, Vector2 dir_unit, float fear01,
+                    double now_s, float scale = 1.0f) {
+    fear01 = std::clamp(fear01, 0.0f, 1.0f);
+
+    // Splash trigger/re-arm (edge-detected via the `armed` latch: it can
+    // only be true again once fear01 has actually dropped below
+    // kSplashRearm, so a fear01 that hovers just under kSplashFear cannot
+    // re-fire the pulse every frame).
+    if (fear01 >= kSplashFear && g_splash.armed) {
+        g_splash.splash_start_s = now_s;
+        g_splash.armed = false;
+    }
+    if (fear01 < kSplashRearm) g_splash.armed = true;
+    g_splash.last_fear = fear01;
+    const double splash_t =
+        (now_s - g_splash.splash_start_s) / kSplashDuration;
+    const bool splashing = splash_t >= 0.0 && splash_t < 1.0;
+
+    // TREMBLE (display-only wobble; deterministic in now_s, per-axis phase
+    // offset so it reads as a shake, not a diagonal slide) — only in the
+    // fully-scared band.
+    Vector2 a = anchor;
+    if (fear01 > 0.7f) {
+        a.x += static_cast<float>(std::sin(now_s * 40.0)) * fear01 * 2.0f;
+        a.y += static_cast<float>(std::cos(now_s * 40.0 + 1.3)) * fear01 *
+              2.0f;
+    }
+
+    // The splash PULSE: the glyph scales up ~1.5x and back over the window
+    // (sin(pi*t) peaks at t=0.5).
+    float s = scale;
+    if (splashing) {
+        const float pt = static_cast<float>(std::clamp(splash_t, 0.0, 1.0));
+        s *= 1.0f + 0.5f * std::sin(PI * pt);
+    }
+
+    // The splash RINGS: 2-3 expanding, fading screen-space circles centered
+    // on the glyph, drawn FIRST (behind the mouse).
+    if (splashing) {
+        constexpr int kRings = 3;
+        for (int i = 0; i < kRings; ++i) {
+            const double ring_t =
+                std::clamp(splash_t - i * 0.12, 0.0, 1.0);
+            if (ring_t <= 0.0) continue;
+            const float radius =
+                (14.0f + static_cast<float>(ring_t) * 46.0f) * scale;
+            const unsigned char al = static_cast<unsigned char>(
+                (1.0 - ring_t) * 180.0);
+            DrawCircleLinesV(a, radius, Color{60, 255, 120, al});
+        }
+    }
+
+    constexpr Color kBody{57, 255, 60, 255};    // bright neon-green body
+    constexpr Color kWhite{250, 250, 250, 255};  // emboss highlights
+    const float outline = 1.7f * s;
+
+    // Tail: a curling flick off the body's lower-right (a few segments),
+    // drawn UNDER the body.
+    {
+        const Vector2 t0{a.x + 8.0f * s, a.y + 2.0f * s};
+        const Vector2 t1{a.x + 14.0f * s, a.y - 1.0f * s};
+        const Vector2 t2{a.x + 12.0f * s, a.y - 7.0f * s};
+        const Vector2 t3{a.x + 6.0f * s, a.y - 6.0f * s};
+        DrawLineEx(t0, t1, 2.6f * s, BLACK);
+        DrawLineEx(t1, t2, 2.6f * s, BLACK);
+        DrawLineEx(t2, t3, 2.6f * s, BLACK);
+        DrawLineEx(t0, t1, 1.4f * s, kBody);
+        DrawLineEx(t1, t2, 1.4f * s, kBody);
+        DrawLineEx(t2, t3, 1.4f * s, kBody);
+    }
+
+    // Body (a squat ellipse) + head (a circle) + two round ears.
+    const Vector2 body_c{a.x, a.y - 6.0f * s};
+    const Vector2 head_c{a.x, a.y - 16.0f * s};
+    const Vector2 ear_l{a.x - 6.0f * s, a.y - 22.5f * s};
+    const Vector2 ear_r{a.x + 6.0f * s, a.y - 22.5f * s};
+    const float body_rx = 9.0f * s, body_ry = 7.0f * s;
+    const float head_r = 8.0f * s;
+    const float ear_r_px = 4.5f * s;
+
+    ellipse_outlined(body_c, body_rx, body_ry, kBody, outline);
+    circle_outlined(ear_l, ear_r_px, kBody, outline);
+    circle_outlined(ear_r, ear_r_px, kBody, outline);
+    circle_outlined(head_c, head_r, kBody, outline);
+
+    // WHITE EMBOSS: a highlight crescent (a shaded pie wedge, upper-left of
+    // the head) + thin white rim arcs on the ears.
+    DrawCircleSector(Vector2{head_c.x - 2.0f * s, head_c.y - 2.0f * s},
+                     head_r * 0.55f, 200.0f, 260.0f, 8, kWhite);
+    DrawRing(ear_l, ear_r_px - 1.6f * s, ear_r_px - 0.4f * s, 0.0f, 360.0f, 16,
+            Color{250, 250, 250, 200});
+    DrawRing(ear_r, ear_r_px - 1.6f * s, ear_r_px - 0.4f * s, 0.0f, 360.0f, 16,
+            Color{250, 250, 250, 200});
+
+    // --- FACE, by fear band ---
+    const Vector2 eye_l{head_c.x - 3.4f * s, head_c.y - 1.0f * s};
+    const Vector2 eye_r{head_c.x + 3.4f * s, head_c.y - 1.0f * s};
+
+    if (fear01 < 0.3f) {
+        // COOL: sunglasses on, level.
+        const Rectangle band{head_c.x - 6.5f * s, head_c.y - 2.6f * s,
+                             13.0f * s, 3.4f * s};
+        DrawRectangleRounded(band, 0.6f, 6, BLACK);
+        circle_outlined(eye_l, 2.6f * s, BLACK, 1.0f * s);
+        circle_outlined(eye_r, 2.6f * s, BLACK, 1.0f * s);
+        DrawCircleV(Vector2{eye_l.x - 0.8f * s, eye_l.y - 0.8f * s},
+                   0.7f * s, kWhite);  // glints
+        DrawCircleV(Vector2{eye_r.x - 0.8f * s, eye_r.y - 0.8f * s},
+                   0.7f * s, kWhite);
+    } else {
+        // Eyes visible (white sclera + black pupil), bigger the more
+        // scared.
+        const float eye_r_px = (fear01 < 0.7f ? 3.0f : 4.0f) * s;
+        circle_outlined(eye_l, eye_r_px, kWhite, 1.0f * s);
+        circle_outlined(eye_r, eye_r_px, kWhite, 1.0f * s);
+        DrawCircleV(eye_l, eye_r_px * 0.5f, BLACK);
+        DrawCircleV(eye_r, eye_r_px * 0.5f, BLACK);
+
+        if (fear01 < 0.7f) {
+            // NERVOUS: the shades SLIP — drawn lower + skewed, via
+            // DrawRectanglePro's rotation.
+            Rectangle band{head_c.x, head_c.y + 2.0f * s, 13.0f * s,
+                          3.2f * s};
+            Vector2 origin{6.5f * s, 1.6f * s};
+            DrawRectanglePro(band, origin, 12.0f, BLACK);
+        } else {
+            // SCARED: glasses FLUNG — a tiny pair offset up and away,
+            // tilted, as if knocked off.
+            Rectangle band{head_c.x - 10.0f * s, head_c.y - 16.0f * s,
+                          9.0f * s, 2.4f * s};
+            Vector2 origin{4.5f * s, 1.2f * s};
+            DrawRectanglePro(band, origin, -35.0f, BLACK);
+        }
+
+        // Mouth: a small black O behind the buckteeth, bigger when scared.
+        const float mouth_r = (fear01 < 0.7f ? 2.0f : 3.4f) * s;
+        DrawCircleV(Vector2{head_c.x, head_c.y + 5.5f * s}, mouth_r, BLACK);
+
+        // Sweat drops: 1-2 nervous, more scared — small blue-white
+        // teardrops off the temple.
+        const int drops = fear01 < 0.7f ? 2 : 3;
+        for (int i = 0; i < drops; ++i) {
+            const Vector2 dp{head_c.x + (8.5f + 3.0f * i) * s,
+                            head_c.y - (6.0f - 3.0f * i) * s};
+            DrawCircleV(dp, 1.6f * s, Color{210, 235, 255, 230});
+            DrawTriangle(
+                Vector2{dp.x - 1.6f * s, dp.y},
+                Vector2{dp.x + 1.6f * s, dp.y},
+                Vector2{dp.x, dp.y - 3.2f * s}, Color{210, 235, 255, 230});
+        }
+    }
+
+    // BUCKTEETH: two small white rounded rects below the mouth, a thin
+    // black split between them. Drawn LAST (over the mouth/glasses) so
+    // they always read as the mouse's signature.
+    {
+        const float ty = head_c.y + 5.0f * s;
+        const Rectangle tl{head_c.x - 3.0f * s, ty, 2.6f * s, 4.0f * s};
+        const Rectangle tr{head_c.x + 0.4f * s, ty, 2.6f * s, 4.0f * s};
+        DrawRectangleRounded(tl, 0.4f, 4, kWhite);
+        DrawRectangleRounded(tr, 0.4f, 4, kWhite);
+        DrawLineEx(Vector2{head_c.x, ty}, Vector2{head_c.x, ty + 4.0f * s},
+                  1.0f * s, BLACK);
+    }
+
+    // Pointer tick: a short green stroke from the glyph toward `dir_unit`
+    // (off-screen: toward the screen edge the true aim sits beyond;
+    // on-screen docked: toward the reticle it accompanies) — keeps the
+    // direction legible without rotating the art.
+    const float dlen = std::sqrt(dir_unit.x * dir_unit.x +
+                                 dir_unit.y * dir_unit.y);
+    if (dlen > 1e-6f) {
+        const Vector2 ud{dir_unit.x / dlen, dir_unit.y / dlen};
+        const Vector2 p0{a.x + ud.x * 18.0f * s, a.y + ud.y * 18.0f * s};
+        const Vector2 p1{a.x + ud.x * 27.0f * s, a.y + ud.y * 27.0f * s};
+        DrawLineEx(p0, p1, 2.2f * s, kBody);
+    }
+}
+
+// Animated flying sweat: 1-3 small blue-white droplets that spawn at the
+// crown and arc off the head (a simple flung parabola driven by
+// fmod(now_s, ~0.8s) per-drop phase), count/size scaling with fear01. A
+// no-op below kSweatStartFear so the cool band reads "on watch," not
+// "sweating buckets."
+constexpr float kSweatStartFear = 0.15f;
+constexpr double kSweatPeriod = 0.8;  // [s] one flung-off flight
+void draw_ghost_sweat(Vector2 head_c, float head_r, float fear01,
+                      double now_s, float s) {
+    if (fear01 < kSweatStartFear) return;
+    int drops = 1;
+    if (fear01 >= 0.45f) drops = 2;
+    if (fear01 >= 0.7f) drops = 3;
+    for (int i = 0; i < drops; ++i) {
+        const double phase =
+            std::fmod(now_s + i * 0.29, kSweatPeriod) / kSweatPeriod;
+        const float pd = static_cast<float>(phase);
+        const float side = (i % 2 == 0) ? -1.0f : 1.0f;
+        const Vector2 crown{head_c.x + side * 1.5f * s,
+                            head_c.y - head_r * 0.85f};
+        // Flung sideways off the crown, arcing down (a small parabola).
+        const float dx = side * (2.5f + 6.0f * pd) * s;
+        const float dy = (-2.0f * pd + 7.0f * pd * pd) * s;
+        const Vector2 p{crown.x + dx, crown.y + dy};
+        const float r = (0.9f + 0.5f * fear01) * s;
+        const unsigned char al =
+            static_cast<unsigned char>((1.0f - pd) * 220.0f);
+        DrawCircleV(p, r, Color{210, 235, 255, al});
+        DrawTriangle(Vector2{p.x - r, p.y}, Vector2{p.x + r, p.y},
+                    Vector2{p.x, p.y - r * 2.0f}, Color{210, 235, 255, al});
+    }
+}
+
+// The PANIC form (replaces the old scale-pulse+rings splash entirely,
+// Chad: "make the ghost have a cooler form"): a WAIL-STREAK transformation
+// over the g_splash ~2 s window, `t01` = 0..1 through it.
+//   t 0.00-0.25  the body stretches vertically ~1.6x, eyes clench then fly
+//                open huge, mouth becomes a big screaming O.
+//   t 0.25-0.75  full wail: the hem streams into a flowing comet tail,
+//                violent tremble, shed wisp particles, flickering scream
+//                lines off the mouth.
+//   t 0.75-1.00  snap back: one overshoot bounce to normal, wisps fade.
+// Owns its own full body draw (skin-local — draw_aim_mouse's splash is
+// untouched, its ring/pulse code was never a shared helper).
+void draw_ghost_panic(Vector2 anchor, float t01, double now_s, float scale) {
+    t01 = std::clamp(t01, 0.0f, 1.0f);
+    const Color kGhostFill{57, 255, 60, 110};
+    const Color kGhostRim{57, 255, 60, 200};
+    constexpr Color kWhite{250, 250, 250, 255};
+
+    float stretch, intensity, eye_open, mouth_open, tail_amt;
+    if (t01 < 0.25f) {
+        const float u = t01 / 0.25f;
+        const float ease = u * u * (3.0f - 2.0f * u);
+        stretch = 1.0f + 0.6f * ease;
+        eye_open = u < 0.5f ? 0.0f : (u - 0.5f) / 0.5f;  // clench, fly open
+        mouth_open = u;
+        tail_amt = u * 0.3f;
+        intensity = u * 0.4f;
+    } else if (t01 < 0.75f) {
+        stretch = 1.6f;
+        eye_open = 1.0f;
+        mouth_open = 1.0f;
+        tail_amt = 1.0f;
+        intensity = 1.0f;
+    } else {
+        const float u = (t01 - 0.75f) / 0.25f;
+        stretch = 1.0f + 0.6f * (1.0f - u) +
+                 0.12f * std::sin(u * PI * 2.0f) * (1.0f - u);  // one bounce
+        eye_open = 1.0f - u;
+        mouth_open = 1.0f - u;
+        tail_amt = 1.0f - u;
+        intensity = 1.0f - u;
+    }
+
+    const float s = scale;
+
+    // Violent tremble, peaking in the wail phase.
+    Vector2 a = anchor;
+    a.x += static_cast<float>(std::sin(now_s * 55.0)) * intensity * 3.0f * s;
+    a.y +=
+        static_cast<float>(std::cos(now_s * 55.0 + 0.7)) * intensity * 2.0f * s;
+
+    const float head_r = 9.0f * s;
+    const float body_half_w = 9.5f * s * (1.0f - 0.15f * tail_amt);
+    const Vector2 head_c{a.x, a.y - 15.0f * s * stretch};
+    const float body_top = head_c.y;
+    const float hem_y = a.y + 9.0f * s * stretch;
+    const float rim_px = 1.2f * s;
+
+    DrawCircleV(head_c, head_r + rim_px, kGhostRim);
+    DrawRectangle(static_cast<int>(a.x - body_half_w - rim_px),
+                 static_cast<int>(body_top),
+                 static_cast<int>(2.0f * (body_half_w + rim_px)),
+                 static_cast<int>(hem_y - body_top), kGhostRim);
+    DrawCircleV(head_c, head_r, kGhostFill);
+    DrawRectangle(static_cast<int>(a.x - body_half_w),
+                 static_cast<int>(body_top),
+                 static_cast<int>(2.0f * body_half_w),
+                 static_cast<int>(hem_y - body_top), kGhostFill);
+
+    // Hem -> comet tail: 3 trailing wisps (sin-driven flutter) once the
+    // wail has started to build, plus shed wisp particles peeling off and
+    // fading (each its own fmod(now_s, ~0.6s) phase).
+    if (tail_amt > 0.05f) {
+        constexpr int kWisps = 3;
+        for (int i = 0; i < kWisps; ++i) {
+            const float wt = (i + 0.5f) / static_cast<float>(kWisps);
+            const float x0 = a.x - body_half_w + 2.0f * body_half_w * wt;
+            const float len = (10.0f + 14.0f * tail_amt) * s;
+            const float flutter =
+                static_cast<float>(std::sin(now_s * 10.0 + i * 2.1)) * 4.0f *
+                s * tail_amt;
+            const Vector2 p0{x0, hem_y};
+            const Vector2 p1{x0 + flutter * 0.5f, hem_y + len * 0.5f};
+            const Vector2 p2{x0 + flutter, hem_y + len};
+            DrawLineEx(p0, p1, 3.4f * s, kGhostRim);
+            DrawLineEx(p1, p2, 2.6f * s, kGhostFill);
+        }
+
+        constexpr int kParticles = 5;
+        for (int i = 0; i < kParticles; ++i) {
+            constexpr double kPartPeriod = 0.6;
+            const double phase =
+                std::fmod(now_s + i * 0.13, kPartPeriod) / kPartPeriod;
+            const float along = static_cast<float>(phase);
+            const float px = a.x + (i % 2 == 0 ? -1.0f : 1.0f) *
+                              (3.0f + 10.0f * along) * s;
+            const float py = hem_y + along * 22.0f * s * tail_amt;
+            const unsigned char al = static_cast<unsigned char>(
+                (1.0f - along) * 140.0f * tail_amt);
+            DrawCircleV(Vector2{px, py}, 1.6f * s, Color{120, 255, 130, al});
+        }
+    }
+
+    // Arms flung up in fright.
+    const Vector2 arm_l{a.x - body_half_w - 1.0f * s,
+                        head_c.y + 6.0f * s * stretch};
+    const Vector2 arm_r{a.x + body_half_w + 1.0f * s,
+                        head_c.y + 6.0f * s * stretch};
+    const float arm_r_px = 3.0f * s;
+    DrawCircleV(arm_l, arm_r_px + rim_px, kGhostRim);
+    DrawCircleV(arm_r, arm_r_px + rim_px, kGhostRim);
+    DrawCircleV(arm_l, arm_r_px, kGhostFill);
+    DrawCircleV(arm_r, arm_r_px, kGhostFill);
+
+    // Eyes: clenched shut -> flown open huge.
+    const Vector2 eye_l{head_c.x - 3.4f * s, head_c.y - 1.0f * s};
+    const Vector2 eye_r{head_c.x + 3.4f * s, head_c.y - 1.0f * s};
+    if (eye_open < 0.5f) {
+        DrawLineEx(Vector2{eye_l.x - 2.5f * s, eye_l.y},
+                  Vector2{eye_l.x + 2.5f * s, eye_l.y}, 1.6f * s, BLACK);
+        DrawLineEx(Vector2{eye_r.x - 2.5f * s, eye_r.y},
+                  Vector2{eye_r.x + 2.5f * s, eye_r.y}, 1.6f * s, BLACK);
+    } else {
+        const float eo = (eye_open - 0.5f) / 0.5f;
+        const float eye_r_px = (3.5f + 2.0f * eo) * s;
+        DrawCircleV(eye_l, eye_r_px, kWhite);
+        DrawCircleV(eye_r, eye_r_px, kWhite);
+        DrawCircleV(eye_l, eye_r_px * 0.45f, BLACK);
+        DrawCircleV(eye_r, eye_r_px * 0.45f, BLACK);
+    }
+
+    // Mouth: screaming O, with flickering scream lines during the full wail.
+    if (mouth_open > 0.05f) {
+        const float mouth_r = (1.0f + 2.6f * mouth_open) * s;
+        const Vector2 mouth_c{head_c.x, head_c.y + 5.5f * s * stretch};
+        DrawCircleV(mouth_c, mouth_r, BLACK);
+        DrawRing(mouth_c, mouth_r * 0.55f, mouth_r * 0.7f, 0.0f, 360.0f, 10,
+                Color{80, 20, 20, 200});
+
+        if (tail_amt > 0.6f && std::sin(now_s * 30.0) > 0.0) {
+            constexpr int kLines = 3;
+            for (int i = 0; i < kLines; ++i) {
+                const float ang = (-40.0f + 40.0f * i) * PI / 180.0f;
+                const float sn = static_cast<float>(std::sin(ang));
+                const float cs = static_cast<float>(std::cos(ang));
+                const Vector2 p0{mouth_c.x + sn * mouth_r * 1.3f,
+                                mouth_c.y + cs * mouth_r * 1.3f};
+                const Vector2 p1{mouth_c.x + sn * mouth_r * 2.1f,
+                                mouth_c.y + cs * mouth_r * 2.1f};
+                DrawLineEx(p0, p1, 1.4f * s, kWhite);
+            }
+        }
+    }
+}
+
+// The translucent green ghost glyph (Chad: "a little green caspery ghost
+// guy translucent with sunglasses and bald head" — the future economy-item
+// skin). Reuses the SAME fear/splash/tremble machinery as draw_aim_mouse
+// (g_splash, kSplashFear/kSplashRearm/kSplashDuration, the fear01 bands, the
+// pointer tick) — only the ART changes, PLUS its own panic form and relief
+// beat (both skin-local, not shared with draw_aim_mouse). Generic
+// friendly-ghost silhouette (round bald head, no ears, stubby side nubs for
+// arms, body tapering to a wavy scalloped hem, no legs) — deliberately NOT
+// a copy of any specific copyrighted character's exact face/proportions.
+void draw_aim_ghost(Vector2 anchor, Vector2 dir_unit, float fear01,
+                    double now_s, float scale = 1.0f) {
+    fear01 = std::clamp(fear01, 0.0f, 1.0f);
+
+    // Splash (panic) trigger/re-arm — identical mechanism to draw_aim_mouse,
+    // shared g_splash (only one skin is ever live at a time, kAimBuddySkin).
+    if (fear01 >= kSplashFear && g_splash.armed) {
+        g_splash.splash_start_s = now_s;
+        g_splash.armed = false;
+    }
+    if (fear01 < kSplashRearm) g_splash.armed = true;
+    g_splash.last_fear = fear01;
+    const double splash_t =
+        (now_s - g_splash.splash_start_s) / kSplashDuration;
+    const bool splashing = splash_t >= 0.0 && splash_t < 1.0;
+
+    // RELIEF trigger/re-arm (Chad: "also relief at safety") — a separate
+    // hysteretic latch keyed off a HIGH-WATER read of fear01 so it only
+    // fires after a real scare, not a brief blip through the low band.
+    g_splash.fear_high_water = std::max(g_splash.fear_high_water, fear01);
+    if (fear01 < kReliefFear && g_splash.fear_high_water > kReliefHighWater &&
+        g_splash.relief_armed) {
+        g_splash.relief_start_s = now_s;
+        g_splash.relief_armed = false;
+        g_splash.fear_high_water = 0.0f;
+    }
+    if (fear01 > kReliefRearm) g_splash.relief_armed = true;
+    const double relief_t =
+        (now_s - g_splash.relief_start_s) / kReliefDuration;
+    const bool relieving = !splashing && relief_t >= 0.0 && relief_t < 1.0;
+
+    // TREMBLE — same shake as the mouse, only in the fully-scared band, and
+    // only OUTSIDE panic (the panic form has its own, stronger tremble).
+    Vector2 a = anchor;
+    if (!splashing && fear01 > 0.7f) {
+        a.x += static_cast<float>(std::sin(now_s * 40.0)) * fear01 * 2.0f;
+        a.y += static_cast<float>(std::cos(now_s * 40.0 + 1.3)) * fear01 *
+              2.0f;
+    }
+
+    float s = scale;
+    if (relieving) {
+        // A slow exhale: squash to ~0.92x then recover over the beat.
+        const float rt = static_cast<float>(std::clamp(relief_t, 0.0, 1.0));
+        const float squash =
+            1.0f - 0.08f * std::sin(PI * std::min(rt / 0.4f, 1.0f));
+        s *= squash;
+    }
+
+    if (splashing) {
+        draw_ghost_panic(a, static_cast<float>(std::clamp(splash_t, 0.0, 1.0)),
+                         now_s, s);
+    } else {
+        // Body alpha PULSES at ~6 Hz in the fully-scared band ("flickering
+        // with fright"); a steady MORE TRANSLUCENT 85 otherwise (was 140 —
+        // Chad: "I need it more translucent").
+        unsigned char body_alpha = 85;
+        if (fear01 > 0.7f) {
+            const double pulse = std::sin(now_s * 2.0 * PI * 6.0);
+            body_alpha = static_cast<unsigned char>(
+                std::clamp(85.0 + 35.0 * pulse, 0.0, 255.0));
+        }
+        const Color kGhostFill{57, 255, 60, body_alpha};  // translucent green
+        const Color kGhostRim{57, 255, 60, 150};  // soft rim, still legible
+        constexpr Color kWhite{250, 250, 250, 255};
+
+        // Geometry: bald round head merging into a tapering body, no ears,
+        // no legs.
+        const Vector2 head_c{a.x, a.y - 15.0f * s};
+        const float head_r = 9.0f * s;
+        const float body_half_w = 9.5f * s;
+        const float body_top = head_c.y;
+        const float hem_y = a.y + 9.0f * s;
+        const float rim_px = 1.2f * s;
+
+        // Hem wave speed/amplitude by fear band (Chad: "hem waves gently"
+        // cool, "waves faster" nervous/scared).
+        float wave_speed = 3.0f, wave_amp = 1.0f;
+        if (fear01 >= 0.3f && fear01 < 0.7f) {
+            wave_speed = 6.0f;
+            wave_amp = 1.5f;
+        } else if (fear01 >= 0.7f) {
+            wave_speed = 9.0f;
+            wave_amp = 2.0f;
+        }
+
+        // RIM first (soft, slightly larger), FILL on top — the ghost's
+        // "soft" outline in place of the mouse's hard black one.
+        DrawCircleV(head_c, head_r + rim_px, kGhostRim);
+        DrawRectangle(static_cast<int>(a.x - body_half_w - rim_px),
+                     static_cast<int>(body_top),
+                     static_cast<int>(2.0f * (body_half_w + rim_px)),
+                     static_cast<int>(hem_y - body_top), kGhostRim);
+        DrawCircleV(head_c, head_r, kGhostFill);
+        DrawRectangle(static_cast<int>(a.x - body_half_w),
+                     static_cast<int>(body_top),
+                     static_cast<int>(2.0f * body_half_w),
+                     static_cast<int>(hem_y - body_top), kGhostFill);
+
+        // WAVY SCALLOPED HEM: 4 bumps, each independently phased so the hem
+        // reads as a traveling wave, not a rigid bounce.
+        constexpr int kScallops = 4;
+        const float scallop_r = (2.0f * body_half_w / kScallops) * 0.62f;
+        for (int i = 0; i < kScallops; ++i) {
+            const float t = (i + 0.5f) / static_cast<float>(kScallops);
+            const float x = a.x - body_half_w + 2.0f * body_half_w * t;
+            const float phase = i * 1.3f;
+            const float wave =
+                static_cast<float>(std::sin(now_s * wave_speed + phase)) *
+                wave_amp * s;
+            const Vector2 sc{x, hem_y + wave};
+            DrawCircleSector(sc, scallop_r + rim_px, 0.0f, 180.0f, 10,
+                            kGhostRim);
+            DrawCircleSector(sc, scallop_r, 0.0f, 180.0f, 10, kGhostFill);
+        }
+
+        // Stubby side-nub arms (no hands/fingers — a friendly, generic
+        // silhouette).
+        const Vector2 arm_l{a.x - body_half_w - 1.0f * s, head_c.y + 6.0f * s};
+        const Vector2 arm_r{a.x + body_half_w + 1.0f * s, head_c.y + 6.0f * s};
+        const float arm_r_px = 3.0f * s;
+        DrawCircleV(arm_l, arm_r_px + rim_px, kGhostRim);
+        DrawCircleV(arm_r, arm_r_px + rim_px, kGhostRim);
+        DrawCircleV(arm_l, arm_r_px, kGhostFill);
+        DrawCircleV(arm_r, arm_r_px, kGhostFill);
+
+        // Faint white emboss crescent on the head + a bald-crown specular
+        // arc.
+        DrawCircleSector(Vector2{head_c.x - 2.0f * s, head_c.y - 2.0f * s},
+                         head_r * 0.55f, 200.0f, 260.0f, 8,
+                         Color{250, 250, 250, 120});
+        DrawRing(Vector2{head_c.x, head_c.y - 3.0f * s}, head_r * 0.35f,
+                head_r * 0.42f, 300.0f, 340.0f, 8, Color{255, 255, 255, 190});
+
+        // --- FACE, by fear band (the ONE opaque element: sunglasses) ---
+        const Vector2 eye_l{head_c.x - 3.4f * s, head_c.y - 1.0f * s};
+        const Vector2 eye_r{head_c.x + 3.4f * s, head_c.y - 1.0f * s};
+
+        if (relieving) {
+            // RELIEF: eyes close to happy arcs, the sunglasses SLIDE BACK
+            // ON (descend from above the head to seated over the beat), one
+            // last big sweat drop rolls off, and a tiny 'phew' puff.
+            const float rt = static_cast<float>(std::clamp(relief_t, 0.0, 1.0));
+
+            DrawRing(Vector2{eye_l.x, eye_l.y + 1.0f * s}, 2.0f * s, 2.8f * s,
+                    200.0f, 340.0f, 8, BLACK);
+            DrawRing(Vector2{eye_r.x, eye_r.y + 1.0f * s}, 2.0f * s, 2.8f * s,
+                    200.0f, 340.0f, 8, BLACK);
+
+            const float seat_y = head_c.y - 2.6f * s;
+            const float start_y = head_c.y - head_r * 2.2f;
+            const float band_y =
+                start_y + (seat_y - start_y) * std::min(rt / 0.7f, 1.0f);
+            const Rectangle band{head_c.x - 6.5f * s, band_y, 13.0f * s,
+                                 3.4f * s};
+            DrawRectangleRounded(band, 0.6f, 6, BLACK);
+
+            if (rt < 0.8f) {
+                const float dp = rt / 0.8f;
+                const Vector2 p{head_c.x + head_r * 0.95f,
+                               head_c.y - head_r * 0.3f + dp * head_r * 1.6f};
+                const unsigned char al =
+                    static_cast<unsigned char>((1.0f - dp) * 230.0f);
+                DrawCircleV(p, 1.8f * s, Color{210, 235, 255, al});
+            }
+
+            constexpr int kPuffs = 3;
+            const Vector2 mouth_c{head_c.x, head_c.y + 5.0f * s};
+            for (int i = 0; i < kPuffs; ++i) {
+                const float pt = std::clamp(rt * 1.3f - i * 0.15f, 0.0f, 1.0f);
+                if (pt <= 0.0f) continue;
+                const Vector2 p{mouth_c.x + (i - 1) * 2.0f * s,
+                               mouth_c.y - pt * 10.0f * s};
+                const unsigned char al =
+                    static_cast<unsigned char>((1.0f - pt) * 200.0f);
+                DrawCircleV(p, (1.0f + pt) * 1.0f * s,
+                          Color{255, 255, 255, al});
+            }
+        } else if (fear01 < 0.3f) {
+            // COOL: sunglasses on, level-ish — a touch of apprehension from
+            // fear01 >= 0.15 (Chad: "also relief at safety" implies he
+            // should read as ON WATCH even here, not oblivious): the
+            // glasses TILT slightly and one small sweat drop shows.
+            float tilt = 0.0f;
+            if (fear01 >= kSweatStartFear) {
+                tilt = (fear01 - kSweatStartFear) / (0.3f - kSweatStartFear) *
+                      7.0f;
+            }
+            const Rectangle band{head_c.x, head_c.y - 2.6f * s, 13.0f * s,
+                                 3.4f * s};
+            const Vector2 origin{6.5f * s, 1.7f * s};
+            DrawRectanglePro(band, origin, tilt, BLACK);
+            circle_outlined(eye_l, 2.6f * s, BLACK, 1.0f * s);
+            circle_outlined(eye_r, 2.6f * s, BLACK, 1.0f * s);
+            DrawCircleV(Vector2{eye_l.x - 0.8f * s, eye_l.y - 0.8f * s},
+                       0.7f * s, kWhite);
+            DrawCircleV(Vector2{eye_r.x - 0.8f * s, eye_r.y - 0.8f * s},
+                       0.7f * s, kWhite);
+            draw_ghost_sweat(head_c, head_r, fear01, now_s, s);
+        } else {
+            // Wide white eyes, pupils biased LOW (looking DOWN at what
+            // scares him — the dive/ground) + worried eyebrow arcs.
+            const float eye_r_px = (fear01 < 0.7f ? 3.0f : 4.0f) * s;
+            const float look_down = eye_r_px * 0.35f;
+            DrawCircleV(eye_l, eye_r_px, kWhite);
+            DrawCircleV(eye_r, eye_r_px, kWhite);
+            DrawCircleV(Vector2{eye_l.x, eye_l.y + look_down},
+                       eye_r_px * 0.5f, BLACK);
+            DrawCircleV(Vector2{eye_r.x, eye_r.y + look_down},
+                       eye_r_px * 0.5f, BLACK);
+
+            DrawLineEx(Vector2{eye_l.x - 3.2f * s, eye_l.y - eye_r_px - 1.4f * s},
+                      Vector2{eye_l.x + 1.4f * s, eye_l.y - eye_r_px - 3.0f * s},
+                      1.3f * s, BLACK);
+            DrawLineEx(Vector2{eye_r.x + 3.2f * s, eye_r.y - eye_r_px - 1.4f * s},
+                      Vector2{eye_r.x - 1.4f * s, eye_r.y - eye_r_px - 3.0f * s},
+                      1.3f * s, BLACK);
+
+            if (fear01 < 0.7f) {
+                // NERVOUS: the shades SLIP down off the eyes.
+                Rectangle band{head_c.x, head_c.y + 2.0f * s, 13.0f * s,
+                              3.2f * s};
+                Vector2 origin{6.5f * s, 1.6f * s};
+                DrawRectanglePro(band, origin, 12.0f, BLACK);
+            } else {
+                // SCARED: shades FLUNG — a tiny pair knocked off, up and
+                // away.
+                Rectangle band{head_c.x - 10.0f * s, head_c.y - 16.0f * s,
+                              9.0f * s, 2.4f * s};
+                Vector2 origin{4.5f * s, 1.2f * s};
+                DrawRectanglePro(band, origin, -35.0f, BLACK);
+            }
+
+            // Mouth: a small black O, big O when scared.
+            const float mouth_r = (fear01 < 0.7f ? 2.0f : 3.4f) * s;
+            DrawCircleV(Vector2{head_c.x, head_c.y + 5.5f * s}, mouth_r,
+                       BLACK);
+            draw_ghost_sweat(head_c, head_r, fear01, now_s, s);
+        }
+    }
+
+    // Pointer tick — identical in role to the mouse's (direction legible
+    // without rotating the art). Uses the ORIGINAL anchor `a` and `scale`
+    // (not the panic/relief-perturbed `s`) so it stays a stable, legible
+    // direction cue through every state.
+    const Color kTickRim{57, 255, 60, 200};
+    const float dlen = std::sqrt(dir_unit.x * dir_unit.x +
+                                 dir_unit.y * dir_unit.y);
+    if (dlen > 1e-6f) {
+        const Vector2 ud{dir_unit.x / dlen, dir_unit.y / dlen};
+        const Vector2 p0{a.x + ud.x * 18.0f * scale, a.y + ud.y * 18.0f * scale};
+        const Vector2 p1{a.x + ud.x * 27.0f * scale, a.y + ud.y * 27.0f * scale};
+        DrawLineEx(p0, p1, 2.2f * scale, kTickRim);
+    }
+}
+
+// The skin-dispatching entry point every call site uses. `kAimBuddySkin`
+// picks the shipped skin; every branch stays compilable so a future
+// economy-item picker can switch on a player selection instead.
+void draw_aim_buddy(Vector2 anchor, Vector2 dir_unit, float fear01,
+                    double now_s, float scale = 1.0f) {
+    switch (kAimBuddySkin) {
+        case BuddySkin::kMouse:
+            draw_aim_mouse(anchor, dir_unit, fear01, now_s, scale);
+            return;
+        case BuddySkin::kGhost:
+            draw_aim_ghost(anchor, dir_unit, fear01, now_s, scale);
+            return;
+    }
+}
+
+}  // namespace aim_buddy
 
 }  // namespace
 
@@ -407,9 +1444,38 @@ void draw_frame(const sim::SimState& state, const sim::AircraftParams& params,
                                             rlGetCullDistanceFar()));
     }
     draw_planet(params, pose.eye);
-    draw_aircraft(state, pose.eye);
-    for (const sim::SimState& d : info.drones_draw)
-        draw_aircraft(d, pose.eye, /*enemy=*/true, info.drone_scale);
+    // Fleet Rig (rig-D port): the real Bf 109 F-4 mesh, posed by the
+    // commanded Inputs (info.player_inputs / info.drone_inputs[i] — a
+    // missing/short drone_inputs draws that drone at rest, the documented
+    // rig-B fallback). rig_* fields are unset in this tree (no
+    // config/world.toml [fleet_rig] loader here — cosmetic, not a physics
+    // dial), so FleetDrawParams below carries FrameInfo's built-in plausible
+    // defaults, matching the tunnel tree's own "unset => a plausible mirror"
+    // contract.
+    const glm::vec3 fleet_sun = glm::normalize(kFleetSunRaw);
+    const DeflectGains gains{
+        static_cast<float>(info.rig_aileron_deg) * kFleetD2R,
+        static_cast<float>(info.rig_elevator_deg) * kFleetD2R,
+        static_cast<float>(info.rig_rudder_deg) * kFleetD2R,
+        static_cast<float>(info.rig_gear_deploy_deg) * kFleetD2R};
+    const FleetDrawParams fp{fleet_sun,
+                             static_cast<float>(info.rig_reflectivity),
+                             static_cast<float>(info.rig_fresnel_power),
+                             info.rig_player_color,
+                             info.rig_bandit_color,
+                             gains,
+                             static_cast<float>(info.rig_prop_disc_alpha),
+                             static_cast<float>(info.rig_prop_idle_alpha)};
+    // Opaque pass: player + every drone, each posed by its OWN commanded
+    // Inputs. Gear reads each plane's state.gear.
+    draw_aircraft(state, pose.eye, fp, info.player_inputs, /*enemy=*/false,
+                 /*scale=*/1.0, static_cast<float>(info.player_wheel_roll_rad));
+    for (std::size_t i = 0; i < info.drones_draw.size(); ++i) {
+        const sim::Inputs di =
+            i < info.drone_inputs.size() ? info.drone_inputs[i] : sim::Inputs{};
+        draw_aircraft(info.drones_draw[i], pose.eye, fp, di, /*enemy=*/true,
+                     info.drone_scale);
+    }
     // MB-7c (iii): wingtip vortex trails — fading world-space streamers off
     // the tips near stall AoA / high G. Read-only cosmetic overlay; points
     // are re-based to the eye at draw time (the double->float seam).
@@ -431,6 +1497,16 @@ void draw_frame(const sim::SimState& state, const sim::AircraftParams& params,
         draw_trail(info.vortices->left);
         draw_trail(info.vortices->right);
     }
+    // Fleet Rig translucent pass: ALL blur discs + glass canopies AFTER ALL
+    // opaque bodies, alpha-blended with depth-WRITE off so a farther body
+    // can't overwrite a nearer disc/canopy and overlapping ones composite.
+    BeginBlendMode(BLEND_ALPHA);
+    rlDisableDepthMask();
+    draw_prop(state, pose.eye, fp);
+    for (const sim::SimState& d : info.drones_draw)
+        draw_prop(d, pose.eye, fp, info.drone_scale);
+    rlEnableDepthMask();
+    EndBlendMode();
     EndMode3D();
 
     // Correct-frame HUD (SPEC §12): the readouts come through the ONE shared
@@ -444,6 +1520,12 @@ void draw_frame(const sim::SimState& state, const sim::AircraftParams& params,
                  : "MOUSE aim   S/W A/D Q/E override   SPACE freelook   "
                    "Shift/Ctrl throttle   [F1] raw",
              12, 12, 16, Color{200, 200, 200, 180});
+    // BUILD STAMP (Chad 2026-07-23, the "am I flying the right kernel?"
+    // ambiguity — never again): the TREE identity, drawn always. Every
+    // worktree's build says which kernel it is; a fly report without this
+    // stamp visible is a report about an unknown kernel.
+    DrawText("KERNEL v5 [seads-feel]", GetScreenWidth() - 232,
+             GetScreenHeight() - 26, 16, Color{255, 190, 60, 200});
 
     // Reticle/nose-marker pair (SPEC §9.2): the on-screen gap IS the
     // controller's error — to within S-reticle's hard-capped display ease
@@ -505,16 +1587,25 @@ void draw_frame(const sim::SimState& state, const sim::AircraftParams& params,
                 info.lens_shift_ndc, info.cue_horizon_gap_frac);
             const unsigned char a = static_cast<unsigned char>(
                 std::clamp(info.cue_horizon_alpha, 0.0, 1.0) * 255.0);
-            // SLAG-ORANGE recolor: the main horizon line + its ticks are the
-            // BRIGHT slag; the pitch-ladder rungs below are the DIMMER ember.
-            const Color hc{kCueSlagR, kCueSlagG, kCueSlagB, a};
+            // v5 WHITE-INNER / ORANGE-OUTER (Chad 2026-07-23: "white inner
+            // and orange outer so a little thicker, subtle cue" — replaces
+            // the flat SLAG-ORANGE main line with a classic outlined-line
+            // read: a thicker, dimmer orange stroke drawn FIRST, then a
+            // thinner white stroke on top). The ladder rungs below stay the
+            // single-tone DIMMER ember, unchanged — the outline is only on
+            // the primary horizon line so it doesn't compete with the
+            // reticle.
+            const Color hc_outer{
+                kCueSlagR, kCueSlagG, kCueSlagB,
+                static_cast<unsigned char>(a * 0.5)};  // subtle, kept dim
+            const Color hc_inner{255, 255, 255, a};    // white inner stroke
             // Draw a set of NDC segments (with sky-side ticks) at a stroke.
             const auto stroke_segs = [&](const GhostHorizonResult& g,
-                                         const Color& col) {
+                                         const Color& col, float th) {
                 for (int i = 0; i < g.count; ++i) {
                     const ScreenPoint pa{g.segs[i].a.x, g.segs[i].a.y, true};
                     const ScreenPoint pb{g.segs[i].b.x, g.segs[i].b.y, true};
-                    DrawLineEx(to_pxf(pa), to_pxf(pb), 1.5f, col);
+                    DrawLineEx(to_pxf(pa), to_pxf(pb), th, col);
                     // Sky-side tick: points toward projected +local_up (UP
                     // upright, DOWN inverted) — resolves the line's up/down
                     // ambiguity. Same alpha as the line.
@@ -522,10 +1613,11 @@ void draw_frame(const sim::SimState& state, const sim::AircraftParams& params,
                                          g.segs[i].tick_root.y, true};
                     const ScreenPoint tk{g.segs[i].tick.x, g.segs[i].tick.y,
                                          true};
-                    DrawLineEx(to_pxf(tr), to_pxf(tk), 1.5f, col);
+                    DrawLineEx(to_pxf(tr), to_pxf(tk), th, col);
                 }
             };
-            stroke_segs(gh, hc);
+            stroke_segs(gh, hc_outer, 3.0f);  // orange outer, thicker, first
+            stroke_segs(gh, hc_inner, 1.5f);  // white inner, on top
 
             // GHOST PITCH LADDER (the angle indicator): SHORT rungs at ±15/±30/
             // ±45° elevation, in the DIMMER ember at 0.7x the horizon alpha, so
@@ -543,7 +1635,7 @@ void draw_frame(const sim::SimState& state, const sim::AircraftParams& params,
                     ghost_ladder(cam_forward, pose.up, local_up, fovy_rad,
                                  aspect, info.lens_shift_ndc,
                                  info.cue_horizon_gap_frac, elev_deg * kDeg);
-                stroke_segs(rung, lc);
+                stroke_segs(rung, lc, 1.5f);
             }
         }
         // Cue B — BANK ARC (Falcon 4.0 convention): a small arc at the TOP
@@ -684,29 +1776,99 @@ void draw_frame(const sim::SimState& state, const sim::AircraftParams& params,
         const ScreenPoint nos =
             project_dir(nose, cam_forward, pose.up, fovy_rad, aspect);
 
+        // v5 NOSE CROSSHAIR (Chad 2026-07-23: "my dot a crosshair and bright
+        // red"): four short open-center strokes along the screen axes,
+        // replacing the old green dot. Open center so it never occludes the
+        // pixel it marks.
         if (nos.in_front) {
-            DrawCircleV(to_pxf(nos), 4.0f,
-                        Color{120, 230, 120, 220});  // nose marker
+            const Vector2 nc = to_pxf(nos);
+            constexpr Color kNoseRed{255, 40, 40, 235};
+            constexpr float kNoseIn = 3.0f, kNoseOut = 9.0f;
+            DrawLineEx({nc.x + kNoseIn, nc.y}, {nc.x + kNoseOut, nc.y}, 2.0f,
+                      kNoseRed);
+            DrawLineEx({nc.x - kNoseIn, nc.y}, {nc.x - kNoseOut, nc.y}, 2.0f,
+                      kNoseRed);
+            DrawLineEx({nc.x, nc.y + kNoseIn}, {nc.x, nc.y + kNoseOut}, 2.0f,
+                      kNoseRed);
+            DrawLineEx({nc.x, nc.y - kNoseIn}, {nc.x, nc.y - kNoseOut}, 2.0f,
+                      kNoseRed);
         }
+        // v5 NEON RETICLE (Chad 2026-07-23: "my circle bigger and more neon
+        // green"): radius 9->14 px, two concentric strokes (13.5/14.5) so it
+        // reads thick/glowy with no shader. KERNEL COUPLING: [capture]
+        // circle_deg in config/controller.toml is DERIVED from this drawn
+        // radius (see that key's comment — it was 9 px = 0.551 deg; it is
+        // NOT retuned here, a kernel dial is Chad's alone). The toml carries
+        // a matching note that the drawn ring (14 px, ~0.86 deg) is now
+        // deliberately a bit larger than the flown 0.55-deg capture circle,
+        // pending Chad's ruling.
+        constexpr Color kAimNeon{57, 255, 60, 255};
         if (ret.in_front) {
             const Vector2 rc = to_pxf(ret);
-            DrawCircleLinesV(rc, 9.0f, RAYWHITE);  // aim reticle
+            DrawCircleLinesV(rc, 13.5f, kAimNeon);
+            DrawCircleLinesV(rc, 14.5f, kAimNeon);
             // Freelook: the reticle nests in a cursor ring — the "aim locked"
             // cue (SPEC §9.2). The held aim sits inside the mouse cursor.
             if (info.freelook) {
-                DrawCircleLinesV(rc, 20.0f, Color{255, 220, 120, 200});
+                DrawCircleLinesV(rc, 24.0f, Color{255, 220, 120, 200});
             }
         }
-        // v5 OFF-SCREEN AIM ARROW (Chad 2026-07-23: "give me a little red
-        // arrow to show where the mouse aim is when it's temporarily off
-        // screen"): when the TRUE aim is off screen (behind the camera, or
-        // in front but outside the visible box), a red edge arrow points
-        // toward it. PURE DISPLAY ADDITION — the reticle is never moved,
-        // clamped, or substituted (the S-retclamp lesson stands: a pinned
-        // edge MARKER replacing the reticle under-reports the error; an
-        // arrow ADDS the missing read while the true reticle stays raw).
-        // Direction from the SHARED camera screen basis (never a re-derived
-        // projection — the projection-basis-fork lesson).
+
+        // v5 SPLIT-S FEAR (Chad: "gets scared the closer you go to the split
+        // s point"): a render-only proximity read on the TRUE aim (the same
+        // direction the reticle projects, info.reticle_dir) vs the local
+        // horizon, smoothstepped between the two named elevation thresholds
+        // above. Computed UNCONDITIONALLY (both the on-screen docked mouse
+        // and the off-screen mouse read it) — cheap, and the split-S dive is
+        // usually flown with the aim well within the visible box, so gating
+        // it on off_screen would silently mute the mouse-glyph's whole
+        // purpose.
+        const glm::dvec3 fear_local_up = glm::normalize(state.position);
+        const glm::dvec3 fear_aim_dir = glm::normalize(info.reticle_dir);
+        const double fear_elev = glm::dot(fear_aim_dir, fear_local_up);
+        const float fear01 = static_cast<float>(aim_buddy::smoothstep01(
+            aim_buddy::kMouseFearStart, aim_buddy::kMouseFearCommit,
+            fear_elev));
+        const double now_s = GetTime();
+
+        // v5 ON-SCREEN scared mouse (Chad's fear read is valuable on-screen
+        // too, not just as the off-screen direction marker): when the aim is
+        // ON screen AND fear01 > 0.3, dock a SMALL (~22 px) scared mouse just
+        // outside the reticle ring, bottom-right of it. Below 0.3 on-screen,
+        // no mouse at all — the "cool mouse" ONLY ever appears as the
+        // off-screen direction marker (policy: Chad framed the mouse as the
+        // off-screen marker; the docked variant is purely the fear cue).
+        if (ret.in_front && fear01 > 0.3f) {
+            const Vector2 rc = to_pxf(ret);
+            const Vector2 dock{rc.x + 26.0f, rc.y + 20.0f};
+            const Vector2 to_ret{rc.x - dock.x, rc.y - dock.y};  // tiny tick
+                                                                 // back at
+                                                                 // the ring
+            aim_buddy::draw_aim_buddy(dock, to_ret, fear01, now_s,
+                                        /*scale=*/0.69f);
+        }
+
+        // v5 OFF-SCREEN AIM MARKER (Chad 2026-07-23: originally "a little red
+        // arrow"; RESTYLED same day into the scared-mouse glyph — "my marker
+        // for off screen a little mouse... embossed in white outlined in
+        // black and stylish accents like sunglasses and buckteeth"): when
+        // the TRUE aim is off screen (behind the camera, or in front but
+        // outside the visible box), the mouse appears at the screen edge,
+        // upright, pointing (via its short tick) toward the aim. PURE
+        // DISPLAY ADDITION — the reticle is never moved, clamped, or
+        // substituted (the S-retclamp lesson stands: a pinned edge MARKER
+        // replacing the reticle under-reports the error; the mouse ADDS the
+        // missing read while the true reticle stays raw). Direction from the
+        // SHARED camera screen basis (never a re-derived projection — the
+        // projection-basis-fork lesson); this is a raw orthographic
+        // perpendicular-component direction (dot with right/up, NO
+        // perspective divide by the forward component), which is why it
+        // stays correct even when dot(aim, forward) < 0 (behind the camera):
+        // a perspective-divided x/y WOULD flip sign there, but this raw
+        // (dx, dy) = (dot(aim,right), dot(aim,up)) is exactly sin/cos of the
+        // aim's azimuth about the camera forward at every angle, continuous
+        // through the +/-90 deg boundary — see the investigation note in the
+        // handoff for the worked examples.
         {
             const bool off_screen =
                 !ret.in_front || std::abs(ret.x) > 1.0 ||
@@ -719,32 +1881,23 @@ void draw_frame(const sim::SimState& state, const sim::AircraftParams& params,
                 const double dlen = std::sqrt(dx * dx + dy * dy);
                 if (dlen > 1e-6) {
                     // Screen-space direction (y down) from center toward the
-                    // aim; anchor the arrow on the screen rect inset by a
-                    // margin, tip outward.
+                    // aim; anchor the mouse on the screen rect inset by a
+                    // margin (sized for the ~32 px glyph, not the old 8 px
+                    // arrow half-width).
                     const double ux = dx / dlen, uy = -dy / dlen;
                     const double cx = sw * 0.5, cy = sh * 0.5;
-                    const double margin = 26.0;
+                    const double margin = 34.0;
                     double t = 1e18;
                     if (std::abs(ux) > 1e-9)
                         t = std::min(t, (sw * 0.5 - margin) / std::abs(ux));
                     if (std::abs(uy) > 1e-9)
                         t = std::min(t, (sh * 0.5 - margin) / std::abs(uy));
-                    const float ax = static_cast<float>(cx + ux * t);
-                    const float ay = static_cast<float>(cy + uy * t);
-                    const float px = static_cast<float>(-uy);  // perp
-                    const float py = static_cast<float>(ux);
-                    const Color red{230, 55, 45, 235};
-                    const Vector2 tip{ax + static_cast<float>(ux) * 14.0f,
-                                      ay + static_cast<float>(uy) * 14.0f};
-                    Vector2 bl{ax + px * 8.0f, ay + py * 8.0f};
-                    Vector2 br{ax - px * 8.0f, ay - py * 8.0f};
-                    // raylib front-face winding guard (same pattern as the
-                    // bandit edge markers above).
-                    const float area = (br.x - tip.x) * (bl.y - tip.y) -
-                                       (bl.x - tip.x) * (br.y - tip.y);
-                    Vector2 b1 = bl, b2 = br;
-                    if (area > 0.0f) std::swap(b1, b2);
-                    DrawTriangle(tip, b1, b2, red);
+                    const Vector2 anchor{static_cast<float>(cx + ux * t),
+                                        static_cast<float>(cy + uy * t)};
+                    const Vector2 dir_unit{static_cast<float>(ux),
+                                          static_cast<float>(uy)};
+                    aim_buddy::draw_aim_buddy(anchor, dir_unit, fear01,
+                                                now_s);
                 }
             }
         }

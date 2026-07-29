@@ -285,11 +285,27 @@ inline TickResult tick(LoopState& st, const TickInput& in,
         //    this feeds ci.target_dir_world, a CONTROL input, so the sim's
         //    held last_vhat must not be read): below v_ballistic or
         //    tail-slide (vhat . nose <= 0) fall back to the nose.
-        //  - Freelook WITHOUT keys is untouched: the held-turn aim stays
-        //    carried, release moves nothing (the 4d conditional reset).
+        //  - Freelook WITHOUT keys: with release_orient OFF, untouched — the
+        //    held-turn aim stays carried, release moves nothing (the 4d
+        //    conditional reset). With release_orient ON (S-relorient, Chad
+        //    2026-07-28), EVERY airborne no-override release drives THIS same
+        //    guarded-velocity snap and reports the orient camera cut — the
+        //    flown double-tap verb, automatic. It fires HERE (not in the
+        //    S-orient block below) so the S7-hrz capture on fs.released
+        //    measures the up-debt about the POST-snap forward on the SAME
+        //    tick (plan-audit P1: the later slot captures the stale pre-snap
+        //    axis and retires the wrong debt). The !grounded term is
+        //    REDUNDANT DEFENSE, not load-bearing (diff red-team P2-1): the
+        //    GROUNDED pairing's fl.reset() above already eats the release
+        //    edge on every grounded tick, so fs.released && grounded is
+        //    unreachable — the term is mutation-unkillable by construction.
+        //    An override still held at release keeps legacy exactly (the D9
+        //    precedent — the pilot is actively maneuvering).
+        const bool release_orient = cp.freelook_release_orient &&
+                                    fs.released && !st.grounded && !any_ovr;
         if (in.freelook_held && any_ovr) {
             st.aim.snap_forward_to_nose(st.curr.orientation);
-        } else if (fs.snap_to_nose) {
+        } else if (fs.snap_to_nose || release_orient) {
             const glm::dvec3 nose =
                 st.curr.orientation * glm::dvec3{0.0, 0.0, -1.0};
             glm::dvec3 dir = nose;
@@ -299,6 +315,7 @@ inline TickResult tick(LoopState& st, const TickInput& in,
                 if (glm::dot(vhat, nose) > 0.0) dir = vhat;
             }
             st.aim.snap_forward_to_dir(dir, st.curr.orientation);
+            if (release_orient) res.orient_fired = true;
         }
         // Consume the offered mouse delta into the aim iff MOUSE mode is live
         // and not on a spawn/reset tick (else drop it — never queue it into a
@@ -553,6 +570,12 @@ struct FrameResult {
     // sim::load_factor on last_vhat, S5), never the frame's last-tick telem — a
     // FrameResult.telem would be a dead report field (the M1-class hole waiting
     // to happen).
+    // render/rig-D port: the LAST tick's emitted commanded Inputs this frame
+    // (mirror of TickResult::inputs on the final consumed tick), read-only,
+    // for the render-only Fleet Rig control-surface deflection. Zero Inputs
+    // (rest pose) on a 0-tick frame — the caller should hold its previous
+    // value in that case, same discipline as the HUD's SimState read.
+    sim::Inputs last_inputs{};
 };
 
 // One render frame (SPEC §10, the accumulator loop): advance the fixed-dt
@@ -637,6 +660,14 @@ inline FrameResult step_frame(LoopState& st, Accumulator& accum,
 
         const TickResult r = tick(st, in, ap, cp, dw);
         res.orient_fired = res.orient_fired || r.orient_fired;
+        // render/rig-D port (2026-07-23, plane-model-only): the last tick's
+        // emitted commanded Inputs, for the Fleet Rig's cosmetic control-
+        // surface deflection (render-only, RA9 — read, never written back).
+        // Overwritten every tick so the FRAME's value is the LAST tick's,
+        // matching how the HUD reads SimState post-frame. Additive report
+        // field, defaulted zero Inputs (rest pose) => no existing consumer
+        // or test is affected.
+        res.last_inputs = r.inputs;
         // S-aimff: forward the consuming tick's computed rate to the rest of
         // the frame; every tick's controller-seen rate integrates into the
         // smear-invariant instrument. Red-team P2-3: the forwarded WORLD

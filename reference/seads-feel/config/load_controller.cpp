@@ -23,6 +23,22 @@ double require(const toml::table& root, const char* section, const char* key) {
     return node->value_or(0.0);
 }
 
+// Optional boolean key: absent => fallback (the S-relorient differential-
+// firewall shape — an untouched toml stays bit-identical legacy). Present but
+// non-boolean is still a hard error: a typo must fail loud, never default.
+bool optional_bool(const toml::table& root, const char* section,
+                   const char* key, bool fallback) {
+    const toml::node* node =
+        root.at_path(std::string(section) + "." + key).node();
+    if (node == nullptr) return fallback;
+    if (!node->is_boolean()) {
+        throw std::runtime_error(std::string("controller.toml: non-boolean "
+                                             "key [") +
+                                 section + "] " + key);
+    }
+    return node->value_or(fallback);
+}
+
 void check(bool ok, const char* what) {
     if (!ok) {
         throw std::runtime_error(
@@ -162,6 +178,10 @@ control::ControllerParams load_controller_toml(const std::string& path,
 
     c.freelook_easeback_time = require(root, "freelook", "easeback_time");
     c.orient_double_tap_s = require(root, "freelook", "orient_double_tap_s");
+    // S-relorient: optional-with-default-false — absent key = legacy
+    // bit-identical (the structural off-switch pattern; fixtures untouched).
+    c.freelook_release_orient =
+        optional_bool(root, "freelook", "release_orient", false);
     // S-globelook (v4 rung 3): globe-inertia dials — tau stays seconds, the
     // cap crosses the deg->rad boundary here (stored rad/s, the convention).
     c.freelook_inertia_tau = require(root, "freelook", "inertia_tau");

@@ -12,14 +12,14 @@ flies kernel v5, gate 797/797, first landing ever put down, Golden Felt Flight #
 that build. The old "feel branch diverges from a v4 main" danger no longer exists.
 
 **The live risk now:** `feel/kernel-v5` keeps moving PAST the `flight-kernel-v5` seal
-(`149a99c40`). As of 2026-07-28 the branch tip is `b2019cf43` — the Chad-approved
-rudder-trim + S-relorient session (see the 2026-07-28 entry below) — and **origin's backup
-of the branch lags at the seal**; a further change (auto-upright timing) was in flight the
-same day. Consequences for this repo:
+(`149a99c40`). As of the 2026-07-28 re-snapshot the branch tip is `cfe1bd7fe` — the full
+Chad-approved rudder-trim + S-relorient + auto-right session, all three verdicts in
+("perfect behavior as expected, 3/3") — and **origin's backup of the branch lags at the
+seal** (worth a push from the seads-feel side). Consequences for this repo:
 
-- `reference/seads-feel/` is snapshotted at `89447aba5` (pre-seal) — it does not contain
-  the recorder graft, S-relorient, or the yaw_scale 2.0 trim. Re-snapshot is queued for
-  when the 2026-07-28 micro-session settles; until then the live tree is ground truth.
+- `reference/seads-feel/` is snapshotted at **`cfe1bd7fe` (2026-07-28)** — current through
+  the whole approved session, including the recorder graft. If the live tip has moved past
+  that, the live tree is ground truth again until the next re-snapshot.
 - **Every future session must check the branch state first** (read-only `git -C
   D:\flight_sim2\seads-feel log --oneline` / `git status` — never write there) before
   treating any dial value, snapshot, or cascade Code section as current. The branch has
@@ -68,9 +68,33 @@ diff red-team came back SOUND-WITH-FIXES; its one real find (nothing pinned the 
 one-shot — a re-fire-every-tick mutant survived the whole suite) was folded and
 mutation-verified. 7 new test legs + 4 loader legs.
 
-**Status:** LANDED and Chad-approved on `feel/kernel-v5`; not yet in `reference/`
-(snapshot predates it) and not yet reconciled to the game trees. Cascade entry:
+**Status:** LANDED and Chad-approved on `feel/kernel-v5`; in `reference/seads-feel/` as
+of the 2026-07-28 re-snapshot; not yet reconciled to the game trees. Cascade entry:
 `docs/cascade/freelook-orient-verbs.md`.
+
+---
+
+## 2026-07-28 — Auto-right quickening: `inverted_delay` 1.0 → 0.5 s ("3/3")
+
+Same-day follow-up ask, flown and approved ("yes perfect as expected 3/3!" — the third of
+three approvals that session). One TOML dial on the MB-right mechanism (Chad 2026-07-07:
+"need to roll over on bank after about 2 s no gross inputs if belly up... slow roll off
+ailerons"): the belly-up **rest timer** before the wings slow-roll upright halves;
+`inverted_rate` stays 180°/s (the roll itself is unchanged, it just arms sooner). Landed
+`e1684fdbb`, gate 380/380; verdict logged `cfe1bd7fe`.
+
+Not a delicate change, and the reasoning is worth keeping: single dial, roll rate
+untouched, and the scripted golden never dwells inverted so no goldens moved. One test
+tripped **deliberately** — the "inverted plane at rest STAYS inverted" leg carries a
+config-relative premise calibrated to the 1.0 s dial (`REQUIRE(window > 60)` ticks); at
+0.5 s the inside-the-delay window is 48 ticks. That is the repo's designed tripwire for
+exactly this kind of retune: the premise was re-derived honestly (floor 36 ticks, reasoning
+in the comment) and the mutant it guards (un-gated wings-hold righting the plane) was
+re-verified to die in the shorter window.
+
+**Fly sentinel (standing):** a loop apex or slow roll where the hand rests a full half
+second now auto-rights sooner. If it starts stealing inverted maneuvers, walk-back is
+1.0, or 0.75 splits the difference.
 
 ---
 

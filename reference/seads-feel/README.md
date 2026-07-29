@@ -1,13 +1,18 @@
 # reference/seads-feel/ — PRIMARY reference: the active kernel
 
-These files are **copies**, taken 2026-07-23, from `D:\flight_sim2\seads-feel`, branch
-**`feel/kernel-v5`**, HEAD **`89447aba5`** — **unpushed** at snapshot time, diverging from
-`main` (which is still v4, `d68de7d91`).
+These files are **copies**, re-snapshotted **2026-07-28**, from `D:\flight_sim2\seads-feel`,
+branch **`feel/kernel-v5`**, HEAD **`cfe1bd7fe`** (tree clean at snapshot time). This
+snapshot postdates the `flight-kernel-v5` seal (`149a99c40`) and the v4→v5 reconciliation
+(`main` in the game trees = `game-kernel-v5` @ `36ee936e9`), and includes the full
+Chad-approved 2026-07-28 session: the rudder trim (`yaw_scale = 2.0`), S-relorient
+(release fires the orient verb, `release_orient` knob), the auto-right quickening
+(`inverted_delay = 0.5`), and the felt-flight recorder (`test/harness/recorder.h`, new to
+this snapshot — the grafted, authoritative version the proposal copies under
+`harness/seads_recorder_proposal/` were synced against). Previous snapshot: `89447aba5`,
+2026-07-23 (pre-seal).
 
-**This is the kernel Chad is actually flight-testing tonight, and the source of the rung-E
-story** (the push/split-S 45° knife-edge gate, the red off-screen aim arrow — see
-`docs/cascade/push-gate-knife-edge.md`). It supersedes both other reference directories in
-this repo as the primary source of truth for current flight-feel work:
+**This is the kernel Chad is actually flying.** It supersedes both other reference
+directories in this repo as the primary source of truth for current flight-feel work:
 
 - `reference/evc2026/` (Roblox/Luau) — a prior-generation **testbed**. The same ideas
   (world-anchored mouse aim, camera-independent control) appear there first, but the actual
@@ -23,8 +28,9 @@ this repo as the primary source of truth for current flight-feel work:
   for every rung (A, A2, C, D, E) tied to Chad's felt verdicts and rulings, quoted verbatim.
   Read this before touching any dial.
 - `test/harness/{harness_main.cpp, telemetry.h, instructor.h, comfort.h, injector.h,
-  scenarios.h}` — the flight-test harness (deterministic scripted maneuvers: `track`,
-  `nudge`, `lathold`, reversal probes) used to produce every measured grid in the handoff doc.
+  scenarios.h, recorder.h}` — the flight-test harness (deterministic scripted maneuvers:
+  `track`, `nudge`, `lathold`, reversal probes) used to produce every measured grid in the
+  handoff doc, plus the felt-flight recorder (the `.seadsrec` format behind `goldens/`).
 - `control/{controller.h, controller.cpp, params.h, transport.h, extract.h}` — the instructor
   cascade itself: the push-gate state machine, the capture/arrival servo (rungs A/A2), the
   hold-the-line AoA servo (rung C), and every dial the handoff doc references.
@@ -44,6 +50,7 @@ this repo as the primary source of truth for current flight-feel work:
 **`D:\flight_sim2\seads-feel` is READ-ONLY from this repo** — no writes, no git commands
 there (read-only `git log`/`git status` for research is fine; nothing that touches the
 working tree). It is the authoritative live tree; a live session may move past rung E at any
-time. Re-snapshot before trusting anything here as still-current, and always check whether
-`feel/kernel-v5` has merged to `main` yet (see the reconciliation watch-item in
-`docs/DECISIONS.md` and `CLAUDE.md`) — baselining on `main` alone is a generation behind.
+time. Re-snapshot before trusting anything here as still-current — check the live branch
+tip against the HEAD named at the top of this file (see the live-branch watch-item in
+`docs/DECISIONS.md` and `CLAUDE.md`). New feel work lands on `feel/kernel-v5` before it
+reaches the game trees' `main` — baselining on `main` alone lags the feel thread.

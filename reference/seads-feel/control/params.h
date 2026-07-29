@@ -317,6 +317,13 @@ struct ControllerParams {
     // fires), so default-off is a bit-identical strict superset.
     double orient_double_tap_s = 0.0;  // [s] max gap between the two taps
 
+    // Release-orient (S-relorient, Chad 2026-07-28 "should be automatic upon
+    // release of the spacebar"): EVERY freelook release fires the ORIENT verb
+    // (aim := guarded velocity + camera hard-cut), not just the double-tap.
+    // Caller-side like orient_double_tap_s. Read OPTIONAL by the loader with
+    // this default, so an untouched toml is bit-identical legacy.
+    bool freelook_release_orient = false;
+
     // Horizon recovery (S7-hrz, docs/horizon_recovery_plan.md D3/D6): the
     // open-loop fixed-angle roll that rights the carried aim/camera frame's
     // horizon on a freelook release. Caller-side like the freelook fields —

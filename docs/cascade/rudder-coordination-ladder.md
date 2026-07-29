@@ -108,7 +108,7 @@ Pre-agreed, untaken fallbacks from the 2026-07-28 session (kept for the record):
 `Cy_beta 2.5 → 1.5` (if speed snap-back survived), `center_frac 0.0 → 0.3` (if
 crab-at-rest survived — ⚠ walks back Rung M1).
 
-## 4. Code — grounded in `reference/seads-feel/` (snapshot @ `89447aba5`)
+## 4. Code — grounded in `reference/seads-feel/` (snapshot @ `cfe1bd7fe`, 2026-07-28)
 
 - `control/controller.cpp` — `sqrt_law` (the shaped gain law; comment block names the
   yaw call convention), the yaw pointing call sites (`cp.K_theta * cp.yaw_scale`), and the
@@ -124,10 +124,9 @@ crab-at-rest survived — ⚠ walks back Rung M1).
 - `config/controller.toml` `[coordination]` — the dials with Chad's rulings quoted inline;
   the richest single narrative of this ladder lives in those comments.
 
-**Snapshot drift flag:** the snapshot's `controller.toml` carries `yaw_scale = 2.2` — the
-pre-trim value. The live tree (`feel/kernel-v5` @ `385a43dbd`, 2026-07-28) carries **2.0**
-with the trim ruling quoted inline. Re-snapshot pending (see the watch-item in
-`docs/DECISIONS.md`). Everything else in this entry is present in the snapshot.
+**Snapshot status:** current. The 2026-07-28 re-snapshot carries `yaw_scale = 2.0` with
+the trim ruling quoted inline in the toml. Everything in this entry is present in the
+snapshot.
 
 ## Lineage
 

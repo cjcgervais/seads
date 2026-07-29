@@ -57,6 +57,11 @@ struct ClosedLoop {
     // nose snaps, which is fine for what it grades (AT-8's release-catch
     // transient — latch semantics, shared via input::Freelook, unchanged).
     // App-side freelook behavior is pinned in test_instructor_tick.cpp only.
+    // SEAM (S-relorient, 2026-07-28): ClosedLoop models the KNOB-OFF release
+    // — it has no freelook_release_orient snap/orient_fired. Never script a
+    // mouse-only freelook release through a shipped-cp (knob-ON) mirror leg:
+    // app::tick snaps to guarded velocity there and the two arms diverge.
+    // The release-orient pins live in test_relorient.cpp (app::tick only).
     bool freelook_held = false;
     input::Freelook fl{};
     bool mouse_aim_live = true;

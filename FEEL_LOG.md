@@ -26,9 +26,12 @@ the plant now able to respond, the yaw pointing no longer has to drag the nose o
 aim, and 2.0 reads balanced where it once read weak. Neither pre-agreed fallback rung
 (`Cy_beta`, `center_frac`) was needed.
 
-**Next ask (same session, in flight with the seads-feel agent):** auto-upright /
-roll-to-level time with no deflection while inverted, currently ~1 s of banking 180° to
-restore orientation — Chad wants 0.5 s.
+**Follow-up, same day — auto-right quickening, also APPROVED:** `inverted_delay`
+1.0 → 0.5 s (the belly-up rest timer before the wings slow-roll upright; the 180°/s roll
+itself unchanged). Chad: "yes perfect as expected 3/3!" — three asks, three approvals in
+one session. Standing fly sentinel: a loop apex or slow roll where the hand rests a full
+half-second now auto-rights sooner; if it starts stealing inverted maneuvers, walk-back
+is 1.0 (or 0.75 splits the difference). See `docs/DECISIONS.md` 2026-07-28 entries.
 
 ---
 

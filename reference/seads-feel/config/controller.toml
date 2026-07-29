@@ -335,6 +335,12 @@ circle_deg = 0.55 # [deg] the on-screen aim-circle angular RADIUS at 1x zoom.
                  #   world — circle_deg is the 1x number by contract. Also the
                  #   refractory clear radius (a new ARRIVAL = the error left
                  #   the circle).
+                 #   v5 HUD RESTYLE NOTE (2026-07-23, render-only, this VALUE
+                 #   untouched): the drawn reticle ring is now 14 px (~0.86
+                 #   deg) — bigger/neon per Chad's ask — while circle_deg
+                 #   stays the flown 0.55-deg capture radius. The visual ring
+                 #   is deliberately a bit larger than the capture circle for
+                 #   now, pending Chad's ruling on reconciling the two.
 return_w = 400.0 # [deg/s] the return rate CAP — effectively UNCAPPED (Chad's
                  #   v3 Q4 ruling: the snap home is the absolute physical
                  #   maximum). The demand is min(return_w, sqrt(2*alpha*
@@ -511,7 +517,11 @@ lean_max  = 30.0  # [deg] cap (Chad ruling); saturated by ~3.75 deg lateral
 # NOTE at 180 deg/s the DONE handoff carries real plant coast (~10-20 deg
 # past knife-edge before the rate-PI arrests it — momentum the 45 tune
 # never had; feel item, flight-log row).
-inverted_delay = 1.0    # [s] belly-up rest time before the righting roll arms
+# Dialed 2026-07-28 (Chad: "shorten the time... lessen that time to 0.5s"):
+# delay 1.0 -> 0.5. The mouse-at-rest gate is unchanged — a loop apex or slow
+# roll where the hand rests a full half-second now rights sooner (watch for
+# that on the fly). Walk-back = 1.0.
+inverted_delay = 0.5    # [s] belly-up rest time before the righting roll arms
 inverted_rate  = 180.0  # [deg/s] the righting roll rate clamp (a 180 in ~1 s)
 
 [regime]             # blend smoothstep(lo,hi,e); latch gates heldBank + telem
@@ -697,7 +707,16 @@ center_band = 1.5    # [deg] full coordination returns by this error.
                      #   just the last half-degree; full coordination by
                      #   1.5° keeps turns coordinated and AT-16 untouched by
                      #   construction). Loader cap blend_lo/2 = 2.5°.
-yaw_scale = 2.2   # rudder pointing GAIN scale (MB-rud: now multiplies K_theta
+yaw_scale = 2.0   # rudder pointing GAIN scale (MB-rud: now multiplies K_theta
+                  #   RUDDER-TRIM Fly A 2026-07-28: 2.2 -> 2.0 (Chad: "a
+                  #   little too much rudder bias... balance it out a bit" —
+                  #   mouse-aim symptoms: nose sits crabbed/rudder always
+                  #   working + violent at speed; 2.0 is the previously-flown
+                  #   MB-4 value, away from the AT-16 wall. Pre-agreed next
+                  #   rungs if the symptom survives: Cy_beta 2.5 -> 1.5 for
+                  #   speed snap-back, center_frac 0.0 -> 0.3 for crab-at-
+                  #   rest [walks back the Rung-M1 ruling — flag on the fly
+                  #   card]. Walk-back = 2.2.)
                   #   INSIDE sqrt_law — capped by yaw_max, never past it). The
                   #   old 1.2 CEILING (split-S corkscrew, AT-15) is OBSOLETE:
                   #   the bank-aligned gate below disarms the corkscrew by
@@ -764,6 +783,13 @@ easeback_time = 0.30 # [s] post-release mouse->aim suspension (<= 0.30, CQ2)
 # default is OFF; Chad flips it on to fly. 0.30 s is the recommended fly value
 # (a natural double-tap cadence); Chad's stick tunes the window from there.
 orient_double_tap_s = 0.30 # [s] max gap between the two taps (0 = off; 0.30 = fly value — COMFORT MODE ON, Chad 2026-07-17)
+# S-relorient (Chad 2026-07-28: "should be automatic upon release of the
+# spacebar"): EVERY airborne, no-override freelook release fires the ORIENT
+# verb — aim := guarded velocity, camera hard-cut behind the flight path —
+# exactly the double-tap, now automatic. The key is OPTIONAL in the loader
+# (absent = false = legacy bit-identical); the double-tap stays as a redundant
+# manual verb. Walk-back = false.
+release_orient = true # every freelook release = the orient verb (Chad's fly value)
 # S-globelook (v4 rung 3, Chad: freelook "like it has some inertia, move it
 # like a globe with the hand"): while freelook is HELD the orbit carries an
 # angular velocity — INSTANT GRAB while the mouse moves (the hand owns the

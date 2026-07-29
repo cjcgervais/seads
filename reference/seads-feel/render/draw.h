@@ -117,6 +117,36 @@ struct FrameInfo {
     // alpha 0 => the draw is SKIPPED entirely (strict superset). Cosmetic HUD,
     // off every aim/camera/control path. Ships 0.35 (Chad wants to SEE it).
     double cue_cockpit_alpha = 0.35;  // [0..1] cockpit-frame opacity; 0 = OFF
+
+    // Fleet Rig (rig-D port from seads-tunnel, 2026-07-23, plane-model-only):
+    // the mirror-finish knobs + rig-B surface-deflection state. No
+    // config/world.toml [fleet_rig] loader exists in this tree (cosmetic,
+    // not a physics dial — out of scope for the port), so these carry
+    // plausible DEFAULTS unless a future caller sets them; render/draw.cpp's
+    // ensure_fleet() falls back to DrawCube if the mirror shader/GLBs are
+    // unavailable so the sim stays flyable either way.
+    double rig_reflectivity = 0.45;
+    double rig_fresnel_power = 3.0;
+    glm::vec3 rig_player_color{0.20f, 0.55f, 0.95f};
+    glm::vec3 rig_bandit_color{0.90f, 0.25f, 0.15f};
+    // rig-B state-driven surface deflection (render-only, RA9). The
+    // COMMANDED control Inputs pose the Fleet Rig's ailerons/elevator/rudder:
+    // player_inputs for the player, drone_inputs[i] for each drone (empty or
+    // short => that drone draws at rest, e.g. a frozen probe target). Gear
+    // reads state.gear directly (not here) so it slews with the real plant
+    // truth. player_wheel_roll_rad is the app-accumulated ground-roll angle
+    // for the main tyres (0 = no accumulator wired in this tree — no
+    // ground-roll feature here, so the wheels stay static; a cosmetic trim,
+    // never a control-relevant read).
+    sim::Inputs player_inputs{};
+    std::vector<sim::Inputs> drone_inputs{};
+    double player_wheel_roll_rad = 0.0;
+    double rig_aileron_deg = 18.0;      // aileron throw at full roll
+    double rig_elevator_deg = 20.0;     // elevator throw at full pitch
+    double rig_rudder_deg = 22.0;       // rudder throw at full yaw
+    double rig_gear_deploy_deg = 85.0;  // gear swing, deployed -> in-bay
+    double rig_prop_disc_alpha = 0.30;  // prop blur-disc opacity, full throttle
+    double rig_prop_idle_alpha = 0.06;  // prop blur-disc opacity at idle
 };
 
 void draw_frame(const sim::SimState& state, const sim::AircraftParams& params,

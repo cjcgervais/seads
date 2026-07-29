@@ -220,8 +220,12 @@ inline void comfort_turnsteady(const sim::AircraftParams& p,
 // ---- Scenario 2: turn then a freelook TAP with NO override ------------------
 // He keeps commanding the turn throughout (per-tick aim snap models his held
 // mouse turn even while freelook is held — the camera law is what's under
-// test). Release WITHOUT override moves nothing (S7-nest 4d), so this measures
-// how the LAG camera reconverges while he keeps turning.
+// test). LAW NOTE (S-relorient 2026-07-28): under the shipped table
+// (release_orient = true) a no-override release now SNAPS aim := guarded
+// velocity + camera-cuts; the pre-relorient "release moves nothing (S7-nest
+// 4d)" arm is the knob-off table only. The per-tick turn_reaim overwrites
+// the snapped aim next tick, so the metric still reads camera reconvergence
+// under a held turn — with a one-tick snap+cut transient at the release.
 inline void comfort_turnsnap_tap(const sim::AircraftParams& p,
                                  const control::ControllerParams& cp) {
     using namespace comfort_detail;
