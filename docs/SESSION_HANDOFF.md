@@ -36,6 +36,13 @@ settled.
 
 ### Chad's model — load-bearing, quote it, never paraphrase it
 
+> **2026-07-29 (later) CORRECTION — read the "CHAD CORRECTS THE v9 LAW QUOTE" entry in
+> `docs/DECISIONS.md` before quoting anything here.** Chad retracted the "I snap the camera
+> and the aim" phrasing: **the aim never snaps** (freelook nests aim to nose; release moves
+> only the camera, deterministically), and **the release snap includes upright relative to
+> the earth** — which pre-answers the v9 Step 2B question with a ruling. Points 1–4 below
+> still stand.
+
 1. Release freelook → camera snaps to chase, **directly behind the plane**. Every time. Keys
    held or not; **keys are irrelevant to this**.
 2. After that snap: mouse-aim with the ordinary lag camera.

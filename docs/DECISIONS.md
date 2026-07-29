@@ -29,6 +29,62 @@ past v6 at any time:
 
 ---
 
+## 2026-07-29 (later) — CHAD CORRECTS THE v9 "LAW" QUOTE: the aim NEVER snaps, and the release snap IS upright
+
+**Status: RULING. Amends the model statement inside the pre-registered v9 entry below. The
+measurement rule itself (comparative A vs B, coupling, golden tripwire) is unchanged.**
+
+The seads-feel v9 plan opened with a quote of Chad's ("Wherever the nose is pointing when I
+release the freelook, I snap the camera and the aim…"). **Chad retracts that phrasing as wrong
+on two counts, in his own words:**
+
+> "It is w[r]ong precisely because I dont snap the camera and the aim... The aim is waiting
+> for me nesting around the nose indicator circle. Freelook ensures that the aim and nose are
+> nested together as one. Saying I snap the camera is incorrect. The camera is dependent on
+> the aim so releasing freelook just snaps my camera to the aim deterministically, I am not
+> controlling the camera to that directionality."
+
+> "In freelook I am operating the camera with my mouse movement. My aim is in that freelook
+> mode attached to the nose direction and are inseparable. The aim is waiting for me when my
+> camera snaps based on the release mechanism from free look. Instantaneous. No need for
+> anything else."
+
+> "I should after releasing space (freelook) be looking directly at the rudder of my plane
+> given my camera is now chasing the tail of my plane and looking at the currently aligned
+> mouse aim and nose pointing indicator."
+
+> "Only the release of freelook sets me directly looking at my plane from behind, **orients my
+> view as upright relative to the earth** and whatever velocity or turn rate it is currently
+> happening I have control with the mouse aim and the camera is completely dependent on mouse
+> aim never keyboard over[r]ide."
+
+(Bracketed letters are typo fixes only; wording untouched. Emphasis on "upright" is this
+agent's, flagged as such.)
+
+**Corrected model — what changed vs the retracted quote:**
+
+1. **The aim never snaps. Nothing "changes the aim" at release — not even nominally.** During
+   freelook the aim is nested to the nose, inseparably; the mouse is operating the *camera*.
+   At release the aim is simply *waiting there*. The release moves ONLY the camera, and
+   deterministically — Chad is not steering it there. Consequence for the code: setting
+   `ci.target_dir_world := nose` at release must be a **no-op in every freelook release,
+   keys or no keys** — the aim is already on the nose because freelook nests it there. Any
+   measured aim jump at release is a defect by definition.
+2. **The release snap includes UPRIGHT relative to the earth.** This is new, from Chad
+   directly, and it **pre-answers the Step 2B question** ("does 'snap to chase' mean upright
+   too?") — **yes**. "Instantaneous. No need for anything else." The 2026-07-07 ruling
+   ("eased, not a snap") is **superseded for the freelook-release case specifically**;
+   it was made for ordinary releases, and Chad has now ruled the freelook release upright.
+   The pre-registered measurement still runs first and the dominant term still gets fixed —
+   but if B dominates or is comparable, **no question to Chad is needed; the ruling is here.**
+3. Everything else stands: one snap at release, then ordinary mouse-aim lag; keys never touch
+   the camera; the mouse activates nothing.
+
+**Docs correction:** the SPEC quote the v9 plan carries must be replaced with the corrected
+wording above — the retracted sentence must not land in SPEC.md as law.
+
+---
+
 ## PRE-REGISTERED (2026-07-29) — v9 decision rule, written BEFORE the measurement
 
 **Recorded in advance deliberately.** The last three camera rounds each interpreted numbers
