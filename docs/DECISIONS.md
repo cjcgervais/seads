@@ -70,6 +70,15 @@ keep the carve / other"). He wrote option 3 himself. Verbatim, typo-fixes bracke
    only in the keys-held path): the nesting is now spec for ALL freelook, implemented at
    entry as a weld, not per-tick only when keys are held.
 
+**Addendum (same day):** the guard stated the banked-release composition back to Chad —
+camera on the tail line, rolled so the horizon is level — and Chad confirmed verbatim:
+*"yes upright relative to the horizon and behind the plane is correct."* Together with
+"Instantaneous. No need for anything else," the Step 2B question ("does snap-to-chase mean
+upright too, and same-instant?") is **fully answered: upright, at the snap instant, behind
+the plane.** The 2026-07-07 "eased" ruling is superseded for the freelook-release case. If
+B dominates or is comparable, the seads-feel agent implements upright-in-the-snap — **it
+does not re-ask.** Chad has now stated this three times.
+
 ---
 
 ## 2026-07-29 (later) — CHAD CORRECTS THE v9 "LAW" QUOTE: the aim NEVER snaps, and the release snap IS upright
