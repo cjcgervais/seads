@@ -70,9 +70,37 @@ covers it; the correction belongs in the signing metadata):** the file header sa
 `tag=v5-reconcile@46051ca23`, a hardcoded `kFeltFlightVersionTag` constant in `main.cpp`
 that doesn't track the build. Truth: kernel surface = `5e27f237c` exact (sealed v6
 content); app layer = tip + uncommitted conquest WIP; binary = `build-play`
-RelWithDebInfo, rebuilt night of flight. Open item: fix `kFeltFlightVersionTag` so future
-recordings self-describe honestly (deferred that night — `main.cpp` carried uncommitted
-conquest work; a mixed edit wasn't worth it).
+RelWithDebInfo, rebuilt night of flight.
+
+**`kFeltFlightVersionTag` — CLOSED 2026-07-29** (`400f133ec`, seads-recon). The hardcoded
+constant is gone; `cmake/build_info.cmake` now generates `app/build_info.gen.h` into the
+build tree from `git describe --tags --always --dirty` plus the branch, run as a script from
+an ALL target on **every build** (deliberately not at configure time, which would go stale
+between configures). Recordings now track the build.
+
+⚠ **Residual provenance gap — the header still will not name the kernel seal.** Verified
+2026-07-29: in the seads-recon tree `git describe` returns
+**`game-kernel-v5-24-g400f133ec-dirty`**. The `flight-kernel-v7-2026-07-29` tag *exists* in
+recon as a ref, but it is **not reachable from recon's HEAD** — the kernel arrives by
+**cherry-pick, not merge** — so `describe` resolves to the nearest reachable tag, which is
+the *game* seal `game-kernel-v5`. A future reader of a Golden #3 header would see
+"game-kernel-v5" on a build that actually flies v7 kernel content, and would have to know
+that "+24 commits" spans two kernel seals. This is strictly better than the old hardcoded
+lie (it names a real, reachable commit) but it is **not self-describing about the kernel
+generation**. Durable fix: carry an explicit kernel-seal field in the build info rather than
+inferring it from `describe`; until then the kernel identity must be recorded **by hand in
+this ledger** beside each golden, as the v6 entry above already does.
+
+⚠ **Decision needed before Golden #3 is flown.** As of 2026-07-29 the recon tree carries
+**20+ uncommitted files** — audio synth (`render/audio_dsp.h`, `wind_synth.h`,
+`engine_synth.h` deleted), conquest, drone, scenario config, rig, draw, plus the parked
+tourist-map test — i.e. several agents' in-flight work, not just the tourist map. A golden
+flown now stamps `-dirty` against a tree state that **exists in no commit and can never be
+reconstructed.** For an ordinary recording that is merely untidy; for a **golden** it defeats
+the purpose, because a golden is a locked reference meant to be re-derivable and diffable —
+if a future build ever disagrees with it, nobody could tell whether the kernel drifted or the
+unrecorded WIP did. **Recommendation: commit or stash the in-flight work before flying #3.**
+That work belongs to other agents, so the call is Chad's.
 
 **Scope note for `flight-kernel-v7-2026-07-29`, carried in the tag annotation and repeated
 here so it cannot be lost:** v7 fixes the **keyboard-flown** oblique. The **mouse**
