@@ -6,9 +6,10 @@
 knowledge base (the "instructor cascade" docs). It is not yet the live kernel — the live
 kernels still live in their own repositories (see "Extraction plan" below). Today this repo
 is: point-in-time reference snapshots of those live kernels, a structured knowledge library
-explaining the flight-feel mechanisms at four levels, decision/tuning/feel logs, and (owned
-by a separate agent, do not touch) a test harness under `harness/`, run captures under
-`captures/`, and golden reference outputs under `goldens/`.
+explaining the flight-feel mechanisms at four levels, decision/tuning/feel logs, **golden
+reference outputs under `goldens/` (this agent's, as of 2026-07-29)**, and (owned by a
+separate agent, do not touch) a test harness under `harness/` and run captures under
+`captures/`.
 
 Chad is a non-coder game designer with strong flight-feel intuition who steers AI-driven
 builds by flying and reporting what he feels, not by reading code. Everything in
@@ -56,18 +57,51 @@ section for the pattern.
 ## Sacred: tuning values and `goldens/`
 
 **Never silently change a tuning constant or a golden reference value.** Every number in
-`tuning/`, and every file under `goldens/` (owned by the harness-building agent, not this
-repo's docs work), represents either a live-kernel snapshot or a locked reference output.
-If a value looks wrong, that's a question to raise (with Chad, or in `docs/DECISIONS.md` as
-an open question) — not an invitation to "fix" it. Tuning docs in this repo are captures,
-not control surfaces: editing `tuning/evc2026-v5-rungE.md` does not change what Chad is
-flying.
+`tuning/`, and every file under `goldens/`, represents either a live-kernel snapshot or a
+locked reference output. If a value looks wrong, that's a question to raise (with Chad, or
+in `docs/DECISIONS.md` as an open question) — not an invitation to "fix" it. Tuning docs in
+this repo are captures, not control surfaces: editing `tuning/evc2026-v5-rungE.md` does not
+change what Chad is flying.
 
-## `harness/`, `captures/`, `goldens/`
+**Sacred applies to this agent too, and hardest here** — `goldens/` is now this agent's
+(below), which removes the "someone else owns it" backstop. An existing golden is
+**append-only in practice**: never re-derive, re-record, re-sign, or "tidy" one. Add new
+goldens; supersede, never overwrite.
+
+## `goldens/` — THIS AGENT'S, as of 2026-07-29 (Chad's ruling)
+
+Ownership moved here when this agent sealed Golden Felt Flight #2. Sealing a golden means
+**all** of the following, in this order — the checklist is the job, not paperwork:
+
+1. **Verify the recording's own fnv1a body signature** by recomputing it (scheme in
+   `reference/seads-feel/test/harness/recorder.h`, `read_records`: hash every line except
+   the `# sig fnv1a=` line, each with a trailing `\n`). A mismatch means STOP — do not seal.
+2. **Verify SHA-256** against every other existing copy before moving or deleting any of them.
+3. **Derive telemetry from the recording's own per-tick SimState pins only** — never by
+   re-simulating. **State the derivation constants** in the TELEMETRY doc (`sim_dt`, `R`,
+   `alt = |p| - R`, `climb = v·r̂`) so every number is reproducible.
+4. **Reconcile derived counts against the flight-log**, and when they disagree, *recover the
+   predicate rather than restate the number*. Golden #2's inversion count only reproduced at
+   `dot(body_up, local_up) < -0.5` with a ≥0.25 s dwell; the naive `dot < 0` gave 25 instead
+   of 13. **Write the predicate down** — an unstated definition reads as a regression later.
+5. **Never edit a recording's header**, even when it is wrong. The fnv1a signature covers it.
+   Provenance corrections belong in the `_VERDICT.md` signing metadata.
+6. **Force-add the `.seadsrec`** (`git add -f`) — `*.seadsrec` is ignored by default so
+   flights are promoted deliberately, never by accident.
+
+Each golden is four files, following `golden_1_*`: the `.seadsrec`, `_telemetry.csv`
+(10 Hz decimation), `_TELEMETRY.md` (numbers + conclusions + known limits), and `_VERDICT.md`
+(Chad's verdict, purpose, provenance/signing record). Record the seal in `docs/VERSIONS.md`.
+
+**Goldens pin different things and none supersedes another** — #1 is the slow/dirty/ground
+case (landing, taxi, a tunnel run), #2 the fast/clean/air-combat case. Never retire one as
+"covered by" a newer flight.
+
+## `harness/`, `captures/`
 
 Owned by a separate, parallel agent building the test harness. **Do not create, write, or
-modify anything under these three directories.** See `harness/README.md` (once it exists)
-for what they do.
+modify anything under these two directories** — including `harness/replay_diff.py`, which
+this repo's goldens are the calibration input for. See `harness/README.md` for what they do.
 
 ## Extraction plan
 
