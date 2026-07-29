@@ -29,6 +29,70 @@ past v6 at any time:
 
 ---
 
+## PRE-REGISTERED (2026-07-29) — v9 decision rule, written BEFORE the measurement
+
+**Recorded in advance deliberately.** The last three camera rounds each interpreted numbers
+after the fact and each picked a cause that turned out to be partial. This entry fixes the
+decision rule, the predictions, and the falsification condition **before** the v9 scenario is
+run, so the result cannot be rationalised into agreeing with a preferred fix.
+
+**Chad's model — the whole of it. Nothing may be added.**
+1. Release freelook → camera snaps to chase, **directly behind the plane**. Every time. Keys
+   held or not; keys are irrelevant to it.
+2. After that snap: mouse-aim with the ordinary lag camera.
+3. **Keys never touch the camera. Ever.** v8 got this right and it stays.
+4. The mouse activates nothing — it moves the aim, the camera lags it.
+
+No latch, no sustain, no key-triggered mode. The "sustain mechanism" framing was this agent's
+and was wrong; Chad rejected it twice. **Dropped, and not to be reintroduced without a new
+ruling.**
+
+**Symptom being diagnosed** (Chad, flying v8, localised to the *instant*, not the drift):
+*"If I release freelook with keys override still getting input it does not give chase but it is
+reverted to the old behavior of an angled view from across the loop manoeuvre at an oblique top
+down view."*
+
+### The two candidate causes and their predicted magnitudes
+
+| # | candidate | mechanism | predicted magnitude |
+|---|---|---|---|
+| **A** | **forward term** | `orient_snap_dir` returns the **velocity**, so the cut lands behind the flight path, not behind the aircraft | **≤ ~20°** — bounded by `[aoa] aoa_max = 20.0` plus modest sideslip |
+| **B** | **up term** | `orient_fired` cuts `cam_fwd` but **never touches `cam_up`**; `cam_up = loop.aim.up()` carries loop holonomy, and the eye is *lifted along up* | **up to 180°**, righting only over ~1–1.6 s (`horizon_recovery rate = 150 deg/s` + eased tail) |
+
+### The decision rule — comparative, not a threshold
+
+**The dominant term is the term that gets fixed.** Compare `nose_at_fire_deg` against
+`updebt_after_release_deg`.
+
+- **A dominates** → change `orient_snap_dir` to return the nose.
+- **B dominates** → bring the camera-up upright **as part of the one snap**, instead of leaving
+  it to S7-hrz's open-loop roll. ⚠ This contradicts Chad's 2026-07-07 ruling (*"not too much of
+  a snap, just a quick uniform movement that is eased at the end"*) — made for ordinary
+  releases, not a 180° debt out of a loop mid-fight. **It therefore becomes one question for
+  Chad: does "snap to chase" mean upright too?** Ask it with the numbers attached.
+- **Comparable** → both need fixing; the plan needs a second half.
+- **Both small** → **both hypotheses are wrong. STOP and re-attribute.** Do not proceed to a fix.
+
+⚠ **A threshold test on A alone is not acceptable**, and this is the specific repeat-risk: a
+reading of ~18° looks like a solid confirmation of A while B sits at 120°. Fixing A then
+delivers 20° of a 120° problem and buys a fourth round.
+
+### Known coupling — the two causes are NOT independent
+
+The S7-hrz debt is captured about the **post-snap forward on the same tick** (load-bearing
+ordering, established v6). Changing the snap target from velocity to nose therefore changes the
+captured angle and the resulting roll. **`updebt` must be re-measured after any change to A**,
+never assumed to have held still.
+
+### Standing guardrail for this change specifically
+
+`orient_snap_dir` sets the **aim** — `ci.target_dir_world`, a **control input**, not a camera
+value. This is the first change in the whole camera arc that can legitimately move a controller
+golden. **If a golden moves: STOP and confirm intent. Never re-record — a re-record blesses the
+bug.**
+
+---
+
 ## 2026-07-29 — v8 FLOWN, PARTIAL REJECT: the release snap now EVAPORATES (v9 needed)
 
 **Chad, flying v8:** *"Release of freelook is now giving me oblique view rather than chase…
