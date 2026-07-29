@@ -16,6 +16,13 @@ builds by flying and reporting what he feels, not by reading code. Everything in
 `docs/cascade/` exists to translate between his feel-language and the actual mechanism, in
 both directions.
 
+## START HERE IF YOU ARE A FRESH SESSION
+
+Read **`docs/SESSION_HANDOFF.md`** first. It carries the current state of play (repo tips,
+kernel seals, what is in flight, what is blocked on whom), Chad's load-bearing statement of the
+camera model, and the standing decisions that are easy to get wrong. `docs/DECISIONS.md` is the
+authoritative reasoning record behind it.
+
 ## LIVE-BRANCH WATCH-ITEM — check branch state before trusting anything
 
 The v4→v5 reconciliation is DONE: `main` in the game trees is `game-kernel-v5`
