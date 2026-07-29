@@ -26,6 +26,14 @@ the plant now able to respond, the yaw pointing no longer has to drag the nose o
 aim, and 2.0 reads balanced where it once read weak. Neither pre-agreed fallback rung
 (`Cy_beta`, `center_frac`) was needed.
 
+**Same night — Golden Felt Flight #2 flown on the sealed v6 build** (recon tree,
+grafted tip `5e27f237c`, F9 recording): 2.76 min of representative flying that
+deliberately exercised all three v6 mechanisms — mouse-aim tracking across 144–282 m/s,
+20 mid-turn freelook releases (every one the new auto chase-behind; the double-tap went
+unused), and 13 belly-up episodes firing the quickened auto-right. "A worthy Golden #2."
+File: `seads-recon\build-play\felt_flight_2.seadsrec`, awaiting harness signing — see
+`docs/VERSIONS.md` for the provenance flag that must ride with the signing record.
+
 **Follow-up, same day — auto-right quickening, also APPROVED:** `inverted_delay`
 1.0 → 0.5 s (the belly-up rest timer before the wings slow-roll upright; the 180°/s roll
 itself unchanged). Chad: "yes perfect as expected 3/3!" — three asks, three approvals in

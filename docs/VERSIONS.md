@@ -52,8 +52,23 @@ non-defaulted `sim::Environment*` seam argument; the grafted test's calls pass `
 like the sibling legs). The cherry-picked controller golden passed **without a local
 re-record** — the null-Environment seam is bit-identical across the two kernel lines, so
 seads-feel's golden values transferred exactly. The conquest tree flies the identical
-sealed v6 kernel. Queued: a second golden felt flight (`.seadsrec`) flown on the sealed
-v6 build as the resting-state baseline alongside Golden #1.
+sealed v6 kernel.
+
+**Golden Felt Flight #2 — FLOWN 2026-07-28** on the grafted v6 build
+(`D:\flight_sim2\seads-recon\build-play\felt_flight_2.seadsrec`): 2.76 min / 19,844
+ticks, full-marks coverage of all three v6 mechanisms — rebalanced rudder (mouse active
+31% of ticks, 144–282 m/s), 20 freelook releases all via the new auto-orient (zero
+double-taps), 13 inverted episodes exercising the 0.5 s auto-right (longest dwell
+1.68 s), ~45 s of overrides, no raw-mode ticks, clean exit flush. Awaiting harness-agent
+signing + mirror into `goldens/` — that closes the v6 books.
+**Provenance flag for signing (do NOT edit the header in place — the fnv1a signature
+covers it; the correction belongs in the signing metadata):** the file header says
+`tag=v5-reconcile@46051ca23`, a hardcoded `kFeltFlightVersionTag` constant in `main.cpp`
+that doesn't track the build. Truth: kernel surface = `5e27f237c` exact (sealed v6
+content); app layer = tip + uncommitted conquest WIP; binary = `build-play`
+RelWithDebInfo, rebuilt night of flight. Open item: fix `kFeltFlightVersionTag` so future
+recordings self-describe honestly (deferred that night — `main.cpp` carried uncommitted
+conquest work; a mixed edit wasn't worth it).
 
 Also pushed 2026-07-23: the full pre-existing seal ladder (`world-*`, `section-*-gate`,
 `golden-*`, `game-R*`, `spec-freeze`, ...) — previously local-only, now on origin.
