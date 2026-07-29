@@ -61,12 +61,23 @@ sealed v6 kernel.
 ticks, full-marks coverage of all three v6 mechanisms — rebalanced rudder (mouse active
 31% of ticks, 144–282 m/s), 20 freelook releases all via the new auto-orient (zero
 double-taps), 13 inverted episodes exercising the 0.5 s auto-right (longest dwell
-1.68 s), ~45 s of overrides, no raw-mode ticks, clean exit flush. Awaiting harness-agent
-signing + mirror into `goldens/` — that closes the v6 books. Until then a byte-verified
-**safety copy is pushed at `tools/safety/felt_flight_2.seadsrec`** (SHA-256 in
-`tools/safety/README.md`; delete it once the signed authoritative copy is on a remote).
-**Provenance flag for signing (do NOT edit the header in place — the fnv1a signature
-covers it; the correction belongs in the signing metadata):** the file header says
+1.68 s), ~45 s of overrides, no raw-mode ticks, clean exit flush.
+
+✅ **SEALED 2026-07-29 — the v6 books are closed.** Mirrored into `goldens/` as
+`golden_2_v6_seal_flight.seadsrec` with `golden_2_TELEMETRY.md`, `golden_2_VERDICT.md` and
+`golden_2_telemetry.csv` (10 Hz, 1,654 rows). Signature recomputed and matched
+(`13318769238472783059`); SHA-256 verified identical across all three copies. The
+`tools/safety/` duplicate has been deleted per its own supersession rule, in the same commit
+that added the authoritative copy. Derived numbers: 165.4 s, V min 144.2 / mean 245.0 / max
+282.0 m/s, alt 114.7–2497.8 m, **peak 32.1 g sitting exactly on `n_max = 32.0`** (aerodynamic
+ceiling, not a contact spike — this flight never touches the ground, unlike golden #1's
+50.6 g landing jolt), 20 freelook releases with **0** double-taps.
+⚠ **Inversion predicate, needed to reproduce the counts:** `dot(body_up, local_up) < -0.5`
+with a ≥0.25 s dwell → 13 episodes / longest 1.68 s, matching the flight-log exactly. The
+naive `dot < 0` with no dwell gives 25 / 5.74 s (12 sub-0.03 s knife-edge sign flips).
+**Provenance flag, now discharged into the signing metadata** (`golden_2_VERDICT.md`) rather
+than by editing the header — do NOT edit the header in place, the fnv1a signature covers it:
+the file header says
 `tag=v5-reconcile@46051ca23`, a hardcoded `kFeltFlightVersionTag` constant in `main.cpp`
 that doesn't track the build. Truth: kernel surface = `5e27f237c` exact (sealed v6
 content); app layer = tip + uncommitted conquest WIP; binary = `build-play`
