@@ -29,7 +29,79 @@ past v6 at any time:
 
 ---
 
-## 2026-07-29 — RULED + SEALED v8: override keys have NO camera authority (S-keyprec) — AWAITING FLY
+## 2026-07-29 — v8 FLOWN, PARTIAL REJECT: the release snap now EVAPORATES (v9 needed)
+
+**Chad, flying v8:** *"Release of freelook is now giving me oblique view rather than chase…
+the most important part of the change is now reverted. The freelook then release should snap
+back to chase view even if I am holding the key… we threw out the baby with the bathwater and
+reverted to whack-a-mole."* Mouse-aim + keys (the v8 target) is **confirmed fixed**; the
+freelook-release case is **regressed**.
+
+**Nothing is mechanically reverted — verified in-tree.** `release_orient = true`,
+`release_orient_with_keys = true`, the `ovr_ok` predicate fires, and `app/main.cpp` still
+hard-cuts `cam_fwd = loop.aim.forward()` on `orient_fired`. The D9 retirement is fully intact.
+
+**The defect is that the snap no longer persists.** At the release tick: aim := guarded
+velocity, camera cut to it — correct, chase-behind. But the aim is then **parked**, and the
+pilot keeps turning on the keys. `ease_chase_forward` pulls `cam_fwd` toward a *static* target
+at `lag_base + lag_gain·defl` ≈ 0.2 /s, so the camera effectively holds a fixed world direction
+while the aircraft rotates out from under it. In a hard turn the view is oblique within a
+fraction of a second. **S-keychase had been supplying the *sustain*** by re-anchoring to the
+live flight path; excising it removed the sustain, not the snap. **The snap fires and is
+erased.**
+
+### Why this was missed — three failures, recorded because each is reusable
+
+1. **The v8 plan's attribution was false, and this agent endorsed it across three audit
+   passes.** The plan stated: *"Chad's original oblique complaint was caused by the D9
+   exception. Retiring D9 fixed that."* **This file says the opposite**, in the heading of the
+   2026-07-28 entry below: *"retire the D9 exception — ⚠ did NOT fix the reported symptom."*
+   The measurement was explicit (0.375° at the fire, then re-opening) and is the entire reason
+   S-keychase was built. The audits went deep on *implementation* — a vacuous test pin, gate-count
+   accounting, the `drive()` instrument gap, the bounded `max_step` — and **never checked the
+   premise against the ledger.** The section labelled "Attribution, stated honestly" was the one
+   part taken on trust. **Lesson: audit the attribution before the implementation. A plan's
+   stated cause is a claim, not context, and the ledger is the place to check it.**
+2. **Fly card 2 tested firing, not persistence.** Its criterion was "the one snap *still
+   fires*." Firing is a tick-level fact; the felt question was whether the resulting view
+   *holds* for the second after. A kernel with exactly this defect passes that card — and did.
+   **Lesson: a fly card for a discrete event must state how long the result must survive.**
+3. **The sequence Chad actually flies has still never been instrumented.**
+   `comfort_turnsteady_keys` starts on keys with no freelook; `comfort_mouseaim_keys` is mouse +
+   keys with no freelook. **Neither models freelook → release → continue on keys**, which is the
+   complaint in v7 *and* in v8. This is the fourth camera mechanism measured against something
+   adjacent to how he flies. **The v9 scenario must be that exact three-phase sequence.**
+
+**Also: the 16.34° "accepted drift" figure understated the real case.** In
+`turnsteady_keys` the instructor keeps pursuing the parked aim, which drags the aircraft back
+and bounds the divergence. Under real hard key input after a release the aircraft leaves much
+further, which is why this reads as "very distracting" rather than as a mild 16°. A
+scenario-limited number was quoted as if it were the general one.
+
+### The resolution — the two rulings collide, and only one shape satisfies both
+
+Chad's rules **"keys affect neither"** and **"release should put me in chase even while holding
+keys"** conflict in this one case. A one-shot snap can only persist if either the **aim** tracks
+the aircraft (ruled out — keys must never carry the aim) or the **camera** sustains. Therefore
+the camera must sustain, **armed by the freelook release, not by the keys.** That is not key
+authority: it is the freelook release having a *duration* rather than an *instant* — which is
+exactly *"only the precedence of the freelook push shall do that."*
+
+This is the original S-keyprec brief (*gate the anchor on freelook precedence*). When the
+arm-rule question came back and Chad rejected the three options as framed, the plan swung to
+**full excision**, and the excision took the sustain with it. **v8 was right about mouse-aim and
+wrong to discard the release sustain.** v9 restores the anchor gated on freelook precedence:
+arm on the freelook release edge, disarm when the pilot takes the mouse again (his "then I am in
+mouse aim mode"). Open sub-question for Chad, unresolved: whether releasing the *keys* should
+also disarm, and whether the disarm-on-mouse transition needs blending.
+
+**Status:** v8 stands sealed (`ae7ae8f23`) and is **partially rejected on the stick**. Do not
+graft v8 to seads-recon. Fly card 3 (the deflection-shot question) is still outstanding and is
+independent of this.
+
+---
+
+## 2026-07-29 — RULED + SEALED v8: override keys have NO camera authority (S-keyprec) — ⚠ SEE PARTIAL REJECT ABOVE
 
 **Supersedes S-keychase (v7) in full.** Chad, flying v7: *"When I am flying in mouse aim the
 snap back to chase is occurring with every hard key press… if I input some aileron to cut into
