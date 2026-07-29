@@ -11,15 +11,17 @@ Standing decisions for the flight kernel. Each entry: date, decision, why, statu
 flies kernel v5, gate 797/797, first landing ever put down, Golden Felt Flight #1 flown on
 that build. The old "feel branch diverges from a v4 main" danger no longer exists.
 
-**The live risk now:** `feel/kernel-v5` keeps moving PAST the `flight-kernel-v5` seal
-(`149a99c40`). As of the 2026-07-28 re-snapshot the branch tip is `cfe1bd7fe` — the full
-Chad-approved rudder-trim + S-relorient + auto-right session, all three verdicts in
-("perfect behavior as expected, 3/3") — and **origin's backup of the branch lags at the
-seal** (worth a push from the seads-feel side). Consequences for this repo:
+**Current resting state (2026-07-28):** the feel branch tip `cfe1bd7fe` is **sealed as
+`flight-kernel-v6-2026-07-28`** — tag and branch backup both pushed to origin, and all
+seven post-v5-seal commits grafted into the seads-recon conquest tree
+(`sandbox/kernel-v5-reconcile` @ `5e27f237c`, gate 887/887, controller golden transferred
+without re-record). Chad's word at the seal: "getting very near the point I don't touch
+it again for a while." The watch discipline stays — a future session may move the branch
+past v6 at any time:
 
-- `reference/seads-feel/` is snapshotted at **`cfe1bd7fe` (2026-07-28)** — current through
-  the whole approved session, including the recorder graft. If the live tip has moved past
-  that, the live tree is ground truth again until the next re-snapshot.
+- `reference/seads-feel/` is snapshotted at **`cfe1bd7fe` = the v6 seal (2026-07-28)** —
+  current through the whole approved session, including the recorder graft. If the live
+  tip has moved past that, the live tree is ground truth again until the next re-snapshot.
 - **Every future session must check the branch state first** (read-only `git -C
   D:\flight_sim2\seads-feel log --oneline` / `git status` — never write there) before
   treating any dial value, snapshot, or cascade Code section as current. The branch has

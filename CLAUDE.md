@@ -21,10 +21,10 @@ The v4→v5 reconciliation is DONE: `main` in the game trees is `game-kernel-v5`
 (`36ee936e9`, merged by Chad's word 2026-07-24, gate 797/797) — the whole game flies
 kernel v5. The live risk is now the other direction: the feel branch **moves past the
 seal**. `D:\flight_sim2\seads-feel`, branch **`feel/kernel-v5`**, is where new feel work
-lands first, and as of 2026-07-28 it sits several Chad-approved commits past the
-`flight-kernel-v5` seal (`149a99c40`) — the rudder trim + S-relorient + auto-right
-session, tip `cfe1bd7fe` (re-snapshotted into `reference/seads-feel/` that day) — with
-origin's backup lagging at the seal. Every session that touches this
+lands first. As of 2026-07-28 its tip `cfe1bd7fe` is sealed as
+**`flight-kernel-v6-2026-07-28`** (tag + backup pushed, grafted into the seads-recon
+conquest tree, re-snapshotted into `reference/seads-feel/` the same day) and Chad expects
+a quiet period — but the discipline stands. Every session that touches this
 repo's docs, tuning captures, or reference snapshots **must check that branch's state
 first** (read-only `git log`/`git status` against `D:\flight_sim2\seads-feel` — never
 write there) before treating any snapshot, dial value, or rung as current. A live tuning
