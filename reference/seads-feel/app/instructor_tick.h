@@ -56,6 +56,28 @@ inline glm::dvec3 quat_rotation_vec(const glm::dquat& dq) {
     return (2.0 * std::atan2(s, q.w) / s) * v;
 }
 
+// The ORIENT verb's snap TARGET — the guarded velocity (SPEC §9.5 rule 3 /
+// S7-nest D8): the flight path when we are genuinely flying it, else the nose.
+// Guard: below v_ballistic, or a tail-slide (vhat . nose <= 0) where alpha
+// lies, fall back to the nose. This reads the CALLER'S OWN velocity, never the
+// sim's held last_vhat (red-team F5 — it feeds ci.target_dir_world, a CONTROL
+// input, and the §9.6 seam forbids sharing the plant's held copy).
+//
+// Hoisted 2026-07-28 (S-relorient ADDENDUM) from the two verbatim copies at the
+// release site and the double-tap site. Both orient triggers now call THIS —
+// the "one verb, two triggers" redundancy Chad asked for is a property of the
+// code, not of two paragraphs of comment that could drift apart again.
+inline glm::dvec3 orient_snap_dir(const sim::SimState& s,
+                                  const control::ControllerParams& cp) {
+    const glm::dvec3 nose = s.orientation * glm::dvec3{0.0, 0.0, -1.0};
+    const double spd = glm::length(s.velocity);
+    if (spd > cp.v_ballistic) {
+        const glm::dvec3 vhat = s.velocity / spd;
+        if (glm::dot(vhat, nose) > 0.0) return vhat;
+    }
+    return nose;
+}
+
 // Spawn / crash-respawn state (SPEC §6.3: respawn airborne AT speed, born at
 // cruise power — not a 0.5 s spool from idle). Shared by main.cpp and the
 // tick's crash branch so the shipped respawn data IS what the test asserts
@@ -299,22 +321,34 @@ inline TickResult tick(LoopState& st, const TickInput& in,
         //    GROUNDED pairing's fl.reset() above already eats the release
         //    edge on every grounded tick, so fs.released && grounded is
         //    unreachable — the term is mutation-unkillable by construction.
-        //    An override still held at release keeps legacy exactly (the D9
-        //    precedent — the pilot is actively maneuvering).
+        //    An override still held at release kept legacy exactly (the D9
+        //    precedent — "the pilot is actively maneuvering") until the
+        //    S-relorient ADDENDUM (Chad 2026-07-28, flying the sealed v6:
+        //    "anytime my finger isn't pressing freelook, I am in chase camera
+        //    directly behind and using mouse aim — even if still turning and
+        //    pressing hard keys for control surfaces"). That exception is now
+        //    RETIRED under cp.freelook_release_orient_with_keys, here and at
+        //    the two sibling D9 sites (the S7-hrz capture below, the double-tap
+        //    below that) — one knob so the three can never diverge again.
+        //    WHY it had to go: all three ride the ONE-TICK fs.released edge, so
+        //    a key held through that tick spent the edge permanently —
+        //    freelook_prev is already false, and releasing the keys LATER
+        //    produces no new edge. The documented consolation ("the next clean
+        //    release orients") was only true if the pilot pressed AND released
+        //    Space again. Worse, it was a SPLIT, not a clean no-op: rule 3
+        //    still fired (override_used latched during the hold), so the aim
+        //    snapped to the guarded velocity while orient_fired was withheld —
+        //    the reticle moved, cam_fwd stayed on ease_chase_forward (which in
+        //    a sustained turn never converges), and the up-debt never retired.
+        //    Walk-back = release_orient_with_keys false (sealed v6 exactly).
+        const bool ovr_ok = !any_ovr || cp.freelook_release_orient_with_keys;
         const bool release_orient = cp.freelook_release_orient &&
-                                    fs.released && !st.grounded && !any_ovr;
+                                    fs.released && !st.grounded && ovr_ok;
         if (in.freelook_held && any_ovr) {
             st.aim.snap_forward_to_nose(st.curr.orientation);
         } else if (fs.snap_to_nose || release_orient) {
-            const glm::dvec3 nose =
-                st.curr.orientation * glm::dvec3{0.0, 0.0, -1.0};
-            glm::dvec3 dir = nose;
-            const double spd = glm::length(st.curr.velocity);
-            if (spd > cp.v_ballistic) {
-                const glm::dvec3 vhat = st.curr.velocity / spd;
-                if (glm::dot(vhat, nose) > 0.0) dir = vhat;
-            }
-            st.aim.snap_forward_to_dir(dir, st.curr.orientation);
+            st.aim.snap_forward_to_dir(orient_snap_dir(st.curr, cp),
+                                       st.curr.orientation);
             if (release_orient) res.orient_fired = true;
         }
         // Consume the offered mouse delta into the aim iff MOUSE mode is live
@@ -345,13 +379,25 @@ inline TickResult tick(LoopState& st, const TickInput& in,
         // (AFTER the rule-3 snap above, so the angle is about the released
         // forward) and roll it away OPEN-LOOP with the D3 profile — a gauge
         // move about the aim direction, invisible to control::step below.
-        // Canceled (level, not edge) by a freelook re-press or any override
-        // key (D9); a release WHILE a key is still held therefore never arms
-        // (the 4d overlap: the pilot is still maneuvering — the next clean
-        // tap recovers). rate = 0 skips ALL of this structurally, including
-        // the capture — the knob-off strict-superset proof (plan F8).
+        // Canceled (level, not edge) by a freelook re-press, and — under the
+        // sealed-v6 table — by any override key (D9), so a release WHILE a key
+        // was still held never armed (the 4d overlap). The S-relorient ADDENDUM
+        // RETIRES that override clause: with release_orient_with_keys, the
+        // release tick captures the up-debt and the open-loop roll runs to
+        // completion EVEN WHILE THE KEYS STAY DOWN. This is the sub-ruling that
+        // reaches beyond the release edge (an override pressed LATER no longer
+        // aborts an in-progress roll) and it is required by Chad's "even if
+        // still turning and pressing hard keys" — the unretired debt is the
+        // loudest "this isn't chase view" cue, since the world stays ROLLED.
+        // Safe against the keys by construction: the D3 roll is a GAUGE move
+        // about the aim's own forward (open-loop, capture-once), invisible to
+        // control::step, so it cannot fight the deflection the pilot is flying.
+        // A freelook re-press still cancels. rate = 0 skips ALL of this
+        // structurally, including the capture — the knob-off strict-superset
+        // proof (plan F8).
         if (cp.horizon_recovery_rate > 0.0 && !st.grounded) {
-            if (in.freelook_held || any_ovr) {
+            if (in.freelook_held ||
+                (any_ovr && !cp.freelook_release_orient_with_keys)) {
                 st.recov.reset();
             } else {
                 if (fs.released) st.recov.capture(st.aim.up_misalignment(up));
@@ -384,21 +430,20 @@ inline TickResult tick(LoopState& st, const TickInput& in,
         // already produces. In the D9 overlap (an override still held at that
         // release), S7-hrz's own D9 clause skips the capture — the roll is
         // skipped that once, existing semantics (noted on the fly card).
-        // SUPPRESSED while any override key is held: the §5b nested aim := nose
-        // above would fight this velocity snap the same tick (the D9 precedent
-        // — the pilot is still actively maneuvering; the next clean double-tap
-        // orients). orient_double_tap_s = 0 means the caller's OrientTap never
-        // fires, so orient_cmd stays false — the structural off-switch.
-        if (in.orient_cmd && !st.grounded && !any_ovr) {
-            const glm::dvec3 nose =
-                st.curr.orientation * glm::dvec3{0.0, 0.0, -1.0};
-            glm::dvec3 dir = nose;
-            const double spd = glm::length(st.curr.velocity);
-            if (spd > cp.v_ballistic) {
-                const glm::dvec3 vhat = st.curr.velocity / spd;
-                if (glm::dot(vhat, nose) > 0.0) dir = vhat;
-            }
-            st.aim.snap_forward_to_dir(dir, st.curr.orientation);
+        // Was SUPPRESSED while any override key is held (the D9 precedent).
+        // The S-relorient ADDENDUM retires that here too, on the SAME knob as
+        // the release site above — Chad's ask is that the double-tap be TRULY
+        // redundant ("I want to keep the double tap but I want it truly
+        // redundant"), and a backup verb suppressed by exactly the condition
+        // that breaks the primary one is no backup at all. It is also the only
+        // verb available WITHOUT leaving freelook. Note the §5b nested aim :=
+        // nose fires on freelook-held ticks and this snap lands after it in the
+        // same tick, so the velocity snap wins the tick it is commanded on.
+        // orient_double_tap_s = 0 means the caller's OrientTap never fires, so
+        // orient_cmd stays false — the structural off-switch.
+        if (in.orient_cmd && !st.grounded && ovr_ok) {
+            st.aim.snap_forward_to_dir(orient_snap_dir(st.curr, cp),
+                                       st.curr.orientation);
             res.orient_fired = true;
         }
         // RAW mouse basis (§9.1, S7-raw 2026-07-06 — REVERSES the F1 screen-

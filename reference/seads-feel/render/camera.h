@@ -231,6 +231,60 @@ glm::dvec3 ease_chase_forward(const glm::dvec3& cam_fwd,
                               const glm::dvec3& aim_fwd, double lead,
                               double lag_base, double lag_gain, double dt);
 
+// S-keychase (Chad 2026-07-28, flying the S-relorient addendum: "it gives me an
+// oblique view still"). A GUNNERY mechanism, not a comfort one — reclassified
+// on Chad's 2026-07-29 refinement, which is the governing statement of intent:
+//
+//   "I can plan my aim for when I release the key override... but also, and
+//    most importantly, the fact that I am looking through the nose line of the
+//    plane from behind, or see its angle from behind its velocity — and it may
+//    be obliquely aligned at an enemy, but I see where I am shooting and plan
+//    my aim when hard-pressing maneuver without freelook."
+//
+// So the key-flown camera does TWO jobs, neither of them comfort: (1) it shows
+// the GUN LINE — sitting behind the VELOCITY is what makes the nose-vs-velocity
+// angle legible, and the nose is where the guns fire, so an aircraft flying one
+// way while obliquely lined up on an enemy another way can still read its shot;
+// (2) it leaves the aim free to be PRE-PLACED for the moment the keys come up.
+//
+// The chase camera's rest target is anchored to the AIM (`lead = 1.0`), which is
+// right for mouse-aim — there the aim IS where you're going. Under keyboard
+// flying the premise fails: the keys change the path while the aim stays parked.
+// ⚠ The parked aim is NOT a stale target — it is DELIBERATE, the pilot's PLAN
+// for the release. The defect was never that the aim sat still; it was that the
+// CAMERA was spent on the plan at the moment the pilot needed the SHOT. So no
+// amount of extra catch rate could fix it: a legitimate target answering the
+// wrong question arrives at the wrong place sooner, and speeds up the flown-in
+// mouse-aim float as collateral. Measured before the fix: a sustained turn
+// stands at oblique_deg 95.8 and NEVER converges (`seads_harness comfort`).
+//
+// The fix changes only WHICH TARGET the (flown, approved, untouched) chase law
+// chases: while keys are flying, rest target := the flight path (lead 0) with a
+// fast constant catch (key_rate, gain 0). Mouse-aim flying is bit-identical by
+// construction — `keys_flying` false returns the caller's own dials verbatim,
+// and `key_rate <= 0` disables the mechanism STRUCTURALLY (the walk-back).
+// PURE, so the app (main.cpp) and the comfort instrument (MiniCamera::advance)
+// select the args through the SAME function and cannot fork.
+//
+// ⚠ THE HANDBACK IS A HARD SWITCH ON PURPOSE — DO NOT "IMPROVE" IT. On key
+// release the target jumps back to the parked aim and the camera swings to it
+// (~16 deg, ~0.7 s, no pop: the direction itself is carried and eased). A blend
+// was held in reserve during the fly and proved UNNECESSARY: the swing is the
+// pilot's own pre-placed aim BEING DELIVERED — intent arriving, not an artifact
+// — so softening it would blur the moment the plan lands. Chad flew this exact
+// behavior as "precisely perfect" (2026-07-29). Recorded here so a future
+// session doesn't smooth it as obvious polish.
+struct ChaseAnchor {
+    double lead = 0.0;
+    double lag_base = 0.0;
+    double lag_gain = 0.0;
+};
+inline ChaseAnchor chase_anchor(bool keys_flying, double lead, double lag_base,
+                                double lag_gain, double key_rate) {
+    if (!keys_flying || key_rate <= 0.0) return {lead, lag_base, lag_gain};
+    return {0.0, key_rate, 0.0};
+}
+
 // Ease a scalar one frame toward `target` with time-constant `tau` (exponential
 // step 1 - exp(-dt/tau)). dt <= 0 => no-op (returns current); tau <= 0 => snap
 // (returns target). PURE; the RMB-zoom amount animation (0 = resting, 1 =

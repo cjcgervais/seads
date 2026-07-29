@@ -37,6 +37,8 @@ Repo: `D:\flight_sim2\seads-feel` → origin (see that repo's remote)
 | **`game-kernel-v5`** | **`36ee936e9`** | **MAIN. The full game (tunnels, ballistics, Sudbury, Bf 109) on kernel v5 — reconciliation merged to main by Chad's word 2026-07-24 after "this is the best, it's better than all the rest!" (landing + 2 kills + the rung-F sacred-middle dive). Gate 797/797. Rungs F + ghost-brace + F9 recording w/ flush-on-exit included.** |
 | **`flight-kernel-v6-2026-07-28`** | **`cfe1bd7fe`** | **THE V6 SEAL (Chad, 2026-07-28: "update the kernel to v6 with a date... it's getting very near the point I don't touch it again for a while" — after a 3-for-3 approval session, "yes perfect as expected 3/3!"). Over v5: S-relorient (freelook release = instant chase-behind), yaw_scale 2.2→2.0 (rudder-bias trim), inverted_delay 1.0→0.5 s (auto-right quickening) — all three flown-approved same day. Gate 380/380, tree clean. Tag + branch backup pushed same day per convention.** |
 
+| **`flight-kernel-v7-2026-07-29`** | **`51eb5b9e3`** | **THE V7 SEAL (Chad, 2026-07-29: "now it is precisely perfect… it's the right set up for my camera now"). The freelook-release camera, finished. Three commits over v6: `35e31695f` S-relorient ADDENDUM (retire the D9 exception — a release with override keys held now fires the full orient verb), `13631ba92` red-team folds (no P0/P1), `5ea20d8c7` S-keychase (while keys fly and freelook is not held, the chase camera's rest target becomes the flight path instead of the parked aim, caught at 6.0 /s). Gate 388/388, zero moved goldens, tree clean. Both mechanisms are optional-with-default-off knobs (`[freelook] release_orient_with_keys`, `[camera] key_anchor_rate`), so v6 is reachable one line at a time. Tag + branch pushed to origin same day.** |
+
 Reconciliation notes for `game-kernel-v5`: reconcile merge was `46051ca23` (gate 793/793),
 fly-round fixes through `36ee936e9`. Brakes approved — "good enough for the field in front
 of your house when you were five." First landing ever put down on Sudbury clay (the v1
@@ -71,6 +73,35 @@ content); app layer = tip + uncommitted conquest WIP; binary = `build-play`
 RelWithDebInfo, rebuilt night of flight. Open item: fix `kFeltFlightVersionTag` so future
 recordings self-describe honestly (deferred that night — `main.cpp` carried uncommitted
 conquest work; a mixed edit wasn't worth it).
+
+**Scope note for `flight-kernel-v7-2026-07-29`, carried in the tag annotation and repeated
+here so it cannot be lost:** v7 fixes the **keyboard-flown** oblique. The **mouse**
+sustained-turn figure (`COMFORT turnsteady standing_oblique_deg 95.82`, `converged 0`) is
+**untouched and not addressable by S-keychase** — that scenario holds no override key, so
+`chase_anchor` returns the unchanged dials by the same bit-identical property that makes the
+fix safe. The 95.8° was mis-attributed as the motivating number during the session; the real
+measured magnitude of Chad's symptom was `turnsteady_keys_off` = **16.34°**.
+
+**Both of the tag's open items were closed by Chad the same day, after sealing** (see
+`docs/DECISIONS.md`, 2026-07-29): (1) letting the keys **carry the aim** is **RULED
+AGAINST** — "not letting the keys carry their aim is precisely the point"; the keys move the
+airframe *without* taking the aim, which is what buys aim freedom for deflection shots while
+pulling hard, and carrying it would collapse the freelook/mouse-aim mode duality. (2) The
+95.82° mouse figure is therefore **very likely a feature, not a defect** — that scenario is
+the forward-looking oblique deflection geometry Chad wants; the instrument's `converged`
+predicate is mode-blind and should not be read as a verdict on it. The seal's scope note
+stands as written; what changed is the interpretation, not the content.
+
+**Tag-history note (provenance, `flight-kernel-v7-2026-07-29`):** this tag was created on
+`0f5bab51e`, then **moved** to `51eb5b9e3` minutes later and re-pushed. Reason: a
+find/replace in `docs/flight-log.md` matched 17 rows instead of 2 and falsely marked 15
+unrelated *pending* rows as Chad-approved; `51eb5b9e3` is the correction. Verified
+independently by row count — 5 approved rows before the bad edit, 22 at `0f5bab51e`, **7**
+at the seal (the 5 pre-existing plus the 2 genuine v7 approvals). The corruption never
+reached the sealed artifact. This is a deliberate, one-time exception to "never move a seal"
+below, taken because the alternative was sealing falsified stick verdicts; recorded here
+rather than quietly, since a future reader doing forensics would otherwise find two targets
+for one tag and no explanation.
 
 Also pushed 2026-07-23: the full pre-existing seal ladder (`world-*`, `section-*-gate`,
 `golden-*`, `game-R*`, `spec-freeze`, ...) — previously local-only, now on origin.

@@ -324,6 +324,17 @@ struct ControllerParams {
     // this default, so an untouched toml is bit-identical legacy.
     bool freelook_release_orient = false;
 
+    // S-relorient ADDENDUM (Chad 2026-07-28, flying the sealed v6: "anytime my
+    // finger isn't pressing freelook, I am in chase camera directly behind and
+    // using mouse aim — even if still turning and pressing hard keys for
+    // control surfaces"). RETIRES the D9 exception: with this true, an override
+    // key held at the release instant no longer suppresses the orient verb, the
+    // S7-hrz up-debt capture, or the double-tap. The finger leaving freelook is
+    // the whole trigger. Optional-with-default-false like the field above, so a
+    // toml without the key reproduces the sealed-v6 kernel bit-identically —
+    // that default IS the one-line walk-back.
+    bool freelook_release_orient_with_keys = false;
+
     // Horizon recovery (S7-hrz, docs/horizon_recovery_plan.md D3/D6): the
     // open-loop fixed-angle roll that rights the carried aim/camera frame's
     // horizon on a freelook release. Caller-side like the freelook fields —
@@ -389,6 +400,11 @@ struct ControllerParams {
     double cam_lead = 0.0;      // [0..1] velocity->aim lean of the rest target
     double cam_lag_base = 0.0;  // [1/s] base follow rate
     double cam_lag_gain = 0.0;  // [1/(s*rad)] follow rate per rad of deflection
+    // S-keychase: catch rate [1/s] used while the pilot flies on the override
+    // KEYS (aim parked) — the rest target becomes the flight path instead of
+    // the parked aim. 0 = OFF structurally (the walk-back; mouse-aim flying is
+    // untouched either way). Read optional-with-default-0 by the loader.
+    double cam_key_anchor_rate = 0.0;
     // (S7-cam3 removed cam_level_rate: camera-up is now the CARRIED aim-frame
     // up — no horizon-lock ease — so there is no re-level rate. See
     // render/camera.h aim_chase_camera and app/main.cpp `cam_up =

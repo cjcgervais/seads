@@ -182,15 +182,21 @@ struct MiniCamera {
         cam_fwd = s.orientation * glm::dvec3{0.0, 0.0, -1.0};
         cam_up = sim::local_up(s.position);
     }
+    // `keys_flying` mirrors main.cpp's S-keychase selector (override key held
+    // AND not in freelook) — routed through the SAME render::chase_anchor so
+    // the instrument can never measure a different law than the app ships.
+    // Defaulted false: every existing caller keeps the aim-anchored chase.
     void advance(const sim::SimState& s, const glm::dvec3& aim_fwd,
                  const glm::dvec3& aim_up, const control::ControllerParams& cp,
-                 double dt) {
+                 double dt, bool keys_flying = false) {
         const glm::dvec3 nose = s.orientation * glm::dvec3{0.0, 0.0, -1.0};
         const double sp = glm::length(s.velocity);
         const glm::dvec3 vel_dir = sp > 1.0 ? s.velocity / sp : nose;
-        cam_fwd =
-            render::ease_chase_forward(cam_fwd, vel_dir, aim_fwd, cp.cam_lead,
-                                       cp.cam_lag_base, cp.cam_lag_gain, dt);
+        const render::ChaseAnchor ca =
+            render::chase_anchor(keys_flying, cp.cam_lead, cp.cam_lag_base,
+                                 cp.cam_lag_gain, cp.cam_key_anchor_rate);
+        cam_fwd = render::ease_chase_forward(cam_fwd, vel_dir, aim_fwd, ca.lead,
+                                             ca.lag_base, ca.lag_gain, dt);
         cam_up = aim_up;  // carried aim-up (S7-cam3), mirrors main.cpp
     }
 

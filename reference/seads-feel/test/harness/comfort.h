@@ -217,6 +217,68 @@ inline void comfort_turnsteady(const sim::AircraftParams& p,
     std::printf("COMFORT turnsteady crashed %d\n", crashed);
 }
 
+// ---- Scenario 1b: sustained turn flown on the KEYS (S-keychase) ------------
+// Chad's actual complaint (2026-07-28, flying the S-relorient addendum): "it
+// gives me an oblique view still." The turnsteady scenario above re-aims every
+// tick (a MOUSE pilot), so the camera chases a target that tracks the turn.
+// THIS one parks the aim and flies the turn on a held ROLL override — the
+// keyboard case — where the aim does NOT track and the standing oblique is at
+// its worst.
+// ⚠ FILING CAVEAT (Chad's 2026-07-29 refinement): this scenario lives in the
+// COMFORT instrument because that is where oblique_deg lives, but S-keychase is
+// a GUNNERY mechanism — the number here measures whether the pilot can SEE HIS
+// GUN LINE (the nose-vs-velocity angle) while hard-maneuvering on the keys, not
+// whether the view is comfortable. Judge it against that criterion. Reading it
+// as a comfort metric is the same class of error that made the MOUSE figure
+// (turnsteady 95.82) look like a defect: in mouse-aim a large oblique IS the
+// deflection shot, and no anchor change can or should "fix" it. Prints the same metric so the two are directly comparable, and
+// runs BOTH arms (key_anchor_rate as shipped vs forced 0) so the number is
+// self-evidencing rather than a claim.
+inline void comfort_turnsteady_keys(const sim::AircraftParams& p,
+                                    const control::ControllerParams& cp_in,
+                                    bool anchor_on) {
+    using namespace comfort_detail;
+    control::ControllerParams cp = cp_in;
+    if (!anchor_on) cp.cam_key_anchor_rate = 0.0;  // the OFF arm (v6 law)
+
+    app::LoopState st;
+    MiniCamera cam;
+    init(st, cam, p, 150.0, 3500.0);
+
+    const int total = static_cast<int>(8.0 / p.sim_dt);
+    const int window_start = total - static_cast<int>(4.0 / p.sim_dt);
+    double sum_obl = 0.0;
+    int n_win = 0, converged_ever = 0, crashed = 0;
+
+    for (int i = 1; i <= total; ++i) {
+        app::TickInput in;
+        in.throttle = 1.0;
+        in.override_mask[2] = true;  // held roll key: the pilot flies on keys
+        in.override_sign[2] = 1.0;
+        in.override_mask[0] = true;  // and pulls: a real sustained turn
+        in.override_sign[0] = 1.0;
+        in.cam_fwd = cam.cam_fwd;
+        in.cam_up = cam.cam_up;
+        const app::TickResult r = app::tick(st, in, p, cp);
+        if (r.orient_fired) cam.orient_cut(st.aim.forward());
+        cam.advance(st.curr, st.aim.forward(), st.aim.up(), cp, p.sim_dt,
+                    /*keys_flying=*/true);
+        if (r.respawned) crashed = 1;
+        if (i > window_start) {
+            const double obl = oblique_deg(st, cam);
+            sum_obl += obl;
+            ++n_win;
+            if (obl < 10.0) converged_ever = 1;
+        }
+    }
+    const char* arm = anchor_on ? "on" : "off";
+    std::printf("COMFORT turnsteady_keys_%s standing_oblique_deg %.3f\n", arm,
+                n_win ? sum_obl / n_win : 0.0);
+    std::printf("COMFORT turnsteady_keys_%s converged %d\n", arm,
+                converged_ever);
+    std::printf("COMFORT turnsteady_keys_%s crashed %d\n", arm, crashed);
+}
+
 // ---- Scenario 2: turn then a freelook TAP with NO override ------------------
 // He keeps commanding the turn throughout (per-tick aim snap models his held
 // mouse turn even while freelook is held — the camera law is what's under
@@ -690,6 +752,8 @@ inline int run_comfort(const sim::AircraftParams& p) {
         cfg::load_controller_toml(SEADS_CONFIG_DIR "/controller.toml", p);
 
     comfort_turnsteady(p, cp);
+    comfort_turnsteady_keys(p, cp, /*anchor_on=*/false);  // the v6 law
+    comfort_turnsteady_keys(p, cp, /*anchor_on=*/true);   // S-keychase
     comfort_turnsnap_tap(p, cp);
     comfort_orient(p, cp);
     comfort_turnsnap_ovr(p, cp);

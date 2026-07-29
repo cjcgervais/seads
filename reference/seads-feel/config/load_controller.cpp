@@ -39,6 +39,21 @@ bool optional_bool(const toml::table& root, const char* section,
     return node->value_or(fallback);
 }
 
+// Optional numeric key: absent => fallback (the same structural-off-switch
+// shape as optional_bool). Present but non-numeric is still a hard error.
+double optional_double(const toml::table& root, const char* section,
+                       const char* key, double fallback) {
+    const toml::node* node =
+        root.at_path(std::string(section) + "." + key).node();
+    if (node == nullptr) return fallback;
+    if (!node->is_number()) {
+        throw std::runtime_error(std::string("controller.toml: non-numeric "
+                                             "key [") +
+                                 section + "] " + key);
+    }
+    return node->value_or(fallback);
+}
+
 void check(bool ok, const char* what) {
     if (!ok) {
         throw std::runtime_error(
@@ -182,6 +197,10 @@ control::ControllerParams load_controller_toml(const std::string& path,
     // bit-identical (the structural off-switch pattern; fixtures untouched).
     c.freelook_release_orient =
         optional_bool(root, "freelook", "release_orient", false);
+    // S-relorient ADDENDUM (D9 retirement): same optional-with-default-false
+    // pattern — absent key = the sealed-v6 kernel exactly.
+    c.freelook_release_orient_with_keys =
+        optional_bool(root, "freelook", "release_orient_with_keys", false);
     // S-globelook (v4 rung 3): globe-inertia dials — tau stays seconds, the
     // cap crosses the deg->rad boundary here (stored rad/s, the convention).
     c.freelook_inertia_tau = require(root, "freelook", "inertia_tau");
@@ -210,6 +229,9 @@ control::ControllerParams load_controller_toml(const std::string& path,
     c.cam_lead = require(root, "camera", "lead");
     c.cam_lag_base = require(root, "camera", "lag_base");
     c.cam_lag_gain = require(root, "camera", "lag_gain");
+    // S-keychase: optional-with-default-0 (0 = OFF structurally, the walk-back).
+    c.cam_key_anchor_rate =
+        optional_double(root, "camera", "key_anchor_rate", 0.0);
 
     // S-cues (comfort program): peripheral orientation cues, pure HUD, DEFAULT
     // OFF (alpha 0 skips the draw — strict superset). Read from [comfort].

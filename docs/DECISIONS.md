@@ -29,6 +29,323 @@ past v6 at any time:
 
 ---
 
+## 2026-07-29 — FLOWN-APPROVED: the camera ANCHOR (S-keychase) — "precisely perfect"
+
+**Chad's verdict on the stick, 2026-07-29: "now it is precisely perfect… It's the right
+set up for my camera now."** Approved as the camera's finished state, and the trigger for
+sealing the kernel as **v7** (advisement below).
+
+**Chad ruled option 1**, landed as `5ea20d8c7` on `feel/kernel-v5`, gate **388/388**, zero
+moved goldens, compiler-clean verified at the gate (the "new diagnostics" noise was clangd
+missing include paths, not the build).
+
+**The handback swing read fine on the stick** — consistent with the corrected ≈16°/≈0.7 s
+estimate below, not the ≈96° first feared. No mitigation needed; the hard switch stands
+and the "blend the handback" fallback is unused. Recorded so a future reader knows the
+hard switch was flown deliberately, not by omission.
+
+**Mechanism.** While override keys are flying and freelook is not held, the chase camera's
+rest target swaps from the parked aim to the flight path, caught at a constant
+`[camera] key_anchor_rate = 6.0 /s` (≈0.17 s). Mouse-aim flying is bit-identical **by
+construction** — with no key held the helper returns the caller's own dials verbatim.
+Selection goes through one pure helper (`render::chase_anchor`) called by both
+`app/main.cpp` and the comfort instrument (`MiniCamera::advance`), so the shipped law and
+the measured law cannot fork — the same route-the-live-path-through-the-tested-function
+discipline as `app::tick`. Walk-back: `key_anchor_rate = 0.0` (structural off).
+
+### ⚠ Measurement provenance — the 95.8° that motivated this cannot move
+
+**Recorded because the mis-attribution is the reusable lesson.** The
+`COMFORT turnsteady standing_oblique_deg 95.823` figure that drove this whole change is
+from a scenario that holds **no override key**: `comfort_turnsteady` calls `turn_reaim`
+every tick, which models a **mouse** pilot dragging the aim through the turn. There,
+`keys_flying` is false, so `chase_anchor` returns the unchanged dials — **by the very
+bit-identical property that makes S-keychase safe.** That 95.823° will still read 95.823°
+after this fix, forever. It was never Chad's case.
+
+Chad's case is the keyboard one, and it is measured by the scenario built for it,
+`comfort_turnsteady_keys` (both arms, self-evidencing):
+
+| leg | standing oblique |
+|---|---|
+| `turnsteady_keys_off` (v6 law) | **16.34°** |
+| isolated law leg | 89.62° → 0.00° |
+| `turnsteady` (mouse pilot — untouched, and untouchable, by this fix) | 95.82° |
+
+So the fix targets the right case, but **the real magnitude of the reported symptom is
+≈16°, not ≈96°** — roughly six times smaller than the headline number implied. The 89.62° →
+0.00° leg is an *isolated law* check (the helper in isolation), not the end-to-end symptom.
+Whether a standing 95.8° oblique in a sustained **mouse** turn is itself a problem is a
+separate, unasked question — it is presumably the approved "camera follows the aim" feel,
+but nobody has put that number to Chad.
+
+### Watch-item: the handback swing — magnitude corrected downward
+
+S-keychase is a **hard switch** on `keys_flying`. `cam_fwd` is carried and eased so there is
+**no pop** at the switch, but the *rest target* jumps from the flight path back to the
+parked aim the instant the last key comes up, and the camera then chases it under the
+approved mouse-aim dials (`rate = lag_base + lag_gain·defl = 0.2 + 0.7·defl`).
+
+**Correction to the earlier estimate in this file:** that estimate used defl ≈ 1.67 rad,
+taken from the mis-attributed 95.8° mouse figure, and gave ≈96° over ≈1.2 s. Using the
+*measured keys* deflection (≈16.3° ≈ 0.285 rad): rate ≈ 0.40 /s against a 0.285 rad gap —
+**≈16° of swing over ≈0.7 s.** Mild, likely unremarkable on the stick. The concern was real
+in kind but roughly 6× overstated in magnitude.
+
+**It still scales with how far the aim actually parks.** In the scenario the instructor
+keeps pursuing the parked aim on non-overridden axes, which is *why* it only reaches 16°.
+A longer or harder key-turn than the 8-second scripted one parks the aim further off and
+grows the handback proportionally, so the fly is still worth doing deliberately: hard
+key-turn, mouse held still, then let go and watch the handback — key-down is the part
+already known fixed. **If it reads wrong, blend the handback over a couple of tenths**; do
+not raise the lag dials, which would move approved mouse-aim feel. It does not violate the
+standing camera-independence constraint (state→camera throughout).
+
+### RULED (2026-07-29) — the keys must NOT carry the aim. It is the whole point.
+
+The option was put to Chad as a deeper fix: have the override keys **carry the aim along**,
+so releasing them never hands back what was then (wrongly) called a stale target. **He ruled
+against it, decisively, and the reason is a design statement about what the two input modes
+ARE** — verbatim:
+
+> "Not letting the keys carry their aim is precisely the point. Having freelook pressed is
+> the mode that carries my aim and cam is free. In mouse aim, mouse is free, camera fixed —
+> and it's the only way to access forward-looking oblique deflection shots in a merge while
+> holding hard on a key and maintaining aim freedom at the same time. If I want to harness
+> the aim into my nose then I press freelook."
+
+**This is the mode duality, stated for the first time and now load-bearing:**
+
+| mode | aim | camera |
+|---|---|---|
+| **freelook held** | **carried** (welded to the airframe) | **free** (orbit follows the mouse) |
+| **mouse-aim** (no freelook) | **free** (mouse owns it) | **fixed** (anchored per `[camera] lead`) |
+
+The keys are deliberately *outside* that duality: they move the airframe **without** taking
+the aim, which is what buys **aim freedom while pulling hard** — the pilot holds a key
+through the merge and keeps steering the reticle independently for a deflection shot. Making
+the keys carry the aim would collapse the two modes into one and delete that capability.
+Any future proposal to "fix" the parked aim under keys must be refused on this ruling.
+
+**Chad's forward read, worth keeping as a prediction to check later:** "more can now be done
+in mouse aim mode, and I suspect then my freelook will be only for situational awareness and
+when I want to see / need to see obliquely — as opposed to not just *being* oblique."
+I.e. v7 is expected to shift freelook from a *flying* verb to a *looking* verb. If a later
+session finds freelook usage dropping and mouse-aim carrying more of the fight, that is this
+prediction coming true, not a regression.
+
+### Refinement (same day) — S-keychase is a GUNNERY mechanism, and the parked aim is a PLAN
+
+Chad corrected the framing above, and it matters enough to restate: the value of flying on
+keys without freelook is not only that the mouse stays free. Verbatim:
+
+> "I can plan my aim for when I release the key override… but also, and most importantly,
+> the fact that I am looking through the nose line of the plane from behind, or see its
+> angle from behind its velocity — and it may be obliquely aligned at an enemy, but I see
+> where I am shooting and plan my aim when hard-pressing maneuver without freelook."
+
+Two corrections to how this repo had been describing it:
+
+1. **"Stale target" was the wrong word and should not be reused.** The parked aim is
+   **deliberate** — the pilot is pre-placing where he intends to be aiming when the keys come
+   up. It is a *plan*, not a leftover. The defect was never that the aim was parked; it was
+   that the **camera** was anchored to it, spending the eye on the plan at the moment the
+   pilot needs the shot.
+2. **The behind-velocity anchor is a shooting reference, not a comfort fix.** Sitting behind
+   the velocity is what makes the **nose-versus-velocity angle** visible — the gun line
+   against the flight path. The aircraft can be flying one way and obliquely lined up on an
+   enemy another way; from behind the flight path that offset is legible and the shot can be
+   read. From behind the parked aim it is not. S-keychase should therefore be classified with
+   the gunnery/instrument mechanisms, not with the comfort program.
+
+**Consequence for the handback:** the ≈16° swing on key release is the camera going *to the
+place the pilot decided to look*. That is why it flew as "precisely perfect" rather than
+intrusive, and it is an argument **against** ever adding the blend that was held in reserve —
+softening it would blur the moment the plan arrives. Recorded so a future session does not
+"improve" it.
+
+### Consequence — the 95.82° mouse figure is very likely a FEATURE, not a defect
+
+`COMFORT turnsteady standing_oblique_deg 95.82 / converged 0` was logged above as an
+unasked question. **Chad has now effectively answered it without being asked.** That
+scenario is a sustained *mouse* turn, where the camera anchors to a free aim — which is
+precisely the "forward-looking oblique deflection" geometry he just described as the
+capability he wants. The camera showing where the aim points rather than where the plane
+goes **is the deflection view.**
+
+⚠ **Therefore the instrument's own predicate is mode-blind and should not be read as a
+verdict.** `comfort_detail::converged = oblique_deg < 10 ∧ up_debt_deg < 10` encodes an
+assumption that the camera *ought* to end up behind the flight path. That is right for
+keyboard flying (S-keychase now delivers it) and **wrong for mouse-aim**, where a large
+standing oblique is the intended capability. `turnsteady converged 0` is the instrument
+measuring the wrong goal for that mode, not a failure to converge.
+**Recommendation to the harness agent (this repo cannot edit the live tree):** either
+mode-qualify `converged`, or rename the mouse-mode metric so it reads as *deflection
+geometry* rather than as a comfort failure. Left as-is it will keep being mistaken for a
+defect — it already was once, in this very session, where it motivated a change it could
+never affect.
+
+**What the instrument says** (comfort table, shipped config, measured by the harness agent):
+
+```
+COMFORT turnsteady standing_oblique_deg 95.823   converged 0
+COMFORT orient     oblique_at_fire_deg   0.375
+COMFORT orient     peak_oblique_deg     51.269   (after the fire)
+```
+
+The orient verb fires correctly and collapses the camera to **0.375°** off the flight path.
+Then it re-opens to ~96° and **never converges**. The D9 work fixed the release *instant*;
+Chad reported the *standing* state, which returns within about a second of the cut.
+
+**Mechanism.** The chase camera's rest target is anchored to the **aim** (`[camera] lead =
+1.0` — "1.0 = the camera's rest target IS the aim"). Under mouse-aim that is correct and is
+the approved feel: the aim is where you're going, and the reticle-floats-then-centres
+behaviour comes from `lag_base`/`lag_gain`, not from `lead`. But when Chad flies on the
+**override keys**, the keys move the aircraft while the aim stays **parked** — so the plane
+flies out from under the aim and he watches it obliquely. **This is not lag against the
+plane; it is the camera anchored to the parked aim.** Raising the lag cannot fix it, because
+the *target*, not the catch rate, is what answers the wrong question here.
+⚠ **Refined later the same day** (see the S-keychase entry above): the parked aim is
+**deliberate** — the pilot's plan for the release — so it is not a "stale" target, and the
+anchor swap is a **gunnery** mechanism (it makes the nose-versus-velocity gun line legible),
+not a comfort one. Earlier wording in this file that called it stale is superseded.
+
+**Chad's original sentence already said this** — "even if still turning and pressing hard
+keys for control surfaces" — and the earlier framing (snap-at-release vs. a permanent
+behind-lock that would delete `lag_gain`) presented a false pair and steered to the release
+edge. The harness agent has said so plainly; recorded here because the framing error is the
+reusable lesson, not the measurement.
+
+**The three options put to Chad:**
+1. **Anchor behind the flight path while override keys are held** (recommended by the
+   harness agent). Rest target switches from the parked aim to the flight path only while a
+   key is down and freelook isn't. **Mouse-aim flying is untouched** — `lead`/`lag_base`/
+   `lag_gain` unchanged, so nothing Chad approved moves. Releasing the keys hands the camera
+   back to the aim-anchored chase.
+2. **Behind the flight path whenever freelook isn't held.** The literal reading of Chad's
+   sentence, applied to mouse-aim too. **This does change approved feel:** the
+   reticle-floats-off-centre-then-closes behaviour goes away, because the camera stops
+   following the aim.
+3. **Dial the lag faster** (`lag_base`/`lag_gain`). One line, no new mechanism, but
+   **cannot fully fix it** — the target is still the parked aim, so a hard sustained
+   key-turn still stands off, and it speeds up the mouse-aim float Chad liked.
+
+**Docs-side check, so this is judged as a feel question and not a safety one: all three
+options are clean against the standing camera-independence constraint** (below). Each is a
+change to the camera's *rest target*, i.e. state→camera; none creates a camera-derived
+quantity feeding `pitch`/`roll`/`yaw`/throttle, so the motion-sickness rubber-band cannot
+form. Option 2 is nonetheless the one to fly most carefully: it removes a
+visual-motion cue Chad has already approved, and approved feel is the thing this repo is
+least willing to lose by accident.
+
+**No cascade entry owns the camera anchor yet.** `lead`/`lag_base`/`lag_gain` are described
+only in `controller.toml` comments and inside the freelook entry's Code section. Whichever
+option is ruled, this mechanism has earned its own four-level entry — flagged as doc debt.
+
+---
+
+## 2026-07-28 — LANDED: retire S-relorient's D9 exception ("truly redundant") — ⚠ did NOT fix the reported symptom
+
+Supersedes the OPEN QUESTION raised earlier the same day (S-relorient's D9 exception has no
+second chance). **Chad ruled, and the change landed** — `feel/kernel-v5` commits
+`35e31695f` (mechanism) + `13631ba92` (red-team folds), gate **386/386**, zero moved
+goldens. **Not sealed, not tagged, not pushed**, and — the important part —
+**⚠ it did not resolve the oblique-camera symptom Chad reported.** It fixed the release
+*instant*; the symptom is a *standing* state. See the follow-on open question immediately
+above this entry (camera anchor / standing oblique). Read the two together or this entry
+reads as a success it wasn't.
+
+**The report that forced it.** Chad, on the sealed v6: "there are cases where I press space,
+use override keys for flying, then let go of space and continue with the override keys — and
+the camera goes to an oblique angle." His spec, verbatim, and it is the sentence the whole
+change serves:
+
+> "Anytime my finger isn't pressing freelook, I am in chase camera directly behind and using
+> mouse aim — even if still turning and pressing hard keys for control surfaces."
+
+**The ruling.** The D9 "you're still maneuvering" exception is **retired**. The finger
+leaving Space is the whole trigger. Two sub-rulings, both Chad's:
+- **(a) Fire the FULL verb**, identical to a clean release — not a camera-only variant.
+- **(b) Snap at release, keep the flown-in chase lag afterward** — not a permanent
+  behind-lock (that would delete `[camera] lag_gain` and is a separate fly).
+
+He is **keeping** the double-tap, but wants it *truly* redundant — he had to reach for it
+precisely because the release failed. That is the test of this change: the double-tap
+becomes a genuine backup rather than the only way out of a stuck state.
+
+**Root cause — three sites in `app/instructor_tick.h`, all gated on `any_ovr`:** the
+`release_orient` predicate (`orient_fired` withheld ⇒ `main.cpp` never hard-cuts `cam_fwd`
+nor zeroes the orbit); the S7-hrz capture (`recov.reset()` instead of `capture()` ⇒ the
+up-debt never rolls off); and the double-tap (the manual escape hatch suppressed under the
+same condition). Two aggravating facts carried over from the open question and confirmed in
+trace: all three are gated on `fs.released`, a **one-tick edge**, so there is **no second
+chance** — letting go of the keys later re-fires nothing; and it is a **split, not a clean
+no-op** — rule 3 still moves the reticle to guarded velocity while the camera doesn't cut.
+The residual oblique Chad sees is `cam_fwd` on `ease_chase_forward`, which in a sustained
+turn never converges. The orbit is *not* the culprit (it decays ~120 ms every non-freelook
+frame regardless).
+
+**Shape of the change** (worktree `D:\flight_sim2\seads-feel`, branch `feel/kernel-v5`;
+`app/` + `config/` only — the kernel firewall holds by construction, with one tune-data
+field in `control/params.h` where `freelook_release_orient` already lives):
+- **New knob, the standing structural-off-switch pattern:**
+  `freelook_release_orient_with_keys`, **default `false` = today's shipped behaviour exactly**
+  (every knob-off arm bit-identical), read via `optional_bool` like `release_orient`, set
+  `true` in `config/controller.toml` as Chad's fly value.
+- **All three sites relaxed behind that one knob**, so the two triggers can never diverge
+  again. The `in.freelook_held && any_ovr` nesting branch is untouched — that is the
+  while-held rule, not the release.
+- **Sub-ruling with reach beyond the release edge, flagged as a real behaviour change:** with
+  the knob on, an override pressed *later* no longer aborts an in-progress horizon roll.
+  Required by "even if still turning and pressing hard keys"; safe because the D3 roll is
+  open-loop — a gauge move about the aim forward, invisible to `control::step`, so it cannot
+  fight the keys.
+- **Reuse, not a third copy:** the guarded-velocity snap is currently duplicated verbatim at
+  the release and double-tap sites. It gets hoisted to one file-local helper called from
+  both — behaviour bit-identical, but it makes "one verb, two triggers" a property of the
+  code rather than of two paragraphs of comment.
+- **Code banners rewritten to the flown truth.** Three banners still state the D9 rationale
+  as settled ("the next clean release orients"); they name the walk-back instead, so the next
+  reader doesn't re-derive the dead rationale.
+
+**Test discipline.** The existing pin "override held at release = legacy, no camera cut" is
+**re-scoped, not deleted** — kept verbatim as the knob-OFF arm, proving legacy is exactly
+reproducible. New legs (each mutation-verified, on a binary proved fresh): knob-ON full verb
+fires; horizon debt retires with the key still down; **one-shot** — letting go of the keys
+later fires nothing more (this guards against anyone "fixing" it with a deferred latch on
+top, which was the shape floated in the open question and is now explicitly *not* the
+design); double-tap fires with an override held; and knob-OFF ⇒ bit-identical across the
+whole four-phase script (the strict-superset proof). Repro: hold Space → press override
+mid-hold → release Space with the key still down → release the key several ticks later;
+**assert on the phase after the release, not the release tick.** Harness seam respected:
+`ClosedLoop` models the knob-OFF release and has no `orient_fired`, so these pins stay in
+`test_relorient.cpp` (app::tick only). **No controller golden may move. If one does: STOP.**
+
+**Trade, stated honestly.** With D9 retired, a release-while-holding-keys snaps the aim to
+the flight path mid-maneuver — the same trade CARD 1 already flags for the double-tap. Chad
+ruled for it; at that instant he is flying on the keys, which keep the turn. Walk-back is one
+line (`release_orient_with_keys = false`) and restores today's kernel exactly.
+
+**Status:** LANDED on `feel/kernel-v5` (`35e31695f` + `13631ba92`), gate 386/386, zero moved
+goldens, **not sealed / not tagged / not pushed**, and **NOT YET FLOWN** — the fly card is
+pre-filled in the live tree's `docs/flight-log.md`. 6 new test legs (both arms each); the
+three pre-existing D9 pins re-scoped to pin the knob rather than deleted; three mutants
+killed at 4/2/1 cases; fresh-context red-team returned no P0/P1, added two mutants of its
+own (one proving the walk-back arm is genuinely pinned), and its P2s were folded.
+
+**Doc gaps I flagged are all closed in the diff** (verified in-tree): `SPEC.md` §9.5 now
+states the release fires the orient verb independent of held keys; S-relorient has a §0
+supersession entry (line ~736); and the fourth site I found — the D9 clause buried inside
+**S7-hrz's own §0 entry** — carries an explicit ⚠ RETIRED marker. Cascade entry:
+`docs/cascade/freelook-orient-verbs.md`.
+
+⚠ **`reference/seads-feel/` is now STALE for this mechanism.** It is a snapshot of
+`cfe1bd7fe`; `app/instructor_tick.h`, `control/params.h`, `config/*` and `SPEC.md` all moved
+after it. Re-snapshot only once Chad has flown and sealed — a snapshot of an unflown,
+unsealed tip would enshrine a behaviour that may yet walk back.
+
+---
+
 ## 2026-07-28 — Rudder-bias trim + S-relorient, Chad-approved ("okay we have a winner")
 
 Two changes landed on `feel/kernel-v5` in one session, both flown and approved on Chad's

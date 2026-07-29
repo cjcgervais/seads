@@ -790,6 +790,19 @@ orient_double_tap_s = 0.30 # [s] max gap between the two taps (0 = off; 0.30 = f
 # (absent = false = legacy bit-identical); the double-tap stays as a redundant
 # manual verb. Walk-back = false.
 release_orient = true # every freelook release = the orient verb (Chad's fly value)
+# S-relorient ADDENDUM — the D9 RETIREMENT (Chad 2026-07-28, flying the sealed
+# v6: "anytime my finger isn't pressing freelook, I am in chase camera directly
+# behind and using mouse aim — even if still turning and pressing hard keys for
+# control surfaces"). Sealed v6 SUPPRESSED the orient verb, the S7-hrz up-debt
+# capture AND the double-tap whenever an override key was held at the release
+# instant (the D9 "you're still maneuvering" precedent) — and because all three
+# ride the ONE-TICK fs.released edge, holding a key through that tick spent the
+# edge for good: letting go of the keys afterward re-fired nothing, leaving the
+# reticle snapped to the flight path (rule 3 still fires) while the camera stayed
+# oblique and the horizon stayed rolled. True = the finger leaving freelook is
+# the whole trigger; the double-tap becomes TRULY redundant (same verb, two
+# triggers) instead of the only escape. Walk-back = false (sealed v6 exactly).
+release_orient_with_keys = true # orient even with control-surface keys held (Chad's fly value)
 # S-globelook (v4 rung 3, Chad: freelook "like it has some inertia, move it
 # like a globe with the hand"): while freelook is HELD the orbit carries an
 # angular velocity — INSTANT GRAB while the mouse moves (the hand owns the
@@ -883,6 +896,17 @@ lag_gain = 0.7   # [1/(s*rad)] extra catch rate per rad of aim deflection — th
 # S7-cam2 horizon-lock): the camera shows the world from the aim/mouse frame's
 # orientation, so mouse-up == screen-up at any attitude and the horizon rolls
 # with the aim through a loop. No re-level rate — there is no horizon-lock.
+# S-keychase (Chad 2026-07-28, flying the S-relorient addendum: "it gives me an
+# oblique view still"). The two dials below anchor the camera's rest target to
+# the AIM (lead = 1.0) — correct for mouse-aim, where the aim IS where you're
+# going. Flying on the OVERRIDE KEYS parks the aim while the keys turn the
+# plane, so the plane leaves the aim and you watch it obliquely: MEASURED at a
+# standing 95.8 deg that NEVER converges (`seads_harness comfort`). While keys
+# are flying, the rest target becomes the FLIGHT PATH and is caught at this
+# constant rate (lead/gain 0). Mouse-aim flying is untouched by construction.
+# 6.0 /s ~ a 0.17 s time constant: behind the plane in a blink, not a snap.
+# Walk-back = 0.0 (OFF structurally — the aim anchor everywhere, as v6 flew).
+key_anchor_rate = 6.0 # [1/s] catch rate toward the flight path while keys fly
 
 [comfort]  # S-cues: peripheral, world-stable orientation cues (pure HUD, default OFF)
 # Two disorientation-recovery cues from the comfort program (auto/comfort-orient,
