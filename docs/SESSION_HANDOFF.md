@@ -128,6 +128,15 @@ input.
    reads as a regression later.
 6. **Never bulk-edit `docs/flight-log.md`** in the live tree — a blind replace once falsely
    marked 15 pending rows as flown-approved.
+7. **Identify artifacts from their own data, never from another agent's echo.** The
+   seads-feel agent's Golden #3 echo named `felt_flight_3` as the capture; its own stated
+   countables (≥10 releases, terminal ground contact) failed against that file and passed
+   against `felt_flight_4`. The guard had already sealed the right file because
+   identification was derived from release edges and the crash profile before the echo
+   arrived. A cross-agent handoff is a claim with the same standing as a plan's attribution
+   — reconcile it against the artifact before acting on it. (Same night, same principle:
+   the recording header's `kernel=` string was wrong too — stale `KERNEL_SEAL` at build
+   time. Headers are claims; signatures and pins are facts.)
 
 ## 7. How Chad works, and what he needs from you
 
