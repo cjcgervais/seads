@@ -22,12 +22,13 @@ You two hand off through Chad, and through `docs/*_handoff.md` files in the live
 | repo | branch | tip | note |
 |---|---|---|---|
 | `mandalark-kernel` | `main` | see git | pushed, clean |
-| `seads-feel` | `feel/kernel-v5` | `29787debc` | clean, pushed. **= seal `flight-kernel-v9-2026-07-29` (tag verified), FLOWN AND APPROVED by Chad 2026-07-29 night** |
-| `seads-recon` | `sandbox/kernel-v5-reconcile` | `6058329d3` | clean, pushed, **flying v9** (grafted same day, gate 901/901, comfort numbers bit-identical) |
+| `seads-feel` | `feel/kernel-v5` | `2be93007c` | pushed. **Seal `flight-kernel-v10-2026-07-30` @ `f86ee7b9f` (tag verified); docs tip carries the seal banner + #4 fly card** |
+| `seads-recon` | `sandbox/kernel-v5-reconcile` | see git | **graft of the sealed v10 state was in flight 2026-07-30** — verify before treating recon as flying the committed seal (it flew the byte-matched logged flip before that) |
 
 Kernel seals: v5 → v6 (`cfe1bd7fe`) → v7 (`51eb5b9e3`) → v8 (`ae7ae8f23`, pre-fly,
-partially rejected) → **v9 (`29787debc`, FLOWN-APPROVED — the camera arc is closed)**.
-`reference/seads-feel/` is snapshotted at the **v9** seal.
+partially rejected) → v9 (`29787debc`, camera arc closed) → **v10 (`f86ee7b9f`,
+buttery cascade — pool-ball capture retired-parked)**. `reference/seads-feel/` is
+snapshotted at the **v10** seal.
 
 ## 3. THE CAMERA ARC — CLOSED 2026-07-29 night (v9 flown-approved)
 
@@ -85,27 +86,24 @@ input.
 
 ## 4. Open items
 
-**2026-07-30 — SEAL CANDIDATE PENDING CHAD'S WORD.** The buttery-cascade session closed in
-seads-feel at `3dfc8e44b` (gate 391/391): lean_gain 8 (rung 1, partial, kept), rung F
-backport (the flown table healed into the ledger), and the pool-ball capture machine
-RETIRED (`carry = 0.0`, Chad's ruling verbatim in the seads-feel ledger; machinery parked
-whole, 28 self-armed test legs pin it for the walk-back). Recon's logged flip now matches
-the committed kernel — nothing silent. **On Chad's seal word (v10 or his number), this
-agent's pipeline runs:** re-snapshot `reference/seads-feel/` at the flown seal; mirror into
-DECISIONS.md the cue-ball park (with re-entry condition: closing ability vs a diverging gun
-solution degrading), the Fly-13 crabbing supersession, the compensation-decay law (three
-flown instances: yaw_scale Fly A, Fly-13 reversal, cue-ball retirement — dials tuned
-against a low-authority plant become biases when authority rises; predictive for the A6M2
-brief), and the read-the-flown-table rule as lesson 8; then seal **Golden Felt Flight #4**
-from the seal-card recording set — slow buttery tracking with a STATED smoothness predicate
-(FINE-band sub-5°-error full-reversal rate per axis, threshold recovered from the sealed
-tape's own pins; sick-state reference 6.24/s rudder / 3.27/s elevator), plus the pitch-down
-set framed in known-limits as the horizon-gate thread's BEFORE-state (inversions on the
-tape are the documented gap, not blessed behavior). Recording-index facts that matter:
-felt_flight_15–16 are flagged carry=0/lean-8 FLIP-2 table; Chad reported three, two exist —
-identify from data. Two mechanism threads queued in seads-feel plan mode: the 5–10°
-blend-boundary roll slam, the horizon-gate knife-edge inversions (aim ~22° above horizon,
-~2° off-plane, no cone reaches it).
+**2026-07-30 — v10 SEALED; pipeline ran; GOLDEN #4 IS THE OPEN ITEM.** Sealed
+`flight-kernel-v10-2026-07-30` @ `f86ee7b9f` (docs tip `2be93007c`, gate 391/391, tag
+verified by this agent). This agent's seal pipeline is DONE: `reference/seads-feel/`
+re-snapshotted at the seal (README states the one deliberate exception — the v10 fly card
+from the docs tip); DECISIONS.md carries the v10 entry (cue-ball park verbatim + re-entry
+condition, Fly-13 supersession, the compensation-decay law with the A6M2 predictive note,
+lesson 8 read-the-flown-table); VERSIONS.md carries the seal row. **REMAINING: Golden Felt
+Flight #4** — waits on the recon graft's green word (from the seads-feel agent), then
+Chad flies the #4 card: (1) ≥30 s slow small-deflection tracking, smoothness predicate
+recovered from the sealed tape's own pins (FINE-band sub-5°-error full-reversal rate per
+axis; sick-state reference 6.24/s rudder, 3.27/s elevator); (2) pitch-down set framed in
+known-limits as the horizon-gate thread's BEFORE-state (inversions documented-bad, not
+blessed). Then the full sealing checklist in CLAUDE.md. Recording-index facts:
+felt_flight_15–16 are flagged carry=0/lean-8 FLIP-2 table; Chad reported three, two
+exist — identify from data. File counter ≠ golden number (felt_flight_4 = Golden #3);
+never renumber. Two mechanism threads queued in seads-feel plan mode, in order: the 5–10°
+blend-boundary roll slam, then the horizon-gate knife-edge inversions (aim ~22° above
+horizon, ~2° off-plane — no cone reaches it; needs a nose-referenced arm).
 
 | item | owner | state |
 |---|---|---|

@@ -613,17 +613,33 @@ Output step(const sim::SimState& s, const Input& in, const Internal& internal,
                 (vplane_len > 1e-6)
                     ? std::abs(glm::dot(aim_w, vplane_n / vplane_len))
                     : 0.0;
+            // Rung F "THE SACRED MIDDLE" (Chad 2026-07-24 fly): a below-horizon,
+            // tightly IN-PLANE aim (within side_pure_enter of the vertical
+            // plane) pure-pitches at ANY depth below the horizon, not just past
+            // horizon_enter -- "when I nose straight down I need a wider knife
+            // edge... maintain my horizon [as] I slowly pitch up from the dive
+            // in that same direction." The standing rung-E ruling (a lateral/
+            // bank-over nose-down needs 45+ deg down) is UNTOUCHED: this is an
+            // OR onto the horizon leg only, and the wider side_cone_enter/exit
+            // gate still applies on every entry regardless of which arm fires
+            // -- a shallow LATERAL aim (past side_pure, under the outer cone)
+            // still does not push (F2).
+            const bool sacred_middle_enter =
+                aim_side < cp.push_side_pure_enter && aim_elev < 0.0;
+            const bool sacred_middle_exit =
+                aim_side < cp.push_side_pure_exit && aim_elev < 0.0;
             if (ns.push_mode) {
                 if (elev >= 0.0 || !have_bank ||
                     std::abs(bank_eff) <= cp.push_gate_bank_lo ||
                     target_body.z > cp.push_down_z_exit ||
-                    aim_elev > cp.push_horizon_exit ||
+                    (aim_elev > cp.push_horizon_exit && !sacred_middle_exit) ||
                     aim_side > cp.push_side_exit) {
                     ns.push_mode = false;
                 }
             } else if (have_bank && std::abs(bank_eff) > cp.push_gate_bank &&
                        elev < 0.0 && target_body.z <= cp.push_down_z_enter &&
-                       aim_elev < cp.push_horizon_enter &&
+                       (aim_elev < cp.push_horizon_enter ||
+                        sacred_middle_enter) &&
                        aim_side < cp.push_side_enter) {
                 ns.push_mode = true;
                 ns.held_bank = phi_full;  // fold-safe capture (F2)

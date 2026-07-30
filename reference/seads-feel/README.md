@@ -1,15 +1,36 @@
 # reference/seads-feel/ — PRIMARY reference: the active kernel
 
-These files are **copies**, re-snapshotted **2026-07-29 (night)**, from
-`D:\flight_sim2\seads-feel`, branch **`feel/kernel-v5`**, HEAD **`29787debc`** — the
-**`flight-kernel-v9-2026-07-29`** seal (tag verified to resolve to that commit; tree clean
-at snapshot time; tag and branch pushed to origin). This is a **FLOWN seal**: Chad flew the
-build and approved all three fly-card conditions the same day. This snapshot postdates the
-v5 seal (`149a99c40`), the reconciliation (`game-kernel-v5` @ `36ee936e9`), the v6 seal
-(`cfe1bd7fe`), the v7 seal (`51eb5b9e3`), and the **v8 seal (`ae7ae8f23`) — which was
-deliberately never snapshotted here** (partially rejected on the stick; a pre-fly seal).
+These files are **copies**, re-snapshotted **2026-07-30**, from
+`D:\flight_sim2\seads-feel`, branch **`feel/kernel-v5`**, seal commit **`f86ee7b9f`** — the
+**`flight-kernel-v10-2026-07-30`** seal (tag verified to resolve to that commit; tag and
+branch pushed to origin). This is a **FLOWN state**: Chad flew these exact dial values in
+recon (as the logged FLIP-2 table, byte-matched to the committed kernel) and approved the
+buttery small-deflection feel on the stick before ruling the seal. One exception to
+seal-commit purity, stated deliberately: `docs/v10_fly_cards.md` is taken from the
+docs-only tip `2be93007c` (the seal-banner commit, one commit past the seal) because it
+carries the Golden Felt Flight #4 pre-registrations this repo's sealing checklist needs.
 
-**New since the v7 snapshot — the sealed v8+v9 content:**
+**New since the v9 snapshot — the sealed v10 content (the buttery-cascade session):**
+
+- **Rung 1** (flown, partial, KEPT): `lean_gain` 6.0 → 8.0 — earlier bank on turn entry.
+- **Rung F backport** (lineage heal): `side_cone_enter/exit` 27.5/32.5 → 37.5/42.5 — the
+  snapshot now reads the table Chad actually flies; the read-the-flown-table rule stands.
+- **POOL-BALL RETIREMENT** (Chad's ruling, verbatim in the seads-feel ledger): `[capture]
+  carry` 1.0 → 0.0 — the rigid cue-ball capture machine is **parked, not deleted** (28
+  self-armed test legs pin the machinery for the walk-back; a silent re-arm fails the
+  loader pin loud — see `config/load_controller.cpp`). Re-entry condition: closing ability
+  against a diverging gun solution degrading. This retired the small-deflection
+  rudder/elevator flapping and won the buttery feel Chad approved.
+- **Parked rulings carried in the ledger, not this snapshot:** `lean_max` 30→40 (refuted
+  shelf hypothesis — parked); side cone 45/50 (superseded by the horizon-gate attribution:
+  the inversions are unreachable by any cone and need a nose-referenced arm — a queued
+  mechanism thread, with the 5–10° blend-boundary roll slam ahead of it).
+
+Gate at the v10 seal: **391/391**. The recon graft (replacing the logged flip with the
+committed sealed state) was in flight at snapshot time — Golden Felt Flight #4 waits for
+its green word so the tape records the committed kernel.
+
+**Previous snapshot (v9, `29787debc`) content — retained below for lineage:**
 
 - **v8 S-keyprec** (flown, KEPT): override keys are camera-inert. S-keychase is retired —
   `render::ease_chase_forward`'s call stays branch-free on key state (a standing review bar;

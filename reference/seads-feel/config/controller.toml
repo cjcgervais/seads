@@ -311,10 +311,30 @@ tau  = 0.01  # [s] low-pass on the DERIVED rate demand (0 = unfiltered; the raw
 # (protection never bypassed).
 # carry = 0 is the STRUCTURAL OFF (machine never engages, every expression
 # tree bit-identical legacy — the S-hrz rate = 0 pattern). Fly fallback: 0.0.
-carry    = 1.0   # [-] fraction of the incoming net rate carried through center
-                 #   (0 = OFF; 1 = full "no slow-in"). THE dial: physics makes
-                 #   the far apex = rim + w^2/(2*alpha_avail) — lower carry
-                 #   trades carry-through for a tighter rim (see rim note).
+#
+# *** RETIRED (Chad, 2026-07-30) — the pool ball is PARKED, not deleted. ***
+# His ruling, verbatim: "I think we can park the cue-ball behavior and defer it
+# to a future modification if I need it. I think the plant and flight control
+# authority as it is now gives me sufficient closing ability to intercept an
+# opponent diverging away from my gun solution, especially with the powerful
+# elevator at full bank in this kind of situation. So park the cue ball
+# behavior as retired for now." And on the A/B he flew: "the pool ball feel is
+# gone... I am quite happy to trade a little less snappiness to centre for the
+# buttery feel."
+# WHY: the capture machine was ATTRIBUTED (docs/jitter_attribution.md — 26x
+# flap density below blend_lo, dead-blow amplitude match, stick-confirmed A/B)
+# as the owner of the small-deflection rudder/elevator flapping. carry = 0 is
+# the DESIGNED structural off above, so retiring it costs no code: the machine
+# never engages and every expression tree is bit-identical legacy.
+# The machinery and ALL its dials below STAY — in code and in this table —
+# documenting the parked mechanism for the future modification. WALK-BACK =
+# carry 1.0 (and nothing else) restores the pool ball exactly as flown.
+carry    = 0.0   # [-] fraction of the incoming net rate carried through center
+                 #   (0 = OFF/RETIRED — the committed value; 1 = full "no
+                 #   slow-in", the flown pool ball and the walk-back). THE dial:
+                 #   physics makes the far apex = rim + w^2/(2*alpha_avail) —
+                 #   lower carry trades carry-through for a tighter rim (see
+                 #   rim note).
 rim_frac = 1.0   # [0..1] the glance target: the apex lands at this fraction
                  #   of the circle past center. 1.0 = DEAD ON the inside wall
                  #   of the ring (Chad's v3 POOL BALL Q2 ruling — supersedes
@@ -474,7 +494,25 @@ rate = 5.5           # [1/s] exponential rate the held bank decays to level
 # SIDE SCOPES (SPEC §0 MB-lean): freelook now CARVES a held lateral aim
 # (16-30 deg bank, ~2 deg/s turn — the plane chases the raw aim); a FINE-rest
 # ballistic entry attitude-holds up to the leaned bank (omega_bal-clamped).
-lean_gain = 6.0   # [deg bank per deg lateral error] ~6 deg lean at 1 deg off.
+lean_gain = 8.0   # [deg bank per deg lateral error] ~8 deg lean at 1 deg off.
+                  #   BUTTERY RUNG 1 2026-07-30 (Chad: "a little more bank
+                  #   early on... a bit quicker to respond" — the file's own
+                  #   pre-agreed fallback below, "8 if turn entry from FINE
+                  #   reads too flat", is exactly today's read): 6 -> 8.
+                  #   RATIONALE IS TURN ENTRY, NOT CENTERING — Fly 11's
+                  #   standing ruling ("do not re-escalate lean_gain for
+                  #   centering") is NOT walked back. Lean-loop gain 33 -> 44
+                  #   (approved-27 / rejected-88 bracket). TWO PRE-REGISTERED
+                  #   COUPLINGS (plan audit): (1) the lean_max knee drops
+                  #   30/8 = 3.75 deg < blend_lo 5 deg — the 30-deg cap is
+                  #   now REACHABLE inside FINE for lateral errors 3.75-5 deg
+                  #   (a flat-top bank region that hasn't existed since Fly
+                  #   13; at 6 the cap was vestigial); (2) the freelook CARVE
+                  #   side-scope banks ~33% more eagerly on a held lateral
+                  #   aim — the one graze of the v9-sealed freelook surface.
+                  #   Fly sentinels: slow-flight wallow <~80 m/s; "does
+                  #   near-center centering still feel like RUDDER?" (Fly-10
+                  #   vector); the carve + release catch. Walk-back: 6.0.
                   #   FLY 13 2026-07-10: 10 -> 6 — the ORIGINAL plan's Fly-2
                   #   number, finally landable (Chad: "still too much bank
                   #   gain early messing up with the aiming... I want more
@@ -594,13 +632,44 @@ horizon_exit  = 40.0  # [deg below horizon] exit push once the aim rises above
 # nosing the belly at it; only a near-straight-down (in-plane) aim pure-pitches.
 # WIDEN the cone for more push-down territory (more off-axis down-aims PITCH);
 # narrow it to roll over sooner. (The old comment here had it backwards.)
-side_cone_enter = 27.5   # [deg off the vertical plane] push only when inside
+side_cone_enter = 37.5   # [deg off the vertical plane] push only when inside
+                         #   v5 RECONCILE FLY-1 (Chad 2026-07-24, "I love it"
+                         #   + the one issue: "when I go nose down that knife
+                         #   edge is strong and I roll over to one side or the
+                         #   other. Narrow the rollover bands to give way to
+                         #   the sacred middle... broaden that knife edge"):
+                         #   27.5 -> 37.5 — the pure-pitch-down corridor
+                         #   widens +10 deg, the roll-over region narrows.
+                         #   His 2nd widening of this exact dial (22.5 -> 27.5
+                         #   was 2026-07-07, same felt complaint); band kept
+                         #   5 deg. BACKPORTED from seads-recon 6cd91bb12
+                         #   (the tunnel-lineage widening) — this worktree's
+                         #   lineage split at the v9 seal and never got it.
                          #   this. MB (Chad fly verdict 2026-07-07): 22.5->27.5
                          #   — "the knife edge on nose down maneuvers needs a
                          #   little widening... I got thrown over once when
                          #   nosing down": a slightly off-axis down-flick now
                          #   PUSHES instead of rolling over (band kept 5 deg).
-side_cone_exit  = 32.5   # [deg] roll over once the aim swings past this
+side_cone_exit  = 42.5   # [deg] roll over once the aim swings past this
+
+# Rung F "THE SACRED MIDDLE" (v5 kernel-v5-reconcile, Chad 2026-07-24 fly;
+# BACKPORTED from seads-recon 6cd91bb12 — flown-approved there, "I love it").
+# Rung E's horizon_enter=45 blankets EVERYTHING below the horizon, so a
+# shallow straight-ahead dive (in-plane, 20-40 deg down) could no longer
+# pure-pitch: bank-to-turn rolled him over. Chad's ruling, BOTH halves kept:
+# "when I nose straight down I need a wider knife edge... pitch straight
+# down without tipping over... maintain my horizon because I will slowly
+# pitch up from the dive in that same direction" (this arm, below) AND the
+# standing rung-E ruling that a lateral/bank-over nose-down still needs 45+
+# deg down (horizon_enter/exit above, UNCHANGED). This is a second, narrower
+# entry arm ORed onto the horizon leg: tightly in-plane (within
+# side_pure_enter of the vertical plane) AND below the horizon at ANY depth
+# pushes pure-pitch, no roll commitment. side_pure_enter < side_cone_enter
+# (37.5) — the sacred middle is a strict subset of the wider cone that still
+# gates every entry (a shallow LATERAL aim, past side_pure but under the
+# outer cone, still does NOT push — rung E's lateral protection holds).
+side_pure_enter = 18.0  # [deg off the vertical plane] sacred-middle entry
+side_pure_exit  = 23.0  # [deg] sacred-middle exit (hysteresis)
 
 [latches]            # direction latches (SPEC §9.3), every leg hysteretic
 roll_on    = 135.0   # [deg] latch roll direction above |bankErr|

@@ -174,6 +174,15 @@ control::ControllerParams load_controller_toml(const std::string& path,
     const double side_exit_deg = require(root, "push_gate", "side_cone_exit");
     c.push_side_enter = std::sin(rad(side_enter_deg));
     c.push_side_exit = std::sin(rad(side_exit_deg));
+    // Rung F "THE SACRED MIDDLE": a second, narrower in-plane cone gating an
+    // OR-arm on the horizon leg (any depth below horizon, tightly in-plane).
+    // Same |sin| convention as the side cone above.
+    const double side_pure_enter_deg =
+        require(root, "push_gate", "side_pure_enter");
+    const double side_pure_exit_deg =
+        require(root, "push_gate", "side_pure_exit");
+    c.push_side_pure_enter = std::sin(rad(side_pure_enter_deg));
+    c.push_side_pure_exit = std::sin(rad(side_pure_exit_deg));
 
     c.roll_latch_on = rad(require(root, "latches", "roll_on"));
     c.roll_latch_off = rad(require(root, "latches", "roll_off"));
@@ -408,6 +417,12 @@ control::ControllerParams load_controller_toml(const std::string& path,
           "hysteresis)");
     check(c.push_side_enter < c.push_side_exit && c.push_side_enter > 0.0,
           "0 < side_cone_enter < side_cone_exit (push sideways hysteresis)");
+    check(c.push_side_pure_enter < c.push_side_pure_exit &&
+              c.push_side_pure_enter > 0.0,
+          "0 < side_pure_enter < side_pure_exit (sacred-middle hysteresis)");
+    check(c.push_side_pure_enter < c.push_side_enter,
+          "side_pure_enter < side_cone_enter (the sacred middle is a "
+          "narrower subset of the wider side cone)");
     check(c.roll_latch_on > c.roll_latch_off && c.roll_latch_off > 0.0,
           "roll latch hysteresis");
     check(c.astern_on > c.astern_off && c.astern_off > 0.0,

@@ -247,6 +247,23 @@ struct ControllerParams {
     // body. enter < exit (hysteresis).
     double push_side_enter = 0.0;  // enter push below this |aim sideways|
     double push_side_exit = 0.0;   // exit push above this |aim sideways|
+    // Rung F "THE SACRED MIDDLE" (v5 kernel-v5-reconcile, Chad 2026-07-24):
+    // rung E's 45-deg horizon_enter blankets EVERYTHING below the horizon, so
+    // a shallow straight-ahead dive (20-40 deg down, IN-PLANE) could no
+    // longer pure-pitch -- bank-to-turn rolled him over. His ruling, both
+    // halves preserved: "when I nose straight down I need a wider knife
+    // edge... pitch straight down without tipping over... maintain my
+    // horizon because I will slowly pitch up from the dive in that same
+    // direction" (this arm) AND the standing rung-E ruling that a
+    // lateral/bank-over nose-down still needs 45+ deg down (untouched --
+    // push_horizon_enter/exit above). This is a SECOND, narrower entry arm,
+    // ORed with the horizon leg: tightly in-plane (within side_pure_enter of
+    // the vertical plane) AND below the horizon at ANY depth. enter < exit
+    // (hysteresis) and side_pure_enter < push_side_enter (the sacred middle
+    // is a subset of the wider side cone that still gates every entry).
+    double push_side_pure_enter = 0.0;  // enter (sacred middle) below this
+                                        // |aim sideways|, any depth<0
+    double push_side_pure_exit = 0.0;   // exit (sacred middle) above this
 
     // Direction latches (SPEC §9.3), hysteretic.
     double roll_latch_on = 0.0;   // [rad] latch roll dir above |bankErr|

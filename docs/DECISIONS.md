@@ -11,21 +11,83 @@ Standing decisions for the flight kernel. Each entry: date, decision, why, statu
 flies kernel v5, gate 797/797, first landing ever put down, Golden Felt Flight #1 flown on
 that build. The old "feel branch diverges from a v4 main" danger no longer exists.
 
-**Current resting state (2026-07-28):** the feel branch tip `cfe1bd7fe` is **sealed as
-`flight-kernel-v6-2026-07-28`** — tag and branch backup both pushed to origin, and all
-seven post-v5-seal commits grafted into the seads-recon conquest tree
-(`sandbox/kernel-v5-reconcile` @ `5e27f237c`, gate 887/887, controller golden transferred
-without re-record). Chad's word at the seal: "getting very near the point I don't touch
-it again for a while." The watch discipline stays — a future session may move the branch
-past v6 at any time:
+**Current resting state (2026-07-30):** the feel branch is **sealed as
+`flight-kernel-v10-2026-07-30` @ `f86ee7b9f`** (docs tip `2be93007c`, gate 391/391, tag +
+branch pushed). Seal lineage: v6 `cfe1bd7fe` → v7 `51eb5b9e3` → v8 `ae7ae8f23` (pre-fly,
+never snapshotted) → v9 `29787debc` (camera arc closed) → **v10 (the buttery-cascade
+session)**. The recon graft of the sealed state was in flight at the seal; Golden Felt
+Flight #4 waits on its green word. The watch discipline stays — a session may move the
+branch past v10 at any time:
 
-- `reference/seads-feel/` is snapshotted at **`cfe1bd7fe` = the v6 seal (2026-07-28)** —
-  current through the whole approved session, including the recorder graft. If the live
+- `reference/seads-feel/` is snapshotted at **`f86ee7b9f` = the v10 seal (2026-07-30)**
+  (plus `docs/v10_fly_cards.md` from the docs-only tip, stated in its README). If the live
   tip has moved past that, the live tree is ground truth again until the next re-snapshot.
 - **Every future session must check the branch state first** (read-only `git -C
   D:\flight_sim2\seads-feel log --oneline` / `git status` — never write there) before
   treating any dial value, snapshot, or cascade Code section as current. The branch has
   been observed to move between two commands of the same session.
+
+---
+
+## 2026-07-30 — v10 SEALED (buttery cascade): pool-ball capture RETIRED-PARKED by ruling; two supersessions; the compensation-decay law
+
+**Sealed `flight-kernel-v10-2026-07-30` @ `f86ee7b9f`, gate 391/391.** Chad flew the exact
+dial values (as recon's logged FLIP-2 table, byte-matched to the commit) and approved the
+buttery small-deflection feel before ruling the seal. Three dials moved this session:
+`lean_gain` 6→8 (rung 1, flown partial, kept), `side_cone_enter/exit` 27.5/32.5→37.5/42.5
+(rung F — a lineage heal, not a tune: the sealed table had diverged from the table Chad
+actually flies), and `[capture] carry` 1.0→0.0 (the headline, below).
+
+**RULING — the pool-ball capture machine is RETIRED, PARKED NOT DELETED.** Chad, verbatim:
+
+> "I think we can park the cue-ball behavior and defer it to a future modification if I
+> need it. I think the plant and flight control authority as it is now gives me sufficient
+> closing ability to intercept an opponent diverging away from my gun solution, especially
+> with the powerful elevator at full bank in this kind of situation. So park the cue ball
+> behavior as retired for now."
+
+The pinned attribution: the machine's center-carry caused the small-deflection
+rudder/elevator flapping (sick-state 6.24 / 3.27 reversals/s; carry=0 predicted ≲1% and
+Chad's A/B confirmed on the stick — "the pool ball feel is gone"). Machinery kept whole
+behind 28 self-armed test legs; a silent re-arm fails the loader pin loud. **Re-entry
+condition:** closing ability against a diverging gun solution degrading.
+
+**SUPERSESSION — Fly-13's "crabbing? yes!" preference is reversed by Chad's own ruling:**
+
+> "This ask was before I got the power and flight control authority. The more rudder was
+> an attempt to get the nose to meet the mouse aim centre more deliberately. Now that the
+> power has increased I want to try to balance the banking back in… My preference has
+> evolved and I want to see if it is better with a more balanced approach with less
+> crabbing."
+
+`center_band` stays 1.5 at this seal — the shrink is its own future fly, now with a real
+ruling behind it (it was previously blocked for lacking one, not for being wrong).
+
+**THE COMPENSATION-DECAY LAW (three flown instances, now predictive):** dials and
+mechanisms tuned against a low-authority plant become biases when authority rises —
+(1) `yaw_scale` 2.2→2.0, Fly A: "the old yaw bias was partly compensation for a slower
+plant"; (2) the Fly-13 crabbing reversal above; (3) the cue-ball retirement above. First
+predictive use: the A6M2 (low-authority vessel) brief inherits "evaluate re-arming the
+parked capture machinery (carry=1) as a character dial before inventing anything new."
+
+**Parked with conditions:** `lean_max` 30→40 (the shelf hypothesis was REFUTED by the
+pins — the 5–10° bounce is the FINE↔MANEUVER blend-boundary roll slam, pre-dating rung 1;
+mechanism thread queued). Side cone 45/50 (superseded: the knife-edge inversions occur at
+aim ~22° above horizon, ~2° off-plane — no cone reaches them; needs a nose-referenced arm,
+mechanism thread queued behind the blend-boundary one).
+
+**Lesson 8 — read the flown table / fly the identified build.** Twice in one day the
+graded artifact wasn't the assumed one (Card 1 flown on the recon build's old table; the
+side cone flown at 37.5/42.5 while the ledger said 27.5/32.5). Every fly card now states
+the flown build's actual dial values read from config at fly time, plus a pre-registered
+felt tell for the build itself. Same principle as lesson 7, extended from recordings to
+executables and tables: **identification comes from the artifact's own data, never from
+the instruction that created it.**
+
+**Status:** Golden Felt Flight #4 pending (slow-tracking smoothness predicate to be
+recovered from the sealed tape's own pins; pitch-down set framed as the horizon-gate
+BEFORE-state — documented-bad, not blessed). Mechanism threads queued: blend-boundary
+slam, then horizon-gate arm.
 
 ---
 
