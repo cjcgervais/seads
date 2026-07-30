@@ -111,6 +111,19 @@ inline void init(app::LoopState& st, MiniCamera& cam,
 // Returns the tick's TickResult (telem + respawned). Feeds cam.cam_fwd/cam_up
 // (PREVIOUS values) in, exactly as run_mouseloop / main.cpp do. Throttle is
 // forced to 1.0 (every comfort scenario runs full throttle).
+//
+// ⚠ HISTORICAL HAZARD, now structurally impossible (S-keyprec / v8). Under v7
+// this wrapper called `cam.advance(...)` with NO keys_flying argument, silently
+// taking the `false` default — the S-keychase flag had to be threaded BY HAND
+// through every call site, and this convenience wrapper dropped it. That is the
+// very instrument fork render::chase_anchor's purity was built to prevent.
+// MEASURED HONESTLY when it was fixed: NO comfort number moved, because no
+// drive()-based scenario ever reached keys-without-freelook (turnsnap_ovr holds
+// its override only while freelook is also held, which the selector excluded;
+// no other scenario sets an override at all). So the fork was a real latent
+// defect with zero measured consequence — it would have bitten the FIRST
+// scenario to model keys-in-mouse-aim, which is exactly what mouseaim_keys is.
+// v8 removes the class entirely: MiniCamera::advance now takes no key state.
 inline app::TickResult drive(app::LoopState& st, MiniCamera& cam,
                              app::TickInput& in, const sim::AircraftParams& p,
                              const control::ControllerParams& cp) {
@@ -217,30 +230,34 @@ inline void comfort_turnsteady(const sim::AircraftParams& p,
     std::printf("COMFORT turnsteady crashed %d\n", crashed);
 }
 
-// ---- Scenario 1b: sustained turn flown on the KEYS (S-keychase) ------------
-// Chad's actual complaint (2026-07-28, flying the S-relorient addendum): "it
-// gives me an oblique view still." The turnsteady scenario above re-aims every
-// tick (a MOUSE pilot), so the camera chases a target that tracks the turn.
-// THIS one parks the aim and flies the turn on a held ROLL override — the
-// keyboard case — where the aim does NOT track and the standing oblique is at
-// its worst.
-// ⚠ FILING CAVEAT (Chad's 2026-07-29 refinement): this scenario lives in the
-// COMFORT instrument because that is where oblique_deg lives, but S-keychase is
-// a GUNNERY mechanism — the number here measures whether the pilot can SEE HIS
-// GUN LINE (the nose-vs-velocity angle) while hard-maneuvering on the keys, not
-// whether the view is comfortable. Judge it against that criterion. Reading it
-// as a comfort metric is the same class of error that made the MOUSE figure
-// (turnsteady 95.82) look like a defect: in mouse-aim a large oblique IS the
-// deflection shot, and no anchor change can or should "fix" it. Prints the same metric so the two are directly comparable, and
-// runs BOTH arms (key_anchor_rate as shipped vs forced 0) so the number is
-// self-evidencing rather than a claim.
+// ---- Scenario 1b: sustained turn flown on the KEYS -------------------------
+// ⚠⚠ READ THIS BEFORE CALLING THE NUMBER A DEFECT. Under S-keyprec (Chad
+// 2026-07-29, SEALED KERNEL v8) this scenario's standing oblique — the camera
+// sitting ~16.3 deg off the flight path while the pilot flies on keys with a
+// parked aim — is the EXPECTED, CHAD-RULED behavior, not a problem to solve.
+// The camera is bound to the AIM by ruling; fly on keys without touching the
+// mouse and the plane turns away from where you are pointing, so of course you
+// see it obliquely. That IS the deflection view, and the cure is to move the
+// mouse. This leg exists to PIN that number, not to drive it down.
+//
+// History, so it is not re-litigated: v7's S-keychase drove this figure to
+// 0.000 by re-anchoring the camera on the flight path whenever a key was held,
+// and was flown-approved AGAINST THIS SCENARIO. It was then retired, because
+// this scenario parks the aim and Chad does not — he flies mouse-aim AND keys
+// together, where the same mechanism measured a 0 -> 67.8 deg camera departure
+// from his aim (see comfort_mouseaim_keys, the scenario that was missing). A
+// leg that only ever models one hand is how three camera mechanisms in a row
+// got validated against a case he does not fly.
+// MECHANICS: the turnsteady scenario above re-aims every tick (a MOUSE pilot),
+// so the camera chases a target that tracks the turn. THIS one parks the aim
+// and flies the turn on a held roll+elevator override — the pure keyboard case,
+// where the aim does NOT track and the standing oblique is at its largest. It
+// prints the same metric as turnsteady so the two are directly comparable.
+// Single-arm since v8: the A/B (key_anchor_rate as shipped vs forced 0) went
+// with the retired knob — there is only one camera law now.
 inline void comfort_turnsteady_keys(const sim::AircraftParams& p,
-                                    const control::ControllerParams& cp_in,
-                                    bool anchor_on) {
+                                    const control::ControllerParams& cp) {
     using namespace comfort_detail;
-    control::ControllerParams cp = cp_in;
-    if (!anchor_on) cp.cam_key_anchor_rate = 0.0;  // the OFF arm (v6 law)
-
     app::LoopState st;
     MiniCamera cam;
     init(st, cam, p, 150.0, 3500.0);
@@ -261,8 +278,7 @@ inline void comfort_turnsteady_keys(const sim::AircraftParams& p,
         in.cam_up = cam.cam_up;
         const app::TickResult r = app::tick(st, in, p, cp);
         if (r.orient_fired) cam.orient_cut(st.aim.forward());
-        cam.advance(st.curr, st.aim.forward(), st.aim.up(), cp, p.sim_dt,
-                    /*keys_flying=*/true);
+        cam.advance(st.curr, st.aim.forward(), st.aim.up(), cp, p.sim_dt);
         if (r.respawned) crashed = 1;
         if (i > window_start) {
             const double obl = oblique_deg(st, cam);
@@ -271,12 +287,95 @@ inline void comfort_turnsteady_keys(const sim::AircraftParams& p,
             if (obl < 10.0) converged_ever = 1;
         }
     }
-    const char* arm = anchor_on ? "on" : "off";
-    std::printf("COMFORT turnsteady_keys_%s standing_oblique_deg %.3f\n", arm,
+    // EXPECTED ~16.3 deg — the Chad-ruled deflection view, not a defect.
+    std::printf("COMFORT turnsteady_keys standing_oblique_deg %.3f\n",
                 n_win ? sum_obl / n_win : 0.0);
-    std::printf("COMFORT turnsteady_keys_%s converged %d\n", arm,
-                converged_ever);
-    std::printf("COMFORT turnsteady_keys_%s crashed %d\n", arm, crashed);
+    std::printf("COMFORT turnsteady_keys converged %d\n", converged_ever);
+    std::printf("COMFORT turnsteady_keys crashed %d\n", crashed);
+}
+
+// ---- Scenario 1c: MOUSE-AIM flying with hard key modulation (S-keyprec) ----
+// THE MISSING CASE, and the reason three camera mechanisms in a row were
+// validated against a scenario Chad does not fly. `turnsteady` is a pure mouse
+// pilot (aim re-commanded every tick, no keys); `turnsteady_keys` is a pure
+// keyboard pilot (aim parked, keys held). Chad's DOMINANT style is BOTH AT
+// ONCE — "I usually fly with a combination of mouse aim with hard key inputs to
+// maximize control for the fight" (2026-07-29) — and no scenario modeled it.
+//
+// The pilot holds a mouse-aim turn throughout (turn_reaim every tick, exactly
+// as turnsteady) and at t = 4 s adds a held aileron+elevator override to cut
+// inside — "if I input some aileron to cut into their path sooner." Under
+// Chad's v8 ruling the keys change the TRAJECTORY and must change NOTHING about
+// the camera: it stays bound to the aim with the flown lag, continuously.
+//
+// Metric = aim_lag_deg = angle(cam_fwd, aim.forward()) — the camera's lag
+// BEHIND THE AIM, which is the quantity the ruling constrains (oblique_deg
+// measures against velocity, which is the S-keychase question, not this one).
+//   lag_before = mean over the 1 s BEFORE the keypress
+//   lag_during = mean over the last 2 s of the key hold
+//   max_step   = largest single-tick change in aim_lag_deg in the 1 s AFTER the
+//                keypress edge — the "snap"
+//
+// ⚠ HOW TO READ max_step. The S-keychase anchor swap is EASED, not instant: the
+// per-tick step is bounded by min(gap, key_anchor_rate*dt) = 6.0/120 = 0.05 rad
+// ~ 2.9 deg/tick BY CONSTRUCTION. So max_step saturates near 2.9 no matter how
+// violent the snap feels in the hands, and reading the peak alone under-reports
+// it badly. The signal is (a) lag_during vs lag_before — the camera ABANDONING
+// the aim — and (b) that 2.9 deg/tick rate SUSTAINED until the gap closes.
+inline void comfort_mouseaim_keys(const sim::AircraftParams& p,
+                                  const control::ControllerParams& cp) {
+    using namespace comfort_detail;
+    app::LoopState st;
+    MiniCamera cam;
+    init(st, cam, p, 150.0, 3500.0);
+
+    const int total = static_cast<int>(8.0 / p.sim_dt);       // 8 s
+    const int key_at = static_cast<int>(4.0 / p.sim_dt);      // keys down at 4 s
+    const int pre_start = key_at - static_cast<int>(1.0 / p.sim_dt);  // 1 s pre
+    const int dur_start = total - static_cast<int>(2.0 / p.sim_dt);   // last 2 s
+    const int step_end = key_at + static_cast<int>(1.0 / p.sim_dt);   // 1 s post
+
+    double sum_pre = 0.0, sum_dur = 0.0, max_step = 0.0, prev_lag = 0.0;
+    int n_pre = 0, n_dur = 0, crashed = 0, nan_events = 0;
+
+    for (int i = 1; i <= total; ++i) {
+        turn_reaim(st);  // the MOUSE hand, commanding the turn every tick
+        app::TickInput in;
+        if (i >= key_at) {  // and the hard keys, cutting inside
+            in.override_mask[2] = true;  // aileron
+            in.override_sign[2] = 1.0;
+            in.override_mask[0] = true;  // elevator
+            in.override_sign[0] = 1.0;
+        }
+        const app::TickResult r = drive(st, cam, in, p, cp);
+        if (tick_has_nan(st, cam)) ++nan_events;
+        if (r.respawned) crashed = 1;
+
+        const double lag =
+            std::acos(std::clamp(
+                glm::dot(glm::normalize(cam.cam_fwd), st.aim.forward()), -1.0,
+                1.0)) *
+            kDeg;
+        if (i > pre_start && i < key_at) {
+            sum_pre += lag;
+            ++n_pre;
+        }
+        if (i > dur_start) {
+            sum_dur += lag;
+            ++n_dur;
+        }
+        // The snap: per-tick change in the lag, measured across the key edge.
+        if (i >= key_at && i <= step_end)
+            max_step = std::max(max_step, std::abs(lag - prev_lag));
+        prev_lag = lag;
+    }
+    std::printf("COMFORT mouseaim_keys lag_before_deg %.3f\n",
+                n_pre ? sum_pre / n_pre : 0.0);
+    std::printf("COMFORT mouseaim_keys lag_during_deg %.3f\n",
+                n_dur ? sum_dur / n_dur : 0.0);
+    std::printf("COMFORT mouseaim_keys max_step_deg %.3f\n", max_step);
+    std::printf("COMFORT mouseaim_keys nan_events %d\n", nan_events);
+    std::printf("COMFORT mouseaim_keys crashed %d\n", crashed);
 }
 
 // ---- Scenario 2: turn then a freelook TAP with NO override ------------------
@@ -494,6 +593,170 @@ inline void comfort_turnsnap_ovr(const sim::AircraftParams& p,
                 updebt_settle_ticks);
     std::printf("COMFORT turnsnap_ovr nan_events %d\n", nan_events);
     std::printf("COMFORT turnsnap_ovr crashed %d\n", crashed);
+}
+
+// ---- Scenario 3b (v9): freelook + keys held, RELEASE, keep flying on keys --
+// THE sequence Chad actually flies, never instrumented before v9 (the fourth
+// camera round's process lesson — docs/DECISIONS.md, mandalark-kernel ledger
+// @ b4c0751): hard turn -> freelook WITH override keys held -> release
+// freelook -> keep turning on the keys. Metrics are NOSE-referenced: the
+// historical oblique_at_fire_deg 0.375 was VELOCITY-referenced and read
+// perfect while the camera sat ~AoA off the AIRFRAME at the exact instant the
+// mouse takes over (term A), and never printed the up term at all (term B).
+// vel_at_fire_deg is kept beside the nose number to prove the old metric was
+// blind, not wrong. nose_after_1s/3s are the sustained reads, so an
+// instant-only fix cannot masquerade as complete.
+inline void comfort_freelook_release_keys(const sim::AircraftParams& p,
+                                          const control::ControllerParams& cp) {
+    using namespace comfort_detail;
+    app::LoopState st;
+    MiniCamera cam;
+    init(st, cam, p, 150.0, 3500.0);
+
+    const int turn_ticks = static_cast<int>(6.0 / p.sim_dt);
+    const int hold_ticks = 30;
+    const int post_ticks = static_cast<int>(4.0 / p.sim_dt);
+    const int t_1s = static_cast<int>(1.0 / p.sim_dt);
+    const int t_3s = static_cast<int>(3.0 / p.sim_dt);
+    int nan_events = 0, crashed = 0, fired = 0;
+    double nose_at_fire = 0.0, vel_at_fire = 0.0, updebt_after_release = 0.0;
+    double nose_after_1s = 0.0, nose_after_3s = 0.0;
+
+    const auto cam_to = [&](const glm::dvec3& ref) {
+        return std::acos(std::clamp(glm::dot(glm::normalize(cam.cam_fwd),
+                                             glm::normalize(ref)),
+                                    -1.0, 1.0)) *
+               kDeg;
+    };
+    const auto set_keys = [](app::TickInput& in) {
+        in.override_mask[2] = true;  // held aileron
+        in.override_sign[2] = 1.0;
+        in.override_mask[0] = true;  // and elevator: a real sustained turn
+        in.override_sign[0] = 1.0;
+    };
+
+    // Phase A: establish the turn (mouse pilot).
+    for (int i = 0; i < turn_ticks; ++i) {
+        turn_reaim(st);
+        app::TickInput in;
+        drive(st, cam, in, p, cp);
+        if (tick_has_nan(st, cam)) ++nan_events;
+    }
+    // Phase B: freelook held WITH the keys held. No turn_reaim — in freelook
+    // the mouse is on the camera, not the aim.
+    for (int i = 0; i < hold_ticks; ++i) {
+        app::TickInput in;
+        in.freelook_held = true;
+        set_keys(in);
+        drive(st, cam, in, p, cp);
+        if (tick_has_nan(st, cam)) ++nan_events;
+    }
+    // Phase C: release freelook, keys STILL held, keep flying on the keys.
+    for (int i = 0; i < post_ticks; ++i) {
+        app::TickInput in;
+        set_keys(in);
+        const app::TickResult r = drive(st, cam, in, p, cp);
+        if (tick_has_nan(st, cam)) ++nan_events;
+        if (r.respawned) crashed = 1;
+        const glm::dvec3 nose =
+            st.curr.orientation * glm::dvec3{0.0, 0.0, -1.0};
+        if (i == 0) {
+            fired = r.orient_fired ? 1 : 0;
+            nose_at_fire = cam_to(nose);
+            vel_at_fire = cam_to(st.curr.velocity);
+            updebt_after_release = up_debt_deg(st);
+        }
+        if (i == t_1s) nose_after_1s = cam_to(nose);
+        if (i == t_3s) nose_after_3s = cam_to(nose);
+    }
+    std::printf("COMFORT freelook_release_keys fired %d\n", fired);
+    std::printf("COMFORT freelook_release_keys nose_at_fire_deg %.3f\n",
+                nose_at_fire);
+    std::printf("COMFORT freelook_release_keys vel_at_fire_deg %.3f\n",
+                vel_at_fire);
+    std::printf("COMFORT freelook_release_keys nose_after_1s_deg %.3f\n",
+                nose_after_1s);
+    std::printf("COMFORT freelook_release_keys nose_after_3s_deg %.3f\n",
+                nose_after_3s);
+    std::printf("COMFORT freelook_release_keys updebt_after_release_deg %.3f\n",
+                updebt_after_release);
+    std::printf("COMFORT freelook_release_keys nan_events %d\n", nan_events);
+    std::printf("COMFORT freelook_release_keys crashed %d\n", crashed);
+}
+
+// ---- Scenario 3c (v9): mid-turn freelook with NO keys — the weld pin -------
+// Guard-required by the weld ruling (docs/DECISIONS.md @ b4c0751, entry 1):
+// freelook ENTRY welds aim := nose, keys or not, so mid-turn Space with hands
+// off the keys must HOLD the nose heading (the old law kept carving the parked
+// aim's turn — the retired MB-lean side scope) and the release must be a no-op
+// on the aim. On v8 this leg DOCUMENTS the carve; after the weld it pins the
+// ruling.
+//   nose_drift_hold_deg  = nose heading change over the 2 s hold (carve size)
+//   aim_nose_hold_deg    = angle(aim, nose) at the end of the hold (weld => ~0)
+//   aim_jump_release_deg = the aim's own move across the release tick (~0.005
+//                          deg of transport is the honest floor, not zero)
+//   aim_nose_release_deg = angle(aim, nose) after the release tick (no-op => ~0)
+inline void comfort_freelook_nokeys(const sim::AircraftParams& p,
+                                    const control::ControllerParams& cp) {
+    using namespace comfort_detail;
+    app::LoopState st;
+    MiniCamera cam;
+    init(st, cam, p, 150.0, 3500.0);
+
+    const int turn_ticks = static_cast<int>(6.0 / p.sim_dt);
+    const int hold_ticks = static_cast<int>(2.0 / p.sim_dt);
+    int nan_events = 0, crashed = 0;
+    const auto angle_deg = [](const glm::dvec3& a, const glm::dvec3& b) {
+        return std::acos(std::clamp(glm::dot(glm::normalize(a),
+                                             glm::normalize(b)),
+                                    -1.0, 1.0)) *
+               kDeg;
+    };
+
+    // Phase A: establish the turn (mouse pilot).
+    for (int i = 0; i < turn_ticks; ++i) {
+        turn_reaim(st);
+        app::TickInput in;
+        drive(st, cam, in, p, cp);
+        if (tick_has_nan(st, cam)) ++nan_events;
+    }
+    const glm::dvec3 nose_entry =
+        st.curr.orientation * glm::dvec3{0.0, 0.0, -1.0};
+    // Phase B: hold Space, hands off the keys AND the aim (the mouse is on the
+    // camera in freelook).
+    for (int i = 0; i < hold_ticks; ++i) {
+        app::TickInput in;
+        in.freelook_held = true;
+        const app::TickResult r = drive(st, cam, in, p, cp);
+        if (tick_has_nan(st, cam)) ++nan_events;
+        if (r.respawned) crashed = 1;
+    }
+    const glm::dvec3 nose_hold =
+        st.curr.orientation * glm::dvec3{0.0, 0.0, -1.0};
+    const double nose_drift_hold = angle_deg(nose_entry, nose_hold);
+    const double aim_nose_hold = angle_deg(st.aim.forward(), nose_hold);
+    const glm::dvec3 aim_pre = st.aim.forward();
+    // Phase C: release, hands still off everything — ONE tick, the aim law.
+    app::TickInput rel;
+    const app::TickResult r = drive(st, cam, rel, p, cp);
+    if (tick_has_nan(st, cam)) ++nan_events;
+    if (r.respawned) crashed = 1;
+    const glm::dvec3 nose_rel =
+        st.curr.orientation * glm::dvec3{0.0, 0.0, -1.0};
+    const double aim_jump_release = angle_deg(aim_pre, st.aim.forward());
+    const double aim_nose_release = angle_deg(st.aim.forward(), nose_rel);
+
+    std::printf("COMFORT freelook_nokeys nose_drift_hold_deg %.3f\n",
+                nose_drift_hold);
+    std::printf("COMFORT freelook_nokeys aim_nose_hold_deg %.3f\n",
+                aim_nose_hold);
+    std::printf("COMFORT freelook_nokeys aim_jump_release_deg %.3f\n",
+                aim_jump_release);
+    std::printf("COMFORT freelook_nokeys aim_nose_release_deg %.3f\n",
+                aim_nose_release);
+    std::printf("COMFORT freelook_nokeys fired %d\n", r.orient_fired ? 1 : 0);
+    std::printf("COMFORT freelook_nokeys nan_events %d\n", nan_events);
+    std::printf("COMFORT freelook_nokeys crashed %d\n", crashed);
 }
 
 // ---- Scenarios 4/5: immelmann / split-S (mouse deflect-then-hold) ----------
@@ -752,11 +1015,13 @@ inline int run_comfort(const sim::AircraftParams& p) {
         cfg::load_controller_toml(SEADS_CONFIG_DIR "/controller.toml", p);
 
     comfort_turnsteady(p, cp);
-    comfort_turnsteady_keys(p, cp, /*anchor_on=*/false);  // the v6 law
-    comfort_turnsteady_keys(p, cp, /*anchor_on=*/true);   // S-keychase
+    comfort_turnsteady_keys(p, cp);  // keyboard-only: the ~16.3 deg deflection view
+    comfort_mouseaim_keys(p, cp);  // S-keyprec: mouse-aim AND keys (Chad's style)
     comfort_turnsnap_tap(p, cp);
     comfort_orient(p, cp);
     comfort_turnsnap_ovr(p, cp);
+    comfort_freelook_release_keys(p, cp);  // v9: THE flown sequence (nose-ref)
+    comfort_freelook_nokeys(p, cp);        // v9: the weld pin (guard-required)
     comfort_vertical("immelmann", "up", 170.0, 220.0, 3500.0, 12.0, p, cp);
     comfort_vertical("splits", "down", 170.0, 150.0, 5000.0, 12.0, p, cp);
 

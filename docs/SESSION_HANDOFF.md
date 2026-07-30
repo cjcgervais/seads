@@ -21,18 +21,21 @@ You two hand off through Chad, and through `docs/*_handoff.md` files in the live
 
 | repo | branch | tip | note |
 |---|---|---|---|
-| `mandalark-kernel` | `main` | `433038d` | pushed, clean |
-| `seads-feel` | `feel/kernel-v5` | `a307a8a69` | clean, **6 ahead of origin (unpushed)**. **v9 S-nosesnap LANDED 2026-07-29 evening, gate 388/388, NOT yet flown by Chad.** v8 seal `flight-kernel-v8-2026-07-29` = `ae7ae8f23` |
-| `seads-recon` | `sandbox/kernel-v5-reconcile` | `cdf65753d` | clean, **flying v7** — v8 is NOT grafted |
+| `mandalark-kernel` | `main` | see git | pushed, clean |
+| `seads-feel` | `feel/kernel-v5` | `29787debc` | clean, pushed. **= seal `flight-kernel-v9-2026-07-29` (tag verified), FLOWN AND APPROVED by Chad 2026-07-29 night** |
+| `seads-recon` | `sandbox/kernel-v5-reconcile` | `6058329d3` | clean, pushed, **flying v9** (grafted same day, gate 901/901, comfort numbers bit-identical) |
 
-Kernel seals: v5 → v6 (`cfe1bd7fe`) → v7 (`51eb5b9e3`) → **v8 (`ae7ae8f23`)**.
-`reference/seads-feel/` is snapshotted at the **v7** seal, deliberately — see §5.
+Kernel seals: v5 → v6 (`cfe1bd7fe`) → v7 (`51eb5b9e3`) → v8 (`ae7ae8f23`, pre-fly,
+partially rejected) → **v9 (`29787debc`, FLOWN-APPROVED — the camera arc is closed)**.
+`reference/seads-feel/` is snapshotted at the **v9** seal.
 
-## 3. THE ACTIVE WORK — v9, the camera arc
+## 3. THE CAMERA ARC — CLOSED 2026-07-29 night (v9 flown-approved)
 
-**v8 is partially rejected on the stick and v9 is being built by the seads-feel agent right
-now.** This is the fourth attempt at the same camera behaviour. Do not treat any of it as
-settled.
+**v9 "S-nosesnap" is sealed, flown, approved, and grafted — the fourth attempt succeeded.**
+The record of what was ruled, measured, and why is in `docs/DECISIONS.md` (read the five
+2026-07-29 entries newest-first). The section below is kept as it stood during the work,
+because the rulings in it remain load-bearing — but note the handoff quote was CORRECTED
+(the aim never snaps; freelook welds aim to nose; the release snap is instant and upright).
 
 ### Chad's model — load-bearing, quote it, never paraphrase it
 
@@ -84,20 +87,18 @@ input.
 
 | item | owner | state |
 |---|---|---|
-| **v9** | — | **FLOWN AND APPROVED by Chad 2026-07-29 night** — all 3 fly cards pass. CQ2 window KEPT by ruling (new cockpit rationale); Card-1 trade accepted. See DECISIONS.md |
-| **Seal v9 + push** (branch 6 ahead of origin) | seads-feel agent | next |
-| **Re-snapshot `reference/seads-feel/` at the v9 seal** | you | unblocked once the seal tag exists — v9 is a FLOWN seal |
-| **Golden Felt Flight #3** | you | unblocked once v9 seals; fly on the sealed build |
-| **Fly card 3 (v8)** — does the aim-bound camera still let Chad read a deflection shot? | Chad | **open, independent of v9** |
-| **Graft v8/v9 to seads-recon** | seads-feel agent | blocked until v9 flies |
+| **v9** | — | **DONE**: flown-approved, sealed (`flight-kernel-v9-2026-07-29` @ `29787debc`), pushed, grafted to recon (901/901). CQ2 window KEPT by ruling; Card-1 trade accepted. See DECISIONS.md |
+| **Re-snapshot `reference/seads-feel/`** | — | **DONE** at the v9 seal, 2026-07-29 night |
+| **Golden Felt Flight #3** | you (goldens are yours) | **UNBLOCKED** — flyable on the sealed v9 build; would pin freelook-release behavior no existing golden covers |
+| **Fly card 3 (v8)** — does the aim-bound camera still let Chad read a deflection shot? | Chad | open — Card-1 v9 acceptance is adjacent but this gunnery question was left open at the v8 seal |
 | **Golden Felt Flight #3** | you (goldens are yours) | not flown. Needs a clean tree; `KERNEL_SEAL` + build-info now track the build |
 | **Re-snapshot `reference/seads-feel/`** | you | held until v9 flies — see §5 |
 | **Mouse-aim `turnsteady` 95.82°** | Chad | never asked; probably a *feature* (deflection view) |
 
 ## 5. Standing decisions that are easy to get wrong
 
-- **Never re-snapshot `reference/` at an unflown seal.** v8's walk-back is a *revert*, not a
-  dial, so a snapshot could enshrine reverted code. It stays at v7 until Chad flies.
+- **Never re-snapshot `reference/` at an unflown seal.** (This is why v8 was never
+  snapshotted. v9 is a FLOWN seal — snapshotted 2026-07-29 night.)
 - **Goldens are append-only in practice.** Never re-derive, re-record or tidy one. Supersede,
   never overwrite. **No golden supersedes another** (#1 = slow/dirty/ground; #2 = fast/clean/air).
 - **Never edit a recording's header**, even a wrong one — the fnv1a signature covers it.

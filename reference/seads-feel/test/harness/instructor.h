@@ -50,18 +50,18 @@ struct ClosedLoop {
     // must stay recovery-free, which they are: no misaligned release exists in
     // any of them). Its trajectory-neutrality is pinned by the dedicated
     // rate-on-vs-off leg in test_instructor_tick.cpp instead.
-    // SEAM (S7-nest): the app's freelook ACTIONS have also diverged from this
-    // harness's — the shipped tick nests aim:=nose per tick under
-    // freelook+override and snaps the RELEASE to the guarded VELOCITY (SPEC
-    // §9.5 as amended, §0 S7-nest); ClosedLoop keeps the 4d-era one-shot
-    // nose snaps, which is fine for what it grades (AT-8's release-catch
-    // transient — latch semantics, shared via input::Freelook, unchanged).
-    // App-side freelook behavior is pinned in test_instructor_tick.cpp only.
-    // SEAM (S-relorient, 2026-07-28): ClosedLoop models the KNOB-OFF release
-    // — it has no freelook_release_orient snap/orient_fired. Never script a
-    // mouse-only freelook release through a shipped-cp (knob-ON) mirror leg:
-    // app::tick snaps to guarded velocity there and the two arms diverge.
-    // The release-orient pins live in test_relorient.cpp (app::tick only).
+    // SEAM (S7-nest -> v9 S-nosesnap, b4c0751): the app's freelook ACTIONS
+    // have diverged FURTHER from this harness's — the shipped tick now WELDS
+    // aim := nose on EVERY freelook tick, keys or not (the v9 weld), and the
+    // release snap lands on the NOSE; ClosedLoop keeps the 4d-era one-shot
+    // nose snaps and CARRIES the aim through a freelook hold, which is fine
+    // for what it grades (AT-8's release-catch transient — latch semantics,
+    // shared via input::Freelook, unchanged). Consequence (v9 red-team
+    // P2-2): never script ANY freelook — hold OR release — through a
+    // mirror-equivalence leg; even a no-keys freelook HOLD now diverges the
+    // two arms (the app welds, this harness carries). App-side freelook
+    // behavior is pinned in test_instructor_tick.cpp / test_relorient.cpp
+    // only; ClosedLoop also has no freelook_release_orient snap/orient_fired.
     bool freelook_held = false;
     input::Freelook fl{};
     bool mouse_aim_live = true;
@@ -182,21 +182,24 @@ struct MiniCamera {
         cam_fwd = s.orientation * glm::dvec3{0.0, 0.0, -1.0};
         cam_up = sim::local_up(s.position);
     }
-    // `keys_flying` mirrors main.cpp's S-keychase selector (override key held
-    // AND not in freelook) — routed through the SAME render::chase_anchor so
-    // the instrument can never measure a different law than the app ships.
-    // Defaulted false: every existing caller keeps the aim-anchored chase.
+    // ⚠ THIS SEAM TAKES NO OVERRIDE STATE, BY RULING (S-keyprec, Chad
+    // 2026-07-29, SEALED KERNEL v8): "Only the precedence of the freelook push
+    // shall do that" — the camera is bound to the AIM, and the override keys
+    // reach the trajectory and nothing else. The retired S-keychase passed a
+    // `keys_flying` flag here; that parameter is DELETED deliberately, and the
+    // absence IS the invariant — a re-introduction cannot slip in without
+    // changing this signature. (It is also why the old flag was dangerous: it
+    // had to be threaded by hand through every call site, and comfort_detail::
+    // drive() silently dropped it. See render/camera.h for the full record.)
     void advance(const sim::SimState& s, const glm::dvec3& aim_fwd,
                  const glm::dvec3& aim_up, const control::ControllerParams& cp,
-                 double dt, bool keys_flying = false) {
+                 double dt) {
         const glm::dvec3 nose = s.orientation * glm::dvec3{0.0, 0.0, -1.0};
         const double sp = glm::length(s.velocity);
         const glm::dvec3 vel_dir = sp > 1.0 ? s.velocity / sp : nose;
-        const render::ChaseAnchor ca =
-            render::chase_anchor(keys_flying, cp.cam_lead, cp.cam_lag_base,
-                                 cp.cam_lag_gain, cp.cam_key_anchor_rate);
-        cam_fwd = render::ease_chase_forward(cam_fwd, vel_dir, aim_fwd, ca.lead,
-                                             ca.lag_base, ca.lag_gain, dt);
+        cam_fwd = render::ease_chase_forward(cam_fwd, vel_dir, aim_fwd,
+                                             cp.cam_lead, cp.cam_lag_base,
+                                             cp.cam_lag_gain, dt);
         cam_up = aim_up;  // carried aim-up (S7-cam3), mirrors main.cpp
     }
 

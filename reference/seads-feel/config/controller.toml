@@ -757,17 +757,21 @@ yaw_min_frac = 0.1     # [0..1] rudder floor past knife-edge. 0.8-at-blend=1 was
 [override]           # keyboard override (SPEC §9.5), per-axis mask
 ramp_time = 0.080    # [s] engage ramp to full deflection (~80 ms, SPEC §9.5)
 
-[horizon_recovery]   # S7-hrz (docs/horizon_recovery_plan.md, D3/D6 RULED)
-# On a FREELOOK RELEASE, the carried aim/camera frame rolls its horizon back
-# upright: the misalignment angle is captured ONCE at the release edge and
-# rolled OPEN-LOOP about the aim direction — "not too much of a snap, just a
-# quick uniform movement that is eased at the end" (Chad). The aim direction
-# never moves (the instructor cannot see the roll) and the mouse basis rolls
-# WITH the camera, so mouse-up == screen-up throughout. Canceled by a freelook
-# re-press or any override key (D9). rate = 0 disables the mechanism entirely.
-rate   = 150.0       # [deg/s] uniform roll rate (0 = off). ~1 s for a split-S 180.
-settle = 5.0         # [1/s] terminal ease: the last rate/settle rad decays
-                     #   exponentially into alignment (no overshoot), ~0.6 s tail.
+[horizon_recovery]   # v9 S-nosesnap (docs/DECISIONS.md @ b4c0751) — was S7-hrz
+# On a FREELOOK RELEASE, the carried aim/camera frame rights its horizon
+# INSTANTLY: the whole misalignment is rolled about the aim direction in the
+# same tick as the release snap. Chad, superseding the 2026-07-07 "eased"
+# ruling for this case: "Snap to view upon release of freelook, no eased
+# anything as I need to immediately view the back of my plane, the aim, the
+# nose, everything — making it lag there is going to disorient." The aim
+# direction never moves (the instructor cannot see the roll) and the mouse
+# basis rolls WITH the camera, so mouse-up == screen-up throughout. A keys-held
+# release rights only when [freelook] release_orient_with_keys is true (the
+# knob-off arm = sealed-v6 D9). rate = 0 still disables the mechanism
+# entirely; any rate > 0 is a pure ENABLE now (the 150 deg/s open-loop profile
+# is retired — the value no longer paces anything), and settle is inert.
+rate   = 150.0       # 0 = off; > 0 = enabled (instant — value no longer paces)
+settle = 5.0         # [1/s] inert since v9 (the open-loop tail is retired)
 
 [freelook]           # freelook aim state machine (SPEC §9.5 / §16 CQ2)
 # After a freelook release the camera eases back to behind the nose; during
@@ -777,18 +781,20 @@ settle = 5.0         # [1/s] terminal ease: the last rate/settle rad decays
 easeback_time = 0.30 # [s] post-release mouse->aim suspension (<= 0.30, CQ2)
 # S-orient (docs/comfort program Q3): the ORIENT verb — double-tap Space to
 # "put me back together". If a SECOND freelook press-edge lands within this
-# window of the first, the caller snaps aim := guarded velocity, captures the
-# S7-hrz up-debt roll, and hard-cuts the lagged camera-forward behind the flight
-# path. 0 disables the mechanism structurally (never fires) — the AWAITING-FLY
-# default is OFF; Chad flips it on to fly. 0.30 s is the recommended fly value
-# (a natural double-tap cadence); Chad's stick tunes the window from there.
+# window of the first, the caller snaps aim := NOSE (v9 S-nosesnap, b4c0751 —
+# was guarded velocity) and hard-cuts the lagged camera-forward behind the
+# aircraft; the instant horizon righting lands via the second tap's release
+# edge. 0 disables the mechanism structurally (never fires). 0.30 s is the
+# fly value (a natural double-tap cadence); Chad's stick tunes it from there.
 orient_double_tap_s = 0.30 # [s] max gap between the two taps (0 = off; 0.30 = fly value — COMFORT MODE ON, Chad 2026-07-17)
 # S-relorient (Chad 2026-07-28: "should be automatic upon release of the
 # spacebar"): EVERY airborne, no-override freelook release fires the ORIENT
-# verb — aim := guarded velocity, camera hard-cut behind the flight path —
-# exactly the double-tap, now automatic. The key is OPTIONAL in the loader
-# (absent = false = legacy bit-identical); the double-tap stays as a redundant
-# manual verb. Walk-back = false.
+# verb — aim := NOSE (v9 S-nosesnap, b4c0751 — a no-op by construction: the
+# §5b weld already nests the aim on the nose all freelook), camera hard-cut
+# behind the aircraft, horizon righted in the same tick — exactly the
+# double-tap, now automatic. The key is OPTIONAL in the loader (absent =
+# false = legacy bit-identical); the double-tap stays as a redundant manual
+# verb. Walk-back = false.
 release_orient = true # every freelook release = the orient verb (Chad's fly value)
 # S-relorient ADDENDUM — the D9 RETIREMENT (Chad 2026-07-28, flying the sealed
 # v6: "anytime my finger isn't pressing freelook, I am in chase camera directly
@@ -896,17 +902,19 @@ lag_gain = 0.7   # [1/(s*rad)] extra catch rate per rad of aim deflection — th
 # S7-cam2 horizon-lock): the camera shows the world from the aim/mouse frame's
 # orientation, so mouse-up == screen-up at any attitude and the horizon rolls
 # with the aim through a loop. No re-level rate — there is no horizon-lock.
-# S-keychase (Chad 2026-07-28, flying the S-relorient addendum: "it gives me an
-# oblique view still"). The two dials below anchor the camera's rest target to
-# the AIM (lead = 1.0) — correct for mouse-aim, where the aim IS where you're
-# going. Flying on the OVERRIDE KEYS parks the aim while the keys turn the
-# plane, so the plane leaves the aim and you watch it obliquely: MEASURED at a
-# standing 95.8 deg that NEVER converges (`seads_harness comfort`). While keys
-# are flying, the rest target becomes the FLIGHT PATH and is caught at this
-# constant rate (lead/gain 0). Mouse-aim flying is untouched by construction.
-# 6.0 /s ~ a 0.17 s time constant: behind the plane in a blink, not a snap.
-# Walk-back = 0.0 (OFF structurally — the aim anchor everywhere, as v6 flew).
-key_anchor_rate = 6.0 # [1/s] catch rate toward the flight path while keys fly
+# S-keyprec (Chad 2026-07-29, SEALED KERNEL v8): the camera's rest target is the
+# AIM (lead = 1.0), ALWAYS. There is exactly ONE camera automation — the snap to
+# chase on freelook release — and after it the camera lags the aim under mouse
+# authority alone. The override keys change the TRAJECTORY and never the camera.
+#   freelook  — aim carried, camera free.
+#   mouse-aim — aim free, camera bound to the aim.
+#   keys      — affect neither.
+# The retired `key_anchor_rate` dial lived here (S-keychase, v7): it re-anchored
+# the rest target on the flight path while keys were held. Chad flew it and it
+# fought his mouse — "a disorienting snap to the chase cam which throws off my
+# aim." DELETED, not zeroed. Accepted trade: flying on keys alone, the camera
+# stands ~16.3 deg off the flight path — that is the deflection view, and the
+# cure is to move the mouse.
 
 [comfort]  # S-cues: peripheral, world-stable orientation cues (pure HUD, default OFF)
 # Two disorientation-recovery cues from the comfort program (auto/comfort-orient,

@@ -1,36 +1,46 @@
 # reference/seads-feel/ — PRIMARY reference: the active kernel
 
-These files are **copies**, re-snapshotted **2026-07-29**, from `D:\flight_sim2\seads-feel`,
-branch **`feel/kernel-v5`**, HEAD **`51eb5b9e3`** — the **`flight-kernel-v7-2026-07-29`**
-seal (tree clean at snapshot time). This snapshot postdates the v5 seal (`149a99c40`), the
-v4→v5 reconciliation (`game-kernel-v5` @ `36ee936e9`), and the v6 seal (`cfe1bd7fe`).
+These files are **copies**, re-snapshotted **2026-07-29 (night)**, from
+`D:\flight_sim2\seads-feel`, branch **`feel/kernel-v5`**, HEAD **`29787debc`** — the
+**`flight-kernel-v9-2026-07-29`** seal (tag verified to resolve to that commit; tree clean
+at snapshot time; tag and branch pushed to origin). This is a **FLOWN seal**: Chad flew the
+build and approved all three fly-card conditions the same day. This snapshot postdates the
+v5 seal (`149a99c40`), the reconciliation (`game-kernel-v5` @ `36ee936e9`), the v6 seal
+(`cfe1bd7fe`), the v7 seal (`51eb5b9e3`), and the **v8 seal (`ae7ae8f23`) — which was
+deliberately never snapshotted here** (partially rejected on the stick; a pre-fly seal).
 
-**New since the v6 snapshot — the sealed v7 content** (Chad, 2026-07-29: "now it is
-precisely perfect"): the **S-relorient ADDENDUM** (the D9 exception retired — a freelook
-release with override keys still held now fires the full orient verb;
-`[freelook] release_orient_with_keys`) and **S-keychase** (while keys fly and freelook is
-not held, the chase camera's rest target becomes the flight path instead of the parked aim;
-`[camera] key_anchor_rate = 6.0`). Both are optional-with-default-off knobs, so v6
-behaviour is reachable one line at a time.
+**New since the v7 snapshot — the sealed v8+v9 content:**
 
-**`app/main.cpp` is new to this snapshot** (816 lines). It was added because two separate
-sessions needed the freelook-orbit decay, the `orient_fired` camera cut, and the
-`ease_chase_forward` / `chase_anchor` call site — none of which live in
-`app/instructor_tick.h` — and had to read them out of the live tree instead. The cascade
-docs cite symbols in it; it belongs here.
+- **v8 S-keyprec** (flown, KEPT): override keys are camera-inert. S-keychase is retired —
+  `render::ease_chase_forward`'s call stays branch-free on key state (a standing review bar;
+  no ctest can catch a violation there).
+- **v9 S-nosesnap** (flown, APPROVED — the close of the four-round camera arc):
+  - Freelook **welds aim := nose unconditionally** (entry, keys or not); the no-keys
+    "parked carve" is retired by Chad's ruling. `orient_snap_dir` returns the **nose**, so
+    the release is a no-op on the aim by construction.
+  - Release is **one instant snap**: camera behind the plane, **upright to the horizon**,
+    aim and nose in view — the whole S7-hrz up-debt retired in the release tick, no eased
+    roll-in. Chad's ruling of record: "Snap to view upon release of freelook, no eased
+    anything."
+  - The **CQ2 0.30 s easeback window is KEPT by ruling** with a new cockpit rationale
+    ("I need that .4s to observe / orient myself") — it is not dead-rationale debt; do not
+    flip it in a cleanup.
+- **New in `docs/`:** `v9_fly_cards.md` (Chad's approval conditions), and the measured
+  evidence grids `v9_comfort_baseline_v8.txt` / `v9_comfort_after.txt` — the v8→v9
+  before/after for the pre-registered decision rule (headline: `nose_at_fire` 18.552→0.578,
+  `updebt_after_release` 44.904→0.003, no-keys drift 75.5°→1.46°). The rulings ledger is
+  `D:\mandalark-kernel\docs\DECISIONS.md` (four 2026-07-29 entries + the flown verdict);
+  the live tree carries a byte-copy in its own `docs/DECISIONS.md`.
 
-**Two files carry a post-seal, docs-only correction** (`7650dc6d0`, same day):
-`render/camera.h` and `test/harness/comfort.h` are taken from that commit rather than from
-the seal, because the sealed versions carry a **superseded framing** — they described
-S-keychase as a comfort fix and the parked aim as a target the pilot had "left." Both are
-wrong: the parked aim is the pilot's deliberate plan for the release, and the
-behind-velocity anchor is a **gunnery** reference (it makes the nose-versus-velocity gun line
-legible). Verified: **every non-comment line in both files is byte-identical to the seal** —
-`7650dc6d0` changed comments and docs only, zero executable code, gate unmoved at 388/388.
-So this snapshot is the v7 seal's *code* exactly, with only the corrected commentary. See
-`docs/cascade/camera-anchor-mode-duality.md`.
+Gate at the seal: **388/388**, zero moved goldens. Grafted to seads-recon
+`sandbox/kernel-v5-reconcile` @ `6058329d3` the same day (recon gate 901/901, comfort
+numbers reproduce bit-identically) — the play build flies v9.
 
-Previous snapshots: `cfe1bd7fe` (2026-07-28, v6 seal), `89447aba5` (2026-07-23, pre-seal).
+Previous snapshots: `51eb5b9e3` (2026-07-29, v7 seal), `cfe1bd7fe` (2026-07-28, v6 seal),
+`89447aba5` (2026-07-23, pre-seal). The v7 snapshot's note about `render/camera.h` /
+`test/harness/comfort.h` carrying post-seal docs-only corrections (`7650dc6d0`) is
+obsolete: this snapshot takes every file from the seal commit itself, and the v9 red-team
+sweep (`a307a8a69`) folded the corrected framing into the sealed docs.
 
 **This is the kernel Chad is actually flying.** It supersedes both other reference
 directories in this repo as the primary source of truth for current flight-feel work:
@@ -64,8 +74,9 @@ directories in this repo as the primary source of truth for current flight-feel 
 - `app/instructor_tick.h` — where the pieces above wire together for the live app loop
   (the per-TICK half: freelook rules, the orient verbs, the S7-hrz capture).
 - `app/main.cpp` — the per-FRAME caller: device polling, the freelook-orbit camera and its
-  release decay, the `orient_fired` hard cut of `cam_fwd`, the `chase_anchor`/
-  `ease_chase_forward` call site (S-keychase), focus loss, and the accumulator loop.
+  release decay, the `orient_fired` hard cut (as of v9: forward AND up, one instant snap),
+  the `ease_chase_forward` call site (branch-free on key state — standing review bar),
+  focus loss, and the accumulator loop.
   **Read this whenever a camera question isn't answered by `instructor_tick.h`** — the
   orbit and `cam_fwd` glue is here, not there.
 - `config/{controller.toml, aircraft.toml, load_controller.h/.cpp, load_aircraft.h/.cpp}` —

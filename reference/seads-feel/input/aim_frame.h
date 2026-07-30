@@ -190,8 +190,8 @@ struct AimFrame {
     }
 
     // Snap the aim forward to an arbitrary world direction while KEEPING the
-    // carried up (S7-nest: the §5b per-tick nose nesting AND the D8 release
-    // aim := guarded velocity both route through here). Re-orthogonalize the
+    // carried up (the §5b per-tick nose WELD and the release snap — aim :=
+    // NOSE since v9 S-nosesnap, b4c0751 — both route through here). Re-orthogonalize the
     // carried up against the new forward so camera roll stays continuous.
     // Falls back to the airframe's body-up only if the new forward lands
     // along the carried up — reachable only across a LARGE one-shot gap (the

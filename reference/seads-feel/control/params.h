@@ -400,11 +400,10 @@ struct ControllerParams {
     double cam_lead = 0.0;      // [0..1] velocity->aim lean of the rest target
     double cam_lag_base = 0.0;  // [1/s] base follow rate
     double cam_lag_gain = 0.0;  // [1/(s*rad)] follow rate per rad of deflection
-    // S-keychase: catch rate [1/s] used while the pilot flies on the override
-    // KEYS (aim parked) — the rest target becomes the flight path instead of
-    // the parked aim. 0 = OFF structurally (the walk-back; mouse-aim flying is
-    // untouched either way). Read optional-with-default-0 by the loader.
-    double cam_key_anchor_rate = 0.0;
+    // (S-keyprec / v8 removed cam_key_anchor_rate: the override keys reach the
+    // TRAJECTORY and never the camera, by ruling — there is no key-flown anchor
+    // and so no rate for one. The dial was deleted rather than defaulted to 0
+    // because the ruling is categorical. See render/camera.h.)
     // (S7-cam3 removed cam_level_rate: camera-up is now the CARRIED aim-frame
     // up — no horizon-lock ease — so there is no re-level rate. See
     // render/camera.h aim_chase_camera and app/main.cpp `cam_up =

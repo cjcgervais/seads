@@ -56,26 +56,28 @@ inline glm::dvec3 quat_rotation_vec(const glm::dquat& dq) {
     return (2.0 * std::atan2(s, q.w) / s) * v;
 }
 
-// The ORIENT verb's snap TARGET — the guarded velocity (SPEC §9.5 rule 3 /
-// S7-nest D8): the flight path when we are genuinely flying it, else the nose.
-// Guard: below v_ballistic, or a tail-slide (vhat . nose <= 0) where alpha
-// lies, fall back to the nose. This reads the CALLER'S OWN velocity, never the
-// sim's held last_vhat (red-team F5 — it feeds ci.target_dir_world, a CONTROL
-// input, and the §9.6 seam forbids sharing the plant's held copy).
+// The ORIENT verb's snap TARGET — the NOSE (v9 S-nosesnap, ruling ledger
+// docs/DECISIONS.md @ mandalark-kernel b4c0751; supersedes the S7-nest D8
+// guarded velocity). The S7-nest rationale — "the chase camera's rest is
+// behind velocity, one composed settle" — died when the camera's rest target
+// became the AIM ([camera] lead = 1.0), and Chad's ruling is direct: freelook
+// welds aim := nose (the §5b nest, every freelook tick, keys or not), so the
+// release snap is a NO-OP on the aim by construction — entry did the welding,
+// release only re-establishes mouse authority. The old velocity target was
+// term A of the v9 defect: a spurious ~AoA-sized aim/camera jump (measured
+// 18.6 deg at aoa_max) at the exact instant the mouse takes over. The old
+// ballistic/tail-slide guard is SUBSUMED, not violated — the nose was its
+// fallback and the nose is now primary at every speed (dropping the now-unread
+// cp parameter is a recorded future candidate, docs/DECISIONS.md, per the
+// guard's strike — no simplification rides along with v9).
 //
 // Hoisted 2026-07-28 (S-relorient ADDENDUM) from the two verbatim copies at the
-// release site and the double-tap site. Both orient triggers now call THIS —
+// release site and the double-tap site. Both orient triggers still call THIS —
 // the "one verb, two triggers" redundancy Chad asked for is a property of the
 // code, not of two paragraphs of comment that could drift apart again.
 inline glm::dvec3 orient_snap_dir(const sim::SimState& s,
-                                  const control::ControllerParams& cp) {
-    const glm::dvec3 nose = s.orientation * glm::dvec3{0.0, 0.0, -1.0};
-    const double spd = glm::length(s.velocity);
-    if (spd > cp.v_ballistic) {
-        const glm::dvec3 vhat = s.velocity / spd;
-        if (glm::dot(vhat, nose) > 0.0) return vhat;
-    }
-    return nose;
+                                  const control::ControllerParams&) {
+    return s.orientation * glm::dvec3{0.0, 0.0, -1.0};
 }
 
 // Spawn / crash-respawn state (SPEC §6.3: respawn airborne AT speed, born at
@@ -133,8 +135,9 @@ struct TickInput {
     // its input::OrientTap detector fired (a freelook double-tap within the
     // window). Defaulted false => bit-identical (the mirror-equivalence /
     // firewall path never sets it), a strict superset. The tick composes the
-    // ORIENT verb: aim := guarded velocity, S7-hrz up-debt capture, and a
-    // reported camera-forward cut (res.orient_fired) the caller hard-seats.
+    // ORIENT verb: aim := NOSE (v9 S-nosesnap, b4c0751 — was guarded
+    // velocity) and a reported camera-forward cut (res.orient_fired) the
+    // caller hard-seats; the instant horizon righting rides the release edge.
     bool orient_cmd = false;
     bool override_mask[3] = {false, false, false};
     double override_sign[3] = {0.0, 0.0, 0.0};
@@ -291,27 +294,26 @@ inline TickResult tick(LoopState& st, const TickInput& in,
             in.override_mask[0] || in.override_mask[1] || in.override_mask[2];
         const input::Freelook::Step fs = st.fl.step(
             in.freelook_held, any_ovr, ap.sim_dt, cp.freelook_easeback_time);
-        // §5b aim NESTING + the D8 release target (S7-nest, SPEC §9.5
-        // amendment — docs/horizon_recovery_plan.md D7/D8):
-        //  - While freelook AND any override key are held, the aim RIDES THE
-        //    NOSE per tick ("nested with the nose dot") — the per-tick
-        //    strengthening of rule 2's one-shot snap, which this branch
-        //    subsumes (rule 2 fires only when freelook && any_override).
-        //    The mouse never feeds the aim during freelook, so nothing here
-        //    touches the raw mouse->aim path.
-        //  - The rule-3 RELEASE snap (override used during the hold) now
-        //    lands on the GUARDED VELOCITY, not the nose: the aim sits on
-        //    the flight path, the S7-hrz recovery rolls about that same
-        //    axis, and the chase camera's rest is behind velocity — one
-        //    composed settle. The guard is the CALLER'S OWN (red-team F5 —
-        //    this feeds ci.target_dir_world, a CONTROL input, so the sim's
-        //    held last_vhat must not be read): below v_ballistic or
-        //    tail-slide (vhat . nose <= 0) fall back to the nose.
-        //  - Freelook WITHOUT keys: with release_orient OFF, untouched — the
-        //    held-turn aim stays carried, release moves nothing (the 4d
-        //    conditional reset). With release_orient ON (S-relorient, Chad
-        //    2026-07-28), EVERY airborne no-override release drives THIS same
-        //    guarded-velocity snap and reports the orient camera cut — the
+        // §5b aim NESTING — the WELD (v9 S-nosesnap, ruling ledger
+        // docs/DECISIONS.md @ b4c0751; supersedes S7-nest D7/D8's keys-held
+        // scope and retires the MB-lean-era no-keys "freelook carves a held
+        // lateral aim" side scope):
+        //  - While freelook is held — KEYS OR NOT — the aim RIDES THE NOSE
+        //    per tick ("the nose aim becomes welded to the nose
+        //    directionality", Chad 2026-07-29). Entry does the welding: the
+        //    pre-freelook mouse command stops driving the plane at the
+        //    spacebar press, the nose holds its heading, and qweasd is the
+        //    only control while looking. The mouse never feeds the aim during
+        //    freelook, so nothing here touches the raw mouse->aim path.
+        //  - The RELEASE snap therefore lands on the NOSE (orient_snap_dir
+        //    above) and is a NO-OP on the aim by construction — it re-aligns
+        //    to the current-tick nose (sub-degree: one tick of rotation since
+        //    the last welded tick) and re-establishes mouse authority. The
+        //    old guarded-velocity target (S7-nest D8) was term A of the v9
+        //    defect: an ~AoA-sized aim/camera jump at the mouse handover.
+        //  - With release_orient ON (S-relorient, Chad 2026-07-28), EVERY
+        //    airborne release drives the snap and reports the orient camera
+        //    cut — the
         //    flown double-tap verb, automatic. It fires HERE (not in the
         //    S-orient block below) so the S7-hrz capture on fs.released
         //    measures the up-debt about the POST-snap forward on the SAME
@@ -340,11 +342,15 @@ inline TickResult tick(LoopState& st, const TickInput& in,
         //    snapped to the guarded velocity while orient_fired was withheld —
         //    the reticle moved, cam_fwd stayed on ease_chase_forward (which in
         //    a sustained turn never converges), and the up-debt never retired.
-        //    Walk-back = release_orient_with_keys false (sealed v6 exactly).
+        //    Walk-back scope (v9 red-team P2-1): release_orient_with_keys =
+        //    false disables the WITH-KEYS release snap ONLY — the v9 weld,
+        //    nose target, and instant righting are NOT behind this knob, so
+        //    flipping it alone yields an unflown hybrid. The true walk-back
+        //    is the v8 seal tag flight-kernel-v8-2026-07-29 (ae7ae8f23).
         const bool ovr_ok = !any_ovr || cp.freelook_release_orient_with_keys;
         const bool release_orient = cp.freelook_release_orient &&
                                     fs.released && !st.grounded && ovr_ok;
-        if (in.freelook_held && any_ovr) {
+        if (in.freelook_held) {  // the WELD: every freelook tick (b4c0751)
             st.aim.snap_forward_to_nose(st.curr.orientation);
         } else if (fs.snap_to_nose || release_orient) {
             st.aim.snap_forward_to_dir(orient_snap_dir(st.curr, cp),
@@ -374,62 +380,58 @@ inline TickResult tick(LoopState& st, const TickInput& in,
                            (n * ap.sim_dt);
             }
         }
-        // Horizon recovery (S7-hrz, docs/horizon_recovery_plan.md): on the
-        // freelook RELEASE edge, capture the frame's up-misalignment ONCE
-        // (AFTER the rule-3 snap above, so the angle is about the released
-        // forward) and roll it away OPEN-LOOP with the D3 profile — a gauge
-        // move about the aim direction, invisible to control::step below.
-        // Canceled (level, not edge) by a freelook re-press, and — under the
-        // sealed-v6 table — by any override key (D9), so a release WHILE a key
-        // was still held never armed (the 4d overlap). The S-relorient ADDENDUM
-        // RETIRES that override clause: with release_orient_with_keys, the
-        // release tick captures the up-debt and the open-loop roll runs to
-        // completion EVEN WHILE THE KEYS STAY DOWN. This is the sub-ruling that
-        // reaches beyond the release edge (an override pressed LATER no longer
-        // aborts an in-progress roll) and it is required by Chad's "even if
-        // still turning and pressing hard keys" — the unretired debt is the
-        // loudest "this isn't chase view" cue, since the world stays ROLLED.
-        // Safe against the keys by construction: the D3 roll is a GAUGE move
-        // about the aim's own forward (open-loop, capture-once), invisible to
-        // control::step, so it cannot fight the deflection the pilot is flying.
-        // A freelook re-press still cancels. rate = 0 skips ALL of this
-        // structurally, including the capture — the knob-off strict-superset
-        // proof (plan F8).
-        if (cp.horizon_recovery_rate > 0.0 && !st.grounded) {
-            if (in.freelook_held ||
-                (any_ovr && !cp.freelook_release_orient_with_keys)) {
-                st.recov.reset();
-            } else {
-                if (fs.released) st.recov.capture(st.aim.up_misalignment(up));
-                const double d =
-                    st.recov.step(ap.sim_dt, cp.horizon_recovery_rate,
-                                  cp.horizon_recovery_settle);
-                if (d != 0.0) st.aim.roll_about_forward(d);
-            }
+        // Horizon righting at the release — INSTANT (v9 S-nosesnap, ruling
+        // ledger docs/DECISIONS.md @ b4c0751; supersedes S7-hrz's 150 deg/s
+        // open-loop D3 roll AT THIS, ITS ONLY, CONSUMER — and, for the
+        // freelook-release case specifically, the 2026-07-07 "eased, not a
+        // snap" ruling). Chad, verbatim: "Snap to view upon release of
+        // freelook, no eased anything as I need to immediately view the back
+        // of my plane, the aim, the nose, everything — making it lag there is
+        // going to disorient." So on the release edge the ENTIRE
+        // up-misalignment is retired as ONE gauge roll about the aim's own
+        // forward, in the same tick as the forward snap — measured AFTER the
+        // rule-3 snap above (the load-bearing v6 ordering: the angle is about
+        // the released forward). Still a gauge move, invisible to
+        // control::step; still §9.1-legal (a discrete player-commanded event,
+        // not a continuous easing). Term B of the v9 defect was this roll's
+        // ~0.3 s of rolled-world at release (measured 44.9 deg at the fire
+        // tick). The with-keys clause keeps the knob-off legacy arm exactly
+        // (release_orient_with_keys=false = sealed-v6 D9: keys-held release
+        // rights nothing). kFinishEps keeps the aligned release a structural
+        // no-op (bit-identical, no roll at all — the old capture()'s deadband).
+        // rate = 0 still skips ALL of this structurally (the knob-off
+        // strict-superset proof); with the profile retired, rate>0 is now a
+        // pure enable and st.recov is permanently inert (its reset()s remain,
+        // harmless; removing the struct is a recorded future candidate,
+        // docs/DECISIONS.md).
+        if (cp.horizon_recovery_rate > 0.0 && !st.grounded && fs.released &&
+            !(any_ovr && !cp.freelook_release_orient_with_keys)) {
+            const double mis = st.aim.up_misalignment(up);
+            if (std::abs(mis) > input::HorizonRecovery::kFinishEps)
+                st.aim.roll_about_forward(mis);
         }
         // S-orient (docs/comfort program Q3): the ORIENT verb — a DISCRETE,
         // player-commanded composed event that puts the pilot "back together"
         // behind the flight path with the horizon righted. Fires ONLY in
         // instructor mode, airborne, on the tick the caller's OrientTap
         // detected a freelook double-tap. The verb does TWO things here:
-        //   1. aim := GUARDED VELOCITY — the S7-nest rule-3 guard verbatim
-        //      (spd > v_ballistic AND vhat . nose > 0, else nose): a discrete
-        //      player-commanded snap, the sanctioned shape (rules 2/3).
+        //   1. aim := NOSE (orient_snap_dir — v9 S-nosesnap, b4c0751; was the
+        //      S7-nest guarded velocity): a discrete player-commanded snap,
+        //      the sanctioned shape (rules 2/3), and under the §5b weld a
+        //      near-no-op — the aim already rides the nose in freelook.
         //   2. res.orient_fired => the caller hard-cuts cam_fwd :=
-        //      aim.forward() (the camera cut behind the flight path).
+        //      aim.forward() (the camera cut behind the aircraft).
         //
-        // The up-debt RETIREMENT is NOT captured here (P1 red-team fix): on
+        // The up-debt RETIREMENT is NOT done here (P1 red-team fix): on
         // every reachable input the orient fires on the SECOND-tap PRESS tick,
-        // where freelook_held is TRUE, so the S7-hrz block just above RESET
-        // recov this tick — but the NEXT held tick's reset arm would wipe any
-        // capture we set here anyway. The debt is retired by the second tap's
-        // RELEASE edge through the normal S7-hrz path (fs.released ->
-        // recov.capture in the block above), which fires on the release AFTER
-        // this press. So the orient verb = the aim snap + the camera cut; the
-        // up-debt roll rides the existing S7-hrz release capture the double-tap
-        // already produces. In the D9 overlap (an override still held at that
-        // release), S7-hrz's own D9 clause skips the capture — the roll is
-        // skipped that once, existing semantics (noted on the fly card).
+        // where freelook_held is TRUE. The debt is retired by the second tap's
+        // RELEASE edge through the righting block above (fs.released -> the
+        // v9 INSTANT whole-debt roll), which fires on the release AFTER this
+        // press. So the orient verb = the aim snap + the camera cut; the
+        // upright lands via the release edge the double-tap already produces.
+        // In the D9 overlap (an override still held at that release) with
+        // release_orient_with_keys=false, the righting is skipped that once —
+        // the legacy knob-off arm, existing semantics.
         // Was SUPPRESSED while any override key is held (the D9 precedent).
         // The S-relorient ADDENDUM retires that here too, on the SAME knob as
         // the release site above — Chad's ask is that the double-tap be TRULY

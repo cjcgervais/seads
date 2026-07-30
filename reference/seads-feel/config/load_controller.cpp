@@ -229,9 +229,8 @@ control::ControllerParams load_controller_toml(const std::string& path,
     c.cam_lead = require(root, "camera", "lead");
     c.cam_lag_base = require(root, "camera", "lag_base");
     c.cam_lag_gain = require(root, "camera", "lag_gain");
-    // S-keychase: optional-with-default-0 (0 = OFF structurally, the walk-back).
-    c.cam_key_anchor_rate =
-        optional_double(root, "camera", "key_anchor_rate", 0.0);
+    // (S-keyprec / v8: [camera] key_anchor_rate is GONE. It was optional, so a
+    // stale key left in a pilot's TOML is simply ignored, not an error.)
 
     // S-cues (comfort program): peripheral orientation cues, pure HUD, DEFAULT
     // OFF (alpha 0 skips the draw — strict superset). Read from [comfort].

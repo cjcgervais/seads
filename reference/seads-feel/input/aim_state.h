@@ -109,6 +109,16 @@ struct Freelook {
 // after a freelook release. PURE caller-side state, beside Freelook so the
 // same callers own both reset legs.
 //
+// ⚠ RETIRED AT ITS ONLY CONSUMER by v9 S-nosesnap (docs/DECISIONS.md @
+// b4c0751): the release now rights the WHOLE up-debt in the same tick as the
+// snap ("no eased anything" — Chad), so app::tick no longer calls capture()
+// or step(); this struct is permanently INERT (remaining stays 0.0, the
+// reset()s are harmless no-ops). Kept because removal is a recorded future
+// candidate, not v9 work. The contract text below describes the RETIRED
+// pacing; the open-loop capture-once legality argument still explains why
+// the instant roll is legal (a gauge move, edge-triggered, never a per-tick
+// local_up recompute).
+//
 // The contract (red-teamed, plan section 10 — F1 is the P0 this shape kills):
 // the roll angle and sign are CAPTURED ONCE at the release edge
 // (AimFrame::up_misalignment) and counted down per tick with the D3 profile
@@ -168,8 +178,10 @@ struct HorizonRecovery {
 // the ORIENT verb — "double-tap Space to put me back together." A DISCRETE,
 // player-commanded composed event: on the SECOND freelook press-edge that
 // arrives within `window_s` of the previous press-edge, fire ONCE. The caller
-// then (a) snaps aim := guarded velocity, (b) captures the S7-hrz up-debt roll,
-// and (c) hard-cuts the lagged camera-forward — all sanctioned discrete moves.
+// then (a) snaps aim := NOSE (v9 S-nosesnap, b4c0751 — was guarded velocity;
+// a near-no-op under the §5b weld) and (b) hard-cuts the lagged
+// camera-forward — sanctioned discrete moves; the instant horizon righting
+// rides the second tap's RELEASE edge.
 //
 // Follows input::Freelook's style: PURE, no clock (dt is passed in), dt
 // accumulation only. Feed the freelook PRESS-EDGE (a rising edge of the

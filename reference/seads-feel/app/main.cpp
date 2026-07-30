@@ -612,21 +612,24 @@ int main(int argc, char** argv) {
             const double sp = glm::length(draw_state.velocity);
             const glm::dvec3 vel_dir =
                 sp > 1.0 ? draw_state.velocity / sp : nose;
-            // S-keychase: while the pilot flies on the override KEYS (and is
-            // NOT in freelook, which owns the camera itself), the parked aim is
-            // not where he's going — anchor the rest target on the flight path
-            // instead. keys_flying false => the caller's own dials verbatim, so
-            // mouse-aim flying is bit-identical.
-            const bool keys_flying =
-                !live.freelook_held &&
-                (live.override_mask[0] || live.override_mask[1] ||
-                 live.override_mask[2]);
-            const render::ChaseAnchor ca = render::chase_anchor(
-                keys_flying, cparams.cam_lead, cparams.cam_lag_base,
-                cparams.cam_lag_gain, cparams.cam_key_anchor_rate);
+            // S-keyprec (Chad 2026-07-29, SEALED KERNEL v8): the camera is
+            // bound to the AIM, always. The override keys reach the trajectory
+            // and NOTHING else — no key state is read here, by ruling. (This is
+            // the sealed-v6 call; S-keychase's key-flown anchor swap lived here
+            // and is RETIRED — see the record in render/camera.h.)
+            //
+            // ⚠ REVIEW BAR, because no test can enforce it (v8 red-team P2,
+            // confirmed LIVE, not hypothetical): re-adding key→camera coupling
+            // as a DEFAULTED parameter on MiniCamera::advance and wiring it only
+            // HERE reproduces the retired flight-path anchor AND passes the
+            // whole suite — the test_relorient.cpp "S-keyprec" leg calls advance
+            // without the flag, and no ctest runs seads.exe. So the standing
+            // rule is: THIS CALL STAYS BRANCH-FREE ON KEY STATE. A conditional
+            // appearing here, or a new argument threaded from `live.override_*`,
+            // is a ruling violation on sight — no measurement needed.
             cam_fwd = render::ease_chase_forward(
-                cam_fwd, vel_dir, loop.aim.forward(), ca.lead, ca.lag_base,
-                ca.lag_gain, clamped_dt);
+                cam_fwd, vel_dir, loop.aim.forward(), cparams.cam_lead,
+                cparams.cam_lag_base, cparams.cam_lag_gain, clamped_dt);
             // Camera-up = the CARRIED aim-frame up (S7-cam3, 2026-07-07 —
             // reverses S7-cam2's horizon-lock). The raw mouse rotates the aim
             // about THIS frame's own up/right (§9.1); showing the world from

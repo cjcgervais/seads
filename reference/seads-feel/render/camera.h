@@ -231,6 +231,60 @@ glm::dvec3 ease_chase_forward(const glm::dvec3& cam_fwd,
                               const glm::dvec3& aim_fwd, double lead,
                               double lag_base, double lag_gain, double dt);
 
+// ===========================================================================
+// S-keychase — RETIRED 2026-07-29 (S-keyprec, SEALED KERNEL v8). The code is
+// GONE; this record exists so a future session does not rebuild it.
+//
+// THE RULING THAT RETIRED IT (Chad, flying v7): "When I am flying in mouse aim
+// the snap back to chase is occurring with every hard key press. I usually fly
+// with a combination of mouse aim with hard key inputs to maximize control for
+// the fight... if I input some aileron to cut into their path sooner, I get a
+// disorienting snap to the chase cam which throws off my aim." And the rule:
+// "Only the precedence of the freelook push shall do that."
+//
+// Which resolves to ONE camera automation, and this is now the whole law:
+//     freelook   — aim carried, camera free.
+//     mouse-aim  — aim free, camera bound to the aim.
+//     keys       — affect NEITHER.
+// The snap to chase on freelook release (release_orient / the S-relorient
+// ADDENDUM's with-keys retirement of D9) is that one automation and is
+// UNTOUCHED. After it, the camera lags the AIM under mouse authority alone,
+// permanently. Override keys modify TRAJECTORY and must never move the camera.
+//
+// WHAT IT WAS: while any override key was held (and not in freelook), the rest
+// target swapped from the aim (lead = 1.0) to the flight path (lead = 0),
+// caught at a constant [camera] key_anchor_rate with no deflection term. It was
+// never a one-off snap — it was a SUSTAINED re-anchoring that fought the mouse
+// for as long as a key was down, and the felt "snap" was the anchor swapping at
+// the keypress edge.
+//
+// ATTRIBUTION, honestly: Chad's original oblique complaint was caused by the D9
+// exception (releasing freelook with keys held fired no snap at all). Retiring
+// D9 fixed it. S-keychase was then STACKED ON TOP to also flatten the standing
+// state — an over-correction, and the second mechanism is the one that fought
+// the mouse. Measured on the scenario that finally modeled how Chad actually
+// flies (comfort mouseaim_keys): the camera's lag behind the aim went
+// 0.000 deg -> 67.781 deg the moment the keys went down.
+//
+// WHY IT SURVIVED A FLY: it was approved as "precisely perfect" against
+// comfort_turnsteady_keys, which PARKS the aim and flies on keys alone. No
+// scenario modeled mouse-aim AND keys together — Chad's dominant style — so the
+// defect was structurally unmeasurable. Third camera mechanism in a row validated
+// against a case he does not fly (cf. S-aimclamp, S-retclamp).
+//
+// ACCEPTED TRADE, Chad ruled for it: flying on keys without touching the mouse,
+// the plane turns away from the parked aim and the camera ends up ~16.3 deg
+// oblique (comfort turnsteady_keys). That is the DEFLECTION VIEW — the camera
+// showing where you POINT — not a defect. The cure is to move the mouse.
+//
+// WALK-BACK: there is no dial. `git revert` the excision, or the preserved
+// branch sandbox/s-keychase-retired / tag flight-kernel-v7-2026-07-29. A live
+// knob at zero was rejected deliberately: the ruling is categorical, and a knob
+// a future tuner can raise is a loaded gun against it.
+//
+// The v7 rationale it superseded, kept verbatim because it is the argument a
+// future session would otherwise re-derive from scratch:
+//
 // S-keychase (Chad 2026-07-28, flying the S-relorient addendum: "it gives me an
 // oblique view still"). A GUNNERY mechanism, not a comfort one — reclassified
 // on Chad's 2026-07-29 refinement, which is the governing statement of intent:
@@ -274,16 +328,11 @@ glm::dvec3 ease_chase_forward(const glm::dvec3& cam_fwd,
 // — so softening it would blur the moment the plan lands. Chad flew this exact
 // behavior as "precisely perfect" (2026-07-29). Recorded here so a future
 // session doesn't smooth it as obvious polish.
-struct ChaseAnchor {
-    double lead = 0.0;
-    double lag_base = 0.0;
-    double lag_gain = 0.0;
-};
-inline ChaseAnchor chase_anchor(bool keys_flying, double lead, double lag_base,
-                                double lag_gain, double key_rate) {
-    if (!keys_flying || key_rate <= 0.0) return {lead, lag_base, lag_gain};
-    return {0.0, key_rate, 0.0};
-}
+//
+// (End of the retired v7 rationale. `struct ChaseAnchor` and `chase_anchor()`
+// lived here and are DELETED — callers now pass the [camera] dials to
+// ease_chase_forward directly, which is exactly the sealed-v6 call.)
+// ===========================================================================
 
 // Ease a scalar one frame toward `target` with time-constant `tau` (exponential
 // step 1 - exp(-dt/tau)). dt <= 0 => no-op (returns current); tau <= 0 => snap
