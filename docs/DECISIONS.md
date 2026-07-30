@@ -29,6 +29,40 @@ branch past v10 at any time:
 
 ---
 
+## 2026-07-30 (later) — CONSULT: prior-advice issued for the 5–10° blend-boundary roll slam thread
+
+The seads-feel session requested the kernel base's memory before entering plan mode on the
+one active feel thread (consult packet relayed through Chad; reply relayed back the same
+way). PRIOR-ADVICE ONLY — no design ruling made. The reply's substance, so the record does
+not live only in a chat transcript:
+
+1. **Binding rulings found:** `blend_hi` 12→9 is a flown Chad ruling ("roll a little
+   sooner", 2026-07-06) — widening the band back is ruled-against absent a new word;
+   `bank_align_power` 3→6 ("roll first") couples the boundary's roll shape to a second
+   flown ruling; `lean_max`-alone is already refuted (v10 entry); capture stays parked.
+2. **The largest prior: MB-lean is the prior flown fix for this exact class** — its own
+   comment block says it was built so a moderate lateral aim holds a shallow bank
+   "instead of the blend band slamming to the ~90 deg bank_error and auto-leveling
+   back" (Chad's "magnet" approval, 2026-07-08). The 5–10° slam is the same defect
+   surviving outside MB-lean's `err < blend_lo` gate. The thread is coverage-completion,
+   not a new mechanism.
+3. **The frozen-lean gate is load-bearing twice** (pole-freedom of the de-roll azimuth;
+   rest/righting/ENGAGE semantics) — advice: do not move it; add continuity on the
+   MANEUVER side (bank-to-turn's target approaching the lean target as blend→0).
+4. **Scar tissue favors shrinking the target gap over hysteresis** (hysteresis cannot
+   close a tens-of-degrees target disagreement; the knee would track the band edge per
+   the pre-registered §A8 falsification; MB-lean is the flown win for target
+   continuity). Proportional-from-zero, no floors (the S-holdline AT-12 slingshot).
+5. **Exposure beyond AT-15:** the loader wall `center_band <= blend_lo/2` (blend_lo < 3°
+   refuses to load; couples to the separate center_band fly); the parked capture
+   machine's ENGAGE gate and its 28 self-armed legs key on blend_lo; rest/righting legs
+   key on both dials; controller goldens load the shipped config so a deliberate move
+   needs a pre-stated bar + pre-registered gate count (the carry=0 precedent); Golden
+   #4's smoothness predicate (< 1.1/s body-rate reversals) is the felt regression bar
+   the fix must not spend.
+
+---
+
 ## 2026-07-30 (later) — HORIZON-GATE thread RE-STATUSED: PARKED-PENDING-RECURRENCE (did not reproduce on the sealed tape)
 
 **The live ledger's final word for the day (`cdfa7b0b4`, seads-feel flight-log) re-statuses
