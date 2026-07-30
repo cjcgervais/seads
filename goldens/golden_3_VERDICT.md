@@ -43,6 +43,13 @@ in place — the fnv1a signature covers the header. The correction lives here:
   keyboard-override false-alarm test, sig-verified, NOT promoted) and
   felt_flight_4 (this one). Identification was derived from the data (20
   releases, crash-landing profile), not assumed from timestamps.
+- **⚠ The seads-feel agent's same-night echo misidentified the capture as
+  felt_flight_3** (2,204,646 bytes, sig 9257030133408061227). Its own stated
+  countables refute that file: felt_flight_3 has 5 release edges (not ≥10) and
+  never descends below 916 m (no ground contact). felt_flight_4 matches every
+  countable — 20 releases, terminal ground contact, crash profile. The seal
+  stands on felt_flight_4; recorded here so a future reader who finds that echo
+  does not conclude the wrong file was promoted.
 
 ## Sealing record
 - Mirrored into `goldens/` 2026-07-29 from
