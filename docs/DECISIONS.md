@@ -29,6 +29,31 @@ branch past v10 at any time:
 
 ---
 
+## 2026-07-30 (later) — HORIZON-GATE thread RE-STATUSED: PARKED-PENDING-RECURRENCE (did not reproduce on the sealed tape)
+
+**The live ledger's final word for the day (`cdfa7b0b4`, seads-feel flight-log) re-statuses
+the horizon-gate nose-referenced-arm thread from "queued behind blend-boundary" to
+PARKED-PENDING-RECURRENCE.** On the Golden #4 tape (felt_flight_18, canon v10) Chad could
+not produce a rollover — "The knife edge held on pitching up down manouvers" — and both
+steep-down entries held on the pins (`cos_phi_theta` ≥ +0.475; see golden_4_TELEMETRY.md).
+
+**Why parked, not closed:** the 7 pin-derived rollovers on earlier (unpromoted) tapes
+remain the documented gap — one clean tape does not un-document them. But the live agent's
+principle is right and adopted here: **do not design against a symptom that no longer
+reproduces.** Candidate explanations, all noted UNTESTED: the retired capture machine's
+arrival dynamics (carry=0 landed at v10), lean 8's bank channel, or maneuver-geometry luck.
+
+**Re-entry condition:** first recurrence. The before-state tapes are preserved, and Golden
+#4's clean segment B is the ready-made A/B against any recurrence tape. The fix work, if
+re-opened, should request a dedicated recording set (stated in golden_4_TELEMETRY known
+limits).
+
+**Net thread state after this ruling: ONE active mechanism thread** — the 5–10°
+FINE↔MANEUVER blend-boundary roll slam (plan-mode, mechanism-shaped). This supersedes the
+"two threads queued in order" line in the v10 seal entry below.
+
+---
+
 ## 2026-07-30 — v10 SEALED (buttery cascade): pool-ball capture RETIRED-PARKED by ruling; two supersessions; the compensation-decay law
 
 **Sealed `flight-kernel-v10-2026-07-30` @ `f86ee7b9f`, gate 391/391.** Chad flew the exact
