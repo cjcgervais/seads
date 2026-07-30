@@ -29,6 +29,33 @@ branch past v10 at any time:
 
 ---
 
+## 2026-07-30 (later) — AUDIT of the blend-band roll-continuity plan (two commits, roll_target_mix)
+
+The seads-feel session's plan was audited against the sealed v10 snapshot and this ledger
+(relayed through Chad). **Verdict: sound and consult-compliant — approved with three
+corrections.** Verified true in the snapshot: the composite `roll = blend*roll_maneuver +
+(1-blend)*roll_hold` with roll_maneuver ungated, while pitch and yaw both already carry the
+`(1-blend) + blend*gate` continuity composition — the "roll never got the fix" framing is
+real. No threshold moves (sidesteps AT-15 and the center_band loader wall); lean gate
+unmoved; knob structurally off; golden re-record per the carry=0 pre-stated-bar precedent.
+
+Corrections issued:
+1. **BLOCKING — acceptance set:** recverify must run on the four canonical sealed goldens
+   in THIS repo (`goldens/golden_{1..4}_*.seadsrec`), by explicit path, read-only — not on
+   recon build-dir copies (the lesson-7 error shape).
+2. **Horizon-gate A/B confound:** after the mechanism lands, a recurrence A/B against
+   Golden #4 must set `roll_target_mix = 0.0` to reconstruct the #4-equivalent baseline
+   (the disclosed below-nose side-scope is adjacent geometry). Stated on the fly card.
+3. **Disposition on rejection:** categorical rejection = revert to a branch per the
+   S-keychase/S-aimclamp/S-retclamp precedent, never a live knob parked at zero.
+
+Minor: hand-verify the e_lean sign against the +K_phi·roll_hold_demand vs
+−sqrt_law(bank_eff) asymmetry (author the oracle leg from a hand-computed sample); exact
+gate counts pre-registered before the run; v2 reader keys has_telem off the header tag,
+not per-line stream state; Chad's ruling goes on the card verbatim.
+
+---
+
 ## 2026-07-30 (later) — CONSULT: prior-advice issued for the 5–10° blend-boundary roll slam thread
 
 The seads-feel session requested the kernel base's memory before entering plan mode on the
