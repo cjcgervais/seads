@@ -85,6 +85,28 @@ input.
 
 ## 4. Open items
 
+**2026-07-30 — SEAL CANDIDATE PENDING CHAD'S WORD.** The buttery-cascade session closed in
+seads-feel at `3dfc8e44b` (gate 391/391): lean_gain 8 (rung 1, partial, kept), rung F
+backport (the flown table healed into the ledger), and the pool-ball capture machine
+RETIRED (`carry = 0.0`, Chad's ruling verbatim in the seads-feel ledger; machinery parked
+whole, 28 self-armed test legs pin it for the walk-back). Recon's logged flip now matches
+the committed kernel — nothing silent. **On Chad's seal word (v10 or his number), this
+agent's pipeline runs:** re-snapshot `reference/seads-feel/` at the flown seal; mirror into
+DECISIONS.md the cue-ball park (with re-entry condition: closing ability vs a diverging gun
+solution degrading), the Fly-13 crabbing supersession, the compensation-decay law (three
+flown instances: yaw_scale Fly A, Fly-13 reversal, cue-ball retirement — dials tuned
+against a low-authority plant become biases when authority rises; predictive for the A6M2
+brief), and the read-the-flown-table rule as lesson 8; then seal **Golden Felt Flight #4**
+from the seal-card recording set — slow buttery tracking with a STATED smoothness predicate
+(FINE-band sub-5°-error full-reversal rate per axis, threshold recovered from the sealed
+tape's own pins; sick-state reference 6.24/s rudder / 3.27/s elevator), plus the pitch-down
+set framed in known-limits as the horizon-gate thread's BEFORE-state (inversions on the
+tape are the documented gap, not blessed behavior). Recording-index facts that matter:
+felt_flight_15–16 are flagged carry=0/lean-8 FLIP-2 table; Chad reported three, two exist —
+identify from data. Two mechanism threads queued in seads-feel plan mode: the 5–10°
+blend-boundary roll slam, the horizon-gate knife-edge inversions (aim ~22° above horizon,
+~2° off-plane, no cone reaches it).
+
 | item | owner | state |
 |---|---|---|
 | **v9** | — | **DONE**: flown-approved, sealed (`flight-kernel-v9-2026-07-29` @ `29787debc`), pushed, grafted to recon (901/901). CQ2 window KEPT by ruling; Card-1 trade accepted. See DECISIONS.md |
