@@ -89,7 +89,9 @@ input.
 |---|---|---|
 | **v9** | — | **DONE**: flown-approved, sealed (`flight-kernel-v9-2026-07-29` @ `29787debc`), pushed, grafted to recon (901/901). CQ2 window KEPT by ruling; Card-1 trade accepted. See DECISIONS.md |
 | **Re-snapshot `reference/seads-feel/`** | — | **DONE** at the v9 seal, 2026-07-29 night |
-| **Golden Felt Flight #3** | you (goldens are yours) | **UNBLOCKED** — flyable on the sealed v9 build; would pin freelook-release behavior no existing golden covers |
+| **Golden Felt Flight #3** | — | **FLOWN AND SEALED 2026-07-29** (`golden_3_*`, the v9-seal flight — 20 releases, 2 while inverted, combat + crash + respawn). See VERSIONS.md |
+| **v10 idea (DEFERRED by Chad)** — autolevel after mouse-only aerobatics; "spacebar cures all… I will defer for now" | Chad | parked, his word; recorded in golden_3_VERDICT.md and DECISIONS ledger context |
+| **Recon `KERNEL_SEAL` doc comments** — uncommitted WIP in the recon tree (comments only) | seads-feel agent | should be committed |
 | **Fly card 3 (v8)** — does the aim-bound camera still let Chad read a deflection shot? | Chad | open — Card-1 v9 acceptance is adjacent but this gunnery question was left open at the v8 seal |
 | **Golden Felt Flight #3** | you (goldens are yours) | not flown. Needs a clean tree; `KERNEL_SEAL` + build-info now track the build |
 | **Re-snapshot `reference/seads-feel/`** | you | held until v9 flies — see §5 |

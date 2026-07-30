@@ -165,6 +165,24 @@ below, taken because the alternative was sealing falsified stick verdicts; recor
 rather than quietly, since a future reader doing forensics would otherwise find two targets
 for one tag and no explanation.
 
+| **`flight-kernel-v8-2026-07-29`** | **`ae7ae8f23`** | **THE V8 SEAL — the first PRE-FLY seal, and PARTIALLY REJECTED on the stick.** S-keyprec: override keys are camera-inert (S-keychase retired). Chad KEPT the keys half ("the most important part") but the freelook release regressed to oblique ("we threw out the baby with the bathwater"). Never grafted, never snapshotted into `reference/`. Its keep survives inside v9. |
+| **`flight-kernel-v9-2026-07-29`** | **`29787debc`** | **THE V9 SEAL — S-nosesnap, FLOWN AND APPROVED same day ("v9 is golden and has a golden flight"). The four-round camera arc CLOSED.** Freelook welds aim := nose unconditionally (the no-keys carve retired by ruling); release = ONE instant snap — behind the nose, upright to the horizon, aim/nose in view, no ease ("Snap to view upon release of freelook, no eased anything"). CQ2 0.30 s easeback KEPT by ruling with a new cockpit rationale. Gate 388/388, zero moved goldens, red-team SOUND-WITH-FIXES no P0. Measured v8→v9: nose_at_fire 18.552°→0.578°, updebt_after_release 44.904°→0.003°, no-keys drift 75.5°→1.46°. Grafted to seads-recon `6058329d3`+`4d3e848bc` (gate 901/901, comfort numbers bit-identical). Rulings ledger: `docs/DECISIONS.md`, five 2026-07-29 entries. |
+
+✅ **GOLDEN FELT FLIGHT #3 — FLOWN AND SEALED 2026-07-29**, the v9-seal flight, same day as
+the seal and Chad's stick approval. Mirrored into `goldens/` as
+`golden_3_v9_seal_flight.seadsrec` with `golden_3_TELEMETRY.md`, `golden_3_VERDICT.md` and
+`golden_3_telemetry.csv` (10 Hz, 1,460 rows). fnv1a signature recomputed and matched
+(`12230860415588719877`); SHA-256 `3948B0F8…C2F4D9` verified source↔mirror. 145.9 s: two
+bandits downed (Chad's word — not derivable from SimState pins), a crash landing, a respawn
+teleport, **20 freelook releases all instant-auto-oriented — two of them while inverted**,
+8 inversion episodes, aero g-peak 27.0 (teleport tick excluded by stated predicate).
+**The header's `kernel=` string says v7 and is WRONG** — stale `KERNEL_SEAL` at build time,
+fixed in recon `4d3e848bc` minutes after the flight; correction carried in
+`golden_3_VERDICT.md` per the never-edit-a-header rule. The v7-era warning above (dirty
+recon tree) was **discharged before this flight** by the `cdf65753d` tattoo commit — the
+header carries no `-dirty`, so the golden is reconstructible from recon `966654e0f` exactly.
+#1 = slow/dirty/ground, #2 = fast/clean/air, **#3 = mixed/combat** — none supersedes another.
+
 Also pushed 2026-07-23: the full pre-existing seal ladder (`world-*`, `section-*-gate`,
 `golden-*`, `game-R*`, `spec-freeze`, ...) — previously local-only, now on origin.
 
