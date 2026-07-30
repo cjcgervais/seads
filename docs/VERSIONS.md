@@ -169,6 +169,23 @@ for one tag and no explanation.
 | **`flight-kernel-v9-2026-07-29`** | **`29787debc`** | **THE V9 SEAL — S-nosesnap, FLOWN AND APPROVED same day ("v9 is golden and has a golden flight"). The four-round camera arc CLOSED.** Freelook welds aim := nose unconditionally (the no-keys carve retired by ruling); release = ONE instant snap — behind the nose, upright to the horizon, aim/nose in view, no ease ("Snap to view upon release of freelook, no eased anything"). CQ2 0.30 s easeback KEPT by ruling with a new cockpit rationale. Gate 388/388, zero moved goldens, red-team SOUND-WITH-FIXES no P0. Measured v8→v9: nose_at_fire 18.552°→0.578°, updebt_after_release 44.904°→0.003°, no-keys drift 75.5°→1.46°. Grafted to seads-recon `6058329d3`+`4d3e848bc` (gate 901/901, comfort numbers bit-identical). Rulings ledger: `docs/DECISIONS.md`, five 2026-07-29 entries. |
 | **`flight-kernel-v10-2026-07-30`** | **`f86ee7b9f`** | **THE V10 SEAL — the buttery-cascade session (docs tip `2be93007c`, gate 391/391).** Three dials: `lean_gain` 6→8 (rung 1, flown partial, kept); `side_cone` 27.5/32.5→37.5/42.5 (rung F lineage heal — the sealed table had diverged from the flown one); **`[capture] carry` 1.0→0.0 — the pool-ball capture machine RETIRED-PARKED by Chad's ruling** (verbatim + re-entry condition in DECISIONS.md; machinery kept behind 28 self-armed test legs, silent re-arm fails the loader pin loud). Flown state: Chad flew these exact values as recon's logged flip and approved the butter on the stick ("it really feels better… the pool ball feel is gone") before ruling the seal. Two supersessions ledgered (Fly-13 crabbing preference; the cue-ball founding ask) + the compensation-decay law with its first predictive use (A6M2 re-arm note). Parked: `lean_max` 40 (shelf refuted). Queued mechanism threads: 5–10° blend-boundary roll slam, horizon-gate nose-referenced arm. **Golden Felt Flight #4 PENDING** — awaits the recon graft's green word; smoothness predicate to be recovered from the sealed tape's pins (sick-state reference 6.24/3.27 reversals/s rudder/elevator); pitch-down set = the horizon-gate BEFORE-state, documented-bad not blessed. |
 
+✅ **GOLDEN FELT FLIGHT #4 — FLOWN AND SEALED 2026-07-30**, the v10-seal flight, same day
+as the seal. Mirrored into `goldens/` as `golden_4_v10_seal_flight.seadsrec` with
+`golden_4_TELEMETRY.md`, `golden_4_VERDICT.md`, `golden_4_telemetry.csv` (10 Hz, 1,140
+rows). fnv1a recomputed and matched (`7215269534658975596` — NOTE recorder.h's fnv1a uses
+VARIANT constants; a standard-FNV reimplementation mismatches every valid recording, see
+the TELEMETRY note). SHA-256 `095C5692…5BC6DE` verified source↔mirror. 114.0 s: the
+**buttery slow-tracking state** (smoothness predicate: body-rate full-reversal < 1.1/s
+per axis in the stated slow-window instrument; measured 0.80/0.91/1.03), **both steep-down
+entries HELD** (cpt ≥ +0.475 — Chad: "I couldn't produce a roll over. The knife edge
+held"), and **one partial bank-over at t=55.7 s in the exact documented horizon-gate
+geometry** (~22° above horizon → pitch-through → min cpt −0.554, 0.50 s) — the
+before-state for that thread, captured incidentally and reconciled against Chad's verdict
+(no full roll-over; a partial, matching his own Card-1 description). Identified from data
+over two candidates (felt_flight_17 set aside, "no air", sig-verified, unpromoted).
+**#4 = fast/clean/slow-tracking butter** — #1 slow/dirty/ground, #2 fast/clean/combat,
+#3 mixed/combat; none supersedes another.
+
 ✅ **GOLDEN FELT FLIGHT #3 — FLOWN AND SEALED 2026-07-29**, the v9-seal flight, same day as
 the seal and Chad's stick approval. Mirrored into `goldens/` as
 `golden_3_v9_seal_flight.seadsrec` with `golden_3_TELEMETRY.md`, `golden_3_VERDICT.md` and

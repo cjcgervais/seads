@@ -92,18 +92,21 @@ verified by this agent). This agent's seal pipeline is DONE: `reference/seads-fe
 re-snapshotted at the seal (README states the one deliberate exception — the v10 fly card
 from the docs tip); DECISIONS.md carries the v10 entry (cue-ball park verbatim + re-entry
 condition, Fly-13 supersession, the compensation-decay law with the A6M2 predictive note,
-lesson 8 read-the-flown-table); VERSIONS.md carries the seal row. **REMAINING: Golden Felt
-Flight #4** — waits on the recon graft's green word (from the seads-feel agent), then
-Chad flies the #4 card: (1) ≥30 s slow small-deflection tracking, smoothness predicate
-recovered from the sealed tape's own pins (FINE-band sub-5°-error full-reversal rate per
-axis; sick-state reference 6.24/s rudder, 3.27/s elevator); (2) pitch-down set framed in
-known-limits as the horizon-gate thread's BEFORE-state (inversions documented-bad, not
-blessed). Then the full sealing checklist in CLAUDE.md. Recording-index facts:
-felt_flight_15–16 are flagged carry=0/lean-8 FLIP-2 table; Chad reported three, two
-exist — identify from data. File counter ≠ golden number (felt_flight_4 = Golden #3);
-never renumber. Two mechanism threads queued in seads-feel plan mode, in order: the 5–10°
-blend-boundary roll slam, then the horizon-gate knife-edge inversions (aim ~22° above
-horizon, ~2° off-plane — no cone reaches it; needs a nose-referenced arm).
+lesson 8 read-the-flown-table); VERSIONS.md carries the seal row. **GOLDEN FELT FLIGHT #4: FLOWN AND SEALED 2026-07-30** (`golden_4_*`, the v10-seal
+flight — see VERSIONS.md). Headline findings: the knife edge HELD at both steep-down
+entries (Chad: "I couldn't produce a roll over"), the smoothness predicate is pinned
+(body-rate reversal < 1.1/s per axis in the stated slow-window instrument), and the
+horizon-gate before-state was captured incidentally at t=55.7 s in its exact documented
+geometry (~22° above horizon → partial bank-over, min cpt −0.554). **Sealing lessons paid
+for:** recorder.h's fnv1a uses VARIANT constants (offset `1469598103934665603`, prime
+`1099511628257`) — validate any signature reimplementation against a sealed golden before
+trusting a STOP (this session's first recompute mismatched everything and was correctly
+diagnosed as implementation error, not tampering). File counter ≠ golden number
+(felt_flight_18 = Golden #4; felt_flight_17 set aside "no air", sig-verified, unpromoted,
+SHA in the VERDICT). Two mechanism threads queued in seads-feel plan mode, in order: the
+5–10° blend-boundary roll slam, then the horizon-gate knife-edge inversions (needs a
+nose-referenced arm; #4 carries its before-state, and the fix work should request a
+dedicated recording set).
 
 | item | owner | state |
 |---|---|---|
