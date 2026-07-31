@@ -29,6 +29,49 @@ branch past v10 at any time:
 
 ---
 
+## 2026-07-30 (night) — S-ROLLMIX FLOWN: slam GONE, verdict approving — plus a NEW observation (the flick "dip curl"), attributed-pending-A/B
+
+**Chad flew S-rollmix (build fc3ea6970 card, tip 39aa52a48) and the thread's symptom is
+gone. Verbatim:**
+
+> "its interesting it definately feels smooth, I tried firing my guns (tracers) while I
+> flew. While it definately feels buttery, and there isnt rebounding, one thing I did
+> notice is that there seems to be a dip smaller if I move more gradually but If I do a
+> flick there is a kind of a dip curl. I tried with tracers it goes staright at first but
+> its like as its waiting for full bank there is a bit of a lull in the z height gain
+> (first part of the shallow dip, then it reaches the full bank and then the elevator
+> kicks in and you get the upswing of the dip it forms with viewing the line of tracerrs,
+> ---> straight, shallow dip --> straight The dip is a shalllow us shape. Now im not
+> saying its is really bad but it is there.."
+
+**The slam verdict:** smooth, buttery, no rebounding — the 5–10° thread's reason to exist
+is answered. (Note the instrument: he flew with TRACERS as a trajectory readout — a new,
+sharper felt instrument than any prior fly, worth reusing on future cards.)
+
+**The dip observation — kernel-base attribution hypothesis (pre-A/B, stated before the
+number so it can't be rationalised):** the flick dip is almost certainly PRE-EXISTING v10
+character, not S-rollmix — flicks past blend_hi are bit-identical by exact guard, golden
+blend==1 prefix, and the equality legs. The geometry is the composition of two of Chad's
+OWN flown rulings: (1) `bank_align_power` 3→6 (S7-turn2, 2026-07-06, "roll first, don't
+get pushed up in a turn") holds the elevator ~0 until the bank aligns — the lull in
+z-gain; (2) the S-holdline sag servo (rung C2b–d, "hold the line of my mouse inputs")
+fights proportionally-from-zero once the nose falls below the aim's elevation line —
+which is WHY the dip is shallow, not deep; then align kicks in → the upswing. Straight →
+shallow U → straight is that handoff's tracer signature. Gradual = smaller dip is
+consistent: through the band the bank deepens progressively (S-rollmix), so alignment is
+already partial when full commit arrives — less pull-hold to pay.
+
+**Discriminating A/B (30 seconds, pre-registered):** `roll_target_mix = 0.0`, same flick,
+same tracers. Dip persists → v10 character confirmed; dip vanishes → the hypothesis is
+WRONG and S-rollmix owns it (STOP and re-attribute — flicks were supposed to be
+bit-identical, so this outcome would also indict the equality legs). If confirmed
+character and Chad wants less dip, the honest dial is `bank_align_power` (lower = pull
+sooner = shallower dip, but re-admits some of the "pushed up in a turn" climb he ruled
+OUT — a feel trade only he can re-rule; `pull_floor` is already 1.0 = full servo). That
+would be its own thread with its own card — not folded into this one.
+
+---
+
 ## 2026-07-30 (later) — AUDIT of the blend-band roll-continuity plan (two commits, roll_target_mix)
 
 The seads-feel session's plan was audited against the sealed v10 snapshot and this ledger
