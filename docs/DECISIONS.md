@@ -32,6 +32,31 @@ past v12 at any time:
 
 ---
 
+## 2026-07-30 (late night) — CONSULT: the eagle receives v12 — reply issued, EAGLE REGISTERED as a governed vessel (Chad's R7)
+
+The EvC2026 eagle engineer's consult packet
+(`D:\EvC2026\docs\CONSULT-KERNEL-V12-RECEIVE-PACKET.md` @ `166bd58`) was answered in
+full (asks A–G; reply relayed through Chad). Highlights on the record: the v12
+free-look release contract clarified — **CQ2 is a mouse→aim SUSPENSION (0.30 s of
+dropped deltas), not a camera ease** — their STAGE-2 sketch confirmed with the CQ2
+addition; the camera lead law stated (`[camera] lead = 1.0` toward the AIM,
+deflection-scaled lag) with the categorical keys ruling (no key fallback — the
+S-keychase class, excised upstream); the pole-free mechanism stated (the aim's OWN
+carried frame; camera a pure consumer; their camera-basis attribution endorsed as the
+S7 family); **`line_hold_ff` identified as the eagle's ready-made character knob**
+(0 = v11 curl, 1 = plane-straight — the per-aviary doctrine clause executed as a
+dial); the rung-D stale-envelope method + compensation-decay audit list issued for
+their bottom-end work; the C/D split ordered MEASURED before ranked (our own
+attribution-flip scar, applied outward). COMS-1 confirmed as a PLANE promise — the
+eagle's player promise will be its own COMS entry.
+
+**R7 executed: `docs/DECISIONS-evc-eagle.md` created** — the eagle's vessel ledger in
+this repo, seeded with Chad's R1–R7 batch, the CS-registry sync rule, and the adopted
+governance conventions (annotated eagle-v1 retro-seal, four-file goldens with
+BuildStamp identity, fly-card template, pre-registered decision rules).
+
+---
+
 ## 2026-07-30 (night, latest) — S-STRAIGHTLINE FLOWN AND APPROVED: "This is now the baseline for a quality flight kernel." Seal word GIVEN (→ v12) + Golden #5 ordered
 
 **Chad flew S-straightline (build `ecbf51c6a`, pushed pre-fly per his precedent) and
