@@ -73,12 +73,59 @@ literally true — until S-straightline is flown-approved, the promise is pendin
 measured 2.2-8.3 deg turn-entry dip. The thread's completion is therefore also a coms
 event: notify the mandalark docs agent at seal so COMS-1's truth-check clears.
 
-## Next actions
+## EXECUTED 2026-07-30 — THE ATTRIBUTION FLIPPED IN FLIGHT (read before citing the stub above)
 
-1. Consult packet to the mandalark kernel docs agent (prior rulings on bank_align_power,
-   S7-turn2, rung-C sag servo, pitch-pull shaping; scar tissue on gate-shape changes).
-2. Plan mode: candidate shape = replace/augment the cos^6 fade with bank-coordinated pitch
-   FEEDFORWARD (hold the path-elevation line proactively during roll-in), sag servo kept as
-   the backstop. Clarify with Chad: should the line hold EXACTLY level (zero dip target) or
-   is a stated small bound acceptable; and does "rudder first" mean more lead than today's
-   crab gives.
+The consult + plan + audit chain ran (kernel-base prior-advice received; plan-stage fresh
+red-team SOUND-WITH-FIXES; Chad's three plan-mode rulings: roll-in is the win / crab is
+enough / keep gate + add FF). Then the PRE-REGISTERED INSTRUMENT (commit 1: lathold/latflick
+DIP phase-split) overturned the mechanism §16-17 above attributes:
+
+**The dip is NOT the align-gate lull + gravity sag. It is the CRAB.** Gravity can source
+~0.2° of the measured 5° (the deficit column proves it live); the dip is the MB-rud rudder
+sweeping the nose toward the lateral aim about the BANKED body-up axis — sin(bank) of that
+sweep points at the ground (~20°/s nose-drop at 50° bank). The gravity-deficit FF (the
+approved plan shape) measured 2-4% closure; killed before a fly was spent on it. Phase
+split: 100% of the dip accrues in the roll window (c > 0.2), none past knife-edge — the
+knife-edge worry was empirically dead too.
+
+**The shipped mechanism (director-approved with 4 conditions, compressed re-audit
+SOUND-WITH-FIXES, identity + all four sign quadrants independently verified; the parasitic
+discriminator added after the additivity premise sweep caught the v2 all-component cancel
+driving elevated-aim-while-banked geometries into the −G floor — an uncommanded push):**
+`[regime] line_hold_ff` — AXIS-CORRECTION pitch feedforward. Exact nose-elevation
+kinematics (the MB-lean frame-true pair): d(elev)/dt = pitch·cosΦθ + yaw·sin(e.phi). The FF
+cancels ONLY the emitted yaw's PARASITIC vertical component — the part moving the nose AWAY
+from the aim's elevation line: w_axis = −(w_dn·min(yv,0) + w_up·max(yv,0))/cosΦθ with
+yv = emitted_yaw·sin(e.phi), each side fading over a ±0.087 (~5°) sag band at the line. At
+the line both cancel fully (the flick's dig AND the reversal's kink); past the band the
+yaw's motion TOWARD the aim is the pointing arc itself and is never fought (elevated and
+below-line aims keep their commanded arcs). Keyed on the EMITTED yaw (post yaw_gate/blend),
+gated blend · fwd_gate · knife_fade, AoA/G envelope = the hard wall. Gravity sag stays the
+sag servo's job (feedback-plus-feedforward, no double-pay — additivity leg + zero-sag leg).
+0.0 = structural off, bit-identical v11.
+
+**PRE-STATED CLOSURES (measured before any fly, the honesty rule; final parasitic law):**
+V200 world-held flicks 15/30/60° — baseline dip 2.23/5.05/8.31° → 0.92/1.08/4.50°
+(closure 59/79/46%). The 15/30°
+residual ~1° is plant lag (inner loop + lift build). The 60° residual is the AoA/G ENVELOPE
+riding (alpha_p95 15.7° vs aoa_max 20° — MEASURED ON A ~6–10 s WINDOW, red-team P2-1: the
+default 30 s lathold window dilutes the ~1 s entry transient to alpha_p95 ≈ 2.8; always
+state the window with this stat) — full cancellation of a 55°/s crab at 60°+ bank is more G
+than the airframe has; the entry is now an honest high-G level pull. Chad flies knowing
+these numbers; the card must not promise more. V-SWEEP (red-team, offline backing beyond
+V200): V140 30/60° dips 1.99/6.18°, V250 → 0.44/2.99° — monotone V-scaling, no ring, no
+chatter; the reversal trace at 86° established bank holds elevation flat within ~0.1°
+through the whole bank reversal (the upward kink measurably dead). A steady ~2.3°-below
+park in a HELD-err 86°-bank turn (partial knife fade) joins the known-limits family
+(measured MANEUVER-side companion of limit (a)).
+
+**Documented-known-limits (Chad's ruling — recorded, NOT blessed character; each a future
+thread only on a felt report):** (a) ~1.3° steady droop below the aim in a sustained
+60°-bank FINE track (blend=0 there — structural scope); (b) the >~75°-bank window where
+elevator cannot hold the line (top-rudder territory, MB-rud fade is a flown ruling);
+(c) the PUSH branch has no complement (push-wedge down-and-lateral crabs keep their kink —
+push is a commanded deep dive); (d) aim_ff's yaw_max clamp-corner asymmetry on saturated
+moving sweeps (pre-existing, unowned by this thread).
+
+Fly card: `docs/straightline_fly_card.md` (G-bite = HEADLINE row). COMS-1 clears on Chad's
+stick, not the math.

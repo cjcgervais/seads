@@ -450,3 +450,28 @@ TEST_CASE("load_controller: [freelook] release_orient optional, default false") 
             "relorient_nonbool"),
         ap));
 }
+
+TEST_CASE("load_controller: line_hold_ff shipped pin + wall (S-straightline)") {
+    const sim::AircraftParams ap =
+        cfg::load_aircraft_toml(SEADS_CONFIG_DIR "/aircraft.toml");
+    const std::string shipped = slurp(SEADS_CONFIG_DIR "/controller.toml");
+    // Shipped-value pin: the axis-correction FF ships LIVE at 1.0 (the exact
+    // kinematic complement); 0.0 is the fly kill-switch / golden baseline
+    // arm, never the committed value (docs/straightline_thread.md).
+    REQUIRE(shipped.find("line_hold_ff = 1.0") != std::string::npos);
+    const control::ControllerParams cp =
+        cfg::load_controller_toml(SEADS_CONFIG_DIR "/controller.toml", ap);
+    CHECK(cp.line_hold_ff == 1.0);
+    // Wall: [0, 2] — headroom to 2 for a deliberate over-correction fly,
+    // never unbounded; negative flips the FF into a dip AMPLIFIER.
+    CHECK_THROWS(cfg::load_controller_toml(
+        write_temp(
+            replace_all(shipped, "line_hold_ff = 1.0", "line_hold_ff = 3.0"),
+            "linehold_big"),
+        ap));
+    CHECK_THROWS(cfg::load_controller_toml(
+        write_temp(
+            replace_all(shipped, "line_hold_ff = 1.0", "line_hold_ff = -0.5"),
+            "linehold_neg"),
+        ap));
+}

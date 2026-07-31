@@ -1,10 +1,24 @@
 # reference/seads-feel/ — PRIMARY reference: the active kernel
 
-These files are **copies**, re-snapshotted **2026-07-30 (night)**, from
-`D:\flight_sim2\seads-feel`, branch **`feel/kernel-v5`**, seal commit **`0602d8292`** — the
-**`flight-kernel-v11-2026-07-30`** seal (annotated tag `20f14817c` verified to resolve to
-that commit; tag and branch pushed to origin, ls-remote confirmed). No purity exceptions
-this time — every file is from the seal commit exactly. **Scope note (deliberate, stated
+These files are **copies**, re-snapshotted **2026-07-30 (late night)**, from
+`D:\flight_sim2\seads-feel`, branch **`feel/kernel-v5`**, seal commit **`e362df289`** — the
+**`flight-kernel-v12-2026-07-30`** seal (tag verified local + ls-remote; NOTE: v12 is a
+LIGHTWEIGHT tag, a deviation from the annotated-tag convention v6–v11 followed — pushed
+and permanent, noted rather than hidden). No purity exceptions — every file is from the
+seal commit exactly.
+
+**New since the v11 snapshot — the sealed v12 content (S-straightline):** the
+axis-correction pitch feedforward `[regime] line_hold_ff = 1.0` (0.0 = bit-identical
+v11) — cancels ONLY the crab's parasitic vertical component (motion away from the aim's
+elevation line), keyed on the EMITTED yaw, four-gate continuous, envelope-bounded; the
+attribution was flipped by the commit-1 instrument (crab, not gravity — 2–4% measured
+gravity closure) and the parasitic-only split was forced by a test leg's premise sweep
+(the v2 all-cancel bunted elevated aims into the −G floor). Closures 2.23/5.05/8.31° →
+0.92/1.08/4.50° (60° residual = the honest G envelope). Gate 404/404. Chad's verdict:
+"This is now the baseline for a quality flight kernel." Grafted to recon `2116f6ea3`
+(914/914; the nullable sim::Environment* seam adapt documented in the graft commit);
+build-play re-stamped. Known limits ledgered: endgame droop ~1.3°, >75° top-rudder
+window, push-branch kink, aim_ff clamp-corner asymmetry. **Scope note (deliberate, stated
 at the v11 re-snapshot):** this snapshot is the COMPLETE tracked tree of the eight
 directories (`app config control docs input render sim test`) via `git archive` at the
 seal commit; previous snapshots were partial subsets. In particular the live tree's own

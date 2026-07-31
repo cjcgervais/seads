@@ -22,8 +22,8 @@ You two hand off through Chad, and through `docs/*_handoff.md` files in the live
 | repo | branch | tip | note |
 |---|---|---|---|
 | `mandalark-kernel` | `main` | see git | pushed, clean |
-| `seads-feel` | `feel/kernel-v5` | `9b62a7d79` | pushed. **Seal `flight-kernel-v11-2026-07-30` @ `0602d8292`** (S-rollmix flown-approved + blend instrument + P-helm; tag verified); tip is the docs-only seal banner. `reference/seads-feel/` re-snapshotted at the v11 seal, no purity exceptions |
-| `seads-recon` | (graft branch) | `01b28231a` | pushed. **Flies sealed v11** — gate 905/905, recorder v2 through the TickHook seam (F9 tapes now carry blend/held_bank natively), build-play re-stamped |
+| `seads-feel` | `feel/kernel-v5` | `e362df289` | pushed. **Seal `flight-kernel-v12-2026-07-30` @ tip** (S-straightline flown-approved — "the baseline for a quality flight kernel"; ⚠ tag is LIGHTWEIGHT, convention deviation noted). `reference/seads-feel/` re-snapshotted at the v12 seal, no purity exceptions |
+| `seads-recon` | `sandbox/kernel-v5-reconcile` | `2116f6ea3` | pushed. **Flies sealed v12** — gate 914/914 (pre-registered 905+9), Environment* seam adapt documented, build-play re-stamped (`line_hold_ff = 1.0` confirmed) |
 | `seads-recon` | `sandbox/kernel-v5-reconcile` | see git | **graft of the sealed v10 state was in flight 2026-07-30** — verify before treating recon as flying the committed seal (it flew the byte-matched logged flip before that) |
 
 Kernel seals: v5 → v6 (`cfe1bd7fe`) → v7 (`51eb5b9e3`) → v8 (`ae7ae8f23`, pre-fly,
@@ -109,17 +109,16 @@ v11** (`0602d8292`), grafted (recon 905/905), build-play re-stamped. Full pipeli
 this ledger: consult 45f9737 → audit e606070 → card review → verdict → A/B closure →
 seal entry.
 
-**S-straightline is FLOWN AND APPROVED** ("This is now the baseline for a quality flight
-kernel") — the axis-correction FF (`line_hold_ff`; the attribution FLIPPED mid-thread:
-crab's parasitic vertical component, not gravity — see DECISIONS, three entries). COMS-1
-truth-check SATISFIED on the stick; rendering still awaits Chad's wording approval.
-**PENDING NOW: the v12 seal** (Chad's word given; numbering note — he said "this v11"
-meaning the build in hand = v11 + S-straightline → seals as v12) **and GOLDEN #5**
-(first golden on recorder v2 — native telem_blend/held_bank pins; card must carry the
-spawn-altitude check and note the tracer instrument; candidate new predicate:
-dip-depth/straight-line from nose-elevation pins; identify the tape from its own data).
-This agent's seal pipeline armed: verify tag → re-snapshot → VERSIONS → DECISIONS →
-handoff, then the #5 sealing checklist on the golden tape. The horizon-gate thread is **PARKED-PENDING-RECURRENCE**
+**S-straightline is DONE — v12 SEALED, grafted, build-play stamped.** COMS-1 truth-check
+SATISFIED on the stick; the rendering's wording approval is the one open COMS item.
+**PENDING NOW: GOLDEN #5** — Chad flies the grafted build-play exe (F9), first golden on
+recorder v2 (native telem_blend/held_bank pins + nose-elevation for the candidate
+dip-depth predicate). Sealing checklist additions: spawn-altitude check before promoting
+a take (felt_flight_17/felt_flight_3 class, two occurrences); note the tracer instrument
+on the card; identify the tape from its own data (file counter ≠ golden number). After
+#5: the board — vessel roster (A6M2 awaits the ×1.5-vs-×2 power ruling; brief inherits
+the capture-machine AND roll-first re-arm converses), Scarce Skies (recon carries the
+Phase-1 Environment* seam), and any new felt thread. The horizon-gate thread is **PARKED-PENDING-RECURRENCE**
 (live ledger `cdfa7b0b4`, mirrored in DECISIONS.md: the symptom did not reproduce on the
 sealed tape — do not design against it; #4's clean segment B is the ready-made A/B, and
 re-opened fix work should request a dedicated recording set).

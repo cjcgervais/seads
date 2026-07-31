@@ -606,6 +606,35 @@ wings_level_band = 0.05  # [cos units] ~ +/-2.9 deg of bank around vertical
 # 0.0 = the STRUCTURAL bit-identical legacy two-target blend (the fly
 # kill-switch / the Golden-#4 baseline reconstruction arm).
 roll_target_mix = 1.0  # [0..1] mix weight; flown at 1.0 (Chad card pending)
+# S-straightline (2026-07-30, docs/straightline_thread.md — the tracer-line
+# dip, Chad's spec verbatim: "the elevator increase should smoothly coorelate
+# to banking increase. they are both supposed to align to the final turn angle
+# at the saem time"). AXIS-CORRECTION pitch FEEDFORWARD: the attributed dip
+# mechanism (lathold DIP instrument) is the CRAB — the rudder sweeps the nose
+# toward a lateral aim about the BANKED body-up axis, so sin(bank) of the
+# sweep points at the ground (~20 deg/s nose-drop at 50 deg bank; gravity sag
+# is 2-4% of the dip and stays the sag servo's job). The FF adds exactly the
+# pitch that cancels the emitted yaw's PARASITIC vertical component — the
+# part moving the nose AWAY from the aim's elevation line:
+#   w_axis = -(w_dn*min(yv,0) + w_up*max(yv,0)) / cosPhiTheta,
+#   yv = emitted_yaw * sin(phi)
+# (the MB-lean frame-true pair, exact at every attitude; w_dn/w_up = the
+# one-sided fades over a ~5-deg sag band at the line), gated by blend *
+# fwd_gate * knife_fade (multiplicative + continuous, controller.cpp) — the
+# elevator feeds in WITH the achieved bank, the tracer sweep goes HORIZONTAL,
+# and full cancellation on a hard flick is an honest high-G level pull (the
+# AoA/G envelope is the hard wall; very large flicks keep an
+# envelope-bounded residual). SIGNED at the line (kills the upward kink on
+# reversals); NEVER fights the yaw's motion TOWARD the aim (an elevated or
+# below-line aim keeps its commanded arc — the parasitic split is what
+# prevents the all-component cancel's -G-floor push at elevated aims, caught
+# by the additivity premise sweep before any fly). The cos^6 align gate
+# stays LIVE (July-6 anti-climb); the sag servo stays the residual backstop
+# (feedback-plus-feedforward, servo zero at zero sag — no double-pay).
+# Measured baseline this kills: 2.23/5.05/8.31 deg dip at V200 15/30/60
+# flicks (100% accrues in the roll window, none past knife-edge). 0.0 =
+# STRUCTURAL OFF, bit-identical v11 (fly kill-switch + golden baseline arm).
+line_hold_ff = 1.0   # [frac of the axis correction] 1.0 = exact kinematics
 
 [push_gate]          # push-vs-roll (SPEC §9.3, S7-push); every leg hysteretic.
 # GEOMETRY-based (not the -G budget): push (nose down) while the below-nose aim

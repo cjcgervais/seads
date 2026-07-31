@@ -1372,6 +1372,19 @@ int run_track(const sim::AircraftParams& p, const std::string& axis_name,
 // Input, bank, the bank_error the roll law sees, and push_mode/regime each tick
 // through the reversal, so the roll-vs-pitch choice is visible as NUMBERS. NOT
 // a gate.
+//
+// S-straightline dip columns (2026-07-30, commit 1 — the tracer-line dip
+// instrument, docs/straightline_thread.md): per-tick nose_elev (world
+// elevation of the nose vs local_up) and defct = (g/V)(1 - cos(phi)), the
+// instantaneous gravity deficit a coordinated pull would have to source to
+// hold the line at the achieved bank. Per phase, a LATFLICK DIP summary:
+// start/min elevation, depth, time-to-min, and the dip's PHASE SPLIT —
+// how much of the downward accrual happens at c = cos(phi) below vs above
+// kDipKnifeBand (an instrument-side mirror of the mechanism's knife band;
+// past it the elevator's elevation authority w*c <= g/V has collapsed and
+// the line owner is top rudder — a documented-known-limit, Chad's ruling).
+// Phase 1 IS a from-level entry flick (aim snaps to the lateral offset on
+// tick 1), so the phase-1 depth == the turn-entry dip the thread measures.
 int run_latflick(const sim::AircraftParams& p, double V, double offset_deg,
                  int phase1, int phase2, double down_deg) {
     const control::ControllerParams cp =
@@ -1383,12 +1396,33 @@ int run_latflick(const sim::AircraftParams& p, double V, double offset_deg,
     cl.aim_nose();
     const double off = offset_deg * kPi_step / 180.0;
     const double down = down_deg * kPi_step / 180.0;
+    const double deg = 180.0 / kPi_step;
+    // Instrument-side mirror of the mechanism's knife band (S-straightline):
+    // c = cos(phi) below this = the top-rudder window, where no pitch rate
+    // can hold the line (elevation-effective pull capped at g/V).
+    const double kDipKnifeBand = 0.2;
     std::printf(
         "latflick V=%.0f offset=%.0f down=%.0f | RIGHT %d then LEFT(+down) %d\n"
         "  tick  side   bank   roll   pitch    yaw    err  bankErr  tb.x  tb.y "
         " "
-        "tb.z  push regime\n",
+        "tb.z  push regime  nose_elev  defct\n",
         V, offset_deg, down_deg, phase1, phase2);
+    // Per-phase dip accounting (S-straightline commit 1).
+    double start_elev = 0.0, min_elev = 1e9, prev_elev = 0.0;
+    double acc_roll = 0.0, acc_knife = 0.0;  // downward accrual split by c
+    int min_tick = 0, phase_start = 1;
+    bool have_start = false;
+    auto dip_summary = [&](int phase, int end_tick) {
+        if (!have_start) return;
+        std::printf(
+            "LATFLICK DIP phase=%d V=%.0f offset=%.0f start_elev=%.2f "
+            "min_elev=%.2f depth_deg=%.2f t_min_s=%.2f accrual_roll=%.2f "
+            "accrual_knife=%.2f (knife c<%.2f) ticks=%d..%d\n",
+            phase, V, offset_deg, start_elev * deg, min_elev * deg,
+            (start_elev - min_elev) * deg, (min_tick - phase_start) * p.sim_dt,
+            acc_roll * deg, acc_knife * deg, kDipKnifeBand, phase_start,
+            end_tick);
+    };
     for (int i = 1; i <= phase1 + phase2; ++i) {
         const glm::dvec3 up = sim::local_up(cl.state.position);
         const glm::dvec3 nose =
@@ -1414,17 +1448,51 @@ int run_latflick(const sim::AircraftParams& p, double V, double offset_deg,
             (tb.x * tb.x + tb.y * tb.y > 1e-12) ? control::bank_error(tb) : 0.0;
         const double bank =
             control::unfold_bank(t.extracted.phi, t.extracted.cos_phi_theta);
+        // Dip columns (S-straightline): world nose elevation + the
+        // instantaneous coordinated-pull deficit at the achieved bank.
+        const glm::dvec3 up_now = sim::local_up(cl.state.position);
+        const glm::dvec3 nose_now =
+            cl.state.orientation * glm::dvec3{0.0, 0.0, -1.0};
+        const double nose_elev =
+            std::asin(std::clamp(glm::dot(nose_now, up_now), -1.0, 1.0));
+        const double sp = std::max(glm::length(cl.state.velocity), 1.0);
+        const double c_bank = std::cos(bank);
+        const double defct = (p.g / sp) * (1.0 - std::abs(c_bank));
+        // Per-phase accounting: reset at each phase start, split each tick's
+        // downward accrual by which side of the knife band the bank sat on.
+        if (i == 1 || i == phase1 + 1) {
+            if (i == phase1 + 1) dip_summary(1, phase1);
+            start_elev = min_elev = prev_elev = nose_elev;
+            min_tick = phase_start = i;
+            acc_roll = acc_knife = 0.0;
+            have_start = true;
+        } else {
+            const double fall = prev_elev - nose_elev;  // > 0 = sinking
+            if (fall > 0.0) {
+                if (std::abs(c_bank) < kDipKnifeBand)
+                    acc_knife += fall;
+                else
+                    acc_roll += fall;
+            }
+            prev_elev = nose_elev;
+            if (nose_elev < min_elev) {
+                min_elev = nose_elev;
+                min_tick = i;
+            }
+        }
         const bool near_flick = (i > phase1 - 6 && i < phase1 + 80);
         if (i % 20 == 0 || near_flick)
             std::printf(
                 "  %5d  %5s  %5.0f  %6.2f  %6.2f  %6.2f  %5.0f  %6.0f  %5.2f  "
-                "%5.2f  %5.2f   %d   %s\n",
+                "%5.2f  %5.2f   %d   %s  %9.2f  %5.2f\n",
                 i, (i <= phase1 ? "RIGHT" : "LEFT"), bank * 180.0 / kPi_step,
                 cl.last_inputs.roll, cl.last_inputs.pitch, cl.last_inputs.yaw,
                 t.e * 180.0 / kPi_step, be * 180.0 / kPi_step, tb.x, tb.y, tb.z,
                 t.push_mode ? 1 : 0,
-                t.regime == control::Regime::FINE ? "FINE" : "MANV");
+                t.regime == control::Regime::FINE ? "FINE" : "MANV",
+                nose_elev * deg, defct * deg);
     }
+    dip_summary(phase2 > 0 ? 2 : 1, phase1 + phase2);
     return 0;
 }
 
@@ -1484,6 +1552,14 @@ int run_lathold(const sim::AircraftParams& p, double V, double offset_deg,
     const double start_alt = sim::altitude(cl.state.position, p);
     const int print_every = static_cast<int>(std::lround(0.5 / dt));
     double min_nose_elev = 1e9, min_alt = start_alt;
+    // S-straightline dip accounting (commit 1): this world-held flick is THE
+    // canonical dip shape — it reproduces the ledger baseline (2.23/5.05/8.31
+    // deg depth at V200 15/30/60, start_elev +0.79 at trim) exactly. Split
+    // each tick's downward accrual by which side of the knife band
+    // (|cos(phi)| < 0.2 — the top-rudder window) the achieved bank sat on.
+    const double kDipKnifeBand = 0.2;
+    double start_elev = 0.0, prev_elev = 0.0, acc_roll = 0.0, acc_knife = 0.0;
+    int min_elev_tick = 0;
     int t_capture_tick = -1, windmill_ticks = 0, windmill_cur = 0, crashed = 0;
     std::vector<double> alpha_pos;
     alpha_pos.reserve(static_cast<size_t>(ticks));
@@ -1513,6 +1589,19 @@ int run_lathold(const sim::AircraftParams& p, double V, double offset_deg,
         const double in_roll = cl.last_inputs.roll;
 
         if (t_capture_tick < 0 && err < 5.0) t_capture_tick = i;
+        if (i == 0) {
+            start_elev = prev_elev = nose_elev;
+        } else {
+            const double fall = prev_elev - nose_elev;  // deg; > 0 = sinking
+            if (fall > 0.0) {
+                if (std::abs(std::cos(phi / deg)) < kDipKnifeBand)
+                    acc_knife += fall;
+                else
+                    acc_roll += fall;
+            }
+            prev_elev = nose_elev;
+        }
+        if (nose_elev < min_nose_elev) min_elev_tick = i;
         min_nose_elev = std::min(min_nose_elev, nose_elev);
         if (alpha > 0.0) alpha_pos.push_back(alpha);
         if (std::abs(in_roll) > 0.95) {
@@ -1543,9 +1632,13 @@ int run_lathold(const sim::AircraftParams& p, double V, double offset_deg,
     if (min_nose_elev > 1e8) min_nose_elev = 0.0;  // crash-on-tick-0 guard
     std::printf(
         "LATHOLD V=%.0f offset=%.0f t_capture_s=%.2f min_nose_elev_deg=%.2f "
-        "alt_loss_m=%.0f alpha_p95_deg=%.2f windmill_ticks=%d crashed=%d\n",
+        "alt_loss_m=%.0f alpha_p95_deg=%.2f windmill_ticks=%d crashed=%d\n"
+        "LATHOLD DIP V=%.0f offset=%.0f start_elev=%.2f depth_deg=%.2f "
+        "t_min_s=%.2f accrual_roll=%.2f accrual_knife=%.2f (knife c<%.2f)\n",
         V, offset_deg, t_capture_s, min_nose_elev, start_alt - min_alt,
-        alpha_p95, windmill_ticks, crashed);
+        alpha_p95, windmill_ticks, crashed, V, offset_deg, start_elev,
+        start_elev - min_nose_elev, (min_elev_tick + 1) * dt, acc_roll,
+        acc_knife, kDipKnifeBand);
     return crashed ? 1 : 0;
 }
 

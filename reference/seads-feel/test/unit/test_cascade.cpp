@@ -2740,6 +2740,48 @@ double holdline_blend(double err, const control::ControllerParams& cp) {
     return t * t * (3.0 - 2.0 * t);
 }
 
+// Config-recomputed oracle for the S-straightline axis-correction pitch FF
+// (docs/straightline_thread.md): blend * fwd_gate * knife_fade * knob *
+// (-emitted_yaw * sin(phi) / max(cosPhiTheta, 1e-6)). The emitted yaw at the
+// FF's read point is recovered from telemetry as omega_des.y minus the
+// curvature-ff body component (telem.omega_des is omega_des_total; on a
+// STATIC aim the later aim_ff restructure is an exact identity, so the final
+// pointing yaw == the read-point yaw). Every gate is recomputed from config +
+// the shared extract -- the H1 oracle-side mirror, never the internal.
+double straightline_ff_oracle(const control::Output& o, const sim::SimState& s,
+                              const glm::dvec3& aim,
+                              const sim::AircraftParams& ap,
+                              const control::ControllerParams& cp) {
+    if (cp.line_hold_ff <= 0.0) return 0.0;
+    const control::Extracted& e = o.telem.extracted;
+    if (e.cos_phi_theta <= 0.0) return 0.0;
+    const glm::dvec3 ff_w =
+        glm::cross(e.local_up, s.velocity) / glm::length(s.position);
+    const glm::dvec3 ff_b = sim::body_dir_of(s.orientation, ff_w);
+    const double yaw_emit = o.telem.omega_des.y - ff_b.y;
+    const double tk = std::clamp(e.cos_phi_theta / 0.2, 0.0, 1.0);
+    const double knife = tk * tk * (3.0 - 2.0 * tk);
+    const glm::dvec3 tb = sim::body_dir_of(s.orientation, glm::normalize(aim));
+    const double tz = std::clamp((tb.z - 0.85) / 0.10, 0.0, 1.0);
+    const double fwd = 1.0 - tz * tz * (3.0 - 2.0 * tz);
+    const double blend = holdline_blend(o.telem.e, cp);
+    // The parasitic discriminator (mirrors controller.cpp): only the yaw's
+    // vertical motion AWAY from the aim's elevation line is cancelled.
+    const double yv = yaw_emit * std::sin(e.phi);
+    const glm::dvec3 nose = s.orientation * glm::dvec3{0.0, 0.0, -1.0};
+    const double sag =
+        glm::dot(glm::normalize(aim), e.local_up) - glm::dot(nose, e.local_up);
+    const double band = 0.087;
+    const double td = std::clamp((sag + band) / band, 0.0, 1.0);
+    const double w_dn = td * td * (3.0 - 2.0 * td);
+    const double tu = std::clamp(sag / band, 0.0, 1.0);
+    const double w_up = 1.0 - tu * tu * (3.0 - 2.0 * tu);
+    const double parasitic =
+        w_dn * std::min(yv, 0.0) + w_up * std::max(yv, 0.0);
+    return blend * fwd * knife * cp.line_hold_ff *
+           (-parasitic / std::max(e.cos_phi_theta, 1e-6));
+}
+
 // Config-recomputed oracle for w_push (H1: seek_law's exact three-branch
 // shape, private to controller.cpp's anonymous namespace, replicated here --
 // the rung-C2d bound the mechanism applies to the servo). elev = demand.x
@@ -2773,9 +2815,18 @@ double holdline_w_push_oracle(const sim::SimState& s, const glm::dvec3& aim,
 // this kills: the servo deleted / the sag>0 gate wired to always false.
 TEST_CASE("S-holdline: the sag servo fires deep below the aim's line") {
     REQUIRE(kCp.pull_floor > 0.0);  // premise: the shipped dial is live
+    // S-straightline note: this DEEP fixture (bank 70, err 85) drives the
+    // axis-correction FF into the G-ceiling at the shipped table, so the
+    // servo's identity is unobservable there (clamp-owned — pinned by the
+    // S-straightline envelope leg). Every leg here runs SELF-DISARMED at
+    // line_hold_ff = 0 (the capture-file self-arm precedent); the composed
+    // servo + FF shipped path is pinned by the S-straightline additivity
+    // leg below on an unclamped fixture.
+    control::ControllerParams cp_base = kCp;
+    cp_base.line_hold_ff = 0.0;
     const glm::dvec3 up{1.0, 0.0, 0.0}, heading{0.0, 0.0, -1.0};
-    const control::Output on = holdline_step(25.0, 70.0, kCp);
-    control::ControllerParams cp_off = kCp;
+    const control::Output on = holdline_step(25.0, 70.0, cp_base);
+    control::ControllerParams cp_off = cp_base;
     cp_off.pull_floor = 0.0;  // the structural OFF arm
     const control::Output off = holdline_step(25.0, 70.0, cp_off);
 
@@ -2859,6 +2910,11 @@ TEST_CASE(
 // sqrt_law(sag,...) replaced by a constant full-scale demand (the
 // monotone-but-flat / no-separation failure).
 TEST_CASE("S-holdline: the sag servo is proportional, not bang-bang") {
+    // Self-disarmed at line_hold_ff = 0 (see TC1's S-straightline note): the
+    // sweep isolates the SERVO's proportionality; the FF's own shipped-table
+    // coverage lives in the S-straightline block.
+    control::ControllerParams cp_base = kCp;
+    cp_base.line_hold_ff = 0.0;
     const glm::dvec3 up{1.0, 0.0, 0.0}, heading{0.0, 0.0, -1.0};
     const double pd_fixed = 20.0;
     const double nose_elev0 =
@@ -2874,7 +2930,8 @@ TEST_CASE("S-holdline: the sag servo is proportional, not bang-bang") {
             glm::normalize(glm::angleAxis(rad(30.0), up) * heading);
         const glm::dvec3 aim =
             glm::normalize(std::cos(elev_rad) * h_az + std::sin(elev_rad) * up);
-        const control::Output on = holdline_step_aim(pd_fixed, 70.0, aim, kCp);
+        const control::Output on =
+            holdline_step_aim(pd_fixed, 70.0, aim, cp_base);
         REQUIRE(on.telem.regime == control::Regime::MANEUVER);
         REQUIRE(on.telem.e > kCp.blend_hi);  // blend == 1 throughout
         REQUIRE_FALSE(on.telem.push_mode);
@@ -3332,6 +3389,316 @@ TEST_CASE("roll_target_mix: blend == 1 is bit-untouched (flicks keep v10)") {
             CHECK(on.inputs.yaw == off.inputs.yaw);
             CHECK(on.inputs.roll == off.inputs.roll);
         }
+    }
+}
+
+// ============================ S-straightline ================================
+// The axis-correction pitch FF (docs/straightline_thread.md; the corrected
+// attribution — the dip is the CRAB's vertical component, not gravity):
+//   pitch += blend * fwd_gate * knife_fade * line_hold_ff *
+//            (-emitted_yaw * sin(e.phi) / max(cosPhiTheta, 1e-6))
+// Every leg here is a paired on-vs-off (line_hold_ff shipped vs 0.0) delta
+// against the config-recomputed straightline_ff_oracle above, with vacuity
+// tripwires (REQUIRE delta != 0 where a live sample is claimed — the
+// S-rollmix P1-1 saturation-vacuity lesson). The FF writes PITCH ONLY: the
+// quadrant leg also pins yaw/roll exactly equal across the arms.
+// MUTATION LEDGER (2026-07-30, all RUN, not read): sign flip / knife := 1 /
+// fwd_gate := 1 / blend := 1 / raw-ungated yaw read — all KILLED. Two
+// survivors PROVEN EQUIVALENT, not coverage holes: (a) sin(e.phi) ->
+// sin(phi_full) — unfold_bank is bit-exact identity at cos_phi_theta >= 0
+// (controller.h:119) and sin(pi - phi) == sin(phi) covers the inverted arm,
+// so a SINE consumer cannot distinguish them anywhere (the MB-lean fold trap
+// bites direction pairs, not sines); (b) the cos_phi_theta > 0 guard dropped
+// — knife_fade is exactly 0 for c <= 0 (smoothstep clamp) and max(c, 1e-6)
+// keeps the dead intermediate finite, so the guard is DEFENSIVE only.
+
+namespace {
+control::Output straightline_step(double pitch_down_deg, double bank_deg,
+                                  double az_deg,
+                                  const control::ControllerParams& cp,
+                                  double aoa_seed_rad = -1.0) {
+    const glm::dvec3 up{1.0, 0.0, 0.0}, heading{0.0, 0.0, -1.0};
+    const sim::SimState s =
+        holdline_fixture(pitch_down_deg, bank_deg, up, heading);
+    control::Input in;
+    // Positive az = aim rotated LEFT of the original heading about local_up.
+    in.target_dir_world =
+        glm::normalize(glm::angleAxis(rad(az_deg), up) * heading);
+    in.throttle = 0.7;
+    control::Internal ni = control::reset();
+    if (aoa_seed_rad >= 0.0) ni.aoa_filtered = aoa_seed_rad;
+    return control::step(s, in, ni, kAp, cp, kAp.sim_dt);
+}
+
+glm::dvec3 straightline_aim(double az_deg) {
+    const glm::dvec3 up{1.0, 0.0, 0.0}, heading{0.0, 0.0, -1.0};
+    return glm::normalize(glm::angleAxis(rad(az_deg), up) * heading);
+}
+}  // namespace
+
+// Sign quadrants + oracle equality, incl. the PITCHED companion (the MB-lean
+// P1-1 lesson: a zero-pitch fixture is structurally blind to an unfold_bank/
+// phi_full substitution for sin(e.phi) — pitch 20 below separates them).
+// Mutations this kills: FF sign flip (+yaw), sin(e.phi) -> sin(phi_full),
+// knob-gate dropped, FF wired to a raw (ungated) yaw read. The pitched
+// companion aims DIG-side (-30): a climb-side aim is parasitic-zeroed.
+TEST_CASE("S-straightline: on-vs-off delta equals the config oracle") {
+    REQUIRE(kCp.line_hold_ff > 0.0);  // premise: the shipped dial is live
+    control::ControllerParams cp_off = kCp;
+    cp_off.line_hold_ff = 0.0;  // the structural OFF arm
+
+    struct Case {
+        double pd, bank, az;
+    };
+    // {pitch_down, bank, azimuth}: all four (bank sign x yaw sign) quadrants
+    // at blend == 1, plus the pitched companion.
+    const Case cases[] = {{0.0, 40.0, 30.0},
+                          {0.0, 40.0, -30.0},
+                          {0.0, -40.0, 30.0},
+                          {0.0, -40.0, -30.0},
+                          {10.0, 40.0, -30.0}};
+    const glm::dvec3 up{1.0, 0.0, 0.0}, heading{0.0, 0.0, -1.0};
+    for (const Case& c : cases) {
+        CAPTURE(c.pd, c.bank, c.az);
+        const control::Output on = straightline_step(c.pd, c.bank, c.az, kCp);
+        const control::Output off =
+            straightline_step(c.pd, c.bank, c.az, cp_off);
+        const sim::SimState fixture =
+            holdline_fixture(c.pd, c.bank, up, heading);
+        REQUIRE(on.telem.blend == 1.0);  // premise: err > blend_hi
+        REQUIRE(on.telem.extracted.cos_phi_theta > 0.2);  // knife_fade == 1
+        REQUIRE_FALSE(on.telem.push_mode);
+        // The FF writes pitch ONLY — yaw/roll exactly equal across the arms
+        // (this equality is also what licenses the oracle's emitted-yaw
+        // recovery from the ON arm's telemetry).
+        CHECK(on.telem.omega_des.y == off.telem.omega_des.y);
+        CHECK(on.telem.omega_des.z == off.telem.omega_des.z);
+        const double delta = on.telem.omega_des.x - off.telem.omega_des.x;
+        const double oracle = straightline_ff_oracle(
+            on, fixture, straightline_aim(c.az), kAp, kCp);
+        REQUIRE(delta != 0.0);  // vacuity tripwire
+        CHECK(delta == Catch::Approx(oracle).margin(1e-9));
+    }
+}
+
+// Mid-band: blend strictly interior (the unsaturated-fixture rule) — the FF
+// rides the SAME blend the regime mix uses, and its yaw read is the
+// blend-composed EMITTED yaw (director condition 1). Mutation this kills:
+// the blend factor dropped, or the FF moved above the gated yaw add (a raw
+// pointing-yaw read changes the oracle's recovered value).
+TEST_CASE(
+    "S-straightline: mid-band delta matches the oracle (blend interior)") {
+    control::ControllerParams cp_off = kCp;
+    cp_off.line_hold_ff = 0.0;
+    const glm::dvec3 up{1.0, 0.0, 0.0}, heading{0.0, 0.0, -1.0};
+    const double az = 7.0;  // err ~7 deg: inside (blend_lo 5, blend_hi 9)
+    const control::Output on = straightline_step(0.0, 40.0, az, kCp);
+    const control::Output off = straightline_step(0.0, 40.0, az, cp_off);
+    REQUIRE(on.telem.blend > 0.0);
+    REQUIRE(on.telem.blend < 1.0);  // strictly interior
+    const sim::SimState fixture = holdline_fixture(0.0, 40.0, up, heading);
+    const double delta = on.telem.omega_des.x - off.telem.omega_des.x;
+    const double oracle =
+        straightline_ff_oracle(on, fixture, straightline_aim(az), kAp, kCp);
+    REQUIRE(delta != 0.0);
+    CHECK(delta == Catch::Approx(oracle).margin(1e-9));
+}
+
+// Exact zeros: FINE (blend == 0), astern (fwd_gate == 0), inverted
+// (cos_phi_theta < 0 — the outer guard). Delta must be EXACTLY 0.0 — the
+// knob-on arm is bit-identical where any gate is structurally closed.
+// Mutations this kills: blend factor dropped (fires at err < blend_lo),
+// fwd_gate dropped (fires astern), the cos_phi_theta > 0 guard dropped.
+TEST_CASE("S-straightline: FINE / astern / inverted are exact zeros") {
+    control::ControllerParams cp_off = kCp;
+    cp_off.line_hold_ff = 0.0;
+
+    SECTION("FINE: err below blend_lo") {
+        const control::Output on = straightline_step(0.0, 40.0, 4.0, kCp);
+        const control::Output off = straightline_step(0.0, 40.0, 4.0, cp_off);
+        REQUIRE(on.telem.blend == 0.0);
+        CHECK(on.telem.omega_des.x == off.telem.omega_des.x);
+    }
+    SECTION("astern: fwd_gate == 0 past the D4 edge") {
+        // ~165 deg behind: target_body.z > 0.95 (the TC5 geometry class).
+        const control::Output on = straightline_step(0.0, 40.0, 165.0, kCp);
+        const control::Output off =
+            straightline_step(0.0, 40.0, 165.0, cp_off);
+        const glm::dvec3 up{1.0, 0.0, 0.0}, heading{0.0, 0.0, -1.0};
+        const sim::SimState fixture = holdline_fixture(0.0, 40.0, up, heading);
+        REQUIRE(holdline_target_body(fixture, straightline_aim(165.0)).z >
+                0.95);
+        CHECK(on.telem.omega_des.x == off.telem.omega_des.x);
+    }
+    SECTION("inverted: cos_phi_theta < 0") {
+        const control::Output on = straightline_step(0.0, 120.0, 30.0, kCp);
+        const control::Output off =
+            straightline_step(0.0, 120.0, 30.0, cp_off);
+        REQUIRE(on.telem.extracted.cos_phi_theta < 0.0);
+        CHECK(on.telem.omega_des.x == off.telem.omega_des.x);
+    }
+}
+
+// Knife band strictly interior (the band-edge coverage rule): at bank 80 the
+// fade is in (0,1) and the delta still matches the oracle — a fade deleted
+// (:= 1) or hard-gated (:= 0) both separate here. Also pins the pole-safety
+// product: the fade shrinks the 1/cos growth to a finite, oracle-exact value.
+TEST_CASE("S-straightline: knife fade strictly interior at bank 80") {
+    control::ControllerParams cp_off = kCp;
+    cp_off.line_hold_ff = 0.0;
+    const glm::dvec3 up{1.0, 0.0, 0.0}, heading{0.0, 0.0, -1.0};
+    const control::Output on = straightline_step(0.0, 80.0, 30.0, kCp);
+    const control::Output off = straightline_step(0.0, 80.0, 30.0, cp_off);
+    const double c = on.telem.extracted.cos_phi_theta;
+    REQUIRE(c > 0.0);
+    REQUIRE(c < 0.2);  // strictly inside the knife band
+    const sim::SimState fixture = holdline_fixture(0.0, 80.0, up, heading);
+    const double delta = on.telem.omega_des.x - off.telem.omega_des.x;
+    const double oracle =
+        straightline_ff_oracle(on, fixture, straightline_aim(30.0), kAp, kCp);
+    REQUIRE(delta != 0.0);
+    CHECK(delta == Catch::Approx(oracle).margin(1e-9));
+}
+
+// The envelope is the hard wall (re-audit bound story): with aoa_filtered
+// seeded near aoa_max, the AoA pushback — not the FF formula — sets the
+// emitted pitch. Pins that the FF lands ABOVE the clamp sequence (an FF
+// added after the clamps would emit the unbounded formula value).
+TEST_CASE("S-straightline: the AoA pushback bounds the FF") {
+    const double seed = kCp.aoa_max - rad(1.0);  // 1 deg of margin left
+    const control::Output on = straightline_step(0.0, 60.0, -45.0, kCp, seed);
+    control::ControllerParams cp_off = kCp;
+    cp_off.line_hold_ff = 0.0;
+    const control::Output off =
+        straightline_step(0.0, 60.0, -45.0, cp_off, seed);
+    // The clamp value, from the ON arm's own filtered state (telemetry).
+    const double clamp_x = kCp.K_aoa * (kCp.aoa_max - on.telem.aoa_filtered);
+    // Premise (vacuity): the unclamped composition would exceed the clamp —
+    // the OFF arm plus the oracle FF sits above it.
+    const glm::dvec3 up{1.0, 0.0, 0.0}, heading{0.0, 0.0, -1.0};
+    const sim::SimState fixture = holdline_fixture(0.0, 60.0, up, heading);
+    const glm::dvec3 ff_w =
+        glm::cross(on.telem.extracted.local_up, fixture.velocity) /
+        glm::length(fixture.position);
+    const double ff_bx = sim::body_dir_of(fixture.orientation, ff_w).x;
+    const double oracle =
+        straightline_ff_oracle(on, fixture, straightline_aim(-45.0), kAp, kCp);
+    REQUIRE(off.telem.omega_des.x - ff_bx + oracle > clamp_x + 0.05);
+    // The emitted pitch (minus the post-clamp curvature ff) pins the clamp.
+    CHECK(on.telem.omega_des.x - ff_bx ==
+          Catch::Approx(clamp_x).margin(1e-9));
+}
+
+// The composition rule, leg (i) (the gate-fate ruling's condition): in
+// equilibrium — zero sag — the sag servo is NATURALLY silent while the FF is
+// live: the pull_floor on/off twins are bit-identical at shipped
+// line_hold_ff, and the FF's own on/off delta is nonzero at the same state.
+// (Leg (ii), developed sag, is the ADDITIVITY leg below.)
+TEST_CASE("S-straightline: zero sag means servo silent, FF live (no double-pay)") {
+    // holdline_step's aim (elevation 0) with pitch_down = 0: the nose sits
+    // at/above the aim's elevation line — the zero-sag equilibrium shape.
+    const glm::dvec3 up{1.0, 0.0, 0.0}, heading{0.0, 0.0, -1.0};
+    const control::Output ff_servo = straightline_step(0.0, 50.0, 30.0, kCp);
+    control::ControllerParams cp_noservo = kCp;
+    cp_noservo.pull_floor = 0.0;
+    const control::Output ff_only =
+        straightline_step(0.0, 50.0, 30.0, cp_noservo);
+    // Premise: genuinely zero sag at this fixture (nose at/above the aim's
+    // elevation line).
+    const sim::SimState fixture = holdline_fixture(0.0, 50.0, up, heading);
+    const glm::dvec3 nose = fixture.orientation * glm::dvec3{0.0, 0.0, -1.0};
+    REQUIRE(glm::dot(nose, sim::local_up(fixture.position)) >= 0.0);
+    CHECK(ff_servo.telem.omega_des.x == ff_only.telem.omega_des.x);
+    CHECK(ff_servo.telem.omega_des.y == ff_only.telem.omega_des.y);
+    CHECK(ff_servo.telem.omega_des.z == ff_only.telem.omega_des.z);
+    // ...while the FF itself is live here (not a two-dead-arms tautology).
+    control::ControllerParams cp_off = kCp;
+    cp_off.line_hold_ff = 0.0;
+    const control::Output off = straightline_step(0.0, 50.0, 30.0, cp_off);
+    REQUIRE(ff_servo.telem.omega_des.x != off.telem.omega_des.x);
+}
+
+// The composition rule, leg (ii) — DEVELOPED sag, additivity (the no-double-
+// pay pin): pitch composes as max(legacy, servo) + FF, so with four arms
+// A (both), B (FF only), C (servo only), D (neither): A - B == C - D — the
+// servo's raise is FF-independent, EXACTLY. STRUCTURAL NOTE (found by this
+// leg's own premise sweep): the two terms' statically-live regions
+// ANTI-CORRELATE — the servo is visible only where the align gate has faded
+// (bank away from the aim), where the pointing yaw CLIMBS toward the
+// above-line aim and the parasitic law correctly zeroes the FF; where the
+// yaw digs (bank toward the aim) the align gate is open and legacy masks
+// the servo. The overlap is DYNAMIC (the flick itself: sag develops while
+// the yaw digs) — the pilot-rate-coupled class no static rig represents;
+// the lathold closures + Chad's tape are the dynamic evidence. The FF's
+// servo-independence is pinned by the zero-sag leg (i) above and by every
+// delta-oracle leg (all at servo-inert fixtures).
+TEST_CASE("S-straightline: developed sag composes additively (no double-pay)") {
+    control::ControllerParams cpA = kCp;  // both dials live (shipped)
+    control::ControllerParams cpB = kCp;  // FF only
+    cpB.pull_floor = 0.0;
+    control::ControllerParams cpC = kCp;  // servo only
+    cpC.line_hold_ff = 0.0;
+    control::ControllerParams cpD = kCp;  // neither
+    cpD.pull_floor = 0.0;
+    cpD.line_hold_ff = 0.0;
+    const control::Output A = straightline_step(22.0, 65.0, -8.0, cpA);
+    const control::Output B = straightline_step(22.0, 65.0, -8.0, cpB);
+    const control::Output C = straightline_step(22.0, 65.0, -8.0, cpC);
+    const control::Output D = straightline_step(22.0, 65.0, -8.0, cpD);
+    // Premises: the servo is live (vacuity tripwire) and the clamps slack.
+    REQUIRE(C.telem.omega_des.x != D.telem.omega_des.x);  // servo live
+    REQUIRE(std::abs(A.telem.omega_des.x) < 1.5);         // far from w_max
+    // At this geometry the pointing yaw CLIMBS toward the above-line aim —
+    // the parasitic law zeroes the FF (the elevated-aim pin: the v2
+    // all-component cancel drove exactly this class into the -G floor).
+    CHECK(B.telem.omega_des.x == D.telem.omega_des.x);
+    CHECK(A.telem.omega_des.x - B.telem.omega_des.x ==
+          Catch::Approx(C.telem.omega_des.x - D.telem.omega_des.x)
+              .margin(1e-12));
+}
+
+// The parasitic discriminator's own legs: (a) digging away from an
+// above-the-line aim is cancelled at ANY sag >= 0 (w_dn == 1 far past the
+// band — the flick's whole descent); (b) the w_up band interior — a slightly
+// above-the-line aim with a CLIMBING yaw is partially cancelled (band
+// strictly interior, the reversal-kink region), against the oracle.
+// Mutations these kill: w_dn/w_up bands swapped or widened, min/max
+// swapped, the parasitic split replaced by the v2 all-component cancel.
+TEST_CASE("S-straightline: parasitic discriminator (dig vs climb)") {
+    control::ControllerParams cp_off = kCp;
+    cp_off.line_hold_ff = 0.0;
+    const glm::dvec3 up{1.0, 0.0, 0.0}, heading{0.0, 0.0, -1.0};
+
+    SECTION("digging toward the bank side, aim well above: full cancel") {
+        const control::Output on = straightline_step(10.0, 40.0, -20.0, kCp);
+        const control::Output off =
+            straightline_step(10.0, 40.0, -20.0, cp_off);
+        const sim::SimState fixture =
+            holdline_fixture(10.0, 40.0, up, heading);
+        const double delta = on.telem.omega_des.x - off.telem.omega_des.x;
+        const double oracle = straightline_ff_oracle(
+            on, fixture, straightline_aim(-20.0), kAp, kCp);
+        REQUIRE(delta != 0.0);  // the dig-cancel is live at sag ~ sin(10)
+        CHECK(delta == Catch::Approx(oracle).margin(1e-9));
+    }
+    SECTION("w_up band interior: climbing yaw, aim slightly above the line") {
+        const control::Output on = straightline_step(2.5, 40.0, 30.0, kCp);
+        const control::Output off =
+            straightline_step(2.5, 40.0, 30.0, cp_off);
+        const sim::SimState fixture =
+            holdline_fixture(2.5, 40.0, up, heading);
+        // Premise: sag strictly inside (0, band) — w_up strictly interior.
+        const glm::dvec3 nose =
+            fixture.orientation * glm::dvec3{0.0, 0.0, -1.0};
+        const double sag =
+            0.0 - glm::dot(nose, sim::local_up(fixture.position));
+        REQUIRE(sag > 0.0);
+        REQUIRE(sag < 0.087);
+        const double delta = on.telem.omega_des.x - off.telem.omega_des.x;
+        const double oracle = straightline_ff_oracle(
+            on, fixture, straightline_aim(30.0), kAp, kCp);
+        REQUIRE(delta != 0.0);  // partial cancel — strictly interior
+        CHECK(delta == Catch::Approx(oracle).margin(1e-9));
     }
 }
 

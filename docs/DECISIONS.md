@@ -11,17 +11,20 @@ Standing decisions for the flight kernel. Each entry: date, decision, why, statu
 flies kernel v5, gate 797/797, first landing ever put down, Golden Felt Flight #1 flown on
 that build. The old "feel branch diverges from a v4 main" danger no longer exists.
 
-**Current resting state (2026-07-30 night):** the feel branch is **sealed as
-`flight-kernel-v11-2026-07-30` @ `0602d8292`** (docs tip `9b62a7d79`, gate 395/395, tag +
-branch pushed, tag verified by this agent). Seal lineage: v6 `cfe1bd7fe` → v7 `51eb5b9e3`
-→ v8 `ae7ae8f23` (pre-fly, never snapshotted) → v9 `29787debc` (camera arc closed) → v10
-`f86ee7b9f` (buttery cascade) → **v11 (S-rollmix: the 5–10° slam closed + the blend
-instrument + P-helm)**. Grafted to recon `01b28231a` (905/905), build-play re-stamped.
-The watch discipline stays — a session may move the branch past v11 at any time:
+**Current resting state (2026-07-30 late night):** the feel branch is **sealed as
+`flight-kernel-v12-2026-07-30` @ `e362df289`** (gate 404/404, tag + branch pushed,
+verified — NOTE: v12's tag is LIGHTWEIGHT, a convention deviation from v6–v11's
+annotated tags, noted in VERSIONS). Seal lineage: v6 `cfe1bd7fe` → v7 `51eb5b9e3` → v8
+`ae7ae8f23` (pre-fly, never snapshotted) → v9 `29787debc` (camera arc closed) → v10
+`f86ee7b9f` (buttery cascade) → v11 `0602d8292` (S-rollmix + blend instrument + P-helm)
+→ **v12 (S-straightline: the tracer-line dip closed; "the baseline for a quality flight
+kernel")**. Grafted to recon `2116f6ea3` (914/914), build-play re-stamped. **Golden #5
+ordered, not yet flown.** The watch discipline stays — a session may move the branch
+past v12 at any time:
 
-- `reference/seads-feel/` is snapshotted at **`0602d8292` = the v11 seal (2026-07-30
-  night)**, no purity exceptions. If the live tip has moved past that, the live tree is
-  ground truth again until the next re-snapshot.
+- `reference/seads-feel/` is snapshotted at **`e362df289` = the v12 seal (2026-07-30
+  late night)**, no purity exceptions. If the live tip has moved past that, the live
+  tree is ground truth again until the next re-snapshot.
 - **Every future session must check the branch state first** (read-only `git -C
   D:\flight_sim2\seads-feel log --oneline` / `git status` — never write there) before
   treating any dial value, snapshot, or cascade Code section as current. The branch has

@@ -228,6 +228,20 @@ struct ControllerParams {
     // err ~ 5 deg) collapses. 0 = the structural bit-identical legacy
     // two-target blend (the fly kill-switch); 1 = the full mix.
     double roll_target_mix = 0.0;
+    // S-straightline (2026-07-30, docs/straightline_thread.md — Chad's spec:
+    // "the elevator increase should smoothly coorelate to banking increase"):
+    // AXIS-CORRECTION pitch FEEDFORWARD. The attributed dip mechanism is the
+    // crab's vertical component (yaw about the BANKED body-up digs the nose
+    // at sin(phi) of the sweep); the FF cancels the emitted yaw's PARASITIC
+    // vertical share — motion AWAY from the aim's elevation line only:
+    // w_axis = -(w_dn*min(yv,0) + w_up*max(yv,0))/cosPhiTheta with
+    // yv = emitted_yaw*sin(e.phi) (the MB-lean frame-true pair) and one-
+    // sided sag-band fades w_dn/w_up — gated blend * fwd_gate * knife_fade,
+    // keyed on the EMITTED yaw (never a faded/blended-away demand). The sag servo above stays as the
+    // residual-error backstop (feedback-plus-feedforward). Scales the FF:
+    // 1.0 = the exact kinematic complement, 0.0 = STRUCTURAL OFF
+    // (bit-identical v11 tree — the fly kill-switch and golden baseline arm).
+    double line_hold_ff = 0.0;  // [frac of the axis correction], 0 = off
 
     // Push-vs-roll gate (SPEC §9.3, S7-push), every leg hysteretic. Decided on
     // GEOMETRY (target fore/aft), not the -G budget: push (nose down) while the

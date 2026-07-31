@@ -155,6 +155,9 @@ control::ControllerParams load_controller_toml(const std::string& path,
     // Blend-band roll target continuity: dimensionless mix weight, never
     // rad()'d.
     c.roll_target_mix = require(root, "regime", "roll_target_mix");
+    // S-straightline: dimensionless fraction of the coordinated pull, never
+    // rad()'d.
+    c.line_hold_ff = require(root, "regime", "line_hold_ff");
 
     c.push_gate_bank = rad(require(root, "push_gate", "bank_hi"));
     c.push_gate_bank_lo = rad(require(root, "push_gate", "bank_lo"));
@@ -405,6 +408,10 @@ control::ControllerParams load_controller_toml(const std::string& path,
     // K_theta line-hold, above the spec).
     check(c.pull_floor >= 0.0 && c.pull_floor <= 1.0,
           "0 <= pull_floor <= 1 (0 disarms the S-holdline sag servo)");
+    // S-straightline: [0,2] — 1.0 is the exact coordinated pull; headroom to
+    // 2 for a deliberate over-coordination fly, never unbounded.
+    check(c.line_hold_ff >= 0.0 && c.line_hold_ff <= 2.0,
+          "0 <= line_hold_ff <= 2 (0 disarms the S-straightline pitch FF)");
     check(c.wings_level_band > 0.0 && c.wings_level_band < 1.0,
           "0 < wings_level_band < 1 (fade band around the 90 deg knife-edge)");
     check(c.push_gate_bank > c.push_gate_bank_lo && c.push_gate_bank_lo > 0.0,

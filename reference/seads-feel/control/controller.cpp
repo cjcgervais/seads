@@ -799,6 +799,112 @@ Output step(const sim::SimState& s, const Input& in, const Internal& internal,
                 yaw += ((1.0 - blend) + blend * yaw_gate) *
                        sqrt_law(demand.y, cp.K_theta * cp.yaw_scale, aB_yaw,
                                 cp.yaw_max);
+                // S-straightline (2026-07-30, docs/straightline_thread.md —
+                // Chad's spec: "the elevator increase should smoothly
+                // coorelate to banking increase... The line that my tracers
+                // draw should be straight"). AXIS-CORRECTION pitch
+                // FEEDFORWARD: the ATTRIBUTED dip mechanism (lathold DIP
+                // instrument, commit 1) is the CRAB's vertical component —
+                // the rudder sweeps the nose toward a lateral aim about the
+                // BANKED body-up axis, so sin(phi) of that sweep points at
+                // the ground (~20 deg/s of nose-drop at 50 deg bank; gravity
+                // sag is ~2-4% of the measured dip and stays the sag servo's
+                // job). The exact nose-elevation kinematics use the SAME
+                // frame-true pair as MB-lean's lateral axis (exact at every
+                // attitude, no unfold):
+                //     d(elev)/dt = pitch*cosPhiTheta + yaw*sin(e.phi)
+                // so the pitch that makes the pointing sweep happen about
+                // LOCAL UP (a horizontal, straight-tracer sweep) instead of
+                // the banked body axis is w_axis = -yaw*sin(phi)/cosPhiTheta.
+                // SIGNED: it also kills the upward kink when a reversal yaw
+                // RAISES the nose. It cancels ONLY the yaw channel's
+                // PARASITIC vertical component — the part moving the nose
+                // AWAY from the aim's elevation line: with yv = yaw*sin(phi)
+                // and sag = aim_elev - nose_elev, digging (yv < 0) is
+                // parasitic when the aim is at/above the line (sag >= 0),
+                // climbing (yv > 0) is parasitic when the aim is at/below it
+                // (sag <= 0); each side fades over a +/-kLineParaBand of sag
+                // (continuous — at the line BOTH cancel fully, the flick and
+                // the reversal kink; past the band the yaw's motion TOWARD
+                // the aim is the pointing arc itself and is never fought —
+                // the additivity premise sweep caught the v2 all-component
+                // cancel driving an elevated-aim-while-banked geometry into
+                // the -G floor, an uncommanded push). A commanded climb/dive
+                // flows through the pitch channel untouched. SCOPE: an
+                // in-plane split-S carries
+                // only a small transient demand.y mid-roll (yaw_gate faded
+                // to yaw_min_frac there — integrated FF < ~1-2 deg, AT-15
+                // re-stated as a bound); the PUSH branch has no complement
+                // at all (a push-wedge down-and-lateral crab keeps its kink
+                // — push is a commanded deep dive, the straight-tracer
+                // contract does not bind there; re-audit P2-3).
+                // KEYED ON THE EMITTED YAW (director condition 1): read
+                // AFTER the yaw_gate/blend-composed pointing add above, so a
+                // yaw the kernel is NOT commanding (faded past knife-edge,
+                // FINE-blended) is never phantom-cancelled. The (parked,
+                // carry=0) S-rimshot CARRY/RETURN overwrite below replaces
+                // pitch wholesale, FF included — the event owns the demand,
+                // same as S-aimff. Curvature ff (added outside the clamps)
+                // is deliberately NOT cancelled — it is the sphere's frame
+                // rotation, never a crab. S-aimff's LATER yaw add is ALSO
+                // deliberately not cancelled (re-audit P2-1): aim_ff feeds a
+                // matched pitch+yaw PAIR whose elevation effect is the
+                // COMMANDED aim motion, not a crab — cancelling its yaw half
+                // would double-count against its own pitch half. (Known
+                // pre-existing residual: at the yaw_max clamp corner the
+                // pair truncates asymmetrically — an aim_ff artifact this FF
+                // neither causes nor fixes.)
+                // BOUND STORY (director condition 2 — its own, not the dead
+                // gravity rationale's): the term is demand-COUPLED but
+                // structurally self-bounded — it can never exceed
+                // |emitted yaw| * sin(phi)/cosPhiTheta, knife_fade caps the
+                // 1/cosPhiTheta growth (product -> 0 continuously at the
+                // knife-edge; past it the elevator's elevation authority has
+                // collapsed anyway — the documented-known-limit top-rudder
+                // window), and the AoA pushback downstream is the hard wall
+                // (w_max_pitch never binds at n_max 32): full cancellation
+                // on a hard flick IS a high-G level pull — the honest
+                // real-airplane entry, a HEADLINE fly-card row. NOT capped
+                // by w_push: on a pure lateral flick demand.x ~ 0 so
+                // w_push ~ 0 — exactly where the crab digs hardest.
+                // Multiplicative continuous gates only (the C2c scar; no
+                // latch, no floor): blend (MANEUVER limb — FINE/goldens'
+                // FINE segments/capture legs bit-untouched, honest additive
+                // fade to 0 at the boundary), fwd_gate (shared D4 edges —
+                // cedes the true-astern window to the elev-sign latch's
+                // deliberate pull-through), knife_fade. The sag servo above
+                // stays the residual-error backstop: feedback-plus-
+                // feedforward, no double-pay (the servo is zero at zero sag;
+                // with the sweep held level, sag never develops).
+                // line_hold_ff = 0.0 is the STRUCTURAL OFF arm
+                // (bit-identical v11 tree — fly kill-switch and golden
+                // baseline arm).
+                if (cp.line_hold_ff > 0.0 && e.cos_phi_theta > 0.0) {
+                    // Instrument mirror: harness_main.cpp kDipKnifeBand.
+                    constexpr double kLineKnifeBand = 0.2;  // [cos units]
+                    // Parasitic-blend band, dot units (~5 deg of elevation;
+                    // the audit P1-2 derivation: wide enough to clear
+                    // plant-lag chop at the line, narrow enough that a
+                    // 10-deg-past-the-line commanded arc is never fought).
+                    constexpr double kLineParaBand = 0.087;  // [dot units]
+                    const double knife_fade =
+                        smoothstep(0.0, kLineKnifeBand, e.cos_phi_theta);
+                    const double fwd_gate_ff =
+                        1.0 - smoothstep(0.85, 0.95, target_body.z);
+                    const double yv = yaw * std::sin(e.phi);
+                    const double sag_now =
+                        aim_elev - glm::dot(e.nose, e.local_up);
+                    const double w_dn =
+                        smoothstep(-kLineParaBand, 0.0, sag_now);
+                    const double w_up =
+                        1.0 - smoothstep(0.0, kLineParaBand, sag_now);
+                    const double parasitic = w_dn * std::min(yv, 0.0) +
+                                             w_up * std::max(yv, 0.0);
+                    const double w_axis =
+                        -parasitic / std::max(e.cos_phi_theta, 1e-6);
+                    pitch += blend * fwd_gate_ff * knife_fade *
+                             cp.line_hold_ff * w_axis;
+                }
                 // Skid within the bank (S7-yaw2): the turn keeps its full
                 // high-G bank-to-turn roll (Chad ruled OUT capping the bank —
                 // flat turns were too low-G). The added skid comes purely from
