@@ -22,7 +22,7 @@ You two hand off through Chad, and through `docs/*_handoff.md` files in the live
 | repo | branch | tip | note |
 |---|---|---|---|
 | `mandalark-kernel` | `main` | see git | pushed, clean |
-| `seads-feel` | `feel/kernel-v5` | `cdfa7b0b4` | pushed. **Seal `flight-kernel-v10-2026-07-30` @ `f86ee7b9f` (tag verified); tip is docs-only past the seal (Golden-#4 flown ledger + horizon-gate re-status + tapes 17/18 indexed) — reference snapshot still valid** |
+| `seads-feel` | `feel/kernel-v5` | `39aa52a48` | **UNPUSHED (ahead 6)**. Seal `flight-kernel-v10-2026-07-30` @ `f86ee7b9f` stands; tip carries **S-ROLLMIX (mechanism code, AWAITING CHAD'S FLY)** — `[regime] roll_target_mix` (0.0 = bit-identical v10), telem.blend/held_bank + recorder v2, controller golden deliberately re-recorded, gate 395/395. **Reference snapshot is now BEHIND the live tree's code** — live tree is ground truth until the next flown seal + re-snapshot |
 | `seads-recon` | `sandbox/kernel-v5-reconcile` | see git | **graft of the sealed v10 state was in flight 2026-07-30** — verify before treating recon as flying the committed seal (it flew the byte-matched logged flip before that) |
 
 Kernel seals: v5 → v6 (`cfe1bd7fe`) → v7 (`51eb5b9e3`) → v8 (`ae7ae8f23`, pre-fly,
@@ -103,8 +103,13 @@ for:** recorder.h's fnv1a uses VARIANT constants (offset `1469598103934665603`, 
 trusting a STOP (this session's first recompute mismatched everything and was correctly
 diagnosed as implementation error, not tampering). File counter ≠ golden number
 (felt_flight_18 = Golden #4; felt_flight_17 set aside "no air", sig-verified, unpromoted,
-SHA in the VERDICT). **ONE active mechanism thread** in seads-feel plan mode: the
-5–10° blend-boundary roll slam. The horizon-gate thread is **PARKED-PENDING-RECURRENCE**
+SHA in the VERDICT). **ONE active mechanism thread**, now LANDED AS CODE AND AWAITING CHAD'S FLY: the
+5–10° blend-boundary roll slam → **S-rollmix** (`docs/rollmix_fly_card.md` in the live
+tree; consult 45f9737, audit e606070, both on this ledger; fly card cleared by this agent
+2026-07-30 — all three audit corrections verified in the live tree, recverify sig_ok=1 on
+all four canonical goldens recorded in commit 063b4d27d). Rejection disposition:
+revert-to-branch, never parked at zero. After approval: recon graft incl. recorder-v2
+port, then build-play re-stamp. The horizon-gate thread is **PARKED-PENDING-RECURRENCE**
 (live ledger `cdfa7b0b4`, mirrored in DECISIONS.md: the symptom did not reproduce on the
 sealed tape — do not design against it; #4's clean segment B is the ready-made A/B, and
 re-opened fix work should request a dedicated recording set).
