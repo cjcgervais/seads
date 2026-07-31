@@ -4,7 +4,14 @@ These files are **copies**, re-snapshotted **2026-07-30 (night)**, from
 `D:\flight_sim2\seads-feel`, branch **`feel/kernel-v5`**, seal commit **`0602d8292`** — the
 **`flight-kernel-v11-2026-07-30`** seal (annotated tag `20f14817c` verified to resolve to
 that commit; tag and branch pushed to origin, ls-remote confirmed). No purity exceptions
-this time — every file is from the seal commit exactly. This is a **FLOWN state**: Chad
+this time — every file is from the seal commit exactly. **Scope note (deliberate, stated
+at the v11 re-snapshot):** this snapshot is the COMPLETE tracked tree of the eight
+directories (`app config control docs input render sim test`) via `git archive` at the
+seal commit; previous snapshots were partial subsets. In particular the live tree's own
+`docs/` (its flight-log, DECISIONS byte-copy, vessel briefs, thread stubs) is now
+mirrored here — those are SNAPSHOT copies for reference; the authoritative versions of
+this repo's ledgers remain `D:\mandalark-kernel\docs\`, and the live tree remains ground
+truth for its own. This is a **FLOWN state**: Chad
 flew S-rollmix on the card build and approved it ("it definately feels smooth… buttery…
 there isnt rebounding") before ruling the seal.
 
