@@ -29,6 +29,43 @@ branch past v10 at any time:
 
 ---
 
+## 2026-07-30 (night) — STANDING INTENT: the mouse-helm comfort doctrine (Chad's words — quote, never paraphrase)
+
+**This is not a mechanism ruling — it is the stated PURPOSE the mechanism rulings serve,
+given by Chad the night the dip was ruled a flaw. It grades every future feel thread.
+Verbatim:**
+
+> "This ruling is available to me becasue I am being honest about how it feels. I wanted
+> to adjust to the character (and that might be an actual feature in another aviary game
+> such as an eagle flying game). But for what I learned about coordinated flying when I
+> was learning simflying is how to keep my aim steady depends on the flying I am doing.
+> So you be lining up my aim while trying to intuit a dip and rise as I am also moving
+> laterally is more to process. A smoothly controlled plane's nose will follow a straight
+> line to its target. Feeling comfortable at the mouse helm will be something I want to
+> offer my players so that they might better focus on situational awareness, strategy,
+> tactics and their required manouvers in realtion to the flying adversary. I want to be
+> undpedictable to them not myself. :)"
+
+**What this settles, permanently:**
+- **The flaw-vs-character test now has a stated purpose behind it:** kernel quirks tax
+  the pilot's attention budget, and that budget belongs to situational awareness,
+  strategy, tactics, and maneuvering against the adversary — never to compensating for
+  the plane. "Unpredictable to them, not myself" is the one-line form; use it.
+- **The straight tracer line is doctrine, not preference:** a smoothly controlled
+  plane's nose follows a straight line to its target. Deviations exist only when the
+  pilot commands them ("Curver are nice, but I can decide what and when").
+- **Character is a per-game (and per-vessel) design choice, not a kernel default** — his
+  own example: dip-and-rise might be a genuine FEATURE in an eagle-flight game. This is
+  the intent-level root of the A6M2 pattern (re-arming parked mechanisms as character
+  dials for other vessels): the KERNEL stays clean; character is added deliberately,
+  per aviary.
+- **Why the honesty discipline pays:** the ruling was "available" only because the felt
+  report was honest. The verbatim-words rule, the flown-table rule, and the
+  identify-from-data lessons all serve this — the ledger exists so intent like this can
+  be reached, stated, and kept.
+
+---
+
 ## 2026-07-30 (night, later) — RULING: THE DIP IS A FLAW. The 2026-07-06 roll-first spec is SUPERSEDED by Chad's own refined law: pull arrives WITH the bank, not after it
 
 **Chad's ruling, verbatim (this is the new thread's specification — quote it, never

@@ -128,6 +128,12 @@ re-opened fix work should request a dedicated recording set).
 
 ## 5. Standing decisions that are easy to get wrong
 
+- **The mouse-helm comfort doctrine (2026-07-30) is the intent behind every feel
+  ruling** — quote it from DECISIONS.md ("STANDING INTENT" entry), never paraphrase.
+  One-line form: *"I want to be unpredictable to them, not myself."* Kernel quirks tax
+  attention that belongs to the adversary; character is a per-game/per-vessel design
+  choice, never a kernel default.
+
 - **Never re-snapshot `reference/` at an unflown seal.** (This is why v8 was never
   snapshotted. v9 is a FLOWN seal — snapshotted 2026-07-29 night.)
 - **Goldens are append-only in practice.** Never re-derive, re-record or tidy one. Supersede,
