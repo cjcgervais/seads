@@ -111,14 +111,19 @@ seal entry.
 
 **S-straightline is DONE — v12 SEALED, grafted, build-play stamped.** COMS-1 truth-check
 SATISFIED on the stick; the rendering's wording approval is the one open COMS item.
-**PENDING NOW: GOLDEN #5** — Chad flies the grafted build-play exe (F9), first golden on
-recorder v2 (native telem_blend/held_bank pins + nose-elevation for the candidate
-dip-depth predicate). Sealing checklist additions: spawn-altitude check before promoting
-a take (felt_flight_17/felt_flight_3 class, two occurrences); note the tracer instrument
-on the card; identify the tape from its own data (file counter ≠ golden number). After
-#5: the board — vessel roster (A6M2 awaits the ×1.5-vs-×2 power ruling; brief inherits
-the capture-machine AND roll-first re-arm converses), Scarce Skies (recon carries the
-Phase-1 Environment* seam), and any new felt thread. The horizon-gate thread is **PARKED-PENDING-RECURRENCE**
+**GOLDEN #5: FLOWN AND SEALED 2026-07-30 late night** (`golden_5_*`, the v12-seal
+flight — see VERSIONS). felt_flight_20 promoted (identified from data; felt_flight_19 =
+thin-air false start, THIRD of its class, set aside sig-verified). Headline: the
+**straight-line predicate** debuts (max parasitic dip 0.58° vs v11's 2.23–8.31°, bound
+< 1.0°, aim-free U-recovery discriminator — instrument stated in TELEMETRY) and the
+first native blend/held_bank baselines are laid. ⚠ Two items for the seads-feel agent:
+(1) recon's `KERNEL_SEAL` string is stale (tape headers say v10 on a v12 build — third
+header-claim incident; refresh at next graft); (2) the v12 tag is lightweight —
+re-tag annotated at leisure if the convention is kept. **The board now:** COMS-1
+rendering wording (Chad's copy approval, at leisure); vessel roster (A6M2 awaits the
+×1.5-vs-×2 power ruling; brief inherits the capture-machine AND roll-first re-arm
+converses); Scarce Skies (recon carries the Phase-1 Environment* seam); any new felt
+thread on a felt report. The horizon-gate thread is **PARKED-PENDING-RECURRENCE**
 (live ledger `cdfa7b0b4`, mirrored in DECISIONS.md: the symptom did not reproduce on the
 sealed tape — do not design against it; #4's clean segment B is the ready-made A/B, and
 re-opened fix work should request a dedicated recording set).

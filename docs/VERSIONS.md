@@ -173,6 +173,25 @@ for one tag and no explanation.
 
 | **`flight-kernel-v12-2026-07-30`** | **`e362df289`** | **THE V12 SEAL — S-STRAIGHTLINE: the tracer-line dip closed by axis correction. Chad: "This is now the baseline for a quality flight kernel."** (His "this v11 is the standard" = the build in hand; ledgered numbering note.) One dial: `[regime] line_hold_ff = 1.0` (0.0 = bit-identical v11) — cancels only the crab's PARASITIC vertical component (emitted-yaw keyed, four continuous gates, AoA/G-envelope bounded). The thread's story is the discipline's showcase: the approved gravity-deficit shape was killed by its own commit-1 instrument at 2–4% measured closure BEFORE any fly (attribution: the crab digs the nose at sin(bank)·yaw); the corrected all-cancel v2 was then killed by a test leg's premise sweep (−G bunt on elevated aims) before the red-team. Closures 2.23/5.05/8.31° → 0.92/1.08/4.50° (60° residual = the honest G envelope, the fly card's headline G-bite row — approved). Gate 404/404 pre-registered exact. **COMS-1 truth-check CLEARED on the stick** — "your tracers go where you pointed them" is literally true (rendering wording approval still open). Known limits ledgered, not blessed: ~1.3° endgame droop, >75° top-rudder window, push-branch kink. Grafted to recon `2116f6ea3` (914/914 = pre-registered 905+9; Environment* seam adapt documented); build-play re-stamped. ⚠ Tag is LIGHTWEIGHT (v6–v11 were annotated) — noted, re-tag at leisure. **GOLDEN #5 ORDERED** — first golden with native telem_blend/held_bank pins; candidate dip-depth predicate from nose-elevation pins. |
 
+✅ **GOLDEN FELT FLIGHT #5 — FLOWN AND SEALED 2026-07-30 (late night)**, the v12-seal
+flight, same night as the seal. Mirrored into `goldens/` as
+`golden_5_v12_seal_flight.seadsrec` with `golden_5_TELEMETRY.md`, `golden_5_VERDICT.md`,
+`golden_5_telemetry.csv` (10 Hz, 558 rows). fnv1a recomputed and matched
+(`6046690173471929225`; implementation validated against sealed #4 first — this
+session's raw-bytes recompute tripped the documented LF-normalization clause, the
+procedure's second distinct catch). SHA-256 `2A9A01A1…67DCE9` verified source↔mirror.
+55.8 s, alt 298–881 m, V 230–285: **FIRST golden with native blend/held_bank pins**
+(recorder v2), and the debut of the **STRAIGHT-LINE PREDICATE** — committed near-level
+U-recovered entries: 5, max parasitic dip **0.58°** (vs the v11 baseline 2.23–8.31°;
+predicate bound < 1.0°, instrument stated in full). 4 inversion episodes (deepest
+−0.994, deliberate aerobatics), 1 steep-down entry (recovered), blend/dwell baselines
+laid (52.6/16.9/30.5% FINE/band/MANEUVER). Header `kernel=` string STALE (says v10;
+build stamp `g2116f6ea3` = the v12 graft is the truth — Golden-#3 class, correction in
+VERDICT). Identified from data over two candidates: `felt_flight_19` set aside as the
+thin-air false start (THIRD of its class; sig-verified, SHA in VERDICT, unpromoted).
+**#5 = fast/low/maneuver-dense straight-line** — #4 remains the butter golden (no
+deliberate butter segment on this tape; stated, not glossed). None supersedes another.
+
 ✅ **GOLDEN FELT FLIGHT #4 — FLOWN AND SEALED 2026-07-30**, the v10-seal flight, same day
 as the seal. Mirrored into `goldens/` as `golden_4_v10_seal_flight.seadsrec` with
 `golden_4_TELEMETRY.md`, `golden_4_VERDICT.md`, `golden_4_telemetry.csv` (10 Hz, 1,140
