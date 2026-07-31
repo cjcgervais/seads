@@ -1,0 +1,66 @@
+# SEADS — world.toml  (the WORLD/ART config; single source for every map threshold)
+#
+# House rule inherited from the flight kernel: NO BARE NUMBERS in render/ or world/.
+# Every constant the world layer would otherwise bake into code or a shader lives
+# here as tuning data (docs/world_build_plan.md §1, §5).
+#
+# SEPARATE namespace from aircraft.toml / controller.toml — the world build must
+# never read or write those two. R is NOT here: the planet radius is owned by the
+# sim and passed in by argument (params.R), single-source, never mirrored.
+#
+# Angles in DEGREES at this boundary only (converted to radians in the loader).
+# Distances in METERS. Grayscale/strength values are luminance fractions in [0,1].
+
+[sky]
+# Mercury-silver newsreel sky (docs/world_build_plan.md P1 step 1). NOT a flat
+# value: a minimal 2-stop zenith->horizon gradient the water mirrors (a flat sky
+# reflects a constant => no lake beacon). The full per-pixel glow is P4.
+silver              = 0.82      # base sky luminance
+gradient            = 0.25      # zenith->horizon 2-stop gradient strength
+
+[water]
+# Mirror-silver lakes (§2, §6 bold #0): analytic sky reflection, no render-to-texture.
+reflectivity        = 0.90      # mirror strength of the sky in calm water
+sparkle_sharpness   = 200.0     # specular pow() exponent for the sun sparkle
+min_lake_m          = 350.0     # authored lake floor (landmask ~46 m/texel; keep >300 m)
+
+[ground]
+relief_scale_m      = 600.0     # theatrical radial displacement at full-white heightfield
+field_scale_m       = 200.0     # farmland/bush patchwork cell (the known-size ruler)
+use_procedural      = 1         # A/B toggle: 0 = keep Earth DEM, 1 = procedural Sudbury
+
+[planet]
+# Cubesphere MESH build (render-only; the physics crash surface is the perfect R
+# sphere — SPEC 6). These moved out of render/draw.cpp constexprs into config so
+# no bare geometry number lives in render/ (docs/world_build_plan.md 1).
+subdiv              = 200       # verts per face edge (2..256; ushort index cap)
+u_offset            = 0.806     # longitude alignment of the map (fraction of 360)
+dem_blur_radius     = 3         # DEM softening; coupled to ground.relief_scale_m
+
+[tone]
+# The B&W newsreel tone curve, applied per-material in the world/prop shaders.
+# Chad's call: HIGH CONTRAST, MINIMAL GRAIN (crisp filmic, not a dust storm).
+contrast            = 1.35      # >1 steepens the value ladder
+lift                = 0.02      # small black lift so the ground stays a readable reference
+grain               = 0.02      # whisper of grain (near off; do NOT crush legibility)
+
+[horizon_cull]
+# Prop/chunk cull is altitude- AND prop-height-aware (§2). margin pads a feature
+# half-below the horizon so it still draws (the steeple-over-the-rim shot).
+margin_deg          = 3.0
+
+[scatter]
+seed                = 1337      # determinism anchor; hash INTEGER cell indices, never wall clock
+furniture_scale     = 5.0       # landmark structures at ~5x, GENERALIZED silhouettes (Chad)
+
+[perf]
+frame_budget_ms     = 8.0       # world render fits well under a 120 Hz sim frame
+max_draw_calls      = 24        # instanced batches; a hard ceiling
+
+# ---------------------------------------------------------------------------
+# FUTURE sections (defined when the phase that needs them lands; kept here as the
+# single source so no number is ever born in code):
+#   [teams]  the ONLY saturated entries in all of config — complementary duos
+#            (orange+blue, green+red, purple+yellow), picked per match. (P2)
+#   [landing][zone]  forward-compat data regions (Garson runway, capture caps). (P5)
+# ---------------------------------------------------------------------------

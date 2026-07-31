@@ -1,16 +1,41 @@
 # reference/seads-feel/ — PRIMARY reference: the active kernel
 
-These files are **copies**, re-snapshotted **2026-07-30**, from
-`D:\flight_sim2\seads-feel`, branch **`feel/kernel-v5`**, seal commit **`f86ee7b9f`** — the
-**`flight-kernel-v10-2026-07-30`** seal (tag verified to resolve to that commit; tag and
-branch pushed to origin). This is a **FLOWN state**: Chad flew these exact dial values in
-recon (as the logged FLIP-2 table, byte-matched to the committed kernel) and approved the
-buttery small-deflection feel on the stick before ruling the seal. One exception to
-seal-commit purity, stated deliberately: `docs/v10_fly_cards.md` is taken from the
-docs-only tip `2be93007c` (the seal-banner commit, one commit past the seal) because it
-carries the Golden Felt Flight #4 pre-registrations this repo's sealing checklist needs.
+These files are **copies**, re-snapshotted **2026-07-30 (night)**, from
+`D:\flight_sim2\seads-feel`, branch **`feel/kernel-v5`**, seal commit **`0602d8292`** — the
+**`flight-kernel-v11-2026-07-30`** seal (annotated tag `20f14817c` verified to resolve to
+that commit; tag and branch pushed to origin, ls-remote confirmed). No purity exceptions
+this time — every file is from the seal commit exactly. This is a **FLOWN state**: Chad
+flew S-rollmix on the card build and approved it ("it definately feels smooth… buttery…
+there isnt rebounding") before ruling the seal.
 
-**New since the v9 snapshot — the sealed v10 content (the buttery-cascade session):**
+**New since the v10 snapshot — the sealed v11 content (the S-rollmix session):**
+
+- **S-ROLLMIX** (flown, APPROVED — the 5–10° blend-boundary roll slam CLOSED): in the
+  blend band the MANEUVER roll limb chases `blend·commit + (1−blend)·live-lean-target`
+  (`control/controller.cpp`, the `roll_target_mix` block) — coverage-completion of
+  MB-lean; pitch/yaw already carried the same continuity treatment. Dial:
+  `[regime] roll_target_mix = 1.0`; **0.0 = bit-identical v10** (kill-switch AND the
+  Golden-#4 baseline arm for any horizon-gate recurrence A/B).
+- **THE INSTRUMENT** (jitter_attribution §6.5 pin #2, landed first by ruling):
+  `telem.blend` / `telem.held_bank` in `control/controller.h` Telemetry; recorder v2
+  trailing columns (`test/harness/recorder.h`) with v1 back-compat — all four canonical
+  sealed goldens in this repo sig-verify under the new reader (`seads_harness recverify`).
+- **SPEC First Principle 5 — P-helm** (`docs/`, the mouse-helm comfort doctrine, Chad
+  verbatim: "unpredictable to them, not myself"). Mirrored in this repo's DECISIONS.md
+  STANDING INTENT entry and KERNEL_COMS.md COMS-1.
+- **`docs/straightline_thread.md`** — the S-straightline stub (the flick dip, RULED A
+  FLAW: pull arrives WITH the bank, simultaneous arrival; measured baseline 2.2–8.3° sag;
+  COMS-1 stake pinned). The next mechanism thread; consult pending.
+- Controller golden deliberately re-recorded under the pre-stated procedure (knob-off arm
+  proved bit-identical first; first divergent tick 289, blend 0.9899).
+
+Gate at the v11 seal: **395/395** (count reconciliation on the fly card). Grafted to
+recon `01b28231a` same night (gate 905/905; recorder v2 ported through the TickHook seam,
+so recon F9 tapes now carry blend/held_bank natively); build-play re-stamped on sealed v11.
+
+**Previous snapshot (v10, `f86ee7b9f`) content — retained below for lineage (its one
+purity exception, `docs/v10_fly_cards.md` from docs tip `2be93007c`, is now moot — the
+v11 snapshot carries the whole docs tree at its own seal):**
 
 - **Rung 1** (flown, partial, KEPT): `lean_gain` 6.0 → 8.0 — earlier bank on turn entry.
 - **Rung F backport** (lineage heal): `side_cone_enter/exit` 27.5/32.5 → 37.5/42.5 — the

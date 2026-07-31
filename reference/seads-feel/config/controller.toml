@@ -593,6 +593,19 @@ pull_floor = 1.0      # [frac of the sag-servo demand] 1.0 = full line-hold
 # the ~90 deg knife-edge from chattering (CLAUDE.md "every gate hysteretic")
 # without touching real banked turns (which are MANEUVER, roll_hold ~ 0 anyway).
 wings_level_band = 0.05  # [cos units] ~ +/-2.9 deg of bank around vertical
+# Blend-band roll TARGET continuity (the 5-10 deg roll slam, 2026-07-30 —
+# jitter_attribution §A6 + the kernel-base consult: coverage-completion of
+# MB-lean; the pitch align / yaw_gate McRuer-transition treatment applied to
+# the roll limb's TARGET). Inside the band the maneuver roll chases the mix
+# blend*phi_commit + (1-blend)*lean_target instead of the raw 60-90 deg
+# bank_error commit, so the FINE and MANEUVER roll targets agree at the
+# boundary and the 5-deg full-aileron tug-of-war collapses. Flicks past
+# blend_hi are BIT-untouched (the guard is exact at blend == 1).
+# COUPLING (pre-registered): the in-band FINE anchor reuses [auto_level]
+# lean_gain/lean_max — a lean retune moves the in-band anchor too.
+# 0.0 = the STRUCTURAL bit-identical legacy two-target blend (the fly
+# kill-switch / the Golden-#4 baseline reconstruction arm).
+roll_target_mix = 1.0  # [0..1] mix weight; flown at 1.0 (Chad card pending)
 
 [push_gate]          # push-vs-roll (SPEC §9.3, S7-push); every leg hysteretic.
 # GEOMETRY-based (not the -G budget): push (nose down) while the below-nose aim

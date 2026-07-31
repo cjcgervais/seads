@@ -1,0 +1,49 @@
+# SEADS scenario — the target drone + (Stage 2) lead gunsight (SPEC §0
+# S8-drone). Tune data, loaded live like [ui]/[camera] so the bandit and the
+# gunsight tune WITHOUT a recompile. NOT a coefficient of the flight model —
+# nothing here can move the player's controller/plant golden.
+
+[drone]
+# A FLEET scattered over the world ("it's a big place"): drone 0 spawns ahead of
+# the player (the immediate target), the rest scatter evenly over the sphere.
+count = 10   # number of bandits
+size  = 4.0  # draw scale (cosmetic visibility — the plant is a point). Bigger
+             #   = readable from further; raise if they're still too small.
+# The flight PROGRAM (Chad 2026-07-07): a patrol, mostly LINEAR with periodic
+# course changes — fly a straight great-circle leg for `straight_time`, then hold
+# a gentle bank for `turn_time` (direction alternates so it weaves, not spirals),
+# repeat. Purely scheduled by the drone's tick age (deterministic). Set
+# turn_time = 0 (or turn_bank_deg = 0) for a pure straight great circle.
+straight_time = 8.0    # [s] straight-leg duration (bigger = more linear)
+turn_time     = 4.0    # [s] turn-leg duration (0 = never turn)
+# The dedicated autopilot HOLDS this bank during a turn leg, so the turn is
+# gentle and controllable: turn rate = g*tan(bank)/V (25 deg -> ~1.9 deg/s at
+# 140 m/s). Any bank works now (no bistability). Raise for a tighter turn.
+turn_bank_deg = 25.0   # [deg] bank angle held during a turn leg
+throttle      = 1.0    # [0,1] cruise power (holds speed / altitude)
+speed         = 140.0  # [m/s] spawn speed (player-class cruise)
+# Spawn placement, relative to the player spawn (ahead along its nose, beside
+# along its right wing, at the same altitude) so the bandit is visible on the
+# first flight.
+spawn_ahead = 1200.0   # [m] drone 0 ahead of the player spawn nose
+spawn_side  = 250.0    # [m] drone 0 lateral (right wing) of the player spawn
+spawn_alt   = 2000.0   # [m] AGL (matches the player spawn altitude)
+spread_m    = 3000.0   # [m] the rest of the fleet scatters within this arc-
+                       #   radius of the spawn AREA -> a VISIBLE cluster you fly
+                       #   into. Raise for a wider patrol (up to ~47000 = the far
+                       #   side); lower for a tight furball.
+
+[gunsight]
+# Lead-angle pipper (Chad: "calculate the lead angle for a hit"). A READ-ONLY
+# deflection solution — no shot is fired. The pipper marks where to point the
+# nose to hit the nearest bandit ahead; it turns green when the nose is on the
+# solution AND the bandit is within range.
+muzzle_speed  = 850.0  # [m/s] notional projectile speed (WWII cannon-class)
+hit_cone_deg  = 2.0    # [deg] nose-on-solution cone that counts as "on target"
+max_range     = 500.0  # [m] effective gun range (green only inside this)
+track_range   = 2000.0 # [m] engagement range: pipper shows + TOT% runs inside
+                       #   this. The TOT denominator only counts within max_range
+                       #   (a real shot), so the % means "in-gun-range on-target".
+track_cone_deg = 45.0  # [deg] engagement half-angle off the nose: a bandit
+                       #   further off boresight than this is not "engaged" (no
+                       #   pipper, no denominator) — it's not a shot you can take.

@@ -214,11 +214,20 @@ struct ControllerParams {
     // (continuous -- no floor-slingshot momentum). pull_floor scales the
     // servo demand: 1.0 = the full K_theta line-hold, 0.0 = the bit-
     // identical OFF arm (the fly fallback).
-    double pull_floor = 0.0;      // [frac of the sag-servo demand], 0 = off
+    double pull_floor = 0.0;  // [frac of the sag-servo demand], 0 = off
     // Wings-leveling fade band (S7-loop-invert): the wings-leveling roll fades
     // over smoothstep(-band, +band, cos_phi_theta) — 1 upright (bit-identical
     // golden), 0 inverted, smooth across the ~90 deg knife-edge (no chatter).
     double wings_level_band = 0.0;  // [cos units]
+    // Blend-band roll TARGET continuity (the 5-10 deg roll slam, 2026-07-30 —
+    // coverage-completion of MB-lean): inside the blend band the MANEUVER
+    // roll limb chases the mixed bank target blend*phi_commit +
+    // (1-blend)*lean_target instead of the raw bank_error commit, so the two
+    // roll limbs AGREE in target as blend -> 0 and the boundary tug-of-war
+    // (frozen ~30 deg lean vs 60-90 deg commit, full-aileron reversals at
+    // err ~ 5 deg) collapses. 0 = the structural bit-identical legacy
+    // two-target blend (the fly kill-switch); 1 = the full mix.
+    double roll_target_mix = 0.0;
 
     // Push-vs-roll gate (SPEC §9.3, S7-push), every leg hysteretic. Decided on
     // GEOMETRY (target fore/aft), not the -G budget: push (nose down) while the

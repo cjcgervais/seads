@@ -22,7 +22,8 @@ You two hand off through Chad, and through `docs/*_handoff.md` files in the live
 | repo | branch | tip | note |
 |---|---|---|---|
 | `mandalark-kernel` | `main` | see git | pushed, clean |
-| `seads-feel` | `feel/kernel-v5` | `39aa52a48` | pushed (pre-fly, by Chad's word). Seal `flight-kernel-v10-2026-07-30` @ `f86ee7b9f` stands; tip carries **S-ROLLMIX (mechanism code, AWAITING CHAD'S FLY)** — `[regime] roll_target_mix` (0.0 = bit-identical v10), telem.blend/held_bank + recorder v2, controller golden deliberately re-recorded, gate 395/395. **Reference snapshot is now BEHIND the live tree's code** — live tree is ground truth until the next flown seal + re-snapshot |
+| `seads-feel` | `feel/kernel-v5` | `9b62a7d79` | pushed. **Seal `flight-kernel-v11-2026-07-30` @ `0602d8292`** (S-rollmix flown-approved + blend instrument + P-helm; tag verified); tip is the docs-only seal banner. `reference/seads-feel/` re-snapshotted at the v11 seal, no purity exceptions |
+| `seads-recon` | (graft branch) | `01b28231a` | pushed. **Flies sealed v11** — gate 905/905, recorder v2 through the TickHook seam (F9 tapes now carry blend/held_bank natively), build-play re-stamped |
 | `seads-recon` | `sandbox/kernel-v5-reconcile` | see git | **graft of the sealed v10 state was in flight 2026-07-30** — verify before treating recon as flying the committed seal (it flew the byte-matched logged flip before that) |
 
 Kernel seals: v5 → v6 (`cfe1bd7fe`) → v7 (`51eb5b9e3`) → v8 (`ae7ae8f23`, pre-fly,
@@ -103,13 +104,18 @@ for:** recorder.h's fnv1a uses VARIANT constants (offset `1469598103934665603`, 
 trusting a STOP (this session's first recompute mismatched everything and was correctly
 diagnosed as implementation error, not tampering). File counter ≠ golden number
 (felt_flight_18 = Golden #4; felt_flight_17 set aside "no air", sig-verified, unpromoted,
-SHA in the VERDICT). **ONE active mechanism thread**, now LANDED AS CODE AND AWAITING CHAD'S FLY: the
-5–10° blend-boundary roll slam → **S-rollmix** (`docs/rollmix_fly_card.md` in the live
-tree; consult 45f9737, audit e606070, both on this ledger; fly card cleared by this agent
-2026-07-30 — all three audit corrections verified in the live tree, recverify sig_ok=1 on
-all four canonical goldens recorded in commit 063b4d27d). Rejection disposition:
-revert-to-branch, never parked at zero. After approval: recon graft incl. recorder-v2
-port, then build-play re-stamp. The horizon-gate thread is **PARKED-PENDING-RECURRENCE**
+SHA in the VERDICT). **S-rollmix is DONE** — flown ("smooth… buttery… there isnt rebounding"), **SEALED as
+v11** (`0602d8292`), grafted (recon 905/905), build-play re-stamped. Full pipeline on
+this ledger: consult 45f9737 → audit e606070 → card review → verdict → A/B closure →
+seal entry.
+
+**ONE active mechanism thread: S-straightline** (the flick dip, RULED A FLAW — Chad's
+simultaneous-arrival spec, verbatim in DECISIONS; measured baseline 2.2–8.3° sag; stub
+`docs/straightline_thread.md` in the live tree). Consult packet PENDING — expect five
+questions on the rung-C2 align_f floor scar tissue, the pre-July-6 "pushed up in a turn"
+failure verbatim, and whether MB-rud's crab satisfies the rudder-leads clause. COMS-1
+("Control is king", `docs/KERNEL_COMS.md`) is PENDING S-straightline by its own truth
+rule. Cannot be fixed by dial — `bank_align_power` down only interpolates climb↔dip. The horizon-gate thread is **PARKED-PENDING-RECURRENCE**
 (live ledger `cdfa7b0b4`, mirrored in DECISIONS.md: the symptom did not reproduce on the
 sealed tape — do not design against it; #4's clean segment B is the ready-made A/B, and
 re-opened fix work should request a dedicated recording set).

@@ -1,0 +1,12 @@
+﻿step: pitch +0.2 deg at V=140.0 m/s | 720 ticks (6.00 s), dt=0.00833333s
+  gains: K_w_pitch=150000  K_theta=3.20  I=9000 | ZOH K_w*dt/I=0.139 (ceil 0.50) | crit K_w/(4*I*K_theta)=1.30 (>=1)
+  OUTER (total pointing error t.e, AT-2 signal):
+    peak error   :   0.17 deg  (step = 0.2)
+    settle time  :  0.000 s   (|e| < 0.50 deg thereafter)
+    overshoot    :   0.01 deg  (error rebound past best approach)
+    reversals    :      1      (post-0.5s slope flips)
+    steady error :  0.059 deg  (mean |e|, last 0.5 s)
+  INNER (body rate, axis pitch):
+    peak |omega| :   0.51 deg/s
+    peak |des|   :   0.53 deg/s  (demand; saturates -> clamp)
+    rate overshoot:  0.00 deg/s (0.0% of demand)

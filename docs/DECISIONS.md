@@ -11,21 +11,48 @@ Standing decisions for the flight kernel. Each entry: date, decision, why, statu
 flies kernel v5, gate 797/797, first landing ever put down, Golden Felt Flight #1 flown on
 that build. The old "feel branch diverges from a v4 main" danger no longer exists.
 
-**Current resting state (2026-07-30):** the feel branch is **sealed as
-`flight-kernel-v10-2026-07-30` @ `f86ee7b9f`** (docs tip `2be93007c`, gate 391/391, tag +
-branch pushed). Seal lineage: v6 `cfe1bd7fe` → v7 `51eb5b9e3` → v8 `ae7ae8f23` (pre-fly,
-never snapshotted) → v9 `29787debc` (camera arc closed) → **v10 (the buttery-cascade
-session)**. The recon graft of the sealed state was in flight at the seal; Golden Felt
-Flight #4 waits on its green word. The watch discipline stays — a session may move the
-branch past v10 at any time:
+**Current resting state (2026-07-30 night):** the feel branch is **sealed as
+`flight-kernel-v11-2026-07-30` @ `0602d8292`** (docs tip `9b62a7d79`, gate 395/395, tag +
+branch pushed, tag verified by this agent). Seal lineage: v6 `cfe1bd7fe` → v7 `51eb5b9e3`
+→ v8 `ae7ae8f23` (pre-fly, never snapshotted) → v9 `29787debc` (camera arc closed) → v10
+`f86ee7b9f` (buttery cascade) → **v11 (S-rollmix: the 5–10° slam closed + the blend
+instrument + P-helm)**. Grafted to recon `01b28231a` (905/905), build-play re-stamped.
+The watch discipline stays — a session may move the branch past v11 at any time:
 
-- `reference/seads-feel/` is snapshotted at **`f86ee7b9f` = the v10 seal (2026-07-30)**
-  (plus `docs/v10_fly_cards.md` from the docs-only tip, stated in its README). If the live
-  tip has moved past that, the live tree is ground truth again until the next re-snapshot.
+- `reference/seads-feel/` is snapshotted at **`0602d8292` = the v11 seal (2026-07-30
+  night)**, no purity exceptions. If the live tip has moved past that, the live tree is
+  ground truth again until the next re-snapshot.
 - **Every future session must check the branch state first** (read-only `git -C
   D:\flight_sim2\seads-feel log --oneline` / `git status` — never write there) before
   treating any dial value, snapshot, or cascade Code section as current. The branch has
   been observed to move between two commands of the same session.
+
+---
+
+## 2026-07-30 (night) — v11 SEALED: S-rollmix (the 5–10° slam thread CLOSED), sealed on Chad's word after the flown verdict
+
+**Sealed `flight-kernel-v11-2026-07-30` @ `0602d8292`** (annotated tag `20f14817c`,
+pushed, verified by this agent local + ls-remote). Content over v10: S-rollmix
+(`roll_target_mix = 1.0`; 0.0 = bit-identical v10), the blend/held_bank instrument +
+recorder v2, SPEC First Principle 5 (P-helm), and the S-straightline stub with the COMS-1
+stake. Gate 395/395. Grafted to recon `01b28231a` same night — gate 905/905, zero golden
+movement, recorder v2 threaded through recon's TickHook seam (control::Telemetry through
+the hook typedef → step_frame → main.cpp), so **every future F9 tape carries blend and
+held_bank natively**; build-play re-stamped on sealed v11. The graft session also caught
+the stale-exe trap live (build failed while ctest passed on the old binary — caught,
+fresh relink, clean re-run): the relink lesson is now twice-paid.
+
+This repo's seal pipeline ran the same night: `reference/seads-feel/` re-snapshotted at
+`0602d8292` (no purity exceptions — the snapshot README states it), VERSIONS.md seal row,
+this entry, handoff updated. **No golden flight for v11** — the S-rollmix fly was a card
+fly, not a golden session; goldens #1–#4 stand, none superseded. The next golden (#5)
+should wait for a natural seal-flight occasion and will carry the new telem pins natively.
+
+**Open after the seal:** S-straightline (consult packet pending — its five questions aim
+at the rung-C2 align_f floor scar tissue, the verbatim pre-July-6 "pushed up in a turn"
+failure, and whether MB-rud's crab already satisfies the rudder-leads clause of Chad's
+spec). COMS-1 stays PENDING S-straightline. Horizon-gate stays parked-pending-recurrence
+(recurrence A/Bs must set `roll_target_mix = 0.0` for the #4-equivalent baseline).
 
 ---
 

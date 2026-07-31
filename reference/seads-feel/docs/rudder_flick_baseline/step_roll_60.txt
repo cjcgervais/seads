@@ -1,0 +1,12 @@
+﻿step: roll +60.0 deg at V=140.0 m/s | 720 ticks (6.00 s), dt=0.00833333s
+  gains: K_w_roll=120000  K_phi=5.00  I=6000 | ZOH K_w*dt/I=0.167 (ceil 0.50) | crit K_w/(4*I*K_phi)=1.00 (>=1)
+  OUTER (total pointing error t.e, AT-2 signal):
+    peak error   :  60.00 deg  (step = 60.0)
+    settle time  :   >6.00 s  (did NOT settle in window)
+    overshoot    :   0.32 deg  (error rebound past best approach)
+    reversals    :      2      (post-0.5s slope flips)
+    steady error :  1.145 deg  (mean |e|, last 0.5 s)
+  INNER (body rate, axis roll):
+    peak |omega| : 187.53 deg/s
+    peak |des|   : 260.05 deg/s  (demand; saturates -> clamp)
+    rate overshoot:  0.00 deg/s (0.0% of demand)

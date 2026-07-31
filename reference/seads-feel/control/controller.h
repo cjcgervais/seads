@@ -323,6 +323,12 @@ struct Telemetry {
     double aoa_filtered = 0.0;  // the low-passed AoA feeding the clamp (§9.3b);
                                 // frozen below v_ballistic (the tail-slide lie)
     bool righting = false;      // MB-right inverted auto-righting latch
+    // Blend-band instrument (jitter_attribution §6.5 pin #2): the regime mix
+    // weight and the roll-hold setpoint, mirrored per tick so the boundary
+    // state is READ from the tape, never re-inferred from bank/aileron. Pure
+    // mirrors — no consumer of behavior reads them (the moved-consumer rule).
+    double blend = 0.0;      // smoothstep(blend_lo, blend_hi, e)
+    double held_bank = 0.0;  // ns.held_bank after this tick's captures/lean
     // S-rimshot (v4 rung 2): the event machine's state, mirrored for the
     // instrument and the tests. A state mirror alone is blind (the
     // moved-consumer trap) — every test pairs this probe with BEHAVIOR

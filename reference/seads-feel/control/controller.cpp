@@ -128,6 +128,12 @@ Output step(const sim::SimState& s, const Input& in, const Internal& internal,
         out.inputs.gear_cmd =
             static_cast<float>(std::clamp(in.gear_cmd, 0.0, 1.0));
         out.telem.regime = fresh.regime;
+        out.telem.held_bank = fresh.held_bank;  // the carried-bank mirror
+        // telem.blend stays 0.0 BY CONVENTION on a GROUNDED tick (err is
+        // never computed here; the respawn contract is aim := nose, so
+        // blend 0 == FINE-at-spawn is the true reading). Tape consumers
+        // doing blend-dwell reads must treat a respawn tick's 0 as this
+        // convention, not a measured mid-hunt value (red-team P2-2).
         return out;
     }
 
@@ -184,6 +190,18 @@ Output step(const sim::SimState& s, const Input& in, const Internal& internal,
     const double err = glm::length(demand);
     const glm::dvec3 target_body =
         sim::body_dir_of(s.orientation, glm::normalize(in.target_dir_world));
+    // Regime mix weight, hoisted (pure function of err + config — bit-identical
+    // to the former in-branch local) so the telemetry mirror below reads the
+    // ONE value the cascade blends with (§6.5 pin #2).
+    const double blend = smoothstep(cp.blend_lo, cp.blend_hi, err);
+    // De-rolled lateral azimuth (MB-lean's frame-true lateral axis — see the
+    // lean block's comment for the full derivation), hoisted so the lean
+    // update and the blend-band roll target continuity share ONE expression
+    // (an in-band recompute would be the H1 fork). Same expression tree, same
+    // inputs — the lean block's consumption is bit-identical.
+    const double az_lat = std::atan2(
+        target_body.x * e.cos_phi_theta + target_body.y * std::sin(e.phi),
+        -target_body.z);
 
     // Regime hysteresis + heldBank capture on FINE entry (SPEC §9.3). The
     // latch gates ONLY the capture edge + telemetry; commands blend
@@ -510,11 +528,8 @@ Output step(const sim::SimState& s, const Input& in, const Internal& internal,
         // the nose so the lean is ~0 there — the brief knife-edge overlap
         // where both run is a benign double decay).
         if (ns.pursuit && err < cp.blend_lo) {
-            const double az = std::atan2(target_body.x * e.cos_phi_theta +
-                                             target_body.y * std::sin(e.phi),
-                                         -target_body.z);
             const double lean_target =
-                std::clamp(cp.lean_gain * az, -cp.lean_max, cp.lean_max);
+                std::clamp(cp.lean_gain * az_lat, -cp.lean_max, cp.lean_max);
             ns.held_bank += wings_level_gate * cp.auto_level_rate * dt *
                             (lean_target - ns.held_bank);
         }
@@ -524,7 +539,8 @@ Output step(const sim::SimState& s, const Input& in, const Internal& internal,
         // fall to zero exactly as in the deadzone, but coordination (above) and
         // the inner-loop rate damping stay live. Same idle-latches exit branch.
         if (ns.pursuit && !ns.deadzoned) {
-            const double blend = smoothstep(cp.blend_lo, cp.blend_hi, err);
+            // (blend hoisted to function scope — the telemetry mirror shares
+            // it.)
 
             // Elev sign latch near astern (hysteretic): the shortest-arc pitch
             // sign flips wholesale across straight-behind (AT-0) — hold it.
@@ -613,15 +629,16 @@ Output step(const sim::SimState& s, const Input& in, const Internal& internal,
                 (vplane_len > 1e-6)
                     ? std::abs(glm::dot(aim_w, vplane_n / vplane_len))
                     : 0.0;
-            // Rung F "THE SACRED MIDDLE" (Chad 2026-07-24 fly): a below-horizon,
-            // tightly IN-PLANE aim (within side_pure_enter of the vertical
-            // plane) pure-pitches at ANY depth below the horizon, not just past
-            // horizon_enter -- "when I nose straight down I need a wider knife
-            // edge... maintain my horizon [as] I slowly pitch up from the dive
-            // in that same direction." The standing rung-E ruling (a lateral/
-            // bank-over nose-down needs 45+ deg down) is UNTOUCHED: this is an
-            // OR onto the horizon leg only, and the wider side_cone_enter/exit
-            // gate still applies on every entry regardless of which arm fires
+            // Rung F "THE SACRED MIDDLE" (Chad 2026-07-24 fly): a
+            // below-horizon, tightly IN-PLANE aim (within side_pure_enter of
+            // the vertical plane) pure-pitches at ANY depth below the horizon,
+            // not just past horizon_enter -- "when I nose straight down I need
+            // a wider knife edge... maintain my horizon [as] I slowly pitch up
+            // from the dive in that same direction." The standing rung-E ruling
+            // (a lateral/ bank-over nose-down needs 45+ deg down) is UNTOUCHED:
+            // this is an OR onto the horizon leg only, and the wider
+            // side_cone_enter/exit gate still applies on every entry regardless
+            // of which arm fires
             // -- a shallow LATERAL aim (past side_pure, under the outer cone)
             // still does not push (F2).
             const bool sacred_middle_enter =
@@ -749,11 +766,11 @@ Output step(const sim::SimState& s, const Input& in, const Internal& internal,
                     if (sag > 0.0) {
                         const double fwd_gate =
                             1.0 - smoothstep(0.85, 0.95, target_body.z);
-                        const double floor_w = std::min(
-                            blend * fwd_gate * cp.pull_floor *
-                                sqrt_law(sag, cp.K_theta, aB_pitch,
-                                        w_max_pitch),
-                            w_push);
+                        const double floor_w =
+                            std::min(blend * fwd_gate * cp.pull_floor *
+                                         sqrt_law(sag, cp.K_theta, aB_pitch,
+                                                  w_max_pitch),
+                                     w_push);
                         pitch = std::max(pitch, floor_w);
                     }
                 }
@@ -788,9 +805,53 @@ Output step(const sim::SimState& s, const Input& in, const Internal& internal,
                 // the strong yaw POINTING above (yaw_scale/yaw_gate/c_yaw):
                 // the nose crabs onto the aim WITHIN the hard bank, growing
                 // sideslip, without flattening the turn or bleeding the G.
+                // Blend-band roll TARGET continuity (the 5-10 deg roll slam,
+                // 2026-07-30 — coverage-completion of MB-lean; the pitch
+                // align / yaw_gate McRuer-transition treatment applied to the
+                // roll limb's TARGET instead of its weight, because the
+                // weights are ALREADY continuous — the slam is the in-band
+                // tug-of-war between two near-saturated demands at targets
+                // tens of degrees apart). Inside the band the maneuver limb
+                // chases the mixed bank target
+                //     blend*phi_commit + (1-blend)*lean_target
+                // via bank_eff_used = bank_eff + w_eff*(1-blend)*(e_lean -
+                // bank_eff), where e_lean = lean_target - phi_full is the
+                // hold-style error in bank_eff's roll-right-positive
+                // convention and lean_target is the LIVE
+                // clamp(lean_gain*az_lat, +/-lean_max) — the value the frozen
+                // held_bank WOULD be chasing (the ruled err < blend_lo gate
+                // on the held_bank UPDATE does not move), so on a slow-add
+                // both roll limbs AGREE in target and the boundary
+                // tug-of-war collapses. Guards, in order:
+                //   * roll_target_mix > 0: the structural knob-off arm —
+                //     bank_eff_used IS bank_eff, bit-identical legacy.
+                //   * blend < 1.0: smoothstep returns EXACTLY 1.0 at/above
+                //     blend_hi, so a committed flick takes the identical
+                //     expression tree — bit-untouched. This is an EVALUATION
+                //     guard whose two limbs are continuous at the boundary
+                //     (the added term -> 0 as blend -> 1): the lat_sq class,
+                //     NOT a regime gate — no hysteresis needed.
+                //   * w_eff rides wings_level_gate: inverted the continuity
+                //     term fades to raw bank_eff exactly — split-S /
+                //     knife-edge roll-through untouched (AT-15's legs are
+                //     also all at blend == 1, doubly safe).
+                // Pole-free in-band: blend < 1 => err < blend_hi =>
+                // -target_body.z >= cos(blend_hi) ~ 0.988. The roll_latch and
+                // the push gate keep reading the RAW bank_eff above — the
+                // reshaping never feeds back into a latch.
+                double bank_eff_used = bank_eff;
+                if (cp.roll_target_mix > 0.0 && have_bank && blend < 1.0) {
+                    const double lean_t = std::clamp(cp.lean_gain * az_lat,
+                                                     -cp.lean_max, cp.lean_max);
+                    const double e_lean = lean_t - phi_full;
+                    const double w_eff = cp.roll_target_mix * wings_level_gate;
+                    bank_eff_used =
+                        bank_eff + w_eff * (1.0 - blend) * (e_lean - bank_eff);
+                }
                 const double roll_maneuver =
-                    have_bank ? -sqrt_law(bank_eff, cp.K_phi, aB_roll, cp.p_max)
-                              : 0.0;
+                    have_bank
+                        ? -sqrt_law(bank_eff_used, cp.K_phi, aB_roll, cp.p_max)
+                        : 0.0;
                 // FINE wings-hold — faded by wings_level_gate (S7-loop-invert,
                 // REVERSES F2's un-gating): ~1 upright, ->0 as it inverts.
                 // Inverted, the wings-leveling term is 0, so a well-tracked
@@ -1048,9 +1109,9 @@ Output step(const sim::SimState& s, const Input& in, const Internal& internal,
                                 cp.capture_rim_frac * cp.capture_circle;
                             double rim_live = rim_full;
                             if (cp.capture_depth_frac > 0.0) {
-                                const double sat = std::min(
-                                    1.0,
-                                    cp.capture_depth_frac * glance / rim_full);
+                                const double sat =
+                                    std::min(1.0, cp.capture_depth_frac *
+                                                      glance / rim_full);
                                 rim_live =
                                     cp.capture_depth_pow != 1.0
                                         ? rim_full *
@@ -1067,7 +1128,8 @@ Output step(const sim::SimState& s, const Input& in, const Internal& internal,
                                 ns.cap_crossed = true;
                                 ns.cap_err0 = dlen;
                                 ns.cap_rim_t = rim_live;
-                                ns.cap_d_allow = std::max(rim_live + glance, dlen);
+                                ns.cap_d_allow =
+                                    std::max(rim_live + glance, dlen);
                                 ns.cap_stall_ticks = 0;
                                 ns.cap_inbound = true;  // no glance leg
                             } else {
@@ -2064,7 +2126,9 @@ Output step(const sim::SimState& s, const Input& in, const Internal& internal,
     out.telem.pursuit = ns.pursuit;
     out.telem.aoa_filtered = ns.aoa_filtered;
     out.telem.righting = ns.righting;
-    out.telem.capture = ns.capture;  // S-rimshot state mirror (v4 rung 2)
+    out.telem.capture = ns.capture;      // S-rimshot state mirror (v4 rung 2)
+    out.telem.blend = blend;             // the regime mix weight (§6.5 pin #2)
+    out.telem.held_bank = ns.held_bank;  // post-capture/lean roll-hold setpoint
     // True load factor from lift, logged ALONGSIDE the cosPhiTheta G-proxy
     // (SPEC §16 CQ1) — telemetry, never a gate. The formula is sim/aero.h's
     // single source (H1), shared bit-identically with the HUD.

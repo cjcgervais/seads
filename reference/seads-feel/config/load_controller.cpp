@@ -152,6 +152,9 @@ control::ControllerParams load_controller_toml(const std::string& path,
     // Kernel v5 rung C2b (S-holdline sag servo): pull_floor is a
     // DIMENSIONLESS fraction of the sag-servo demand, never rad().
     c.pull_floor = require(root, "regime", "pull_floor");
+    // Blend-band roll target continuity: dimensionless mix weight, never
+    // rad()'d.
+    c.roll_target_mix = require(root, "regime", "roll_target_mix");
 
     c.push_gate_bank = rad(require(root, "push_gate", "bank_hi"));
     c.push_gate_bank_lo = rad(require(root, "push_gate", "bank_lo"));
@@ -395,6 +398,8 @@ control::ControllerParams load_controller_toml(const std::string& path,
     check(c.blend_hi > c.blend_lo && c.blend_lo > 0.0,
           "0 < blend_lo < blend_hi (hysteresis)");
     check(c.bank_align_power >= 1.0, "bank_align_power >= 1");
+    check(c.roll_target_mix >= 0.0 && c.roll_target_mix <= 1.0,
+          "0 <= roll_target_mix <= 1 (0 = legacy two-target roll blend)");
     // Kernel v5 rung C2b: pull_floor in [0,1] (0 disarms the sag servo
     // entirely; above 1 would let the servo demand more than the full
     // K_theta line-hold, above the spec).

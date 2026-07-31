@@ -93,6 +93,7 @@
 #include "test/harness/comfort.h"
 #include "test/harness/injector.h"
 #include "test/harness/instructor.h"
+#include "test/harness/recorder.h"  // recverify (sealed-tape signature check)
 #include "test/harness/scenarios.h"
 #include "test/harness/telemetry.h"
 
@@ -1163,10 +1164,10 @@ int run_track(const sim::AircraftParams& p, const std::string& axis_name,
     if (pattern == "nudge") {
         // The REAL HAND: a repeated small hand adjustment. Each cycle EASES the
         // aim amp_deg (default 1.0) about the axis over T_move via a smoothstep
-        // position profile s(x)=3x^2-2x^3, then RESTS; the next cycle nudges the
-        // SAME direction. Reports the rebound each engage earns — an event
-        // table (engage tick/time, state entered, apex excursion PAST the aim in
-        // deg + rim units, and w_rel_approx_dps) plus the summary counters.
+        // position profile s(x)=3x^2-2x^3, then RESTS; the next cycle nudges
+        // the SAME direction. Reports the rebound each engage earns — an event
+        // table (engage tick/time, state entered, apex excursion PAST the aim
+        // in deg + rim units, and w_rel_approx_dps) plus the summary counters.
         const double A = amp_deg / deg;
         const double dir = amp_deg >= 0.0 ? 1.0 : -1.0;
         const double T_move = 0.7, T_rest = 1.5;
@@ -1175,15 +1176,17 @@ int run_track(const sim::AircraftParams& p, const std::string& axis_name,
         const int cycle_ticks = move_ticks + rest_ticks;
         const int cycles = cycle_ticks > 0 ? ticks / cycle_ticks : 0;
         if (cycles < 1) {
-            std::fprintf(stderr, "ticks too short for one nudge cycle (need %d)\n",
+            std::fprintf(stderr,
+                         "ticks too short for one nudge cycle (need %d)\n",
                          cycle_ticks);
             return 2;
         }
         const int settle_ticks = static_cast<int>(std::lround(0.5 / dt));
         auto smooth = [](double x) { return x * x * (3.0 - 2.0 * x); };
 
-        // Signed lead of the nose PAST the aim about `axis` [rad] (>0 = the nose
-        // is ahead of the moving aim in the + rotation sense — the overshoot).
+        // Signed lead of the nose PAST the aim about `axis` [rad] (>0 = the
+        // nose is ahead of the moving aim in the + rotation sense — the
+        // overshoot).
         auto lead_now = [&]() {
             const glm::dvec3 nose =
                 cl.state.orientation * glm::dvec3{0.0, 0.0, -1.0};
@@ -1198,8 +1201,8 @@ int run_track(const sim::AircraftParams& p, const std::string& axis_name,
             int tick;
             double time;
             control::CaptureState state;
-            double apex;      // max lead*dir over the event [rad]
-            double w_rel_dps; // w_rel_approx at engage [deg/s]
+            double apex;       // max lead*dir over the event [rad]
+            double w_rel_dps;  // w_rel_approx at engage [deg/s]
         };
         std::vector<NEvent> events;
         int nprev = kCapIdle;
@@ -1220,7 +1223,8 @@ int run_track(const sim::AircraftParams& p, const std::string& axis_name,
                     const double t0 = std::min((k - 1) * dt, T_move);
                     dang = A * (smooth(t1 / T_move) - smooth(t0 / T_move));
                     const double x = t1 / T_move;
-                    rate_now = A * 6.0 * x * (1.0 - x) / T_move;  // analytic ds/dt
+                    rate_now =
+                        A * 6.0 * x * (1.0 - x) / T_move;  // analytic ds/dt
                 }
                 const control::Telemetry t = drive(dang, rate_now);
                 if (sim::altitude(cl.state.position, p) <= 0.0) {
@@ -1232,11 +1236,12 @@ int run_track(const sim::AircraftParams& p, const std::string& axis_name,
                 if (nprev == kCapIdle && ci != kCapIdle) {
                     in_event = true;
                     cur_apex = lead_now() * dir;
-                    // w_rel_approx: the nose's angular rate about the axis minus
-                    // the scripted aim rate. INSTRUMENT APPROXIMATION only — the
-                    // real net closing rate the controller ENGAGED on nets
-                    // curvature/coordination/mouse-frame too, which we cannot see
-                    // from outside; this is the visible-kinematics stand-in.
+                    // w_rel_approx: the nose's angular rate about the axis
+                    // minus the scripted aim rate. INSTRUMENT APPROXIMATION
+                    // only — the real net closing rate the controller ENGAGED
+                    // on nets curvature/coordination/mouse-frame too, which we
+                    // cannot see from outside; this is the visible-kinematics
+                    // stand-in.
                     events.push_back({gi, (gi + 1) * dt, t.capture, cur_apex,
                                       (omega_about() - rate_now) * deg});
                 }
@@ -1250,7 +1255,8 @@ int run_track(const sim::AircraftParams& p, const std::string& axis_name,
                     const double e = t.e;
                     if (k == move_ticks + 1) {
                         rest_prev_e = e;
-                        rest_prev_de = 0.0;  // fresh window: no cross-window slope
+                        rest_prev_de =
+                            0.0;  // fresh window: no cross-window slope
                     } else {
                         const double de = e - rest_prev_e;
                         if (std::abs(de) > 1e-7) {
@@ -1277,9 +1283,10 @@ int run_track(const sim::AircraftParams& p, const std::string& axis_name,
             "w_rel_approx_dps\n");
         double max_apex = 0.0, sum_apex = 0.0;
         for (const NEvent& e : events) {
-            const char* sn = e.state == control::CaptureState::CARRY  ? "CARRY"
-                             : e.state == control::CaptureState::RETURN ? "RETURN"
-                                                                        : "IDLE";
+            const char* sn = e.state == control::CaptureState::CARRY ? "CARRY"
+                             : e.state == control::CaptureState::RETURN
+                                 ? "RETURN"
+                                 : "IDLE";
             std::printf("    %11d  %6.3f  %6s  %8.3f  %8.3f  %8.2f\n", e.tick,
                         e.time, sn, e.apex * deg, e.apex / cp.capture_circle,
                         e.w_rel_dps);
@@ -1464,7 +1471,7 @@ int run_lathold(const sim::AircraftParams& p, double V, double offset_deg,
         h = cl.state.orientation * glm::dvec3{1.0, 0.0, 0.0};
     h = glm::normalize(h);
     glm::dvec3 hr = glm::angleAxis(off, up_cap) * h;  // rotate LEFT about up
-    hr = hr - glm::dot(hr, up_cap) * up_cap;           // project to the horizon
+    hr = hr - glm::dot(hr, up_cap) * up_cap;          // project to the horizon
     cl.aim = glm::normalize(hr);
 
     std::printf(
@@ -1542,6 +1549,26 @@ int run_lathold(const sim::AircraftParams& p, double V, double offset_deg,
     return crashed ? 1 : 0;
 }
 
+// recverify: read a .seadsrec tape READ-ONLY, report whether its fnv1a
+// signature verifies under the CURRENT reader (the sealed-tape back-compat
+// acceptance check for any recorder-format change). Exit 0 = sig_ok.
+int run_recverify(const std::string& path) {
+    std::vector<seads_replay::TickRecord> recs;
+    std::string tag;
+    bool sig_ok = false;
+    if (!seads_replay::read_records(path, recs, &tag, &sig_ok)) {
+        std::fprintf(stderr, "recverify: cannot read %s\n", path.c_str());
+        return 2;
+    }
+    size_t telem_ticks = 0;
+    for (const auto& r : recs)
+        if (r.has_telem) ++telem_ticks;
+    std::printf("recverify %s\n  sig_ok=%d tag=%s ticks=%zu telem_ticks=%zu\n",
+                path.c_str(), sig_ok ? 1 : 0, tag.c_str(), recs.size(),
+                telem_ticks);
+    return sig_ok ? 0 : 1;
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -1610,8 +1637,8 @@ int main(int argc, char** argv) {
         const double carry_ovr = argc > 8 ? std::atof(argv[8]) : -1.0;
         // argv[9] = sine/nudge amplitude [deg]. Default 10 for sine (bit-stable
         // legacy), 1 for nudge (the real hand's small adjustment).
-        const double amp = argc > 9 ? std::atof(argv[9])
-                                    : (pattern == "nudge" ? 1.0 : 10.0);
+        const double amp =
+            argc > 9 ? std::atof(argv[9]) : (pattern == "nudge" ? 1.0 : 10.0);
         return run_track(p, axis, pattern, rate, V, ticks, gain_ovr, carry_ovr,
                          amp);
     }
@@ -1624,11 +1651,19 @@ int main(int argc, char** argv) {
         const std::string out = argc > 3 ? argv[3] : "ctrl_telemetry.csv";
         return run_ctrl_fly(p, ticks, out);
     }
+    if (mode == "recverify") {
+        if (argc < 3) {
+            std::fprintf(stderr, "recverify: missing tape path\n");
+            return 2;
+        }
+        return run_recverify(argv[2]);
+    }
 
     std::fprintf(
         stderr,
         "unknown mode '%s' (fly | ctrl_fly | step | track | loop | mouseloop | "
-        "latflick | lathold | comfort | alpha | golden | ctrl_golden)\n",
+        "latflick | lathold | comfort | alpha | golden | ctrl_golden | "
+        "recverify)\n",
         mode.c_str());
     return 2;
 }

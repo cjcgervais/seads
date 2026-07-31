@@ -13,16 +13,17 @@
 // were verified against, at feel/kernel-v5 @ 89447aba5:
 //     app/instructor_tick.h   -> app::TickInput, app::LoopState, app::tick,
 //                                 TickInput fields (raw_mode, raw_in, throttle,
-//                                 flap_cmd, gear_cmd, freelook_held, orient_cmd,
-//                                 override_mask[3], override_sign[3], aim_dx,
-//                                 aim_dy, aim_gain_scale, aim_rate_ff, frame_ticks)
+//                                 flap_cmd, gear_cmd, freelook_held,
+//                                 orient_cmd, override_mask[3],
+//                                 override_sign[3], aim_dx, aim_dy,
+//                                 aim_gain_scale, aim_rate_ff, frame_ticks)
 //     app/loop.h              -> LoopState.curr (sim::SimState)
 //     sim/state.h             -> sim::Inputs{pitch,yaw,roll,throttle,flap_cmd,
 //                                 gear_cmd}; sim::SimState{position,velocity,
 //                                 orientation,angular_vel,throttle}
 //     sim/params.h            -> sim::AircraftParams
-// A standalone clang invocation WILL error on the glm/app/sim includes — that is
-// expected for a graft header; SECTION 1 (the data model + serializer) is
+// A standalone clang invocation WILL error on the glm/app/sim includes — that
+// is expected for a graft header; SECTION 1 (the data model + serializer) is
 // glm-free and parses on its own.
 //
 // FIREWALL: this file is APP/RENDER-SIDE ONLY. It taps app::TickInput going IN
@@ -96,6 +97,15 @@ struct TickRecord {
     double pin_orientation[4] = {1.0, 0.0, 0.0, 0.0};  // w, x, y, z
     double pin_angular_vel[3] = {0.0, 0.0, 0.0};
     double pin_throttle = 0.0;
+
+    // v2 (blend-band instrument, jitter_attribution §6.5 pin #2): the tick's
+    // control::Telemetry blend + held_bank, appended as TRAILING columns so a
+    // v1 tape parses unchanged and its fnv1a signature (hashed over the
+    // verbatim body bytes) verifies bit-identically. has_telem = 0 on a v1
+    // read — consumers must gate on it, never trust the zero defaults.
+    int has_telem = 0;
+    double telem_blend = 0.0;
+    double telem_held_bank = 0.0;
 };
 
 inline std::uint64_t fnv1a(const std::string& s) {
@@ -112,7 +122,8 @@ inline const char* kRecColumns =
     "throttle flap_cmd "
     "gear_cmd freelook orient om0 om1 om2 os0 os1 os2 aim_dx aim_dy "
     "aim_gain_scale ffx ffy ffz frame_ticks "
-    "px py pz vx vy vz qw qx qy qz wx wy wz pin_throttle";
+    "px py pz vx vy vz qw qx qy qz wx wy wz pin_throttle "
+    "telem_blend telem_held_bank";  // v2 trailing columns (absent on v1 tapes)
 
 // Body only (no signature line) so the writer can hash it and the reader
 // re-hash and compare — full double round-trip precision (max_digits10).
@@ -120,14 +131,15 @@ inline std::string serialize_body(const std::vector<TickRecord>& recs,
                                   const std::string& version_tag) {
     std::ostringstream o;
     o << std::setprecision(std::numeric_limits<double>::max_digits10);
-    o << "# seads-felt-flight v1  tag=" << version_tag << '\n';
+    o << "# seads-felt-flight v2  tag=" << version_tag << '\n';
     o << "# columns: " << kRecColumns << '\n';
     for (const TickRecord& r : recs) {
         o << r.tick << ' ' << r.raw_mode << ' ' << r.raw_pitch << ' '
           << r.raw_yaw << ' ' << r.raw_roll << ' ' << r.raw_throttle << ' '
-          << r.raw_flap << ' ' << r.raw_gear << ' ' << r.throttle << ' ' << r.flap_cmd << ' ' << r.gear_cmd << ' '
-          << r.freelook_held << ' ' << r.orient_cmd << ' ' << r.override_mask[0]
-          << ' ' << r.override_mask[1] << ' ' << r.override_mask[2] << ' '
+          << r.raw_flap << ' ' << r.raw_gear << ' ' << r.throttle << ' '
+          << r.flap_cmd << ' ' << r.gear_cmd << ' ' << r.freelook_held << ' '
+          << r.orient_cmd << ' ' << r.override_mask[0] << ' '
+          << r.override_mask[1] << ' ' << r.override_mask[2] << ' '
           << r.override_sign[0] << ' ' << r.override_sign[1] << ' '
           << r.override_sign[2] << ' ' << r.aim_dx << ' ' << r.aim_dy << ' '
           << r.aim_gain_scale << ' ' << r.aim_rate_ff[0] << ' '
@@ -138,7 +150,8 @@ inline std::string serialize_body(const std::vector<TickRecord>& recs,
           << r.pin_orientation[0] << ' ' << r.pin_orientation[1] << ' '
           << r.pin_orientation[2] << ' ' << r.pin_orientation[3] << ' '
           << r.pin_angular_vel[0] << ' ' << r.pin_angular_vel[1] << ' '
-          << r.pin_angular_vel[2] << ' ' << r.pin_throttle << '\n';
+          << r.pin_angular_vel[2] << ' ' << r.pin_throttle << ' '
+          << r.telem_blend << ' ' << r.telem_held_bank << '\n';
     }
     return o.str();
 }
@@ -185,18 +198,35 @@ inline bool read_records(const std::string& path, std::vector<TickRecord>& out,
         std::istringstream s(dl);
         TickRecord r;
         s >> r.tick >> r.raw_mode >> r.raw_pitch >> r.raw_yaw >> r.raw_roll >>
-            r.raw_throttle >> r.raw_flap >> r.raw_gear >> r.throttle >> r.flap_cmd >> r.gear_cmd >>
-            r.freelook_held >> r.orient_cmd >> r.override_mask[0] >>
-            r.override_mask[1] >> r.override_mask[2] >> r.override_sign[0] >>
-            r.override_sign[1] >> r.override_sign[2] >> r.aim_dx >> r.aim_dy >>
-            r.aim_gain_scale >> r.aim_rate_ff[0] >> r.aim_rate_ff[1] >>
-            r.aim_rate_ff[2] >> r.frame_ticks >> r.pin_position[0] >>
-            r.pin_position[1] >> r.pin_position[2] >> r.pin_velocity[0] >>
-            r.pin_velocity[1] >> r.pin_velocity[2] >> r.pin_orientation[0] >>
-            r.pin_orientation[1] >> r.pin_orientation[2] >> r.pin_orientation[3] >>
-            r.pin_angular_vel[0] >> r.pin_angular_vel[1] >> r.pin_angular_vel[2] >>
-            r.pin_throttle;
+            r.raw_throttle >> r.raw_flap >> r.raw_gear >> r.throttle >>
+            r.flap_cmd >> r.gear_cmd >> r.freelook_held >> r.orient_cmd >>
+            r.override_mask[0] >> r.override_mask[1] >> r.override_mask[2] >>
+            r.override_sign[0] >> r.override_sign[1] >> r.override_sign[2] >>
+            r.aim_dx >> r.aim_dy >> r.aim_gain_scale >> r.aim_rate_ff[0] >>
+            r.aim_rate_ff[1] >> r.aim_rate_ff[2] >> r.frame_ticks >>
+            r.pin_position[0] >> r.pin_position[1] >> r.pin_position[2] >>
+            r.pin_velocity[0] >> r.pin_velocity[1] >> r.pin_velocity[2] >>
+            r.pin_orientation[0] >> r.pin_orientation[1] >>
+            r.pin_orientation[2] >> r.pin_orientation[3] >>
+            r.pin_angular_vel[0] >> r.pin_angular_vel[1] >>
+            r.pin_angular_vel[2] >> r.pin_throttle;
+        // Red-team P2-1: a truncated line (any of the 40 fixed fields
+        // missing) must not push a record with silently-zeroed tail fields
+        // and the "pinned" flag set — the body hash already fails on
+        // truncation, but a consumer reading past sig_ok would get poisoned
+        // pins. Skip the malformed line instead.
+        if (!s) continue;
         r.has_state_pin = 1;
+        // v2 trailing telemetry columns — extracted into LOCALS with the
+        // stream state checked (a failed >> zeroes its target since C++11, so
+        // extracting straight into the struct would silently poison a v1
+        // read). A v1 line stops here with has_telem = 0 and defaults intact.
+        double tb = 0.0, thb = 0.0;
+        if (s >> tb >> thb) {
+            r.telem_blend = tb;
+            r.telem_held_bank = thb;
+            r.has_telem = 1;
+        }
         out.push_back(r);
     }
     return true;
@@ -217,6 +247,7 @@ inline bool read_records(const std::string& path, std::vector<TickRecord>& out,
 #include <glm/gtc/quaternion.hpp>
 
 #include "app/instructor_tick.h"  // app::TickInput, app::LoopState, app::tick
+#include "control/controller.h"   // control::Telemetry (v2 columns)
 #include "sim/params.h"           // sim::AircraftParams
 #include "sim/state.h"            // sim::Inputs, sim::SimState
 
@@ -227,9 +258,15 @@ namespace seads_replay {
 // (firewall criterion (c)). Call INSIDE the step_frame tick loop, immediately
 // after `tick(st, in, ...)` returns; `st` is the LoopState after the tick.
 inline TickRecord record_tick(long tick, const app::TickInput& in,
-                              const app::LoopState& st) {
+                              const app::LoopState& st,
+                              const control::Telemetry& telem) {
     TickRecord r;
     r.tick = tick;
+    // v2: the tick's telemetry mirror (app::tick's TickResult carries it —
+    // res.telem — at every call site; READ-ONLY like the state pin).
+    r.has_telem = 1;
+    r.telem_blend = telem.blend;
+    r.telem_held_bank = telem.held_bank;
     r.raw_mode = in.raw_mode ? 1 : 0;
     r.raw_pitch = in.raw_in.pitch;
     r.raw_yaw = in.raw_in.yaw;
@@ -308,8 +345,9 @@ class Recorder {
         recs_.clear();
         tick_ = 0;
     }
-    void on_tick(const app::TickInput& in, const app::LoopState& st) {
-        recs_.push_back(record_tick(tick_++, in, st));
+    void on_tick(const app::TickInput& in, const app::LoopState& st,
+                 const control::Telemetry& telem) {
+        recs_.push_back(record_tick(tick_++, in, st, telem));
     }
     bool flush(const std::string& path, const std::string& version_tag) const {
         return write_records(path, recs_, version_tag);

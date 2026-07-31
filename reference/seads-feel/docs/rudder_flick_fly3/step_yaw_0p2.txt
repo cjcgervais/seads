@@ -1,0 +1,12 @@
+﻿step: yaw +0.2 deg at V=140.0 m/s | 720 ticks (6.00 s), dt=0.00833333s
+  gains: K_w_yaw=200000  K_theta=3.20  I=12000 | ZOH K_w*dt/I=0.139 (ceil 0.50) | crit K_w/(4*I*K_theta)=1.30 (>=1)
+  OUTER (total pointing error t.e, AT-2 signal):
+    peak error   :   0.20 deg  (step = 0.2)
+    settle time  :  0.000 s   (|e| < 0.50 deg thereafter)
+    overshoot    :   0.03 deg  (error rebound past best approach)
+    reversals    :      0      (post-0.5s slope flips)
+    steady error :  0.057 deg  (mean |e|, last 0.5 s)
+  INNER (body rate, axis yaw):
+    peak |omega| :   0.76 deg/s
+    peak |des|   :   1.41 deg/s  (demand; saturates -> clamp)
+    rate overshoot:  0.00 deg/s (0.0% of demand)
