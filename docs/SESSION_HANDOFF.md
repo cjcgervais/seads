@@ -22,7 +22,7 @@ You two hand off through Chad, and through `docs/*_handoff.md` files in the live
 | repo | branch | tip | note |
 |---|---|---|---|
 | `mandalark-kernel` | `main` | see git | pushed, clean |
-| `seads-feel` | `feel/kernel-v5` | `39aa52a48` | **UNPUSHED (ahead 6)**. Seal `flight-kernel-v10-2026-07-30` @ `f86ee7b9f` stands; tip carries **S-ROLLMIX (mechanism code, AWAITING CHAD'S FLY)** — `[regime] roll_target_mix` (0.0 = bit-identical v10), telem.blend/held_bank + recorder v2, controller golden deliberately re-recorded, gate 395/395. **Reference snapshot is now BEHIND the live tree's code** — live tree is ground truth until the next flown seal + re-snapshot |
+| `seads-feel` | `feel/kernel-v5` | `39aa52a48` | pushed (pre-fly, by Chad's word). Seal `flight-kernel-v10-2026-07-30` @ `f86ee7b9f` stands; tip carries **S-ROLLMIX (mechanism code, AWAITING CHAD'S FLY)** — `[regime] roll_target_mix` (0.0 = bit-identical v10), telem.blend/held_bank + recorder v2, controller golden deliberately re-recorded, gate 395/395. **Reference snapshot is now BEHIND the live tree's code** — live tree is ground truth until the next flown seal + re-snapshot |
 | `seads-recon` | `sandbox/kernel-v5-reconcile` | see git | **graft of the sealed v10 state was in flight 2026-07-30** — verify before treating recon as flying the committed seal (it flew the byte-matched logged flip before that) |
 
 Kernel seals: v5 → v6 (`cfe1bd7fe`) → v7 (`51eb5b9e3`) → v8 (`ae7ae8f23`, pre-fly,
