@@ -19,7 +19,18 @@ Rules of this document:
 
 ---
 
-## COMS-1 (2026-07-30) — CONTROL IS KING
+## COMS-1 (2026-07-30) — CONTROL IS KING — **STATUS: PENDING `S-straightline`**
+
+> ⚠ **TRUTH-CHECK, applied by this doc's own STOP rule on day one** (caught by the
+> seads-feel session, accepted here): the rendering's sentence "Your nose flies a
+> straight line to where you aim. Your tracers go where you pointed them" is **not yet
+> true of the shipped kernel** — the turn-entry dip is measured at 2.2–8.3° of sag
+> (15/30/60° flicks, both S-rollmix arms, ledger row `291dc5314`). The thread that makes
+> it literally true is **`S-straightline`** (live tree `docs/straightline_thread.md`;
+> the dependency is pinned in both directions — the stub names this coms entry at its
+> seal, commit `0602d8292`). **This entry may not ship player-facing until
+> S-straightline is flown-approved and the sag is re-measured under the same
+> instrument.** The rest of the entry (philosophy, soundbites, doctrine) is true today.
 
 ### The philosophy, in Chad's words (source, verbatim)
 
