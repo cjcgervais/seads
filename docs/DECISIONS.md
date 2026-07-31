@@ -29,7 +29,48 @@ branch past v10 at any time:
 
 ---
 
-## 2026-07-30 (night) — S-ROLLMIX FLOWN: slam GONE, verdict approving — plus a NEW observation (the flick "dip curl"), attributed-pending-A/B
+## 2026-07-30 (night, later) — RULING: THE DIP IS A FLAW. The 2026-07-06 roll-first spec is SUPERSEDED by Chad's own refined law: pull arrives WITH the bank, not after it
+
+**Chad's ruling, verbatim (this is the new thread's specification — quote it, never
+paraphrase it):**
+
+> "the dip is a flaw, whether pre existing or not. I feel that a normal flight would
+> apply, rudder first to lead the bank a little before the elevator but I feel the
+> elevator increase should smoothly coorelate to banking increase. they are both supposed
+> to align to the final turn angle at the saem time is what I hypothesize. I think we
+> need a new thread to get this right as we are so close to getting it right why stop
+> now. The line that my tracers draw should be straight and my gunnery should have a
+> predictable path via my control surface operation not accept 'character' that I need to
+> compensate for. A straight line is the shortest distance, a dip is a delay. ... Curver
+> are nice, but I can decide what and when that looks like via inputs rather that
+> adjusting to quirks."
+
+**Both agents were asked flaw-or-character; this ledger's answer: FLAW — a bug in the
+SPEC, not in the code.** The mechanism (`bank_align_power = 6`, S7-turn2) is a correct
+implementation of the 2026-07-06 ruling "roll first, don't get pushed up in a turn."
+Chad's flying has now refined that ruling: the two documented failure modes are
+pull-BEFORE-roll (power=1: the climb he ruled out in 2026-07-06) and pull-AFTER-roll
+(power=6: the dip, measured 2.23/5.05/8.29° at 15/30/60° flicks). The new spec is the
+third shape neither implements: **pull grows WITH the bank, both arriving at the final
+turn angle together** — the elevator phased to bank PROGRESS, not gated on
+bank-error-to-target. Rudder-leads is already flown-in (MB-rud, "nose should crab
+immediately and bank immediately") and is consistent with his "rudder first" clause.
+
+**Why FLAW is the right answer by this project's own standards:** (1) his words are the
+specification, and the ruling is explicit; (2) the mission standard — this is a GUNNERY
+kernel, and a trajectory quirk the pilot must compensate for during a firing solution is
+a cost paid every fight ("my gunnery should have a predictable path"); (3) the player-
+authority principle every prior ruling upholds — curves on command, never as furniture.
+"Character" is what you keep when it doesn't fight the mission; this fights the mission.
+
+**Supersession bookkeeping:** the 2026-07-06 bank_align_power ruling joins Fly-13 and the
+cue-ball as rulings superseded by Chad's own evolved word (the R6 pattern — though this
+one is a spec REFINEMENT, not a compensation decay: neither old failure mode comes back).
+The new thread is mechanism-shaped (a gate re-key, not a dial walk: power-down on the
+same cos(bankErr)^p law only interpolates between climb and dip — it cannot express
+simultaneous arrival). Belongs to seads-feel plan mode with the usual pipeline: consult
+→ plan → audit → instrument-first if a new pin is needed → one dial → Chad flies.
+S-rollmix's own disposition (seal word, recon graft) remains pending and SEPARATE.
 
 **Chad flew S-rollmix (build fc3ea6970 card, tip 39aa52a48) and the thread's symptom is
 gone. Verbatim:**
