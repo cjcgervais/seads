@@ -67,3 +67,24 @@ any ranking (the kernel base's freshest scar: an approved, audited attribution w
 falsified by its own instrument at 2–4% measured closure); the eagle's `line_hold_ff`
 character value (Chad's stick, suggested sweep 0.3/0.5/0.7 one per flight); eagle-v1
 retro-seal and Golden Felt Flight #1 (eagle) on Chad's next accept flight.
+
+---
+
+## 2026-07-30 (late night) — STAGE-0 instruments LANDED (`d7a42b8`), inert; baseline capture awaits Chad's stick
+
+Four instruments, one add-zero-inert hook in `computeMouseAim`, behavior byte-identical
+unarmed: the parasitic-dip column on the F7/F6 step tracker (basis-free by construction
+— world-fixed aim isolates the crab term); the F4 synthetic mouse sweep (basis-live,
+with a direct `aim_drift_deg` basis-arc read); the duration-stated free-look release
+scorer (true horizon roll); the keys-held oblique/slam scorer. Sonnet built, Opus
+verified SHIP-WITH-FIXES all applied — headline catch: a sign-blind overshoot metric
+that would have FABRICATED 20–40° readings on every sweep, killed before any baseline
+existed. Tier-4 659/659, rojo PASS, no CS contact. Commit-window discipline held
+against the concurrent flight-13 session (waited out `9e33187`, committed alone).
+
+**The measured C/D split = the dip difference between F7 rows (crab alone) and F4 rows
+(crab + camera basis)** — same number family as Golden #5's 0.58° predicate. Capture
+protocol (twice, one stamped build): serve → confirm `[BuildStamp]` → F8 on → F7 ×2 →
+F4 ×2 → two free-look releases → one keys-held turn + release → F9 flush; ONE injector
+at a time. The two numbers return to the kernel base for the ordering consult; nothing
+is ranked until they exist.
