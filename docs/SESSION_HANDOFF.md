@@ -133,6 +133,10 @@ re-opened fix work should request a dedicated recording set).
   One-line form: *"I want to be unpredictable to them, not myself."* Kernel quirks tax
   attention that belongs to the adversary; character is a per-game/per-vessel design
   choice, never a kernel default.
+- **`docs/KERNEL_COMS.md` is the OUTWARD-facing intent ledger** (Steam-page/customer
+  voice; COMS-1 = "Control is king"). Entries on Chad's word only; renderings are
+  DRAFTS until he approves; a coms promise that stops being true of the shipped kernel
+  is a STOP.
 
 - **Never re-snapshot `reference/` at an unflown seal.** (This is why v8 was never
   snapshotted. v9 is a FLOWN seal — snapshotted 2026-07-29 night.)
