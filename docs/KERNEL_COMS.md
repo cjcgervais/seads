@@ -19,18 +19,20 @@ Rules of this document:
 
 ---
 
-## COMS-1 (2026-07-30) — CONTROL IS KING — **STATUS: PENDING `S-straightline`**
+## COMS-1 (2026-07-30) — CONTROL IS KING — **STATUS: TRUTH-CHECK SATISFIED (2026-07-30 night); rendering awaits Chad's wording approval**
 
-> ⚠ **TRUTH-CHECK, applied by this doc's own STOP rule on day one** (caught by the
-> seads-feel session, accepted here): the rendering's sentence "Your nose flies a
-> straight line to where you aim. Your tracers go where you pointed them" is **not yet
-> true of the shipped kernel** — the turn-entry dip is measured at 2.2–8.3° of sag
-> (15/30/60° flicks, both S-rollmix arms, ledger row `291dc5314`). The thread that makes
-> it literally true is **`S-straightline`** (live tree `docs/straightline_thread.md`;
-> the dependency is pinned in both directions — the stub names this coms entry at its
-> seal, commit `0602d8292`). **This entry may not ship player-facing until
-> S-straightline is flown-approved and the sag is re-measured under the same
-> instrument.** The rest of the entry (philosophy, soundbites, doctrine) is true today.
+> ✅ **TRUTH-CHECK CLEARED ON CHAD'S STICK, 2026-07-30 night.** The turn-entry dip that
+> falsified "your tracers go where you pointed them" (measured 2.23/5.05/8.31° at
+> 15/30/60° flicks) was attributed by instrument to the crab's parasitic vertical
+> component and fixed by S-straightline's axis-correction FF (re-measured under the same
+> instrument: 0.92/1.08/4.50°; the 60° residual is the honest G envelope, ledgered as a
+> known limit with the endgame droop and the top-rudder window). Chad flew it and ruled:
+> **"yes I really like it. This is now the baseline for a quality flight kernel."**
+> Truth history preserved: this entry spent its first hours PENDING because the doc's
+> STOP rule caught its own first draft promising more than the kernel did — the rule bit
+> on day one, and the promise shipped only after the kernel earned it. **Remaining gate
+> before player-facing use: Chad's approval of the rendering's wording** (truth and
+> copy-approval are separate).
 
 ### The philosophy, in Chad's words (source, verbatim)
 

@@ -109,13 +109,17 @@ v11** (`0602d8292`), grafted (recon 905/905), build-play re-stamped. Full pipeli
 this ledger: consult 45f9737 → audit e606070 → card review → verdict → A/B closure →
 seal entry.
 
-**ONE active mechanism thread: S-straightline** (the flick dip, RULED A FLAW — Chad's
-simultaneous-arrival spec, verbatim in DECISIONS; measured baseline 2.2–8.3° sag; stub
-`docs/straightline_thread.md` in the live tree). Consult packet PENDING — expect five
-questions on the rung-C2 align_f floor scar tissue, the pre-July-6 "pushed up in a turn"
-failure verbatim, and whether MB-rud's crab satisfies the rudder-leads clause. COMS-1
-("Control is king", `docs/KERNEL_COMS.md`) is PENDING S-straightline by its own truth
-rule. Cannot be fixed by dial — `bank_align_power` down only interpolates climb↔dip. The horizon-gate thread is **PARKED-PENDING-RECURRENCE**
+**S-straightline is FLOWN AND APPROVED** ("This is now the baseline for a quality flight
+kernel") — the axis-correction FF (`line_hold_ff`; the attribution FLIPPED mid-thread:
+crab's parasitic vertical component, not gravity — see DECISIONS, three entries). COMS-1
+truth-check SATISFIED on the stick; rendering still awaits Chad's wording approval.
+**PENDING NOW: the v12 seal** (Chad's word given; numbering note — he said "this v11"
+meaning the build in hand = v11 + S-straightline → seals as v12) **and GOLDEN #5**
+(first golden on recorder v2 — native telem_blend/held_bank pins; card must carry the
+spawn-altitude check and note the tracer instrument; candidate new predicate:
+dip-depth/straight-line from nose-elevation pins; identify the tape from its own data).
+This agent's seal pipeline armed: verify tag → re-snapshot → VERSIONS → DECISIONS →
+handoff, then the #5 sealing checklist on the golden tape. The horizon-gate thread is **PARKED-PENDING-RECURRENCE**
 (live ledger `cdfa7b0b4`, mirrored in DECISIONS.md: the symptom did not reproduce on the
 sealed tape — do not design against it; #4's clean segment B is the ready-made A/B, and
 re-opened fix work should request a dedicated recording set).

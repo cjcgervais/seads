@@ -29,6 +29,39 @@ The watch discipline stays — a session may move the branch past v11 at any tim
 
 ---
 
+## 2026-07-30 (night, latest) — S-STRAIGHTLINE FLOWN AND APPROVED: "This is now the baseline for a quality flight kernel." Seal word GIVEN (→ v12) + Golden #5 ordered
+
+**Chad flew S-straightline (build `ecbf51c6a`, pushed pre-fly per his precedent) and
+approved. Verbatim:**
+
+> "yes I really like it. This is now the baseline for a quality flight kernel. This v11
+> is the standard. Lets seal it and fly the golden."
+
+**Numbering note (the felt_flight_18 class, resolved the same way):** "this v11" refers
+to the build in his hands, which is sealed-v11 PLUS S-straightline — the new seal is
+**v12**. Flagged to Chad; carried as v12 unless he rules otherwise.
+
+**What the verdict closes:** the tracer-line dip thread (attributed by instrument to the
+crab's parasitic vertical component, fixed by the axis-correction FF, closures
+0.92/1.08/4.50° against 2.23/5.05/8.31°), the G-bite question (approved implicitly in
+"I really like it" — the honest high-G entry is part of what he is calling the
+standard), and **COMS-1's truth-check: SATISFIED ON THE STICK** — "your tracers go where
+you pointed them" is now true as a player will experience it, with the known-limits
+ledgered (endgame droop, top-rudder window, push-branch kink). The rendering itself
+still awaits Chad's wording approval — truth and copy-approval are separate gates.
+
+**Pipeline armed on this side, executes when the v12 seal tag lands:** verify tag +
+ls-remote → re-snapshot `reference/seads-feel/` at the flown seal → VERSIONS row →
+DECISIONS mirror → handoff. **GOLDEN #5 ordered by Chad's word** — first golden on
+recorder v2 (native `telem_blend`/`telem_held_bank` pins). Checklist additions paid for
+by this arc: spawn-altitude check on the card (the felt_flight_17/felt_flight_3 class,
+two occurrences); tracers as a flown instrument (note in the card what the pilot was
+watching); candidate NEW predicate for #5 — a straight-line/dip-depth predicate derived
+from nose-elevation pins under flick, now derivable because the boundary state is on the
+tape. Identify the tape from its own data; file counter ≠ golden number.
+
+---
+
 ## 2026-07-30 (night, later) — S-STRAIGHTLINE ATTRIBUTION OVERTURNED BY THE INSTRUMENT: the dip is the CRAB's parasitic vertical component, not gravity sag. Axis correction approved with a compressed re-audit
 
 **Commit 1's phase-resolved instrument falsified the plan's physics before any mechanism
