@@ -88,3 +88,43 @@ protocol (twice, one stamped build): serve → confirm `[BuildStamp]` → F8 on 
 F4 ×2 → two free-look releases → one keys-held turn + release → F9 flush; ONE injector
 at a time. The two numbers return to the kernel base for the ordering consult; nothing
 is ranked until they exist.
+
+---
+
+## 2026-07-31 (small hours) — THE EAGLE'S FIRST MEASURED ATTRIBUTION: the dip is THE CAMERA, not the crab. C leads; the crab fix does NOT port
+
+**The split came back TOTAL** (baseline flown by Chad on stamped build
+`ead1cc0-dirty 23:35`, twice-reproduced; eagle repo `963195b`, packet §7.2):
+
+- **Basis-free steps (crab term alone): dip 0.00° / 0.01°.** The crab's turn-sag is
+  ALREADY fully cancelled against a stationary target by `aimBankFeedforward` (the
+  S27-approved term) — the eagle has carried its own S-straightline equivalent all
+  along.
+- **Basis-live sweeps (crab + camera): dip 13.6° / 8.4°** (session range 8.6–16.4°).
+- **Independent confirmation:** the `aim_drift_deg` sign-flip, five-for-five by sweep
+  direction — the bank-rolled swing basis read directly, a signature the crab term
+  cannot produce.
+
+**Ordering, automatic under the pre-registered rule:** the **aim-carries-its-own-frame
+port (stage C) LEADS** — one stage that is simultaneously the pole fix (R4) and, by
+measurement, most-to-all of the dip fix (R1). **`line_hold_ff` DEMOTES to a residual
+character dial**, swept only if any dip survives the basis port. The consult reply's
+"C and D land together or not at all" resolves to: C lands; D is contingent on C's
+residual.
+
+**The mirror, for both ledgers:** the plane assumed gravity and measured the crab; the
+eagle assumed the crab and measured the camera. Two kernels, two wrong priors, two
+instrument-corrected attributions — measure-before-rank is now two-for-two across the
+federation.
+
+**Baselines on the record as diff targets:** releases — 30–39° horizon-tilt debt
+persisting ~1 s (one run −42.8°), standing oblique 22°→72° behind by 3 s (ask A / ask
+B targets respectively, seven runs each); keys — 42–86° oblique, 85–147°/s release
+slam (3–5× the plane's accepted 16.3°). **Must-not-regress rows:** zero-overshoot /
+zero-reversal arrival, 0.35 s vertical settle, 0° basis-free dip. **Honesty flags:**
+the overshoot=30.00 rolling-frame artifact is never to be cited; F7 was unreachable on
+Chad's keyboard — the lateral step is now F3 (instrument keymap is part of the card).
+
+**Next:** stage C, built inert behind a flag, one knob, these baselines as the diff.
+The HttpService recorder (BuildStamp in the tape header) is the specified tape format,
+queued behind live feel work.
