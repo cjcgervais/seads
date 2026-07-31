@@ -70,6 +70,19 @@ sooner = shallower dip, but re-admits some of the "pushed up in a turn" climb he
 OUT — a feel trade only he can re-rule; `pull_floor` is already 1.0 = full servo). That
 would be its own thread with its own card — not folded into this one.
 
+**A/B RESULT (added same night — the pre-registration above is CLOSED, hypothesis
+CONFIRMED):** the seads-feel session had independently run the offline half of exactly
+this A/B before the hypothesis arrived (convergent attribution from two directions —
+this ledger's reasoning from the bit-identity proofs, theirs from nose-elevation traces).
+Lateral flicks 15/30/60° at V200, `roll_target_mix` 1 vs 0: dip depth **2.23 / 5.05 /
+8.29°, identical in both arms to three decimals** (the mix arm 0.02° *shallower* at 15°).
+Verified from the artifact: live-tree ledger row `291dc5314`, flight-log table read
+directly. **The dip is v10 character** — the S7-turn2 roll-first trade, flown since the
+seal, drawn visible for the first time by the tracer instrument. NOT an S-rollmix
+regression. Both dispositions rest with Chad: (1) S-rollmix seal word → recon graft +
+recorder-v2 port; (2) dip = flaw-or-character ruling (if flaw: `bank_align_power` down,
+own thread, own card, revisits his own 2026-07-06 ruling).
+
 ---
 
 ## 2026-07-30 (later) — AUDIT of the blend-band roll-continuity plan (two commits, roll_target_mix)
