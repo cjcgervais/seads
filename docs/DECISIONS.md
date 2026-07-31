@@ -29,7 +29,42 @@ The watch discipline stays — a session may move the branch past v11 at any tim
 
 ---
 
-## 2026-07-30 (night) — AUDIT of the S-straightline plan (line_hold_ff, bank-coordinated pitch feedforward): APPROVED, no blocking corrections
+## 2026-07-30 (night, later) — S-STRAIGHTLINE ATTRIBUTION OVERTURNED BY THE INSTRUMENT: the dip is the CRAB's parasitic vertical component, not gravity sag. Axis correction approved with a compressed re-audit
+
+**Commit 1's phase-resolved instrument falsified the plan's physics before any mechanism
+landed:** the gravity-deficit FF closes 2–4% of the measured dip (2.23→2.20, 5.05→4.92,
+8.31→7.93) — gravity can source ~0.2° of a 5° dip. The measured mechanism: the rudder
+sweeps the nose toward the aim at up to ~55°/s about the BODY yaw axis; once banked,
+sin(bank) of that sweep points down (~20°/s of nose-drop at 50° bank). The dip is the
+crab steering the nose downhill because its axis is bolted to a banked airframe.
+
+**The fix shape (Chad ruled: proceed):** axis correction — `pitch = −yaw·sinφ/cosφθ`,
+exactly the pitch that makes the nose sweep to the aim about LOCAL UP instead of the
+banked body axis (math verified: zeroing the net vertical component of the yaw sweep
+requires q = r·tanφ, fold-safe form as stated). Same dial, same gates, signed (also kills
+the reversal kink); a commanded dive comes through the pitch demand and is untouched.
+Trade, stated honestly: full cancellation on a hard flick is a genuine high-G level pull
+(the real-airplane behavior); very large flicks keep an envelope-bounded residual.
+
+**The prior audit's approval does NOT carry over — compressed re-audit required on the
+changed core, four conditions issued:** (1) the correction must key on the EMITTED yaw
+(post yaw_gate/blend), never the raw demand — else it cancels a yaw that isn't being
+commanded (the P1 trap); (2) the C2d-waiver rationale must be REWRITTEN — "aim-
+independent coordination" is now false; the new bound story is structural
+(≤ emitted-yaw·tanφ, knife-faded, AoA/G envelope as the wall), stated on its own terms;
+(3) G-bite promoted from sentinel to HEADLINE fly-card condition; (4) oracles re-derived
++ per-flick closures re-registered, envelope residual surfaced to Chad pre-fly.
+
+**Lesson (the discipline's best day):** the gravity story was correct PHYSICS wrongly
+ATTRIBUTED — it survived plan-mode, a fresh red-team, and this ledger's audit (which
+verified the formula but could not test whether it was THE mechanism). Only the
+pre-registered instrument killed it, before a fly was spent on a card that would have
+failed. Verifying a formula is not verifying an attribution; only measurement closes
+that gap. Instrument-first is now three-for-three.
+
+---
+
+## 2026-07-30 (night) — AUDIT of the S-straightline plan (line_hold_ff, bank-coordinated pitch feedforward): APPROVED, no blocking corrections — ⚠ SUPERSEDED ABOVE: the plan's physics was falsified by its own commit-1 instrument; the approval's physics section and C2d-waiver rationale are VOID
 
 The plan was audited against this ledger and the v11 snapshot. **Physics verified by
 independent re-derivation:** the FF magnitude `(g/V)·(1−c²)/c` is the exact body-pitch
