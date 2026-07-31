@@ -29,6 +29,33 @@ The watch discipline stays — a session may move the branch past v11 at any tim
 
 ---
 
+## 2026-07-30 (night) — AUDIT of the S-straightline plan (line_hold_ff, bank-coordinated pitch feedforward): APPROVED, no blocking corrections
+
+The plan was audited against this ledger and the v11 snapshot. **Physics verified by
+independent re-derivation:** the FF magnitude `(g/V)·(1−c²)/c` is the exact body-pitch
+component of a coordinated level turn's angular velocity (ω = g·tanφ/V vertical, pitch
+component ω·sinφ), and it is the pitch-axis SIBLING of the flown coordination yaw demand
+— not a new term class. Claimed magnitudes reproduce by hand (0.81°/s @30°, 4.2°/s @60°,
+knife-faded ~13°/s ≈ 4.6 g @85°, V200).
+
+Notable audit findings, all sound: (1) the deliberate NO-w_push-cap deviation from the
+C2d scar is correctly reasoned (w_push ≈ 0 on a pure lateral flick would neuter the FF at
+zero sag; C2d targeted pointing-law helpers, this is aim-independent coordination) with
+replacement bounds named and the dive_gate anti-climb closure comment REQUIRED so a
+retune can't silently reopen it; (2) the FF↔servo composition satisfies the stated
+condition (feedback-plus-feedforward, servo structurally silent at sag=0, pinned by
+two vacuity-tripwired legs); (3) all four of Chad's plan-mode rulings baked (roll-in
+wins / crab enough / keep-gate-add-FF / COMS-1 on the stick). **The honest crux,
+pre-registered in the plan:** deep flicks commit to bank angles where the FF is
+knife-faded — commit 1's phase-resolved instrument measures how much of the 8.3° @60°
+dip lives out-of-reach BEFORE the mechanism lands, and the residual is surfaced to Chad
+before he flies if the roll-in share is < ~half. 15/30° closures expected near-full.
+
+Minor asks (relayed, non-blocking): exact gate-count pre-registration before each run
+(lesson 4); Chad's spec sentence verbatim on the fly card.
+
+---
+
 ## 2026-07-30 (night) — v11 SEALED: S-rollmix (the 5–10° slam thread CLOSED), sealed on Chad's word after the flown verdict
 
 **Sealed `flight-kernel-v11-2026-07-30` @ `0602d8292`** (annotated tag `20f14817c`,
