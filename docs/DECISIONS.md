@@ -63,9 +63,23 @@ a cost paid every fight ("my gunnery should have a predictable path"); (3) the p
 authority principle every prior ruling upholds — curves on command, never as furniture.
 "Character" is what you keep when it doesn't fight the mission; this fights the mission.
 
-**Supersession bookkeeping:** the 2026-07-06 bank_align_power ruling joins Fly-13 and the
-cue-ball as rulings superseded by Chad's own evolved word (the R6 pattern — though this
-one is a spec REFINEMENT, not a compensation decay: neither old failure mode comes back).
+**Supersession bookkeeping — CORRECTED BY CHAD, same night.** This ledger first filed the
+supersession as "a spec refinement, not a compensation decay." Chad overruled that
+reading with the history only he carries, verbatim:
+
+> "The previous ruling were often the compensation of an underpowered plant, and I was
+> having some pole lock so my ruling in this case may have also been a compensatory
+> measure without the proper solution."
+
+So the 2026-07-06 roll-first ruling is the **FOURTH flown instance of the
+compensation-decay law** (R6): (1) yaw_scale 2.2→2.0, (2) Fly-13's crabbing preference,
+(3) the cue-ball retirement, (4) bank_align_power's hard roll-first gate — each a dial or
+ruling tuned against a low-authority plant (and, here, the pole-lock era) that became a
+bias once authority rose. The law's predictive corollary strengthens accordingly: **when
+a v10-era behavior traces to a pre-power-increase ruling, audit whether the ruling was
+compensation before treating it as preference** — and the A6M2 (low-authority vessel)
+brief inherits the converse: the roll-first gate shape may be worth RE-ARMING there as a
+character dial, exactly like the parked capture machine.
 The new thread is mechanism-shaped (a gate re-key, not a dial walk: power-down on the
 same cos(bankErr)^p law only interpolates between climb and dip — it cannot express
 simultaneous arrival). Belongs to seads-feel plan mode with the usual pipeline: consult
