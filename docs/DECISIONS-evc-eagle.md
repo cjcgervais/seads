@@ -1985,3 +1985,83 @@ delete" clarification is superseded on his word and rewritten (zeroed not
 deleted, revert = 0.6). With LAW 5 + tilt 0, the camera rolls with the bird by
 NO mechanism -- the camera-shake suspect list is exhausted by construction.
 Flight verdict on the full S61 stack pends on stamp 64cb275.
+
+---
+
+## 2026-08-01 — WOBBLE SAGA TAIL + NEW THREAD: THE BROAD KNIFE (Chad ask, verbatim) — LINEAGE ANSWER DELIVERED: the plane solved this exact complaint three times; port the flown mechanism, do not invent
+
+**Saga tail:** the engineer's build `64cb275 2026-08-01 03:45` landed both
+rulings (autolevel at Chad's pace — 45° levels in ~0.33 s / 136 deg/s from
+the pre-registered table, damper kept; `bankTiltFactor` ZEROED not deleted
+under the new Law 5 — horizon world-level "by no mechanism at all";
+engineer's ledger `0ad86ef` in the eagle repo). Chad's response opening the
+next ask: **"ookay perfect"** — reads as acceptance; the formal KEEP log on
+the one-flight verdict is the engineer's motion on Chad's confirmed word.
+
+**NEW THREAD — Chad's ask (verbatim):** *"Th knife edge cone is too sharp
+sending me into a roll when I only want to pitch down for a dive. My seads
+codebase had this problem. We altered the deflection zone below something
+like 34 - 40 degrees, to the side without the wings rolling over when its a
+mostly straight down mouse aim movement. So to allow me to dive straight
+down given me choice control of the inversion if I chose to. So a broader
+knife is required."*
+
+**LINEAGE ANSWER (archive-first, per standing doctrine — sources:
+`docs/cascade/push-gate-knife-edge.md`, `reference/seads-feel/config/
+controller.toml` [push] block, snapshot current at the v12 seal — live
+branch verified unchanged at `e362df289`):**
+
+Chad's memory is accurate to the half-degree: the plane's shipped
+**side-cone is 37.5° enter / 42.5° exit** — his "34–40." And the plane's
+ledger carries his SAME complaint, three flown rulings deep:
+
+1. **2026-07-07** (side cone 22.5→27.5): *"the knife edge on nose down
+   maneuvers needs a little widening... I got thrown over once when nosing
+   down."*
+2. **2026-07-24 FLY-1** (27.5→37.5): *"when I go nose down that knife edge
+   is strong and I roll over to one side or the other. Narrow the rollover
+   bands to give way to the sacred middle... broaden that knife edge."*
+3. **Rung F, THE SACRED MIDDLE** (side_pure 18/23): *"when I nose straight
+   down I need a wider knife edge... pitch straight down without tipping
+   over... maintain my horizon because I will slowly pitch up from the dive
+   in that same direction."*
+
+**The mechanism (the eagle has NONE of it — `push-gate-knife-edge.md`'s
+own last line: no equivalent gate exists in the EvC kernel; its knife-edge
+behavior is emergent from `aimRollGain` on any lateral component of a
+steep-down aim):** a hysteretic push-mode state machine confining PURE
+PITCH-DOWN (roll suppressed) to a cone around the vessel's own vertical
+plane, with four legs, plane-shipped values:
+
+- **World-horizon leg** (rung E): push only when the aim is ≥
+  `horizon_enter 45°` BELOW the WORLD horizon (exit 40°, 5° band). The
+  elevation MUST be world-frame (`dot(aim_world, local_up)`),
+  bank-independent — ⚠ eagle-specific hazard: the eagle's measured dip
+  attribution was camera-basis contamination; a camera- or body-frame
+  elevation here recreates the plane's original "mystery dive" (side cone
+  DEGENERATES near-astern — documented in the toml comment).
+- **Side cone**: pure-pitch only within `side_cone_enter 37.5°` of the
+  vertical plane (exit 42.5°); outside it, roll to track — Chad's "choice
+  control of the inversion": a down-AND-side aim still rolls through.
+- **Sacred middle** (rung F): within `side_pure_enter 18°` in-plane (exit
+  23°), below the horizon at ANY depth → pure-pitch — the shallow
+  straight-ahead dive that rung E's 45° blanket alone would deny. Strict
+  subset: a shallow LATERAL aim still never pushes.
+- **Turnover leg**: push while the below-nose angle ≤ `down_enter 88°`,
+  roll into the loop past `down_exit 96°` (turnover ~92°, just past
+  straight down) — "THE knob for nose down without banking over," and the
+  literal implementation of inversion-by-choice.
+
+**Port lessons attached (paid for, both kernels):** every leg HYSTERETIC
+with ~5° bands — the eagle has just paid twice for non-hysteretic
+self-judging gates (F3/F9); the companion display (off-screen red aim
+arrow) made the 45° gate legible on the plane — the eagle equivalent is
+the engineer's call; the reticle is never clamped (S-retclamp lesson).
+**Governance:** this IS a Chad-initiated cascade change (his word above,
+scope: steep-aim region only) — the S61 packet's "zero change to the flown
+cascade feel" stands everywhere else. **Pre-registered pass, from the
+plane's own measured check:** a pure lateral hold produces zero push on
+every row; a straight-down aim pure-pitches with no roll; down-and-side
+still rolls through past inverted. Constants are the plane's as-shipped —
+the eagle's own values are Chad's stick after the port flies, recorded as
+character-sheet entries per vessel doctrine.
