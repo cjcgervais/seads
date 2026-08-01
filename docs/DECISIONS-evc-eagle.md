@@ -2593,3 +2593,54 @@ designed whole with its two false-nulls modeled; plane v12 flew 1.0,
 eagle still gate-held at 0), C2-4 straight-line predicate <1°, C2-5 pole
 clamp residual. The plane's proven instruments; one design → docs-agent
 reconcile → one red-team → one build → one flight.
+
+---
+
+## 2026-08-01 — CARD 2 RECONCILE VERDICT (docs agent, per the 424836f gate): PASS WITH THREE REQUIRED FOLDS — headline confirmed adversarially; lineHoldFF defense set incomplete (blocking fold); C2-4 bar envelope-scoped
+
+**The packet parked at the gate; the reconcile ran; the verdict is
+`docs/consults/CARD2-RECONCILE-VERDICT.md`.** Four independent verification
+passes over the v12 snapshot (`e362df289` — packet's `89447aba5`/07-23
+provenance corrected of record), the goldens, this ledger, and BirdController.
+
+**CONFIRMED:** CL-1, the design's foundation — all six plane push-gate
+conjuncts traced with the S62 geometry: a 6°-off-nose hair-below aim ENTERS
+push on the plane too (aim_side ≤ sin 6° can never reach the 18° sacred
+gate; depth condition is sign-only per the Rung F ruling, verbatim at
+controller.toml:697–714). The plane is depth-blind BY RULING; benign only
+because its push branch keeps full pointing yaw. C2-1's depth floors stand
+as honestly-cited eagle deltas. Q1 answered: NO amendment to this ledger —
+the committed C2-1 row never said "the plane's" depth semantics; the
+EvC-side plan wording corrects. Q2: consistent (designed-whole ≠ flown-at-k;
+sweep stays Chad's post-E2 procedure). Q3: pass table consistent with the
+registrations; R1's residual carries NO numeric predicate (throw-arc bar is
+a different instrument than the basis-live 8.6–16.4° dip of record — the
+substitution must be stated); the C2-5 bitfield is a NEW instrument, not
+"the R4 registration's check" (no ledger antecedent).
+
+**THE FOLDS (design-text amendments before red-team; gate cleared
+conditional on them):** F1 BLOCKING — the plane's shipped line_hold_ff
+carries defenses beyond the packet's {knife_fade, fwd_gate_ff, blend}:
+the parasitic-only split band (the −G-bunt fix) and emitted-yaw keying
+(the phantom-cancel fix), plus entry gate/clamp, structural self-bound with
+the AoA hard wall, loader envelope. The eagle's {knife fade, upright fade,
+cosElev} models none of these — the exact incremental-port pattern the
+909c8ff LAW forbids; each must be adopted or explicitly adjudicated.
+F2 — Golden #5's <1.0° bar is scoped to committed near-level U-recovered
+entries; the plane's own v12 leaves 4.50° at 60° flicks ("the honest G
+envelope") — a blanket bar would false-fail the plane itself. F3 —
+citation corrections (third-shape ruling recited from
+straightline_thread.md:32–34, not DECISIONS.md:260–300; false-null spans
+:205–207/:257–264/:303–306; CAMERA-LAWS.md is eagle-repo, this repo's
+anchor is the camera-anchor-mode-duality cascade; R1 = 8.6–16.4°).
+
+**Red-team inherits three named handoffs:** the banked-configuration test
+requirement (be ≈ ±178° at trivial depth REQUIRES bank — wings-level reads
+±90°; D1a/D1b legs must fly the configuration or pass vacuously); the E2
+steady-state question (phase < 1 at final banks under 90° — intended
+physics or a new lull); the F1 adjudication table. CL-5's substance holds
+(no bank-progress pull shipped anywhere in v12 — E2 is eagle-authored,
+confirmed by search); the phase algebra satisfies both ruled properties and
+is literally the McRuer composition form. CL-4 answered: the plane has no
+per-transition schema at all; the eagle's row schema is strictly finer —
+acceptable, bar stays the edge-count rule, AT-15/AT-16 named as analogs.
