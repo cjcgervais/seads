@@ -708,3 +708,32 @@ rim-pin; Chad's speed verdict in his words.
 **On a clean keep, the closing sequence stands:** CS-5 lands with same-day sync;
 `eagle-v1` annotated seal with Chad's verdict verbatim; alliance asks L1/L2/L4/L5
 in the same session (L3 IS the seal).
+
+---
+
+## 2026-07-31 (E1.2 verify gate) — Opus SHIP-WITH-FIXES (`7dcdb95`); THE LATCH-ZONE IDENTITY IS PROVEN — the 0.8 cap is airtight BY PROOF; both mandatory items closed; Chad's E1.2 refly is next
+
+**Verify verdict accepted and ledgered** (commit `7dcdb95` @ 21:15, verified in the
+tree):
+
+- **The identity HOLDS, exactly:** |φ| > 90° ⟺ UpVector.Y < 0, by the definition
+  of atan2 — precisely the region where levelAssist is gated to zero. The dwell
+  term and levelAssist are PROVABLY DISJOINT in the only zone where their signs
+  could oppose; the total-cap's summed-authority guarantee is airtight by proof,
+  not by testing. The superseded-ceiling arithmetic is now closed mathematics.
+- **M2 strengthened beyond the design's own argument:** the frameUp carry is
+  structurally locked out of the snapToChase window — the 0.4 s failsafe expires
+  before the 0.5 s dwell can open. Disjoint by arithmetic, not by luck.
+- **The caveat's letter enforced in code:** the 0.8 comment corrected to
+  "licensed, unflown, the 45° row is the court"; the builder's wrong
+  single-anchor release claim corrected to the real two-mechanism contract.
+  Comment-only fixes, both.
+- **Tier-4 659/659 exact, zero new findings, register floor untouched.**
+
+**Standing at:** E1.2 flies on Chad's stick next — F8 first, the inverted park's
+two-observations-in-one (level AND true horizon within ~2 s, holding a further
+second), the 45° ease row sitting in judgment over the 0.8 cap, the two-second
+rim-pin, his speed verdict in his words. **On his clean keep, the closing sequence
+executes:** CS-5 lands with same-day sync entry here; `eagle-v1` annotated seal
+with his verdict verbatim in the tag message (recorded in mandalark VERSIONS.md);
+alliance asks L1/L2/L4/L5 in the same session.
