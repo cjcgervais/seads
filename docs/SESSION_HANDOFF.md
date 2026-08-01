@@ -167,7 +167,18 @@ law); F2 (C2-4's <1.0° bar must state the Golden-#5 near-level envelope);
 F3 (citation corrections; R1 of record = 8.6–16.4°). Gate CLEARED
 conditional on the folds landing as design-text amendments; then one
 red-team (inherits three named handoffs in the verdict) → one build →
-Chad's one flight. The reconcile
+Chad's one flight.
+**UPDATE 2026-08-01 (close): CARD 2 IS BUILT, STAMPED, AND WAITING FOR
+CHAD'S ONE FLIGHT.** EvC `9ac7c7a` (updraft, pushed); folds landed;
+red-team BLOCK→folded (4 MAJORs); Opus verify → fix → delta-verify SHIP
+(659/659). Ledger close-out `d37bf40`; build report at
+`docs/consults/CARD2-BUILD-REPORT.md`; C2-4 eagle translation APPROVED on
+docs-agent spot-check. Serve verified LIVE (port 34872), stamp verified
+`9ac7c7a` clean, both checked directly. A real pole bug (Stage-C mid-flight
+body-up rebuild) was found and fixed in the build. Fly card = EvC
+docs/HANDOFF.md top box; "no stamp, no verdict" compares the HASH. When
+the flight verdict arrives, bank it on the eagle ledger and re-check the
+C2 rows against the tape, not the summary. The reconcile
 checks the design's requirement table against the plane's v12 instruments
 in `reference/seads-feel/` and the eagle ledger's registrations
 (R1/R4 originals, S62 tape findings, C2-1..C2-5 as committed). The old E-series ordering survives
