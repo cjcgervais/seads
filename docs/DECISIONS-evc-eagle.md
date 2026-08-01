@@ -292,3 +292,70 @@ flight until:**
 beautiful but I want the players to command the eagle" — the goal is not curl
 removal; it is putting the curl under command. A bank-timing fix and a character
 dial may yet compose.
+
+---
+
+## 2026-07-31 (later night) — GATE RESOLVED: the COLUMNS MOVED, THE HAND DIDN'T. CS-5 amendment-pending on CHAD'S OWN WORD (dwell auto-level). Three levers on the table; ONE flight adjudicates — predictions pre-registered, plus this agent's third-outcome rider
+
+**The sweep gate resolved to the SHARPER branch** (engineer's diff, packet §7.4;
+verified read-only, commits `ecd0d36` + `b39d7e6` on `updraft`): the F3 arc columns
+DID move — arc_over 7.82 → 7.23 → 5.4/6.05, monotone with k — while Chad's hand felt
+"didn't change too much." The dial works as designed, sub-saturation; the FELT curl
+lives in the fast throw, exactly where both pre-identified false-nulls live (the
+saturation rail + the >40° bank-transient taper) and exactly where the scripted
+F3/F4 scenarios don't reach. Lesson 2 fires again: the instrument must model the
+maneuver Chad actually flies. `lineHoldFF` is HELD at the gate (proven lever,
+unranked) and reset to 0 so the throw capture reads the pure curl.
+
+**Honesty ledger:** flight-2's F4 sweep rows are CONTAMINATED (aim_drift +17.8/−41.6
+— armed on a heavily tilted carried frame) and are never to be cited. **Protocol
+amendment on the record: Space-tap re-level before every F4 set.**
+
+**CS-5 AMENDMENT-PENDING — OWNER-INITIATED. Chad's word, verbatim:**
+
+> "per my request when this was build I left autolevel wings to horizon out. So the
+> eagle will fly inverted. Now, I dont really need this anymore. Sometimes a
+> midscreen deflection throw of the mouse aim will casue the bird to hear to the
+> mouse with the inverted bank and is pitching down (sideways along horizon due to
+> the bank) to meet the mouse aim. Also the eagle is not always in a roll angle to
+> meete the mouse input ideally. Ideally an auto level wings after say 0.5s without
+> mouse aim input (holdingstill to settle) will set the eagle on the right pre
+> orientation for specific deflection calls."
+
+This is the vessel doctrine working as designed: inverted flight was Chad's OWN
+session-9 character ask, and it is revised only by his own word — never silently,
+never by an agent's inference. The engineer's tombstone check is endorsed: a
+dwell-gated settle-to-level is an attitude VERB (player-shaped, discrete trigger),
+not the banned continuous-basis class stage C already severed, and not MB-right
+(whose exclusion derived from the very lock now being revised). Design questions
+PARKED until its turn: dwell time (~0.5 s starting point, Chad's number), ease rate,
+and inverted recovery — which per Chad's report is a MUST, since the inverted-bank
+pitch-down IS the complaint.
+
+**Three levers now on the table, NONE ranked** (measure-before-rank, four
+attributions of scar tissue say so): dwell auto-level (pre-orientation), bank
+promptness (timing), residual `lineHoldFF` (arc shape — proven sub-saturation).
+
+**THE ADJUDICATION FLIGHT — predictions pre-registered before any row exists**
+(stamp of record `b39d7e6-dirty 2026-07-31 19:01`; tracker auto-arms on real throws:
+near-centre → ≥15° in ≤0.30 s, keys idle, never injected; per-throw columns:
+`bank0_deg`/`up0_y` starting attitude, `bank_frac` at first pitch-rail
+(`t_peak_pitch` = the hypothesis's exact instant), the two-eyed arc):
+
+- **P1 (pre-orientation):** ugly-arc rows cluster on cross-banked/inverted `bank0`
+  → the dwell-level lever leads.
+- **P2 (timing):** `bank_frac` is small at the pitch-rail even from clean level
+  starts → bank promptness leads.
+- **P1∧P2:** both true — the levers compose (they are not rivals).
+- **P0 — THIS AGENT'S RIDER, added at the gate:** if NEITHER signature appears —
+  arcs forming from clean level starts WITH healthy `bank_frac` — then Chad's
+  hypothesis is itself overturned (attribution overturn #4 fires in full) and we
+  re-attribute again rather than rank a lever. Written now so a third outcome
+  cannot be rationalised into P1 or P2 after the rows exist.
+
+**Flight protocol (variety IS the data):** a dozen-plus fast mid-screen throws,
+both directions, from varied situations — level starts, banked starts, right after
+maneuvers. F8 on; every qualifying throw prints its own row; no other F-keys.
+
+**Standing intent governs whichever lever wins:** "The eagle curl behavior is
+beautiful but I want the players to command the eagle."
