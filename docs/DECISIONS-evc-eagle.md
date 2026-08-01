@@ -2748,3 +2748,46 @@ aimPushMode=false backs out the push family incl. the nose-vertical
 hold; D1b reverts as the PAIR to 0/0; whole-card revert documented in
 the build report. Attempt #2 waits on the archive-first law and Chad's
 token budget — no whack-a-mole resumes.
+
+---
+
+## 2026-08-01 — CORRECTION OF RECORD (Chad's word): the straight-up veer is NOT fixed — the banked "one PASS" is WITHDRAWN. And Chad's standing question on the curl is answered with its provenance chain, and his intent is re-ruled of record.
+
+**Correction:** Chad: "the straight up loop is rolling off → that was a
+typo.. not fixed. the whole thing is broken." The S63 entry's C2-5/veer
+PASS is withdrawn. The [EvC pole] mask=0 sticky=0 tape line now reads
+the other way: THE VEER FLEW WHILE THE POLE INSTRUMENT SAW NOTHING —
+the veer is not the clamp class that instrument watches, so the Stage-C
+body-up-rebuild fix (real bug, kept) was NOT the veer's mechanism. The
+veer's cause remains UNATTRIBUTED. S63 is a full-card FAIL: C2-1
+unread, C2-2 FAIL, C2-3 curl present (k=0), C2-4 FAIL, C2-5 FAIL
+(instrument blind to the symptom).
+
+**Chad's question: "Why did you deliberately leave the curl there? Why
+didn't we fix it like the seads archive with my remaining tokens as I
+had asked?"** The provenance chain, honestly: the k=0 hold traces to
+the 29-throw adjudication ruling (345132b, "lineHoldFF trims last") and
+the S62 card's ordering — every agent downstream, INCLUDING THIS DOCS
+AGENT AT THE RECONCILE, read "trims last" as "ship at 0, Chad sweeps
+later," and the committed C2-3 row froze that reading ("eagle still
+gate-held at 0"). Nobody asked the archive question: THE PLANE'S OWN
+FLOWN ANSWER IS 1.0 — v12 shipped line_hold_ff = 1.0, flown-approved,
+sealed. Porting the mechanism whole per Chad's own 909c8ff law arguably
+included porting its CONVERGED VALUE as the default, with the sweep as
+trim-from-there. The reconcile checked the design against the ledger as
+committed and passed it — correct against the letter, blind to the
+drift from Chad's intent. That intent-drift catch was the docs agent's
+to make. Counted against this agent.
+
+**CHAD'S RULING, now of record:** fix it like the seads archive. Next
+build lands the plane's flown value (line_hold_ff ≡ k = 1.0 equivalent)
+as the DEFAULT, sweep is trim, not prerequisite. "Trims last" is
+re-read per Chad's word: last means last in the BUILD order, not
+absent from it.
+
+**Standing for attempt #2 (fresh tokens, archive-first law):** the
+symptom list is UNATTRIBUTED except the curl (k=0, now ruled to land at
+archive value). Aim flipping, straight-down dive gone, knife-edge guard
+gone, deep-dive chatter, straight-up veer — five open, all concentrated
+in the vertical where the card's changes concentrated. Revert state:
+aimPushMode=false live on stamp 3a0c159.
