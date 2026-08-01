@@ -1198,3 +1198,41 @@ was posed in state-law terms), the dirty-stamp self-declaration as a
 discipline nugget, and the echo-rule-run-by-every-seat observation. Sync
 current in both directions through this beat. Board unchanged: one thing left
 in the world — Chad's flight.
+
+---
+
+## 2026-07-31 (late night) — CORRECTION, SUPERSEDING TWO OF THIS LEDGER'S OWN CLAIMS: the dirty stamp is a CONSTANT, not a signal; the memory update was never at risk
+
+The engineer examined the dirty state; this agent verified each corrected fact
+at the artifact. Three claims in this ledger's S60 entry and the TESGI-pointer
+entry are superseded:
+
+1. **"The claimed memory update lives in the uncommitted `CLAUDE.md`" — FALSE.**
+   The memory update was written to the engineer's memory directory
+   (`project-kernel-v12-consult.md`, verified present), independent of any
+   tracked file. It was never at risk. What sat uncommitted in `CLAUDE.md` was
+   ~51 lines of accidentally pasted conversation transcript — noise, since
+   backed up to scratchpad and restored; `CLAUDE.md` is clean (verified:
+   `git status` now shows only `BuildStamp.luau` modified).
+2. **The "dirty stamp self-declaring" instrument framing — WRONG CLASS.**
+   Verified structurally in `tools/Write-BuildStamp.ps1`: the tool writes the
+   TRACKED `BuildStamp.luau` and then computes the dirty flag from git state —
+   so every serve after a commit dirties the tree with the stamp's own
+   regeneration, and the suffix reads `-dirty` on any tree, forever. **The
+   dirty bit here has zero discriminating power.** A session trusting it as an
+   alarm chases nothing; a session trained to ignore it misses a real
+   uncommitted change.
+3. **The TRUE nugget from this beat, replacing the filed one:** *"no stamp, no
+   verdict" must compare the HASH, not the dirty suffix.* The commit hash in
+   the stamp discriminates; the suffix does not.
+
+Items 1 and 3 of the TESGI arc pin (attribution-by-code-read;
+echo-rule-as-practice) stand as filed. This correction flows to the TESGI
+record through the third seat; its commit gets a pointer here when it lands.
+Note the shape of tonight's second imported-gravity error, same family as the
+keychase misreading: an instrument framing filed from a plausible reading of
+the state instead of an examination of it — the lesson-7 discipline applies to
+DIAGNOSES of artifacts, not just their identification.
+
+Board unchanged: `2229160` pushed and verified, CS-8 gated on Chad's word, the
+flight the one thing left.
