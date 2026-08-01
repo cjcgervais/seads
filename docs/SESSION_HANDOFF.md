@@ -127,13 +127,20 @@ thread on a felt report.
 
 **THE EAGLE IS A REGISTERED VESSEL (2026-07-30/31)** — read
 **`docs/DECISIONS-evc-eagle.md`** before touching anything eagle-related; it is
-current through stage C (KEPT by Chad's word: `aimOwnFrame = true` — pole + drift
-fixed, zero regressions) and carries the full attribution history (three overturned
-attributions across the federation — measure-before-rank is the law). **Eagle next:
-STAGE D** — the two-eyed instrument (`arc_over_deg`/`arc_under_deg`) FIRST, then the
-`line_hold_ff`-concept character dial (eagle's own algebra, NOT the plane's crab
-cancellation; Chad sweeps 0.3/0.5/0.7, one per flight, and rules where the eagle sits
-between bird and plane). Consult packet + reply pattern established — the eagle
+current through the 2026-07-31 29-throw ADJUDICATION RULING. Stage D was built,
+swept 0.3/0.5, and HELD at the pre-registered gate (columns moved, hand didn't —
+dial proven sub-saturation, held as the last-in-line character trim). Chad's
+bank-timing hypothesis was instrumented and BOUNDED, not overturned; the capture
+partitioned the curl into THREE measured co-owners. **Eagle next, by ruling: E1
+dwell settle-to-level** (CS-5 amendment, Chad-initiated — ~0.5 s dwell, eased, MUST
+recover from inverted) → **E1 re-capture** on the standing throw instrument
+(pre-registered: chaos population vanishes, floor persists) → **E2 phased pull**
+(the structural floor: elevator rails on every fast throw — ask-D's "pull grows
+WITH the bank," promoted to measured need) → lineHoldFF sweep resumes last on the
+E2 kernel. Promptness re-classified to the R5 feel thread. **Condition standing:
+the 29-row table must be archived into the eagle repo before any lever's fly card
+cites it** (it exists only in the engineer's session log — echo, not artifact).
+Consult packet + reply pattern established — the eagle
 engineer reads this repo's ledgers directly. EvC2026 tree is READ-ONLY to this agent,
 same as the other live trees. The horizon-gate thread is **PARKED-PENDING-RECURRENCE**
 (live ledger `cdfa7b0b4`, mirrored in DECISIONS.md: the symptom did not reproduce on the
