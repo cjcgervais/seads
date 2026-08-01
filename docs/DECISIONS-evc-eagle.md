@@ -2068,3 +2068,21 @@ every row; a straight-down aim pure-pitches with no roll; down-and-side
 still rolls through past inverted. Constants are the plane's as-shipped —
 the eagle's own values are Chad's stick after the port flies, recorded as
 character-sheet entries per vessel doctrine.
+
+**BROAD KNIFE PORTED (engineer, eagle commit e9114ac, stamp 04:22):** the
+plane four-leg push-gate lands on the eagle, constants as-shipped (horizon
+45/40 WORLD-frame, side 37.5/42.5, sacred 18/23, turnover 88/96, bank guard
+100/120), one seam (hCmd multiply, pushW ramp in-24/out-6). Architect design
++ red-team BLOCK-then-CLEAR; fixes folded: F1 dwell verticality fade (the
+vertical-stoop phi noise snap-roll -- NOT deferred, the stoop is the home
+state), F2 fresh-latch-vs-exit + asymmetric ramp (no dive-entry roll kick),
+F3 [EvC push] transition log + push column on the shake line (chatter
+pre-instrumented; side cone is a self-judging gate, exit action can re-cause
+entry -- pre-diagnosed fix on file), F4 sacred = side-angle AND
+below-horizon, F5 honest: levelAssist self-fades steep, push HOLDS bank
+there, dwell levels the shallow regime, F6 gap-reset clears. CS-8
+amendment-pending row filed in HANDOFF; crow shared-Controls collateral
+noted latent. Red-team confirmed hCmd has exactly three consumers -- the
+one-seam claim is exhaustive, not asserted. Ships aimPushMode=true on
+Chad ask; pre-registered pass = the plane measured check mapped (6 rows in
+the commit). Cone widths become Chad character-sheet values after the fly.
