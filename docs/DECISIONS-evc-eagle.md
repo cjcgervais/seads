@@ -2142,3 +2142,25 @@ like every other leg; (b) take the turnover leg on MAGNITUDE
 semantics. (a) is the missing conjunct proper; (b) closes the signed back
 door even alone. Neither touches the flown dive/sacred-middle behavior —
 astern was never push-eligible on the plane.
+
+---
+
+## 2026-08-01 — BROAD-KNIFE BUG: ATTRIBUTION CONFIRMED BY THE AUTHOR, both plane-shipped fixes going in
+
+The engineer confirmed from the code before touching it — attribution
+exact: the ported turnover check takes the SIGNED angle (astern ≈ −170°
+passes ≤ 96) and astern is in-plane by construction (side cone blind
+there). Both fixes land together, both hysteretic: **(a) the forward
+bound** — the plane's fifth conjunct that never made the trip — and
+**(b) turnover as a magnitude.**
+
+**Pre-registered pass for the fix flight (three moves, one flight):**
+1. The bug maneuver — hard lateral drag one way, then hard the other,
+   banked — produces ZERO `[EvC push]` ENTER lines and the bird ROLLS to
+   the reversed aim (no sideways pitch, no held bank).
+2. The flown-approved dive set is UNCHANGED: straight-down aim
+   pure-pitches; shallow in-plane dive (sacred middle) pure-pitches; a
+   down-AND-side aim rolls through — inversion by choice.
+3. Lateral protection holds: a hard sideways drag at the horizon never
+   noses down (rung E's original pass, re-run on the eagle).
+Commit hash + stamp word before verdict, per standing discipline.
