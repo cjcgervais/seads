@@ -2216,3 +2216,43 @@ Spamming push lines = A (engineer damps/widens the offending leg's band —
 the printed line names WHICH leg flips). Silent = B (log it, resume the
 E-series per the standing ruling). Both paths are fully pre-registered;
 no further consult needed to proceed on either.
+
+---
+
+## 2026-08-01 — ARCHIVE ANSWER (sacred-middle elevation hysteresis): the plane's term is BARE TOO — its protection is a SIXTH conjunct the port also dropped: the BANK-ERROR FLOOR
+
+Read from `reference/seads-feel/control/controller.cpp` (sacred-middle
+block, ~line 644, snapshot current at v12):
+
+1. **The plane ships NO elevation band on the sacred arm.**
+   `sacred_middle_enter = aim_side < side_pure_enter && aim_elev < 0.0`;
+   the exit term uses the SAME bare `aim_elev < 0.0`. The hysteresis is on
+   the side-angle half only (18/23) — identical to the eagle port. A ±2°
+   band is therefore an eagle-local hardening, not a lineage restoration.
+
+2. **What actually protected the plane from horizon-riding chatter is
+   compositional:** push ENTRY requires
+   `have_bank && |bank_eff| > push_gate_bank` — a **bank-ERROR floor**
+   (plus `elev < 0.0` and the `target_body.z` forward bound). In any
+   ESTABLISHED hold the bank error is near zero, so push cannot enter or
+   re-enter at all — the bare elevation term never gets to chatter. **This
+   conjunct did not make the port either** (the port's bank leg is an
+   angle CEILING, 100/120 — correctly kept for near-inverted denial, but
+   it is a different guard; the plane has both ideas). The astern fix
+   restored the fifth dropped conjunct; this is the sixth.
+
+3. **Geometry note for the tape read:** in a pure LATERAL hold, sideDeg ≈
+   90° — the sacred SIDE half already blocks push, so `sac=` flipping
+   there would itself be a finding (check the printed sideDeg). The
+   engineer's bare-elevation chatter is geometrically live in the
+   DOWN-hold / dive-RECOVERY case (aim in-plane, elevDn crossing 0 on the
+   pull-up — Chad's flown "maintain my horizon [as] I slowly pitch up").
+   If the LATERAL-hold oscillation shows a silent push console, it stays
+   Hypothesis B (the E2 floor), per the standing consult.
+
+**Advisement:** lineage-faithful fix = port the bank-error floor as the
+entry conjunct (eagle equivalent of `|bank_eff| > push_gate_bank`,
+hysteretic like every leg); the ±2° elevation band is compatible as
+belt-and-suspenders under the generalized F3 lesson (every sub-condition
+of a latch hysteretic). Console verdict still rules which hypothesis the
+felt oscillation belongs to before anything lands.
