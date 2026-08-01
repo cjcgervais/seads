@@ -2385,3 +2385,42 @@ like every leg. Pre-registered pass: the dive set flown with ZERO push
 transitions between entry and pull-up on the log, no roll burst at
 convergence, hold-chatter fix retained (still no transitions in lateral
 holds).
+
+---
+
+## 2026-08-01 — CHAD'S CORRECTION STANDS: the post-roll AIM INVERSION is a SEPARATE finding — the carried aim frame has NO world-righting outside dwell. Law 5 fixed the camera's reference; the MOUSE mapping still rides the carried frame
+
+**Chad (verbatim):** *"after the roll near the gorund my aim got inverted I
+dont see that explained anywhere."* Correct — the singularity entry covered
+the uncommanded rolls, not the inversion that OUTLIVES them. From the code:
+
+- STAGE C's `(aimDir, frameUp)` pair "rotates about ITS OWN axes. No
+  external" righting. The only things that world-right `frameUp`: a
+  free-look release reseed (nil → reseeded level) and the E1.2b dwell
+  carry (`2.0·dt·dwellRamp` — only while dwell is ARMED).
+- Law 5 (`worldLevelHorizon`) explicitly kept it: "frameUp still governs
+  the MOUSE mapping; the camera just no longer" follows it.
+- So an UNCOMMANDED roll (the singularity's noise rolls; a ground
+  graze/tumble) leaves the carried frame rolled or inverted, and the mouse
+  then swings the aim about an inverted 'up' — **aim controls inverted** —
+  persisting exactly when hands are busy (near the ground, dwell never
+  arms, no carry ever runs). Chad's earlier observation was the same
+  family: "the orientation would be off a moment until the autolevel
+  horizon caught up." ⚠ Additional hazard at full inversion: the carry is
+  a LERP toward level — from an antiparallel frameUp it passes near zero
+  magnitude (degenerate direction) mid-recovery.
+
+**Two-part shape (engineer's design):** the singularity fix removes this
+instance's CAUSE (no more noise rolls), but the frame needs a righting
+guard regardless — candidates: a slow ALWAYS-ON world-righting of frameUp
+(world-level target, so it cannot reintroduce the camera-basis dip STAGE C
+was built against; dwell carry stays the fast path), and/or an inverted-
+frame bound (frameUp·worldUp < 0 while the bird is upright is never a
+valid state — reseed or fast-right, slerp not lerp through the
+antiparallel case). Whether "the horizon should always stay level" extends
+to the aim frame's up is a Chad ruling if the engineer wants it: the
+conservative reading says yes.
+
+**Pre-registered pass:** after any uncommanded roll or ground graze, mouse
+up is world-up within ~1 s without requiring still hands; no aim-axis
+inversion reproducible from the dive-roll-graze family.
