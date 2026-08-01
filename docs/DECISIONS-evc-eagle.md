@@ -802,3 +802,49 @@ camera, a wrong build), it is caught before it can contaminate judged rows.
 **Founding evidence:** tonight's camera regression was caught EXACTLY this way —
 Chad felt the oblique release before flying the E1.2 card, and the STOP protected
 every row on it. The card order is now: warm-up → F8 → judged rows → verdict.
+
+---
+
+## 2026-07-31 (late) — FIX FLIGHT FAILED on Chad's word ("nope its still not fixed"). STOP HOLDS. Attribution correction recorded honestly BOTH ways; two data reads + one feel question REQUIRED before attempt #2
+
+**Chad's word:** "nope its still not fixed." The STOP holds; nothing advances.
+
+**Attribution corrections, both directions, no smooth phrasing:**
+
+1. **Chad's "this was a v12 migratory fix that was dropped in the last build" is
+   SUPERSEDED by the bisect** (commit `a747da5`, packet §7.6, verified in the
+   tree): NOT a regression — the v12 release contract (ask A) was NEVER ported to
+   the eagle; the keys-held lane is provably untouched by all program commits; the
+   oblique exists in the pre-stage-C baseline tapes. The bisect-before-fix ruling
+   was FOLLOWED (this agent's earlier concern is withdrawn — the relay omitted
+   the bisect report; the commit carries it).
+2. **The port (`releaseSnapV12`, built inert, Opus SHIP-W-FIXES) FAILED ITS
+   FLIGHT anyway.** A correct bisect and a correct-looking port still did not
+   satisfy the stick. The plane took FOUR attempts at this same symptom; that
+   scar governs now.
+
+**REQUIRED BEFORE ATTEMPT #2 (no code until all three exist):**
+
+- **Data read 1 — was the flag actually ON in the flown build?** The flip was an
+  uncommitted edit (the `-dirty`); confirm from the flown log (flag echo /
+  BuildStamp) that Chad flew `releaseSnapV12=true`. A flag-off flight would make
+  "still not fixed" a NULL, not a failure — rule this out first.
+- **Data read 2 — the release-scorer rows from the failed flight** (t0_behind /
+  t0_tilt / keys_at_release, the frame-1 columns the port fix added): does the
+  snap FIRE clean at the release instant (behind + upright at frame 1) or not?
+  This splits the world: snap-fires-clean → the oblique lives in the ONGOING
+  keys-held lane AFTER the snap (ask B territory — the plane's law is "keys never
+  touch the camera, EVER"; audit whether the eagle's camera carries ANY key-driven
+  term); snap-doesn't-fire → the port itself is wrong or gated out.
+- **The feel question, Chad's alone to answer, in cockpit terms:** *at the moment
+  you let go of free-look with the key still held — does the camera arrive behind
+  the eagle and THEN drift oblique while you keep holding the key, or is it
+  oblique from the very first instant?* First answer = the snap works and the
+  ongoing-keys law is the defect (a DIFFERENT mechanism than the port). Second
+  answer = the snap itself fails. The two fixes share nothing; flying attempt #2
+  at the wrong one is the plane's v8 mistake replayed.
+
+**Pre-registration rule imported from the plane's v9 arc, binding on attempt #2:**
+rival causes stated in advance, the decision made by the scorer rows + Chad's
+answer BEFORE the fix is designed, and the dominant term is the term that gets
+fixed. No threshold patches on the minority term.
