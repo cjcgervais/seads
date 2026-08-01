@@ -1236,3 +1236,9 @@ DIAGNOSES of artifacts, not just their identification.
 
 Board unchanged: `2229160` pushed and verified, CS-8 gated on Chad's word, the
 flight the one thing left.
+
+**Pointer (added when the leg closed):** the TESGI correction landed as
+**`a080b49`** (verified at the artifact — supersession in the gold addendum:
+retraction, the replacement discriminating-power nugget, the error family
+named against this ledger's `bd6b515`; items 1 and 3 standing). Sync current
+in both directions through the correction beat.
