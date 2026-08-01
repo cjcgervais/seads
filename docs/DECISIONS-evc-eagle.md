@@ -2444,3 +2444,54 @@ up) -- amendment-pending his keep. Pre-registered pass stands: dive
 entry->pull-up zero push transitions on the disk log + hold fix retained +
 post-roll mouse-up rights within ~1 s busy-handed; inversion
 unreproducible from the dive-roll-graze family.
+
+---
+
+## 2026-08-01 — CHAD'S PROCESS RULING: THE WHACK-A-MOLE STOPS. One consolidated, mathematically planned gate — designed whole against the archive, red-teamed once, flown once. The night's findings become the card's requirements, not more dials
+
+**Chad (verbatim, ruling-grade):** *"were whack a moling instead of
+planning the cascade solution arent we... This need a well planned once
+time mathematical fix for the cascade the knife edge, everything! All im
+doing is catching errors."* And the `e32c497` regression (verbatim): *"the
+pitching down to go sideways is happenning again.. If I throw the mouse
+aim to the left, my eagle banks sideways now after the fix when I go back
+to the right on the lateral plane the eagle uses pitch and did not level
+out."*
+
+**Regression attribution (input to the plan, NOT another dial):** the
+entry-only floor still ASKS the noise question at entry — a lateral
+reversal sweeps the aim across the nose (fwd small = the singularity), so
+push can now LATCH during the transit and, entry-only, never re-checks:
+pitch-to-track mid-reversal returns, worse than before mid-engagement.
+Each serial fix has moved the dice-roll, not removed it.
+
+**THE STRUCTURAL LESSON (both kernels, ledger law):** the plane's
+push-vs-roll gate is a CONVERGED mechanism — six conjuncts, two latches,
+an operating-point guard, each one a paid-for bug (v5→v12, Chad's own
+grind). **Never port a converged mechanism incrementally: each missing
+conjunct is a bug you re-live in the order it was originally found.**
+Tonight re-found, in sequence: the astern hole, the hold chatter, the
+singularity, the frame righting — all solved problems in the archive.
+
+**THE RULING EXECUTED — thread STOP on serial dials. Next motion is ONE
+consolidation card:**
+1. **Spec:** the plane's full push-vs-roll state machine (SPEC §9.3 +
+   the [push] block, ALL conjuncts/latches/hysteresis as one unit) as the
+   base — it is the mathematical solution, already converged, already
+   flown v12.
+2. **The three eagle deltas, now known and measured:** (a) aim-on-nose
+   operating point → the singularity POLICY is part of the design (where
+   be is undefined, the STATE holds — not entry-only, not per-leg
+   patches); (b) no commanded bank → same atan2, settled; (c) the carried
+   frame → righting shipped in `e32c497`, keep.
+3. **Requirements = tonight's ledger findings verbatim** (astern denial,
+   hold protection, dive-engagement stability, reversal-transit rolls not
+   pitches, frame never inverted) — each with its pre-registered check,
+   counted in advance, verified from the LOGS in one flight.
+4. Architect designs against the archive; red-team once against the full
+   requirement set; ONE build; ONE fly card. No intermediate dials land
+   on this thread.
+
+Tonight's real wins stand and carry into the card: the wobble arc closed
+flown-approved; hold chatter dead at zero; frame world-righting live.
+The grind was real work — it was pointed at the wrong granularity.
