@@ -1131,3 +1131,55 @@ when it lands, its entry here cites both this pointer and the CS row.
 
 **Board unchanged by this entry:** diagnosis still waits on Chad's state-law
 answer + the stage-A scorer re-read; the STOP holds.
+
+---
+
+## 2026-07-31 (late night) — S60 THE LAW-4 EXCISION (`2229160`): the diagnosis answered itself in the code — the S58 `not keysHeld` fallback WAS the forbidden keys→camera path. The fix is a DELETION. Flight pending; STOP lifts on Chad's word alone
+
+**Verified at the artifact** (read-only `git show` in `D:\EvC2026`, per lesson 7
+— the deletion confirmed in the diff, not the engineer's echo): commit
+`2229160` on `updraft`, pushed. The hoisted `keysHeld` local is deleted; both
+predicates that consumed it (`easeTarget` and the C2 `aimDriving`) lost their
+`not keysHeld` term; `updateCamera` reads zero keyboard state. The forbidden
+path does not exist as code — deleted, not flag-zeroed, per the convergent
+shared-kernel law ("S-keychase and its dial were DELETED rather than defaulted
+to zero").
+
+**The pre-registered question is ANSWERED — by code-read, second branch:** the
+snap was not the residual defect; **state 2 disobeyed the mouse.** The S58
+Stage-1 fallback made the camera abandon the aim and lag-chase the flight path
+(`followDir`) whenever any flight key went down — a key-coupled camera
+reference, the exact structure Chad's law forbids ("keys have nothing to do
+with what the camera follows — ever"). The keys-held oblique was that fallback
+operating every frame after a clean frame-1 snap.
+
+**Also in the commit:** `docs/CAMERA-LAWS.md` (the law organized in the eagle
+tree — states, transition, Law 4's absolute exclusion, the
+presentation-decoration clarification protecting bank tilt, the "over injected
+by the gravity of this superceded bug" postmortem); the keychase build was
+built, verified, and **rejected by Chad pre-commit** — reverted, tombstoned in
+`GameConfig`, design doc kept as history; `releaseSnapV12` committed **TRUE**
+(under the ratified law the instant snap IS Law 2 — the eased return was the
+violation). Tier-4 659/659, rojo PASS.
+
+**Two observations from the artifact, flagged for the engineer (echo-rule
+finds, not blockers):**
+
+1. **The serve stamp honestly reads `2229160-dirty`** — working tree carries
+   uncommitted `CLAUDE.md` and `src/shared/BuildStamp.luau`. The stamp
+   self-declares, which is the discipline working; but the claimed "memory
+   updated so no future agent can arrive at tonight's confusion" lives in the
+   **uncommitted** `CLAUDE.md` — it should be committed or it dies with the
+   session.
+2. **CS-8 rewrite + registry amendment still pend Chad's flown word** (stated
+   in the commit itself) — the CS-registry mirror leg of the same-day sync rule
+   remains open, now explicitly gated on the flight.
+
+**The flight card as issued (warm-up first, per the federation template):**
+release-with-keys-held ×3 (snap instant, keys irrelevant) → sustained key turn
+(camera holds the aim, eagle banks oblique in frame — the law operating) →
+mouse mid-keys (camera obeys it) → clean releases ×3 + normal mouse flight
+(loved lag pursuit, byte-untouched).
+
+**The STOP lifts on Chad's word alone.** His flown sentence ratifies or we go
+again; CS amendments and this ledger's closure entry land on that word.
