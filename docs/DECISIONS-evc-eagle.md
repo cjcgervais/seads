@@ -1423,3 +1423,40 @@ stale-build scare — CLOSES here, on Chad's word, on his hash, on his own
 improved understanding of his own law.** Next by the standing ruling: the
 E-series resumes (E1 dwell settle-to-level → E1 re-capture → E2 phased pull →
 lineHoldFF sweep last).
+
+---
+
+## 2026-08-01 — CS-REGISTRY SYNC (same-day rule): CS-2 and CS-8 amended by `bb99d82` on the flown word. The row diffs verified at the artifact
+
+The engineer's S60-close commit **`bb99d82`** (`updraft`, pushed, verified —
+the amendment is in `docs/HANDOFF.md`, where the CS registry lives) amends two
+rows, both carrying Chad's verdict and the stamp hash in the row per
+discipline. This entry names them, per the sync rule:
+
+- **CS-2 — EXIT-SNAP SUPERSEDED (S60, flown KEEP, stamp `2229160-dirty`
+  confirmed in the Studio log):** under `releaseSnapV12=true` (committed TRUE
+  in `2229160`), freelook release is a ONE-FRAME direct snap to the chase
+  pose (Law 2) with a same-frame level `camUp` — the tilted-horizon flash
+  that motivated the S21 ease is deleted by the snap's own level-up write.
+  The S21 fast eased return remains byte-identical as the flag-off path.
+- **CS-8 — S60 CAMERA-LAWS AMENDMENT (flown KEEP, same stamp):** the camera's
+  follow reference in mouse-aim is THE AIM and nothing else; **key state is
+  NEVER a camera input (Law 4)**; the S58 `not keysHeld` fallback in both
+  `updateCamera` predicates was the violation, DELETED not flag-zeroed;
+  oblique-in-frame under held keys is the law operating. Chad's misattribution
+  note preserved in the row ("same thing, looks different" — turn circle vs
+  chase distance geometry); the keychase build tombstoned in `GameConfig` —
+  do not rebuild.
+
+Also in the engineer's close: `docs/CAMERA-LAWS.md` is now the RATIFIED law;
+the stale-build rival formally dead on the log evidence; the geometry-ratio
+lesson written to the engineer's memory (`project-kernel-v12-consult`). The
+one earlier-registered item this closes out: the CS-registry mirror leg that
+the TESGI filing cited as PENDING is now LANDED — the TESGI seat can flip
+that citation on its next pass.
+
+**This closes every leg of the S60 arc on this ledger.** Eagle board next:
+the E1.2 card, queued and unflown (inverted park — wings level + honest
+horizon within ~2 s holding a further second; upright-45° ease judging the
+0.8 cap; two-second rim-pin; Chad's speed verdict) — on Chad's stick,
+whenever he's ready.
