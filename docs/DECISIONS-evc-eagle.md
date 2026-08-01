@@ -2495,3 +2495,55 @@ consolidation card:**
 Tonight's real wins stand and carry into the card: the wobble arc closed
 flown-approved; hold chatter dead at zero; frame world-righting live.
 The grind was real work — it was pointed at the wrong granularity.
+
+---
+
+## 2026-08-01 — S62: THE CONSOLIDATION CARD EXECUTED (EvC `516899a`). The 909c8ff ruling built: the plane's gate completed WHOLE, red-teamed once, one build, one fly card
+
+**What landed (EvC commit `516899a`, stamp `516899a 2026-08-01 05:51`, card
+= `docs/UNIFIED-STEEP-AIM-PLAN.md`):** (1) the bank-error floor returned to
+a STANDING hysteretic conjunct (120/100) under the ruled SINGULARITY POLICY
+— state-hold: within 5° of the nose axis (sized from the plane's blend_lo)
+the floor is never asked; st.pushBE freezes at its last defined truth,
+fresh-in-zone = false. Engaged dive: frozen TRUE (R3). Reversal transit:
+frozen FALSE from the pre-transit hold — the e32c497 latch-from-noise
+regression is structurally unreachable (R4). S61d entry-only retired.
+(2) The plane's elev<0 demand-sign conjunct, frozen with the floor
+(red-team BLOCK-1: upc IS beUp — one transverse vector, one policy; noted
+of record: outside the zone a live floor ≥100° already implies it — the
+conjunct is the plane's leg made a no-op by the eagle's on-nose operating
+point, kept against knob drift). (3) Astern elev-sign latch 170/160,
+gate-only, decorative on today's numbers (pushFwd already denies ≥96°) —
+on the record, not discovered by a bug. (4) pushFwd 87→88 (numeric align;
+NOT parity — the plane's one acos(−z) leg is two eagle conjuncts,
+strictly tighter).
+
+**Citation honesty (red-team MINOR-3), binding for future ports:** the
+plane's own policy at !have_bank is DENY (push forced off, no re-entry).
+The freeze is the RULED EAGLE DELTA (909c8ff item 2a), required because
+the eagle parks the converged aim ON the nose — a plane-faithful DENY
+would exit every engaged dive.
+
+**Amendment to 909c8ff item 2(c), evidence post-dating the ruling:** the
+e32c497 slow always-on frame righting (0.5/s) is OFF (aimFrameRightRate=0,
+S61e — Chad's flight attributed the "back right uses pitch, did not level"
+half to it rotating the mouse basis while banked; 0 moves TOWARD locked
+CS-8 "re-levels ONLY on player actions"). The fast inverted-frame bound
+STAYS (that is what 2(c) protected). Attribution caveat accepted of
+record: floor policy + righting change share the symptom; both are
+independently config-revertible (aimPushMode=false / aimFrameRightRate=0.5)
+so a dirty flight bisects by toggle, no code revert.
+
+**Fly card (ONE flight, verdicts from the [EvC push] tape; stamp must read
+`516899a`, clean):** R1 astern denial · R2 hold protection (zero ENTER in
+level/lateral holds) · R3 dive stability (one ENTER, zero mid-dive pairs)
+· R4 level reversal (zero ENTER during transit, rolls + levels) · R5
+frame never inverted (~1 s fast bound) · R6 dive-recovery-into-reversal
+(EXIT within ~0.1 s of the throw, no re-ENTER — the maneuver in Chad's
+complaint, red-team MINOR-4a). Chatter rule ≥3 transitions/s with NO
+exemptions (the "convergence elv noise inert" pre-declaration was
+falsified by BLOCK-1 and the noise source removed).
+
+Verify: Tier-4 659/659 green, rojo build green, red-team (opus) run ONCE
+against the full requirement set per the ruling — BLOCK-1/MAJOR-2/
+MINOR-3/MINOR-4 all folded before commit. No intermediate dials landed.
