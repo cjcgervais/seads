@@ -2424,3 +2424,23 @@ conservative reading says yes.
 **Pre-registered pass:** after any uncommanded roll or ground graze, mouse
 up is world-up within ~1 s without requiring still hands; no aim-axis
 inversion reproducible from the dive-roll-graze family.
+
+**S61d SHIPPED (engineer, eagle commit e32c497, stamp 05:19) -- both scoped
+fixes:** (1) FLOOR ENTRY-ONLY, the second scoped form chosen: an engaged
+tracking dive never consults the floor (it exists to protect holds); entry
+requires pushBE, the other five legs govern staying-on, any exit re-arms
+it. The vet "singularity harmless" claim is corrected of record in the
+code comment (tape falsified it). (2) FRAME RIGHTING GUARD: always-on slow
+world-righting of the Stage-C carried aim frame (aimFrameRightRate 0.5/s;
+world target -- cannot reintroduce the camera-basis dip; Law 5 already
+un-hooked the camera), dwell 2.0/s fast path kept, hard bound
+inverted-frame-while-upright -> 4.0/s fast-right. The Lerp carry replaced
+with a GEODESIC rotation about the aim axis: the Lerp antiparallel
+collapse + keep-the-old guard is what froze inversions; collapse now
+resolves to the LEVEL target. E1.2b ramp=0 inertness proofs marked stale
+in place. CS-8 Stage-C "re-levels only on player actions" further amended
+on the owner flown word (conservative Law-5 reading extends to the aim
+up) -- amendment-pending his keep. Pre-registered pass stands: dive
+entry->pull-up zero push transitions on the disk log + hold fix retained +
+post-roll mouse-up rights within ~1 s busy-handed; inversion
+unreproducible from the dive-roll-graze family.
