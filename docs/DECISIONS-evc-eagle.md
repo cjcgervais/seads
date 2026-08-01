@@ -2795,3 +2795,32 @@ archive value). Aim flipping, straight-down dive gone, knife-edge guard
 gone, deep-dive chatter, straight-up veer — five open, all concentrated
 in the vertical where the card's changes concentrated. Revert state:
 aimPushMode=false live on stamp 3a0c159.
+
+---
+
+## 2026-08-01 — CHAD'S CONTROL LAW FOR THE MOUSE-AIM RESOLVE (verbatim, standing intent — replaces the struck "curl is beautiful" line as THE governing statement)
+
+**Chad's words:** "If I do a straight lateral throw of the mouse aim the
+nose shall move in a straight line. If I make a curled throw = a curled
+line of the nose from my pov. The thing is its controllable: straight
+throw = straight resolve to the aim, curved movement = curved resolve to
+the mouse aim!!!! The thing is this is about control, the curl can be
+beautiful but holding to an old 'the curl is beautiful' statement when we
+are in this fix to amend the curl is a pure regression and none of the
+lessons from the archive seads kernel were properly ported or were able
+to guide this build."
+
+**The law, plainly:** THE HAND DRAWS THE LINE. Straight throw → straight
+nose line from Chad's POV. Curved throw → curved nose line. The curl is
+not banned — it is his to command by curving the throw. What is banned is
+the kernel ADDING a shape the hand did not draw. Every steep-aim
+mechanism (E2, lineHoldFF, the floors, the gate) is judged against this
+one sentence from now on; the straight-line predicate is its instrument
+on the straight leg, and a curved-throw fidelity check is the missing
+instrument on the other leg (no such instrument exists yet — counted).
+
+**The indictment, counted with it:** the archive lessons were not
+properly ported and could not guide this build — S63's tape is the
+evidence. This law + the archive-value ruling (042996b) together define
+attempt #2's bar: port the plane's converged mechanisms WHOLE, at their
+FLOWN values, and judge the result against the-hand-draws-the-line.
