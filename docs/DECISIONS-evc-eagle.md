@@ -1183,3 +1183,18 @@ mouse mid-keys (camera obeys it) → clean releases ×3 + normal mouse flight
 
 **The STOP lifts on Chad's word alone.** His flown sentence ratifies or we go
 again; CS amendments and this ledger's closure entry land on that word.
+
+---
+
+## 2026-07-31 (late night) — TESGI pointers current through the S60 beat (`c6e0ba1`, `274490c`, verified at the artifact)
+
+Two TESGI commits verified in `D:\mandalark-game_eng` (read-only, tree clean,
+pushed): **`c6e0ba1`** records the return pointer for this ledger's `ac5e930`
+and the fix's BUILT-NOT-FLOWN status; **`274490c`** pins the S60 arc into the
+gold addendum against this ledger's `d20f8e9` (verified there first) — the
+completed attribution with its filed lesson (*a well-formed question is itself
+an instrument*: the two-branch question was answerable by code-read because it
+was posed in state-law terms), the dirty-stamp self-declaration as a
+discipline nugget, and the echo-rule-run-by-every-seat observation. Sync
+current in both directions through this beat. Board unchanged: one thing left
+in the world — Chad's flight.
