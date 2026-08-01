@@ -1994,9 +1994,12 @@ Flight verdict on the full S61 stack pends on stamp 64cb275.
 rulings (autolevel at Chad's pace — 45° levels in ~0.33 s / 136 deg/s from
 the pre-registered table, damper kept; `bankTiltFactor` ZEROED not deleted
 under the new Law 5 — horizon world-level "by no mechanism at all";
-engineer's ledger `0ad86ef` in the eagle repo). Chad's response opening the
-next ask: **"ookay perfect"** — reads as acceptance; the formal KEEP log on
-the one-flight verdict is the engineer's motion on Chad's confirmed word.
+engineer's ledger entry `0ad86ef` — ON THIS LEDGER; correction, this entry
+first said "in the eagle repo": the engineer now writes
+`DECISIONS-evc-eagle.md` directly, see also `3960d55`). Chad's response
+opening the next ask: **"ookay perfect"** — reads as acceptance; the formal
+KEEP log on the one-flight verdict is the engineer's motion on Chad's
+confirmed word.
 
 **NEW THREAD — Chad's ask (verbatim):** *"Th knife edge cone is too sharp
 sending me into a roll when I only want to pitch down for a dive. My seads
