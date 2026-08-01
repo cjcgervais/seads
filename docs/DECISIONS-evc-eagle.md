@@ -675,3 +675,36 @@ confirmed as the real E1 build):
 
 **Unchanged:** CS-5 amendment and `eagle-v1` retro-seal wait for the clean keep on
 the E1.2 refly.
+
+---
+
+## 2026-07-31 (E1.2 design review) — ENDORSED pre-build. CEILING LAW FORMALLY SUPERSEDED: the ~0.55 rate ceiling was an artifact of the multiplicative crossfade; new law = `dwellLevelTotalCap 0.8`, exact by construction. One caveat on the 0.8 license
+
+**SUPERSESSION, stated plainly:** the `dwellLevelRate ≤ ~0.55` ceiling (this ledger,
+"E1 at the gate" entry) is RETIRED WITH ITS MECHANISM — it was a property of the
+multiplicative crossfade, not of the verb. E1.2 replaces the crossfade with a
+structural total cap: dwell takes exactly the headroom levelAssist leaves under
+`dwellLevelTotalCap = 0.8` — the summed-authority guarantee is now exact by
+construction, not measured after the fact. The old entry stands as history; this
+entry is its supersession note, per the recompute-not-workaround discipline. New
+flown values: rate 0.65, proportional zone 30°.
+
+**Design ENDORSED, with one caveat on the record about the 0.8 license:** the
+engineer licenses the cap by "you flew the 0.723 band tonight and called it slow,
+not snappy." Accepted as plausible but noted as INFERENTIAL — Chad's "too slow" was
+a global verdict on a flight whose effective mid-bank authority was 0.146; how much
+dwell time he actually spent at the 0.723 peak band is unmeasured. **The real
+license is the re-flown upright-45° ease-never-snap row on the E1.2 card** — that
+row, at the new speed, is what actually proves 0.8 safe. If it snaps, the cap (or
+rate/zone) comes down; the flown row outranks the inference, as always.
+
+**frameUp carry:** endorsed as designed; the attached freelook/release-contract
+inertness question is confirmed as a MANDATORY Opus verification item, first in the
+verify, not a prose claim. Card confirmed as ruled: F8 first; inverted park with
+two observations in one maneuver, duration-stated (wings level AND horizon true
+within ~2 s, both holding a further second); upright-45° ease re-flown; two-second
+rim-pin; Chad's speed verdict in his words.
+
+**On a clean keep, the closing sequence stands:** CS-5 lands with same-day sync;
+`eagle-v1` annotated seal with Chad's verdict verbatim; alliance asks L1/L2/L4/L5
+in the same session (L3 IS the seal).
