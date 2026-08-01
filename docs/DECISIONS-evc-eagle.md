@@ -1287,3 +1287,55 @@ attribution; attempt #3 starts at re-attribution.
 **The STOP holds.** Diagnosis is the engineer's seat; this entry is the flown
 record and the gate. Sync legs (engineer's read, TESGI pin) get pointers here
 as they land.
+
+---
+
+## 2026-08-01 — FLAG-STATE READ COMPLETE (gate 3, run first as cheapest): by read, the snap MUST arrive on `2229160`. The LEADING RIVAL is a STALE-BUILD FLIGHT — and the stamp-hash nugget goes to the front of the queue one hour after it was filed
+
+**The engineer ran the registered flag-state gate before any hypothesis; the
+checkable facts verified at the artifact by this agent** (file timestamps
+read directly; snap-chain symbols confirmed at their cited sites in
+`BirdController.client.luau`).
+
+**The code read — `releaseSnapV12 = TRUE` executes a real snap on `2229160`:**
+arm at Space `InputEnded` → `setFreeLook(false)` → `releaseSnapNow = true`
+(HOLD-Space confirmed live, so release is the correct trigger); consume sets
+`chaseDir = -nose`, level `camUp`, `aimHeading = nose`; write is a direct
+same-frame `camera.CFrame = targetCF`, no lerp. The staleness guard can only
+eat the snap on a dead `flightEngine`/`rootPart` — impossible mid-flight.
+**Branch 1 failing on this code has no mechanism the read can find.**
+
+**But the flown build is UNVERIFIED, and the pipe evidence points the other
+way** (timestamps verified by this agent):
+
+- **No capture from the fix flight exists on disk.** All eight log/logpic
+  PNGs are 2026-07-30 (23:32–23:48) — the night BEFORE the S60 commit.
+- **`EaglesVsCrows.rbxlx` was baked 2026-07-31 23:21:18 — one minute BEFORE
+  the commit (23:22:26).** A place file from that moment carries a pre-commit
+  tree (stamp would read `a747da5-dirty`, not `2229160`) — and the rejected
+  keychase build lived and died uncommitted in exactly that window. Opened in
+  Studio without the Rojo serve connected, that file flies a tree the
+  excision never reached, possibly with the keychase in it.
+
+**The corrected nugget pays rent immediately — front of the queue, per
+no-stamp-no-verdict:** the discriminator is the HASH from the flown session.
+**Open question to Chad:** what did the HUD corner / `[BuildStamp]` boot line
+read on the fix flight? `2229160` → the verdict indicts the snap design and
+re-attribution proceeds for real. Anything else → the verdict was rendered on
+a build the fix never reached — the pipe, not the code — and the flight
+re-runs on a confirmed serve. Second discriminator, on a confirmed-`2229160`
+build only: (a) does the view fail to REACH chase (stays where freelook left
+it) or snap-then-misbehave; (b) clean release, keys-held release, or both.
+
+**Engineer's position, filed under the honest arm and endorsed by this
+ledger:** the code read cannot confirm the defect on `2229160`; the leading
+rival cause is a stale-build flight; **no fix gets designed until the hash is
+on the record.** This is gate 3 doing exactly what it was registered to do.
+
+**Two records corrected in passing:** (1) the eagle tree's `CLAUDE.md`
+controls section still says Space is a TOGGLE — stale since the 2026-07-13
+revert to HOLD (engineer's tree to fix). (2) The engineer's report attributes
+a "looks like your flight evidence" flag on `log3.png` to the docs agent — no
+such flag exists in this ledger or this seat's record (this ledger only ever
+listed the PNGs as untracked files); noted for accuracy, source unknown,
+nothing turns on it.
