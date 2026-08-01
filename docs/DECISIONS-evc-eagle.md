@@ -1798,3 +1798,70 @@ Pre-registered check for the fix flight: a hand-off ~40° level-off must
 show ZERO mid-motion collapses ([EvC shake] silent or ramp monotone 0→1→
 level), and the arrival ring, if felt, is F9-independent — the inert
 `dwellLevelDamp` is its dial, one change, its own flight.
+
+---
+
+## 2026-08-01 — S61c (`f136f83`) FLOWN: the bird is damped, the front moves to THE CAMERA (F6 unparked on Chad's word). Two Chad rulings captured verbatim
+
+**Build:** stamp confirmed on Chad's word (`f136f83 2026-08-01 03:19`) —
+S61c armed the pre-registered damper pair (`dwellLevelDamp 0.75` +
+`dwellLevelRateMult 3.50`, steady ~306 deg/s unchanged, in-band ζ≈0.71,
+damper unfiltered AND unclamped — the S61c commit correctly found the
+cascade's damp signal was both behind the filter and PINNED at ±1 through
+the boosted roll, i.e. zero rate feedback in the ringing regime).
+
+**Chad's report (verbatim):** *"camera shake seems like the horizon is
+lagging it. Also the roll of the autolevel is took hard. still the duration
+on the shake is the duration of the bank to level, seems the wings are
+forcing the camera. I think somewhere the orientation autolevel camera got
+loose and dependent on the birds wind level to elvel itself , I noticed the
+problem earlier come on where the orientation would be off a moment until
+the autolevel horizon caught up. Maybe not its just hard for it to catch up
+but the horizon should always stay level."*
+
+**Reading:** the discrete jolt cadence is GONE — the character changed from
+relay cuts to continuous, roll-duration, camera-flavored shake. The
+bird-side stack (F4 filter ring → F8 missing damper) is quiet; S61c's own
+pre-registration names the survivor and Chad's felt read agrees:
+**F6, the camera.** His diagnosis is structurally accurate: while
+aim-driving, the camera's level reference is NOT the world — `levelRef` is
+`aimCursor.frameUp`, a carried frame the E1.2b dwell carry re-levels at a
+hardcoded `2.0·dt·dwellRamp`, consumed by `camUp` relaxing at
+`horizonLevelRate 2.0`/s — two cascaded ~0.5 s lags chained to the bird's
+frame, while `bankTiltFactor 0.6` rolls the camera with the wings through
+the fast follow path. The camera's horizon is literally "dependent on the
+bird's wing level to level itself." At 306 deg/s the wings outrun it for
+the whole motion: "the wings are forcing the camera."
+
+**RULING 1 (Chad, verbatim, the word the parked item waited for): "the
+horizon should always stay level."** F6 UNPARKS. This is camera-laws
+territory (CS-2/CS-8 process; the shared-kernel camera-state law is
+ratified — amendments on Chad's word, never silent). Note for the
+engineer's design: the ruling as spoken is stronger than a rate bump — it
+says the horizon reference should be WORLD-anchored (never a carried
+bird-coupled frame), which reaches the frameUp-as-levelRef chain and
+touches `bankTiltFactor` (any deliberate camera roll-with-bank must now be
+justified against "always level" or ruled a character exception by Chad).
+The previously identified first dial (frameUp carry rate, Controls-scope,
+before anything in the camera module) is the conservative rung; the ruling
+may retire the reference outright — engineer's design, Chad's law,
+CS-amendment on record either way. **Numeric pass pre-registered:** on a
+hand-off level-off the [EvC shake] signature of a working fix is `bankAmp`
+LARGE while `camAmp` ~0 — the tracker's own camera-artifact discriminator,
+run in reverse.
+
+**RULING 2 (Chad, verbatim): "the roll of the autolevel is took hard."**
+The ~306 deg/s + 0.15 s ramp is ruled too violent as felt. The speed dial
+is `dwellLevelRateMult` — ⚠ now one half of the S61c COUPLED PAIR: any
+speed change re-solves the pair arithmetic (steady rate =
+(mult − aimRollDamp − dwellLevelDamp·x̂)·rollRate), never moves one knob
+alone. Chad's number pending in cockpit terms (time-to-level), asked of
+him directly. `dwellLevelRampS` is the harshness-of-onset lever if the
+complaint is the GRAB rather than the speed.
+
+**Still open, latent:** F9 (self-breaking gates) was NOT addressed by
+S61c — the engineer read the earlier cadence as pure servo and the damper
+evidently quieted what was felt, but the gate-3 mid-verb kill structure is
+unchanged in code. If discrete mid-roll cuts ever return on a tape
+(`ramp` flicker 0↔1), F9 is the standing suspect; it should not be
+re-diagnosed from scratch.
