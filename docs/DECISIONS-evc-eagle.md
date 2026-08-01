@@ -1865,3 +1865,79 @@ evidently quieted what was felt, but the gate-3 mid-verb kill structure is
 unchanged in code. If discrete mid-roll cuts ever return on a tape
 (`ramp` flicker 0↔1), F9 is the standing suspect; it should not be
 re-diagnosed from scratch.
+
+---
+
+## 2026-08-01 — CONSULT REPLY (to `docs/CONSULT-S61-SHAKE-PACKET.md` @ `a139c6b`): the open question is ANSWERED — shake SURVIVES `f136f83`, and Chad's felt read lands on the packet's own last suspect. Two Chad rulings delivered verbatim, one is THE WORD the camera work was parked on
+
+**Answer to the packet's open question:** Chad flew the `f136f83` build
+(stamp confirmed on his word: `f136f83 2026-08-01 03:19`) and reported to
+this agent BEFORE the packet landed. The shake survives. His words,
+verbatim: *"camera shake seems like the horizon is lagging it. Also the
+roll of the autolevel is took hard. still the duration on the shake is the
+duration of the bank to level, seems the wings are forcing the camera. I
+think somewhere the orientation autolevel camera got loose and dependent on
+the birds wind level to elvel itself , I noticed the problem earlier come
+on where the orientation would be off a moment until the autolevel horizon
+caught up. Maybe not its just hard for it to catch up but the horizon
+should always stay level."*
+
+**Attribution (checked against all six tombstones — re-proposes none):
+AGREES with the packet's remaining pre-registered suspect — the camera —
+with one refinement to red-team.** The discrete jolt cadence is gone
+(S61c's damper did its job on the bird); what survives is continuous,
+roll-duration, camera-flavored. Within the camera family there are two
+distinct mechanisms and Chad's report doesn't yet discriminate:
+
+- **(i) DISPLAY artifact — the split horizon.** The camera renders TWO
+  horizon cues at different speeds: `bankTiltFactor 0.6` rolls the view
+  with the wings through the fast follow path (~0.1 s), while the true
+  horizon reference crawls behind two chained ~0.5 s smoothers
+  (`camUp` ← `horizonLevelRate 2.0` ← `frameUp` carry literal 2.0) — and
+  the reference itself is the CARRIED, bird-coupled `frameUp`, not the
+  world. At 306 deg/s the wings outrun the reference for the whole
+  motion: "the wings are forcing the camera," shake felt, bird clean.
+  Chad's structural diagnosis is accurate as read from code: while
+  aim-driving, the camera's level is literally "dependent on the bird's
+  wing level to level itself."
+- **(ii) FEEDBACK loop — camera→cursor→cascade** (the packet's framing).
+  Note hands-off does NOT exclude it: the hand is still but the camera
+  tilting moves the world point under the stationary screen cursor, so
+  the aim error changes with zero hand input.
+
+**The packet's own discriminator is the next read, still outstanding from
+the cockpit:** during the camera shake, was the `[EvC shake]` console line
+printing? SILENT + felt shake = (i), camera-only, bird clean. Printed with
+`camAmp` hot / `bankAmp` cold = camera confirmed twice over; `bankAmp` hot
+too = (ii), the loop is moving the bird. One screenshot settles it.
+
+**RULING 1 (Chad, verbatim — THE WORD the camera work was parked on): "the
+horizon should always stay level."** Delivered here per the consult
+pattern; the CS-2/CS-8 amendment process is the engineer's motion. Design
+note for the red team: as spoken, the ruling is stronger than a rate bump —
+it says the horizon reference is WORLD-anchored, never a carried
+bird-coupled frame — which reaches the `frameUp`-as-`levelRef` chain and
+puts `bankTiltFactor` itself in question (any deliberate roll-with-bank
+must now be justified against "always level" or ruled a character
+exception by Chad). The conservative first rung previously identified
+(frameUp carry rate, Controls-scope) may under-shoot the ruling as given.
+**Numeric pass pre-registered for the eventual fix flight:** hand-off
+level-off shows `bankAmp` LARGE while `camAmp` ~0 — the tracker's
+camera-artifact discriminator run in reverse.
+
+**RULING 2 (Chad, verbatim): "the roll of the autolevel is took hard."**
+The ~306 deg/s + 0.15 s ramp is too violent as felt. ⚠ The speed dial
+(`dwellLevelRateMult`) is now HALF of the S61c coupled pair — any speed
+change re-solves the pair (steady x from mult − aimRollDamp −
+dwellLevelDamp·x), never one knob alone. Chad's number pending in
+time-to-level terms (being asked directly); `dwellLevelRampS` is the
+onset-grab lever if the complaint is the catch, not the speed.
+
+**Latent, for the record (not the current attribution):** F9 — the gate-3
+aim-geometry hysteresis still kill-judges the executing verb in code
+(`dwellGateOpen` break → same-frame ramp collapse). Not indicated on this
+flight's felt read; if discrete mid-roll cuts ever return on a tape (ramp
+flicker 0↔1), it is the standing suspect, pre-diagnosed — never re-derive.
+Also still open, minor: F5 (the E1.2a totalCap comment's "enforced
+exactly" claim is stale on the uniform path — a docs fix, not a behavior
+one).
