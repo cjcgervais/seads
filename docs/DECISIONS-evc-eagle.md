@@ -1076,3 +1076,26 @@ state-law terms.
 stated as explicit organized law in this ledger. The engineer mirrors it into
 the CS registry wording / code notes (their tree, their motion, same-day sync
 rule applies) so "any new agent coming in" meets the law before the code.
+
+---
+
+## 2026-07-31 — CONFIRMED FROM THE SEALED RECORD: the eagle's camera state law and the plane's v12 law are THE SAME LAW (shared-kernel law, not per-vessel character)
+
+The engineer verified against the v12 snapshot: freelook = aim carried/camera
+free; mouse-aim = camera bound to the aim; **keys affect NEITHER** — the plane
+DELETED S-keychase and its `key_anchor_rate` dial rather than defaulting them to
+zero. The data-flow statement of the law: the camera's REFERENCE is the mouse in
+freelook and the AIM in mouse-aim state; the aim's only author is the mouse;
+**there is no path from keys to camera, ever**; the bird is IN frame, not the
+frame's TARGET.
+
+**Standing consequence:** this is a SHARED-KERNEL law (both vessels, one law),
+not a character choice — it joins the release-snap contract in the
+must-not-regress family at the federation level. The "vessel divergence" entry is
+fully collapsed. The engineer is repairing three contaminated E-series learnings
+by supersession-in-place, per the discipline — nobody embarrassed, the record
+corrected where it lives.
+
+**Unchanged:** diagnosis waits on Chad's state-law answer (does the SNAP arrive
+wrong, or does the camera DISOBEY THE MOUSE after a correct snap?) + the stage-A
+scorer re-read under the corrected law.
