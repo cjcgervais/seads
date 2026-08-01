@@ -1003,3 +1003,76 @@ it, never from the previous translation.
 
 The A-stage port (`releaseSnapV12`) and its flight status are UNAFFECTED by this
 entry — it too awaits his re-specification before any further verdict is drawn.
+
+---
+
+## 2026-07-31 — CHAD'S ONE STATEMENT: THE EAGLE CAMERA STATE LAW (verbatim, then organized). KEYCHASE IS WITHDRAWN — a misreading. Two oversight errors corrected plainly
+
+**Chad's statement, verbatim — this IS the specification:**
+
+> "one statemnet… Free look release goes to mouse suthority. you dont chase the
+> keypress. Free look release is a change of camera mechanism. During free look
+> camera is controlled by me. During mouse aim state, activated instantly when I
+> release the camera is in a lag state with the mouse. The moment I release free
+> look my view snaps to chase. Then camera is going to obey the free and
+> independent mouse….. not thing to do with keys. I can make my eagle turn
+> oblique after it dosent matter, the cam only lags my mouse aim, what the eagle
+> does has nothing to do with what the cameera follows including hard key press.
+> This is a suble understanding that needs to be made clear and explict. The
+> organization of elements in the relationship need to be made more specific,
+> organized and explicit as laws and the notes better worded to reflect what I
+> want. I thought you knew the state of the relationship but ,,, this is not
+> clear yet to any new agent coming in here.. that or we are over injected by
+> the gravity of this superceded bug."
+
+**THE LAW, ORGANIZED (translation checked against the verbatim above; if they ever
+disagree, the verbatim wins):**
+
+- **Two camera states, one transition.**
+  - **State 1 — FREELOOK:** the mouse controls the CAMERA (Chad's situational
+    awareness). Keys control the bird. The aim is inert.
+  - **Transition — RELEASE (a change of camera MECHANISM, instant):** the view
+    SNAPS to chase — behind the eagle, upright. Mouse authority over the aim is
+    instantly re-established. One snap; nothing eased.
+  - **State 2 — MOUSE-AIM:** the camera is in a LAG state with the MOUSE. The
+    camera follows the aim and ONLY the aim. **Keys have nothing to do with what
+    the camera follows — ever.** The eagle may turn oblique in frame under hard
+    keys; that does not matter; the camera does not chase the bird, it lags the
+    free and independent mouse.
+- **Corollary (the killed misreading):** there is NO key-flight camera clause. A
+  camera that chases the NOSE during held keys is WRONG in state 2 — it would
+  make the camera follow the bird, violating "the cam only lags my mouse aim."
+
+**KEYCHASE IS WITHDRAWN — tombstoned as a MISREADING, second reason on the same
+stone as the plane's deletion.** The design, its red-team, and its card do not
+fly and are not built. (The design doc stays in the eagle tree as history with a
+withdrawal banner — never deleted, per house rule.)
+
+**Two oversight-seat errors, owned plainly:**
+
+1. **The "vessel divergence" I recorded was FALSE.** The eagle does NOT reject
+   the Card-1 deflection view — Chad just ruled the opposite ("I can make my
+   eagle turn oblique after it dosent matter"). Both vessels accept it. The
+   divergence entry (`aca4e00`) is superseded on this point.
+2. **The history-mined diagnosis over-reached.** The archive correctly named the
+   Card-1 PHENOMENON as what the camera does under keys-after-release — but I
+   wrongly promoted the phenomenon to being Chad's COMPLAINT. His complaint is
+   the TRANSITION (the release mechanism-change misbehaving with keys held), not
+   the state-2 law. Chad's own closing line names the failure mode: "over
+   injected by the gravity of this superceded bug" — we imported the plane's
+   whole battle instead of only its law.
+
+**What remains genuinely unfixed, re-opened under the correct law:** at
+release-with-keys-held, Chad's flown verdict on stage A stands ("nope its still
+not fixed") — the transition does not deliver what state law demands on his
+stick. Diagnosis re-opens THERE: the engineer reads the stage-A flight's scorer
+rows under the corrected law (is the snap-to-chase itself wrong — placement,
+uprightness, timing — or is state 2 misbehaving in its OWN terms, e.g. the
+camera failing to lag the aim and instead tracking something key-coupled?). No
+design until that read exists and Chad's words confirm the residual symptom in
+state-law terms.
+
+**Standing directive from Chad executed by this entry:** the relationship is now
+stated as explicit organized law in this ledger. The engineer mirrors it into
+the CS registry wording / code notes (their tree, their motion, same-day sync
+rule applies) so "any new agent coming in" meets the law before the code.
