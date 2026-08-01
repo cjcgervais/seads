@@ -156,7 +156,18 @@ engineer writes the Card 2 reconcile packet to
 `docs/consults/CARD2-RECONCILE-PACKET.md` in THIS repo; the reconcile
 verdict goes alongside as `CARD2-RECONCILE-VERDICT.md` and is banked on
 the eagle ledger. If no docs session is live when the packet lands, the
-pipeline PARKS at this gate — the step is never skipped. The reconcile
+pipeline PARKS at this gate — the step is never skipped.
+**UPDATE 2026-08-01 (later): the packet LANDED and the reconcile RAN.**
+Verdict of record (`1304300`, full text in `docs/consults/`): **PASS WITH
+THREE REQUIRED FOLDS** — CL-1 (the plane's gate admits the convicted case
+too) CONFIRMED by adversarial six-conjunct trace; F1 BLOCKING (the plane's
+line_hold_ff defense set is larger than the design modeled — parasitic-only
+split + emitted-yaw keying must be adopted or adjudicated per the 909c8ff
+law); F2 (C2-4's <1.0° bar must state the Golden-#5 near-level envelope);
+F3 (citation corrections; R1 of record = 8.6–16.4°). Gate CLEARED
+conditional on the folds landing as design-text amendments; then one
+red-team (inherits three named handoffs in the verdict) → one build →
+Chad's one flight. The reconcile
 checks the design's requirement table against the plane's v12 instruments
 in `reference/seads-feel/` and the eagle ledger's registrations
 (R1/R4 originals, S62 tape findings, C2-1..C2-5 as committed). The old E-series ordering survives
