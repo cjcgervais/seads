@@ -1975,3 +1975,13 @@ the complaint is onset grab). Flip on Chad's number; the pair discipline holds.
 
 **F5 closed:** the E1.2a totalCap "enforced exactly" comment was corrected in
 GameConfig during S61 (legacy-path-only caveat added). F9 stands latent as filed.
+
+**RULINGS EXECUTED (engineer, eagle commit 64cb275, same night):** Chad,
+verbatim: "0.33s. remove bank tilt! ty". (1) `dwellLevelRateMult` 3.50 -> 1.88
+from the pre-registered table (45 deg in ~0.33 s = 136 deg/s; damp 0.75
+untouched, pair discipline held). (2) `bankTiltFactor` 0.6 -> 0 -- the owner
+ruled "always level" covers the decoration; the CAMERA-LAWS "loved, do not
+delete" clarification is superseded on his word and rewritten (zeroed not
+deleted, revert = 0.6). With LAW 5 + tilt 0, the camera rolls with the bird by
+NO mechanism -- the camera-shake suspect list is exhausted by construction.
+Flight verdict on the full S61 stack pends on stamp 64cb275.
