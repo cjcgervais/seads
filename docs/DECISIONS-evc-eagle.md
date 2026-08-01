@@ -166,3 +166,50 @@ for its own arc mechanism, never the plane's crab-cancellation transplanted. **T
 two-eyed instrument patch precedes any stage-D knob** (`arc_over_deg`/`arc_under_deg`,
 target-referenced — a dip_deg blind to the rise half is a one-eyed instrument;
 `dip_deg` retained for continuity).
+
+---
+
+## 2026-07-31 (evening) — STAGE D LANDED INERT (`1b68fe8`), verified; SWEEP DECISION RULE PRE-REGISTERED before any number exists
+
+**Verified read-only by this agent against the EvC2026 tree** (branch `updraft`, tip
+`1b68fe8`; serve stamp `1b68fe8-dirty 2026-07-31 17:51`, dirty = BuildStamp only):
+
+- **Instrument-first order HELD:** `05ffb45` (two-eyed `arc_over_deg`/`arc_under_deg`,
+  target-referenced running max each side, on both step and sweep rows) landed BEFORE
+  the dial commit. The columns read the nose vs the aim's CURRENT elevation, so the
+  rise half of the arc is visible — the one-eyed-instrument scar is answered.
+- **The dial is the eagle's own algebra, as ruled:** elevator target blends body-frame
+  `upc` → world-elevation `upcLine = clamp(sin(eElev)/max(cosB, 0.5), -1, 1)`, weight
+  `kEff = lineHoldFF · cosElev · uprightFade · bankTaperFade` — three continuous fades
+  returning today's law at zenith (loops commit — red-team BLOCKER-1), below the
+  horizon (CS-5 no-auto-level stays unconditional — BLOCKER-2), and past the
+  `aimBankFFTaperDeg=55°` shoulder (S30 knife-edge pump stays dead — MAJOR-1, taper
+  MIRRORED not hoisted; if the 15° shoulder ever moves, move BOTH copies).
+- **k=0 is today's path:** `vTarget` aliases `upc` into the unchanged `shapeAxis`
+  call; both terms are exactly zero at a level throw's initiation, and `upcLine ≡ upc`
+  at wings level by construction (the 0.35 s vertical channel untouched).
+- **Declared watch (MAJOR-3, on the record pre-flight):** at k>0 in settled banked
+  turns below saturation, altitude-hold shifts onto `aimBankFeedforward` alone —
+  expect possible mild sag creep in medium sustained turns. Recorded if seen, never
+  auto-fixed; any bankFF retune is its OWN knob, its own flight.
+
+**PRE-REGISTERED SWEEP DECISION RULE** (written now, before the k=0 baseline or any
+sweep row exists, so no result can be rationalised):
+
+1. **Baseline first:** k=0, F3 ×2 + F4 ×2 — the first-ever `arc_over`/`arc_under`
+   rows. These are the diff target for every sweep value. No sweep flight before the
+   baseline rows exist.
+2. **Expected instrument signature:** arc magnitudes on banked pulls fall
+   monotonically as k rises through 0.3/0.5/0.7. **If the arc columns do NOT move
+   with k, that is a candidate FOURTH attribution overturn — STOP the sweep and
+   re-attribute; do not tune through a null.** Known false-null to exclude first: the
+   dial is silent past 55° of bank BY DESIGN (kEff full only below ~40°) — judge on
+   normal-to-hard banked pulls, not rim-pinned or knife-edge rows.
+3. **Must-not-regress rows, per sweep value:** rim-pinned full circle still
+   full-rate; powered loop with cursor high still commits; release clean; arrival
+   zero-overshoot/zero-reversal; basis-free dip stays 0°. Any regression on these
+   rows fails that k value regardless of arc numbers.
+4. **The ruling criterion is Chad's felt character choice, NOT maximal arc
+   reduction.** k=1 is a plane; the sweep is looking for his number — how much bird
+   stays in the bird. The instrument says whether the dial works; only the stick says
+   where it sits. One value per flight (the S28 rule), his verdict verbatim.
