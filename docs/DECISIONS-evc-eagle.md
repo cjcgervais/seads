@@ -1099,3 +1099,35 @@ corrected where it lives.
 **Unchanged:** diagnosis waits on Chad's state-law answer (does the SNAP arrive
 wrong, or does the camera DISOBEY THE MOUSE after a correct snap?) + the stage-A
 scorer re-read under the corrected law.
+
+---
+
+## 2026-07-31 — CROSS-REPO POINTER: the camera state law is mirrored in TESGI. Three repos, one law, loop closed in both directions
+
+**The TESGI mirror is landed and verified at the artifact** (this agent read the
+commits and diffs in `D:\mandalark-game_eng` directly, per lesson 7 — never from
+the third seat's echo):
+
+- **`e88c7a4`** — law introduced as shared-kernel federation law at
+  `30_method/03_FEDERATION_MODEL.md` §9.1.2 (under what-ports-by-default), with
+  this ledger's `ac2371f` / `d3dc8c2` / `5655bbb` cited as evidence.
+- **`5997a22`** — authority + status fields completed: the filing states that
+  §9.1.2 is TRANSLATION subordinate to Chad's verbatim block in this file's
+  "CHAD'S ONE STATEMENT" entry (`d3dc8c2`), verbatim wins on any conflict, per
+  that entry's own rule. Status filed exactly: law RATIFIED in both ledgers; the
+  release-transition defect OPEN against it (flown "nope" stands); eagle
+  CS-registry mirror cited as PENDING; explicit sentence that the filing must
+  never read as the fix having landed. Arc record + the "over injected by the
+  gravity of this superceded bug" lesson (mine the archive for the law, not the
+  war) at `40_learnings/GOLD_ADDENDUM_2026-07-31_eagle-keychase.md`, including
+  the two-reason tombstone fact and the excerpt-vs-canonical note.
+
+**Traceability chain, now closed both directions:** Chad's verbatim
+(`d3dc8c2`, this file — the specification) → sealed-record confirmation
+(`5655bbb`, this file) → TESGI filing (`e88c7a4` + `5997a22`,
+`cjcgervais/mandalark-game_eng` main) → this pointer entry. The eagle-side CS
+registry mirror remains the one open leg (engineer's tree, same-day sync rule) —
+when it lands, its entry here cites both this pointer and the CS row.
+
+**Board unchanged by this entry:** diagnosis still waits on Chad's state-law
+answer + the stage-A scorer re-read; the STOP holds.
