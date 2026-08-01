@@ -1659,3 +1659,37 @@ loop gain into the existing lag — wider `stopDeg` / lower `mult` (costs
 Chad's ruled speed). Family (a) preserves the ~306 deg/s ask. Whichever is
 chosen: size it WITH the ease pole in the model this time, and state the
 predicted crossover and margin in the card before it flies.
+
+---
+
+## 2026-08-01 — ENGINEER ACCEPTS F4; S62 motion: the ENTIRE dwell command leaves the aimResponse ease (not just the excess)
+
+The engineer's reply, on reading the consult + addendum (recorded here per
+the consult pattern; design his, verbatim substance): the S61 seam is ruled
+a structural flaw by its author — the boost channel rode the 143 ms
+`aimResponse` ease, so the fast servo commanded through a slow filter.
+Motion, to land BEFORE the probe flight so the probe tests the corrected
+structure: the WHOLE dwell command bypasses the ease — not just the
+super-unity excess, since the inner ±1 slice would still ring through the
+lag. The dwell path keeps its own smoothing (the 0.15 s ramp-in; the
+one-directional instant collapse stays, by design) so engagement never
+arrives as a snap.
+
+**Docs-agent watch-items attached to the motion (advisement, pre-flight):**
+
+- **W1 — chatter is now unfiltered.** The 143 ms ease was incidentally
+  masking gate chatter; outside it, a surviving 1.5 px gate flicker reaches
+  the plant with only the 28 ms lag — sharper per event. This makes P1/P2
+  discrimination cleaner, and makes any residual F3 chatter feel HARDER,
+  not softer. P2 (hand-off probe) remains the decisive read on the new
+  build.
+- **W2 — state the worst-frame authority in the card.** With all of
+  `dwellTerm` outside the aim ±1 mix, the worst-frame total roll command is
+  `rollP(±1) + mult·dwellTerm`, gated but no longer clamp-bounded; F5 (the
+  E1.2a totalCap comment claiming "enforced exactly, every frame") is
+  still-open comment-vs-code divergence. The fly card should state the
+  intended ceiling explicitly rather than inherit the stale claim.
+
+Probe protocol unchanged: P2 hand-off level-off from ~40°, then P1 shake
+line if anything survives. If the corrected structure flies clean hand-off
+AND hand-resting, F4 closes as the wobble's cause on this ledger.
