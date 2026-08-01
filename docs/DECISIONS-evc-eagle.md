@@ -128,3 +128,41 @@ Chad's keyboard — the lateral step is now F3 (instrument keymap is part of the
 **Next:** stage C, built inert behind a flag, one knob, these baselines as the diff.
 The HttpService recorder (BuildStamp in the tape header) is the specified tape format,
 queued behind live feel work.
+
+---
+
+## 2026-07-31 — STAGE C FLOWN AND KEPT (Chad's word: "keep") — `aimOwnFrame = true`. Attribution #1 partially SUPERSEDED: the camera owned the DRIFT and the POLE; the pointing law owns the arc
+
+**Chad ruled KEEP** on the aim-carries-its-own-frame port, flown on his stick. What the
+flight measured:
+
+- **Drift: KILLED.** After a Space-tap reseed, ±1.89° (was ±16° carried-tilt state;
+  old basis −12/+3). A horizontal hand sweep now draws a level world line — the old
+  basis could not do this at any tilt. The carried tilt was flying history, not a
+  defect; it was invisible to the hand (screen-right stayed hand-right — the seads
+  self-consistency property), and every Space tap re-levels it free — a player action
+  righting the frame, the same shape as the plane's release verb.
+- **Pole (R4): FIXED, on the stick.**
+- **Zero regressions:** release clean, no wobble, arrival still 0-overshoot — every
+  must-not-regress row held.
+- **The dip column DID NOT MOVE (9.99/12.03 vs 8.4–13.6 baseline).**
+
+**SUPERSESSION (stated plainly, no smooth phrasing):** attribution #1's "the camera
+owns most-to-all of the dip" was WRONG. The camera owned the drift and the pole — both
+now fixed. The curl/arc (nose banks, rises over or dips under, then pulls straight)
+lives in the POINTING LAW: pitch and roll commanded simultaneously from the same
+error, the eagle over-rotating through the vertical as the bank comes on. Stage C was
+the discriminating experiment that sharpened this. **The federation's instruments are
+now three-for-three at overturning confident attributions** (plane: gravity→crab;
+eagle: crab→camera; eagle: camera→pointing-law). Nobody is embarrassed; this is what
+the discipline is for — each landed fix is also the experiment that sharpens the next
+attribution.
+
+**Consequences:** CS-8 amended via Chad's word with same-day entry (eagle repo);
+`line_hold_ff` (stage D) PROMOTED back to next — adopting the CONCEPT (continuous,
+envelope-bounded character dial, structurally off at 0, Chad's 0.3/0.5/0.7 sweep, his
+choice of where the eagle sits between bird and plane) with the eagle's OWN algebra
+for its own arc mechanism, never the plane's crab-cancellation transplanted. **The
+two-eyed instrument patch precedes any stage-D knob** (`arc_over_deg`/`arc_under_deg`,
+target-referenced — a dip_deg blind to the rise half is a one-eyed instrument;
+`dip_deg` retained for continuity).
