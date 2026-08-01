@@ -1242,3 +1242,48 @@ flight the one thing left.
 retraction, the replacement discriminating-power nugget, the error family
 named against this ledger's `bd6b515`; items 1 and 3 standing). Sync current
 in both directions through the correction beat.
+
+---
+
+## 2026-08-01 — S60 FIX FLIGHT: FAILED. Chad's flown word, verbatim: "no camera chase on release." The STOP holds; the failing clause is now the TRANSITION ITSELF — the pre-registered re-attribute arm FIRES
+
+**Chad flew the S60 build (`2229160`, `releaseSnapV12 = TRUE` live). His flown
+verdict, verbatim — this is the specification of the failure:**
+
+> "no camera chase on release"
+
+**What this means against the ratified law:** the violated clause is **Law 2,
+the transition** — release of freelook is NOT delivering the one instant snap
+to chase behind the eagle. This is the FIRST branch of the two-branch
+question, the branch the code-read attribution ruled out ("the snap fires
+clean at frame 1; state 2 disobeyed"). The flown word contradicts that
+prediction on the stick.
+
+**The pre-registered discriminator's honest arm FIRES — by its own words,
+binding:** *"a dirty t0 means the snap claim was wrong too → re-attribute,
+not patch."* The S58-fallback deletion may still be correct law-enforcement
+(Law 4 stands regardless), but it was NOT the owner of what Chad feels at
+release — the attribution is re-opened, not amended. No patch on the current
+attribution; attempt #3 starts at re-attribution.
+
+**Gates standing for the next attempt (all previously registered, none new):**
+
+1. **Archive-first (standing discipline):** before any design, mine the ledger
+   history for THIS symptom class — note the snap-does-not-arrive family is
+   new on the eagle (prior symptom was oblique-AFTER-snap); the plane's v9 arc
+   distinguished A (forward term) from B (up term) with the rule *the dominant
+   term is the term that gets fixed*.
+2. **Scorer rows before design:** the engineer reads the release rows from
+   THIS flight's build (frame-1 placement, uprightness, timing) — the
+   fix-build discriminator rows exist for exactly this question.
+3. **Flag-state read first (imported at attempt #2, still binding):** verify
+   what `releaseSnapV12 = TRUE` actually executes on this build before
+   attributing — a flag believed live that isn't, or a path behind it that
+   doesn't run, is the cheapest hypothesis and must be excluded by read, not
+   assumption.
+4. **Rival causes pre-registered, decision by rows + Chad's words BEFORE the
+   fix is designed** (the v9 rule, imported and binding).
+
+**The STOP holds.** Diagnosis is the engineer's seat; this entry is the flown
+record and the gate. Sync legs (engineer's read, TESGI pin) get pointers here
+as they land.
