@@ -32,6 +32,22 @@ past v12 at any time:
 
 ---
 
+## 2026-07-31 — FLY-CARD TEMPLATE AMENDED (Chad's word): every card opens with a FREE WARM-UP before instruments
+
+Chad's ruling, verbatim in the eagle ledger (same-day entry there): *"always fly a
+bit first to practice regular feel and the manouvers you will do before pressing f8
+and going through the card becasue you can feel if something is off before you make
+judgements on what is being measured."* **The template's card order is now: warm-up
+(ordinary flying + dry runs of the card's own maneuvers) → instruments on → judged
+rows → verdict.** **Why:** the pilot's feel is the first instrument and runs before
+the measured ones — founding evidence is the 2026-07-31 eagle camera regression,
+caught in free flight BEFORE the E1.2 card could be contaminated (Chad refused the
+flight; STOP ledgered). This slots beside lesson 2 (instruments must model both
+hands): the warm-up is the check that the whole rig — build, camera, feel — is the
+one you think you're judging. **Status:** standing, federation-wide (both vessels).
+
+---
+
 ## 2026-07-31 — THE MANDALARK MANIFESTO ADOPTED (Chad's word): `docs/MANDALARK_MANIFESTO.md` is the constitution's raison d'être + mode d'emploi
 
 At the close of the eagle adjudication session, Chad ruled his founding intent into
