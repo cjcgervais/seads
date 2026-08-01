@@ -2343,3 +2343,45 @@ not widening. LOG PRE-DECLARATION (F3 false-alarm guard): ENTER/EXIT
 clusters at dive resolution / on-nose convergence are the floor at its
 singularity, behaviorally inert while |hCmd|~=0. Fix-flight pass stands
 as pre-registered: the same two holds, telemetry read from disk.
+
+---
+
+## 2026-08-01 — `f9f0e5c` TAPE READ (from disk, per SOP): the floor formula is right, its OPERATING POINT is wrong — the eagle LIVES at atan2's singularity the plane only visits. The "behaviorally inert" pre-declaration is falsified on the tape
+
+**Chad (verbatim):** *"now my aim got inverted!!! What is wrong? I flew but
+there are weird behaviors, like the double roll."* Log
+`20260801T120614Z`, stamp `f9f0e5c 2026-08-01 05:04` confirmed in-log. 17
+push transitions (down from 73 — the hold chatter IS fixed), but the
+pattern is a NEW defect:
+
+- ENTERs at `fwd=2..9, side=1..10, be=109..174` — aim nearly ON the nose,
+  be huge; EXITs MID-DIVE at `elevDn=21..38` with `fwd=1..3, be=90..100`.
+- Shake lines: `f~2.0Hz pkPit=65 push=1.00` (pitch oscillating WHILE push
+  held) and `f~2.5Hz pkRoll=59 bankAmp=13 camAmp=9.2 push=0.00` (roll
+  burst when push drops).
+
+**Attribution:** `bank_error = atan2(aim_body.x, aim_body.y)` ignores the
+forward component by construction — when the aim converges ONTO the nose
+(the eagle's design; the plane holds it ABOVE the nose, the engineer's own
+pre-flagged "honest thing"), the lateral projection → 0 and be is the
+atan2 of numerical noise: swings 90↔174 on consecutive prints. The floor
+(enter >120 / exit <100) then toggles on noise mid-dive; each drop
+returns roll-to-track for a beat with a NOISE-CHOSEN direction —
+"double roll," the inverted-feeling aim, the 2 Hz pitch cycle under held
+push. The plane's `lat_sq > 1e-12` guard is a singularity EXCLUSION sized
+for a kernel that never parks there; the eagle parks there whenever a
+dive is tracking. The pre-declaration that singularity-adjacent lines are
+"behaviorally inert" is falsified: the toggles carry authority changes.
+
+**Fix family (engineer's design, both plane-consistent):** (a) a REAL
+lateral dead-zone on the floor's evaluation — when the aim's lateral
+projection is inside a felt-size cone of the nose (degrees, not 1e-12),
+the floor HOLDS its last state instead of re-evaluating (state-hold, the
+same move the fresh-latch rule already uses); (b) equivalently, while the
+pure-dive corridor is engaged (sac/turnover in their bands, aim-on-nose),
+the floor is not consulted — it exists to deny ESTABLISHED HOLDS entry,
+and an engaged tracking dive is neither. Hysteresis on the dead-zone edge
+like every leg. Pre-registered pass: the dive set flown with ZERO push
+transitions between entry and pull-up on the log, no roll burst at
+convergence, hold-chatter fix retained (still no transitions in lateral
+holds).
