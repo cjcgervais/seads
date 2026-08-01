@@ -2164,3 +2164,15 @@ bound** — the plane's fifth conjunct that never made the trip — and
 3. Lateral protection holds: a hard sideways drag at the horizon never
    noses down (rung E's original pass, re-run on the eagle).
 Commit hash + stamp word before verdict, per standing discipline.
+
+**ASTERN FIX SHIPPED (engineer, eagle commit 8610740, stamp 04:34):** both
+scoped fixes landed exactly as filed (1788652): turnover now a MAGNITUDE
+(signed -170 could pass "<=96"; astern now ~180, denied by the leg itself)
+AND the plane fifth conjunct restored as a hysteretic forward bound
+(aimPushFwdDeg 87 / exit 96, full 3D off-nose angle -- the side cone is
+blind astern by construction, so the in-plane legs can never police that
+region alone). [EvC push] log gains fwd=(off-nose deg). No felt change to
+the dive set. The three-move fix-flight pass stands as pre-registered; on
+all-pass the broad-knife thread closes flown-approved. Noted for both
+kernels: the astern exclusion has now earned load-bearing-conjunct status
+twice -- once designed on the plane, once by its absence on the eagle.
