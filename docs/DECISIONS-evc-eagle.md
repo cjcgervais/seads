@@ -1752,3 +1752,49 @@ on the rollBoost channel itself — restoring ζ without re-introducing the
 lag. That is the half of the S61b move that didn't ship: the command left
 the filter; its damping never followed. Size it with BOTH poles in the
 model, per the standing rule he just wrote to memory.
+
+---
+
+## 2026-08-01 — R-b/R-c READ IN: F9, THE SELF-BREAKING GATES. The verb's own motion kills it mid-roll; each kill is now an unfiltered step. Chad's original words were the spec
+
+**Chad's probe report (verbatim): "I shakes a couple of times right away and
+half way through and a bit as it settles."** Stamp confirmed on his word
+(R-a: `4814e61 2026-08-01 03:08`). The cadence — DISCRETE shakes at onset,
+mid-motion, and arrival, not a continuous buzz — is the fingerprint of a
+relay, and the committed code confirms the relay structurally:
+
+**F9 — the dwell verb's arming gates keep judging it while it executes, and
+its own motion breaks them.** `computeMouseAim`: the gate-3 hysteresis
+(`absAz > 10 or absElev > 20` → `dwellGateOpen = false`) evaluates every
+frame; ANY gate break zeroes `dwellT` AND `dwellRamp` the same frame
+(instant one-directional collapse); re-arm = 0.25 s + 0.15 s ramp. But a
+level-off from a COORDINATED bank swings the nose (rolling out of a turn
+changes heading), and the E1.2b frameUp carry simultaneously rotates the
+camera reference the cursor ray hangs on — so the verb's own action drives
+`absAz` past the 10° break. Cycle: fire → self-break → instant cut →
+re-settle → re-arm ~0.4 s → fire again. A ~40° level-off yields 2–3 cycles:
+exactly Chad's felt count and placement. This was flagged as a chatter
+source in the original consult (gate-3 clause of F3); S61b's defilter (W1
+landing) turned each cut from a softened dip into a sharp unfiltered step,
+which is why S60→S61→S61b all shook DIFFERENTLY but none cleanly — three
+mechanisms (F4 filter ring, F8 undamped margin, F9 gate relay) stacked, and
+each fix peeled one layer and sharpened the next. The residual "a bit as it
+settles" is consistent with the F8 arrival ring (ζ≈0.51, plant-lag-only).
+
+**Found in the committed tree:** the engineer already shipped
+`dwellLevelDamp` — a dwell-scoped DIRECT rate damp on the rollBoost channel
+(`dwellBoost -= dd·rollRateN·dwellRamp`), currently **0 = inert**. That is
+the F8 lever, built and waiting; it does not address F9.
+
+**The spec, which was on this ledger from the first entry — Chad verbatim:
+"as soon as INPUT settles it should autorotate to wings level."** The gates
+judge AIM GEOMETRY, which the verb's own roll perturbs; the spec says
+HANDS. Advisement (mechanism named, design the engineer's): once armed and
+executing, the verb's KILL conditions should be actual pilot input —
+mouse delta past the quantum, any key (CS-1 preserved), free-look — never
+the aim-resolution geometry; gate-3 belongs at ARMING only (or frozen /
+latched while the verb runs, releasing at level or on real input).
+Pre-registered check for the fix flight: a hand-off ~40° level-off must
+show ZERO mid-motion collapses ([EvC shake] silent or ramp monotone 0→1→
+level), and the arrival ring, if felt, is F9-independent — the inert
+`dwellLevelDamp` is its dial, one change, its own flight.
