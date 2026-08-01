@@ -1941,3 +1941,37 @@ flicker 0↔1), it is the standing suspect, pre-diagnosed — never re-derive.
 Also still open, minor: F5 (the E1.2a totalCap comment's "enforced
 exactly" claim is stale on the uniform path — a docs fix, not a behavior
 one).
+
+---
+
+## S61 HORIZON LAW — engineer motion on RULING 1 (eagle repo, red-team CLEAR w/ riders)
+
+**Engineer entry (2026-08-01, follows 788a429).** RULING 1 executed as a camera-laws
+amendment: `Camera.worldLevelHorizon=true` — the chase camera's self-level REFERENCE is
+world-level ALWAYS; the Stage-C C2 camera-consumer swap (levelRef = the carried frameUp
+while aim drives) is superseded. C1 (aimOwnFrame steering basis) and the E1.2b dwell
+carry untouched. CS-8 amended in docs/HANDOFF.md; ratified as LAW 5 in
+docs/CAMERA-LAWS.md. Revert = flag false (byte-identical C2 path).
+
+**Red-team correction adopted, on the record (F1):** under shipped flags there is NO
+camera-to-cursor feedback loop — Stage C C1 cut every camera read out of the aim law
+(swing basis 3731-3790 reads no camera axis; the camCF clamp at 3837 is unreachable
+with aimFreeCursor=true; aimHeadingLag/chaseDir are camera-reads-aim, one-way;
+WorldToViewportPoint sites are HUD-only). The docs-agent split therefore resolves to:
+display problem = REAL (two mechanisms: the C2 levelRef chain, now fixed by LAW 5; and
+bankTiltFactor 0.6 rolling the camera with the bird — at the 306 deg/s level-off that is
+~184 deg/s of camera roll, faithfully displaying every servo wiggle); feedback loop =
+STRUCTURALLY ABSENT. The hands-off caution stands acknowledged but moot for this build.
+
+**Pre-registered next rung if shake survives LAW 5 flown:** bankTiltFactor — noting it
+is a RATIFIED LOVED decoration (CAMERA-LAWS clarifications: "Do not delete bank tilt
+under Law 4"), so it moves only on Chad's explicit ruling that "always level" covers
+bank tilt too. The [EvC shake] numeric pass from 788a429 stands: hands-off level-off
+with bankAmp LARGE / camAmp ~0 = the camera fix working.
+
+**RULING 2 staged:** pre-solved mult table filed in GameConfig (0.25 s -> 2.30,
+0.33 s -> 1.88, 0.40 s -> 1.65 for a 45-deg bank; damp 0.75 fixed; ramp is the lever if
+the complaint is onset grab). Flip on Chad's number; the pair discipline holds.
+
+**F5 closed:** the E1.2a totalCap "enforced exactly" comment was corrected in
+GameConfig during S61 (legacy-path-only caveat added). F9 stands latent as filed.
