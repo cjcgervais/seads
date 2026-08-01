@@ -486,3 +486,43 @@ proportional inside 45°, one-directional ease-in, instant collapse on any input
 **The tally:** the federation's instruments are now four-for-four at correcting
 confident readings — and this one corrected an ECHO against its own ARTIFACT within
 the hour of the archive landing. The condition was not paperwork.
+
+---
+
+## 2026-07-31 (E1 at the gate) — E1 LANDED INERT (`ee20bc5`, verified read-only; Opus SHIP zero fixes); NEW LAW OF RECORD: dwellLevelRate ceiling ~0.55; verdict-flight card ENDORSED with one rider
+
+**Verified read-only:** `ee20bc5` on `updraft`, `dwellLevelRate = 0` (THE flag —
+tracker and term both inside `if rate > 0`; today's byte path). The verb is a
+controller-scoped roll-input term, plant untouched; CS-5 registry amendment WAITS on
+Chad's keep word (correct — never lands before the verdict, same-day ledger sync
+when it does).
+
+**Design facts now of record** (a ceiling unstated reads as arbitrary later):
+
+- **`dwellLevelRate` DESIGN CEILING ≈ 0.55** (clamp saturation above); 0.5 is both
+  the first flown value AND the boundary. Any future tuner raising it past 0.55 is
+  buying nothing but saturation — written down so the knob's real range is known.
+- **Gate stack:** still hands (post-synth delta) + rotational keys idle + aim
+  RESOLVED with hysteresis (open 5°/15°, hold 10°/20° — the sustained-turn
+  protection) + only while the aim path runs (gap-reset carriers in the else-branch
+  and resetInput). Direction latch past 90° (IEEE ±π chatter), one-directional
+  0.3 s ramp, instant collapse on any input, crossfaded into levelAssist's
+  complement (peak summed authority 0.723 vs today's accepted 0.505 — the mid-bank
+  band carries MORE leveling authority than today's law; that is why the
+  upright-45° ease-never-snap row is load-bearing).
+- **Opus proved, not sampled:** zero frames of leveling can leak into a throw; the
+  parked-cursor chase is dead by construction.
+
+**Verdict-flight card ENDORSED, one rider:** the rim-pin falsifier must be flown in
+its REGISTERED duration-stated form — cursor pinned at the rim, hands frozen TWO
+FULL SECONDS, the bank must hold — not only the moving-chase variant (the chase row
+tests the resolved gate; the two-second pin tests the dwell gate; both are needed).
+Ratification calls reserved to Chad on the card: Shift/Ctrl not resetting the dwell
+(a hands-free powered climb levels itself — bless or veto) and the accepted
+deep-stall corner.
+
+**On keep:** CS-5 amendment lands in the EvC registry with same-day sync entry here,
+closing the loop Chad opened in session 9. Then the re-capture on the SAME stamp —
+pre-registered read stands as corrected: bad-start rows migrate to level starts at
+unchanged throws-per-minute; the floor and the rail discriminator persist; E2 gets
+designed against a clean bed.
