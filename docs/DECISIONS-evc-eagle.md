@@ -2702,3 +2702,49 @@ non-null (FN-1 killed by E2, FN-2 by the knife decouple); kEff fades by
 **PENDING: Chad's one flight** on the S63 fly card (EvC docs/HANDOFF.md
 top box). The tape judges C2-1..C2-5 + the S62 regression set (death-latch
 stays dead) + the felt dip verdict. Every kill-flag is one config line.
+
+---
+
+## 2026-08-01 — S63 FLY VERDICT: FAIL, on the verified stamp (9ac7c7a clean, from the flight's own Studio log). The tape agrees with Chad's hands. Card 2 does NOT ship.
+
+**Chad's verbatim report (sacred, of record):** "completely destroy this
+flight kernel… mouse aim is flipping on me, no more straight down dive…
+This is fully broken… All kinds of old bugs are reintroduced with this
+build. The vertical knife edge is not [guarded] anymore allowing me to
+dive down, I can loop around in the vertical and the curl is still
+there… very disappointing for this cascade. Is my intent not clear[?]"
+Also: "I can do a straight up loop manoeuvre without it rolling off to
+the side" — read as the one PASS (the veer class), pending his word.
+
+**Tape (log 20260801T194827Z, stamp verified):** C2-2 FAIL — [EvC
+pushchatter] n=3 fired at elevDn=71.4°, side=1.6, be=144.5 — a NEW
+chatter class AT DEPTH (S62's was shallow 2–4°); bar was zero lines.
+C2-4 FAIL — [EvC line] episode max_parasitic_deg=4.19 (bar <1.0; other
+episodes 0.57/0.28). C2-5 PASS on tape — [EvC pole] mask=0 sticky=0,
+no clamps, matching the felt straight-up-loop-no-veer. pushwit n=94
+(witness live; shallow-ENTER split not yet read). Felt symptoms not yet
+attributed on tape: aim flipping (inversion class, f608682 registration);
+straight-down dive GONE (suspects: D1a depth floor / N4 nose-vertical
+state-hold — which has NO per-knob revert, only aimPushMode=false);
+knife-edge guard loss (suspect: the FN-2 knife decouple).
+
+**The curl is NOT a bug of this build:** lineHoldFF k is still 0 by the
+ruled ordering (sweep = Chad's post-card procedure). The card failed to
+say this in Feel voice — Chad flew expecting the dip fixed and met it
+unchanged. HIS INTENT WAS CLEAR; THE CARD WAS NOT.
+
+**LESSON, counted:** a pipeline can honor every gate — reconcile,
+red-team, dual verify, 659/659, byte-traced reverts — and still ship a
+kernel that fails in the hand inside one flight. The gates measured what
+they pre-registered; three of tonight's four felt failures were outside
+the pre-registered instrument set. And the fly card was written in
+engineer voice; the four-level convention exists because Chad reads
+LEVEL 1. Proposed standing rule (for Chad's word): every fly card
+carries a Feel-voice front page — what will feel different, what will
+feel THE SAME ON PURPOSE, and the one-line revert.
+
+**Escape hatch, tonight:** every kill-flag is one config line;
+aimPushMode=false backs out the push family incl. the nose-vertical
+hold; D1b reverts as the PAIR to 0/0; whole-card revert documented in
+the build report. Attempt #2 waits on the archive-first law and Chad's
+token budget — no whack-a-mole resumes.
