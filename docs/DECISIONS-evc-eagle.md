@@ -623,3 +623,55 @@ it). Fly first; land the linkage in the same session's cleanup.
 **Next:** engineer's row-read of the E1 flight (in progress at entry time), then
 the E1 revision through the standing chain (red-team the authority envelope +
 inverted path), refly the SAME card with the two-second rim-pin rider intact.
+
+---
+
+## 2026-07-31 (E1 read-back + scoping ruling) — Both defects have NAMED OWNERS (crossfade caution-tax; stale-frame horizon). RULED: E1.2 as ONE revision flight with per-fix card rows; ceiling law to be RECOMPUTED-not-bypassed; F8 becomes a standing card line
+
+**Engineer's read-back accepted** (each finding mapped to mechanism; stamp
+confirmed as the real E1 build):
+
+- **The verb's core is RATIFIED** — the triple gate (still hands + keys idle + aim
+  resolved w/ hysteresis) survived first contact with Chad's real flying.
+- **"Way too slow" owner: the crossfade** (red-team Medium-2's caution tax) —
+  0.146 effective at 45° of bank against the 0.5 flown; the fade against
+  levelAssist's authority cut the verb to ~15–30% at ordinary banks.
+- **Horizon flip owner: the stale aim frame** — the window Opus flagged at the
+  stage-C verify, arriving on schedule: during dwell the hands are still, so the
+  frame never moves while the bird rolls level beneath it; the stage-C2 camera
+  levels toward a stale, sometimes-inverted frame. Bird rights itself; horizon
+  lies.
+- **Honesty note:** no instrument rows — the card omitted F8 (tracker prints are
+  F8-gated, flush on F9). Chad's stick report is the verdict material regardless.
+
+**RULINGS (the base's seat):**
+
+1. **E1.2 is APPROVED as ONE revision flight** — the frameUp carry (E1.1) + the
+   speed retune together — on these conditions: (a) the two fixes have DISJOINT
+   symptoms (ease speed vs horizon truth), so attribution survives a combined
+   flight; (b) the refly card carries a SEPARATE duration-stated row per fix (the
+   inverted park must both LEVEL and show a TRUE horizon — two observations, one
+   maneuver; the upright-45° ease-never-snap row re-flown for the retuned speed);
+   (c) the two-second rim-pin rider stays.
+2. **Retune legality order ENDORSED** (soft-zone steepening → ramp → crossfade
+   reshape) — but since the crossfade is the named OWNER, the reshape is
+   pre-authorized rather than a last resort, on the stated discipline: **reopening
+   the D3 arithmetic means the ~0.55 ceiling law is RECOMPUTED WITH it, never
+   worked around** — the ledger's ceiling entry gets a supersession note citing
+   the new arithmetic, supersede-never-overwrite.
+3. **E1.1 frameUp carry ENDORSED, with one red-team question carried into its
+   review:** the carry must be proven inert during freelook and across the
+   release contract (same gates as the dwell verb — but state it, don't assume
+   it). The generalization is real and welcome: every dwell becomes a frame
+   re-level, retiring the Space-tap maintenance chore permanently — the carried
+   tilt that stage C ruled "flying history" stops accumulating at all.
+4. **PROTOCOL AMENDMENT, standing: F8 leads every instrumented card** — first
+   line, before any maneuver. A card without its instrument step produced a
+   verdict-only flight tonight; verdict-only was acceptable for E1's verb but
+   would have voided the re-capture.
+5. **E2's design opens with Chad's ablation quoted at the top** (previous entry) —
+   the lever arrives with an instrumented confirmation (the rail discriminator)
+   AND a felt one (bank-present-at-pull = straight) before a line of it exists.
+
+**Unchanged:** CS-5 amendment and `eagle-v1` retro-seal wait for the clean keep on
+the E1.2 refly.
