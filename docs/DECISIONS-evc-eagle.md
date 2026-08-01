@@ -904,3 +904,42 @@ gates):** scorer read confirming t0 clean (predicted by this diagnosis: the snap
 fires; the oblique develops AFTER, while keys are held); rival-cause
 pre-registration collapses to confirming that prediction; the fix designs the
 keychase half, red-teamed, with the CS supersessions stated in advance.
+
+---
+
+## 2026-07-31 (keychase design endorsed pre-red-team) — The mechanism made EXACT: aimHeadingLag τ≈0.45 s parks the camera ω/2.2 ≈ 50° off the nose in a hard keys turn — the §7.2 baseline's 42–86° family, matched. Tombstone adjudication ACCEPTED
+
+**The engineer's code-read completes the diagnosis with numbers:** with keys held
+the camera already targets the flight path — but through the MOUSE lag law
+(`aimHeadingLag = 2.2`, τ ≈ 0.45 s, tuned for cursor hang in mouse flight). At a
+~2 rad/s keys turn that lag parks the camera a STANDING ~50° off the nose — the
+§7.2 keys-baseline's 42–86° oblique family, matched from first principles. At
+human granularity (25°+ by a quarter second) it reads as "oblique the instant I
+release." Frame 1 snaps clean; every frame after obeys a law never written for
+key flight. **The snap port was necessary and insufficient — both attribution
+claims survive.** The 42–86° baseline row, captured three days before the fix
+existed, just became its diff target: the baselines pay rent again.
+
+**Tombstone adjudication ACCEPTED as sound:** the plane DELETED S-keychase because
+the plane's aim stays live under keys — keychase fought the mouse mid-combo. The
+eagle's CS-1 makes that fight structurally impossible: keys-held = the aim exerts
+zero pull, so a nose-anchored camera during key flight cannot contradict a mouse
+that isn't flying. The mechanism the plane buried is safe in the eagle BECAUSE of
+a registry difference already locked — the correct form of cross-vessel reuse
+(adopt the concept where the tombstone's reason doesn't apply; cite the tombstone).
+
+**Design ENDORSED as scoped:** fast `keysChaseLag` heading reference during
+keys-held aim mode (behind the eagle, period); on key release, Chad's law verbatim
+— mouse instantly at full authority, camera EASING back into lag pursuit, no snap
+at the seam, existing exponential machinery carrying both transitions. CS-8
+Stage-1 camera-follow clause gains a key-flight exception ON CHAD'S WORD, stated
+before the numbers; S30 cursor law untouched for mouse flight; same-day sync;
+Chad's post-fix flight ratifies. **Pre-registered discriminator endorsed,
+including its honest arm:** fix-build keys-held release rows must show t0 clean
+AND 0.25/1/3 s all small; a dirty t0 means the snap claim was wrong too →
+re-attribute, not patch. Red-team focus confirmed: the key-press/key-release
+seams (S26d), E1-dwell and C2 interactions under the new reference, flag-off
+byte-identity.
+
+**Chain unchanged:** red-team → build → Opus → inert commit → Chad's flight. The
+STOP holds until his sentence is honored on his stick.
