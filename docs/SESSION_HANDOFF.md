@@ -126,8 +126,19 @@ converses); Scarce Skies (recon carries the Phase-1 Environment* seam); any new 
 thread on a felt report.
 
 **THE EAGLE IS A REGISTERED VESSEL (2026-07-30/31)** — read
-**`docs/DECISIONS-evc-eagle.md`** before touching anything eagle-related; it is
-current through the 2026-07-31 29-throw ADJUDICATION RULING. Stage D was built,
+**`docs/DECISIONS-evc-eagle.md`** before touching anything eagle-related.
+**UPDATE 2026-08-01: THE EAGLE CAMERA ARC IS CLOSED — read the ledger's
+2026-08-01 GO entry.** Chad's one statement (`d3dc8c2`) ratified the camera
+state law as SHARED-KERNEL law (identical to the plane's v12; mirrored in
+TESGI §9.1.2 with cross-pointers both directions); the S60 Law-4 excision
+(EvC2026 `2229160`) deleted the keys→camera path; the fix flight's initial
+FAIL was superseded as Chad's owned misattribution (hash `2229160` confirmed
+from the flight's own Studio logs — "no stamp, no verdict" compares the HASH;
+the eagle's `-dirty` suffix is a CONSTANT with zero discriminating power, per
+the corrected nugget). STOP lifted on his word; CS-8 rewrite + CAMERA-LAWS
+ratification are the engineer's motions. Next on the eagle: the E-series per
+the standing ruling below. The paragraph below is kept as it stood
+pre-closure; its E-series ordering still governs. Stage D was built,
 swept 0.3/0.5, and HELD at the pre-registered gate (columns moved, hand didn't —
 dial proven sub-saturation, held as the last-in-line character trim). Chad's
 bank-timing hypothesis was instrumented and BOUNDED, not overturned; the capture
