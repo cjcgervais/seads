@@ -2547,3 +2547,24 @@ falsified by BLOCK-1 and the noise source removed).
 Verify: Tier-4 659/659 green, rojo build green, red-team (opus) run ONCE
 against the full requirement set per the ruling — BLOCK-1/MAJOR-2/
 MINOR-3/MINOR-4 all folded before commit. No intermediate dials landed.
+
+---
+
+## 2026-08-01 — CHAD'S 05:51 FELT SWEEP CONFIRMED PRE-EXISTING: R1 residual (side-to-side rises/dips), S-straightline class (loop veer), R4 residual (z/pole clamping) — ALL go on the consolidation card as requirements with the plane's v12 instruments
+
+Chad (verbatim): *"alot of effects in the cascade, like rises and dips when
+going from dise to side, straight up mouse aim loops would veer off the
+straight line, some z clamping"* — asked whether these predate tonight.
+**They do, all three, on this ledger:** R1 dip/curl (registration ruling;
+measured 8.4–16.4° on basis-live sweeps 2026-07-31; Stage C fixed the
+camera-basis share; residual queued behind E2 + the never-swept
+line_hold_ff); loop veer = the plane's S-straightline class (v12's
+straight-line predicate, max parasitic dip < 1.0°, is the ready-made
+instrument); z-clamping = R4 pole-clamp residual (Stage C was "the pole
+fix" for the camera-basis share only). **Card requirement add:** these
+three join the requirement table with the plane's flown instruments
+(straight-line predicate; F7/F6 step tracker; S59 throw instrument) so the
+consolidated gate is judged on the ORIGINAL asks, not only tonight's
+regressions. The E-series ruled order (E1 re-capture → E2 → lineHoldFF
+sweep) remains the standing path for the cascade half; the card covers the
+gate half — the two meet at the same requirement table.
