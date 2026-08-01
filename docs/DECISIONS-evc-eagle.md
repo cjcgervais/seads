@@ -2256,3 +2256,38 @@ hysteretic like every leg); the ±2° elevation band is compatible as
 belt-and-suspenders under the generalized F3 lesson (every sub-condition
 of a latch hysteretic). Console verdict still rules which hypothesis the
 felt oscillation belongs to before anything lands.
+
+---
+
+## 2026-08-01 — CONSOLE VERDICT FROM THE FLIGHT'S OWN LOGS: HYPOTHESIS A CONFIRMED — sacred-middle latch chatter, 73 + 11 transitions on the tape. The scoped fix is GO. New SOP: read the Studio logs, never ask for screenshots
+
+**Method (now standing SOP, Chad's ask "there must be a better way"):** the
+docs agent reads `%LOCALAPPDATA%\Roblox\logs\*Studio*.log` directly — the
+same source that confirmed hash `2229160` in the camera arc. No screenshots
+from the cockpit, ever again; the log IS the tape.
+
+**The read (two sessions, stamp `8610740 2026-08-01 04:34` confirmed
+inside each log):** 73 `[EvC push]` transitions in one session, 11 in the
+other. Every ENTER: `hz=false sac=true` with **elevDn 0–15 (mostly 0–6)**
+and sideDeg 8–18; EXITs flip on BOTH sacred halves — `sac=false` via
+sideDeg crossing ~23–29 OR elevDn dipping ≤ 0. The engineer's predicted
+signature, line for line. Bank angle at ENTER ranges 5–102° — push
+entering established holds freely, which the plane's bank-error floor
+forbids. One `[EvC shake]` line: `f~2.0Hz pkRoll=70 pkPit=115
+bankAmp=10.8 camAmp=2.5` — PITCH-dominant, consistent with push pulsing
+the elevator, not a roll-servo relapse.
+
+**Geometry note resolved:** sac fired at genuinely small sideDeg — during
+the felt oscillation the aim IS near-in-plane (the curl's own swing brings
+it there: the gate's action creates the geometry that re-triggers it, the
+F3 self-judging class, third instance across the federation).
+
+**GO for the scoped fix, both halves as already designed:** the bank-error
+floor ported as a hysteretic entry conjunct (the sixth conjunct; the
+engineer's mapping question — the eagle rate-law has no commanded bank, so
+bank_eff's equivalent is designed against the archive's definition, e.g.
+lift-plane vs required-turn-plane angle — goes to the architect as
+planned) + the ±2° elevation band belt-and-suspenders. Pre-registered
+pass: the same two holds on the fixed build show near-zero push
+transitions in the logs (read from disk), oscillation gone, dive set
+unchanged.
