@@ -359,3 +359,78 @@ maneuvers. F8 on; every qualifying throw prints its own row; no other F-keys.
 
 **Standing intent governs whichever lever wins:** "The eagle curl behavior is
 beautiful but I want the players to command the eagle."
+
+---
+
+## 2026-07-31 (adjudication) — THE 29-THROW CAPTURE: three signatures, all pre-registered predictions bounded or confirmed, plus ONE UNPREDICTED FINDING (the structural floor). RULING: design order E1 dwell-level → re-capture → E2 phased pull; promptness RE-CLASSIFIES to R5; lineHoldFF trims last
+
+**Provenance caveat, stated first:** this ruling proceeds on the engineer's reported
+numbers (29 throws on stamp `b39d7e6-dirty 19:01`). The row table was flushed to the
+engineer's session log only — NO metrics file exists on disk in the EvC2026 tree
+(verified read-only; nothing written since 19:00 but BuildStamp/rbxlx). The numbers
+are internally coherent and match the pre-registered signatures, but this is an ECHO,
+not an artifact. **Condition of this ruling: the 29-row table is archived verbatim
+into the eagle repo (a committed file) before any lever's fly card cites it.** The
+HttpService tape recorder already queued is the systemic fix.
+
+**Population predicate on the record** (recover the predicate, don't restate the
+number): real single throws = settle < ~1.7 s; five 2–4 s rows are compound
+maneuvers, SET ASIDE (not deleted — set aside, named).
+
+**The three signatures, against the pre-registration:**
+
+- **P1 CONFIRMED — bad starts own the chaos.** Cross-banked/inverted starts
+  (|bank0| > 30° or up0 < 0.9): arc_under median ~9° vs ~0 for level starts, sign
+  chaos, worst row bank0 67° → 32° over / 50° under. The dwell-level's signature.
+- **P2 CONFIRMED AT THE EXTREME, BOUNDED.** Worst clean-level-start arc: pitch
+  railed at t = 0.13 s with 25% of eventual bank → 28° arc. Low bank_frac produces
+  the biggest clean-start curls. But above frac ≈ 0.4, NO correlation between bank
+  timing and arc size.
+- **UNPREDICTED — THE STRUCTURAL FLOOR (the sharpest finding).** Level starts with
+  healthy bank at the rail (frac 0.88–1.0) still arc 8–15°. Cause visible in the
+  data: peak_pitch ≈ 1.0 on nearly every throw — the elevator is RAILED BY DESIGN
+  on any fast throw (gains saturate at small error), so full pull rides a
+  still-developing bank regardless of promptness. This is the consult ask-D third
+  shape, verbatim concept: "the pull grows WITH the bank, both arriving together" —
+  the phased pull, promoted from deferred speculation to measured need. It also
+  closes the lineHoldFF null: a railed command doesn't care about its target's fine
+  shape.
+- **P0 outcome: HALF-FIRED, honestly.** Chad's hypothesis was not overturned — it
+  was BOUNDED: true at the extreme, insufficient for the floor. Attribution #4 is
+  not an overturn but a PARTITION: three co-owners, each with a measured share.
+  (The pre-registration did its job: without P0 in writing, the floor could have
+  been rationalised into P2.)
+
+**THE RULING (the base's seat, reasoning stated):**
+
+1. **E1 — dwell settle-to-level FIRST** (the CS-5 amendment executed). Owner-
+   initiated, smallest structural risk (a dwell-gated attitude verb), deletes the
+   measured chaos population — and, decisive for the ordering: it CLEANS THE
+   MEASUREMENT BED. Bad starts contaminate every arc statistic; every later lever
+   gets measured on a clean population. Design constraints from the record: dwell
+   ~0.5 s (Chad's number, tunable on his stick); eased, never snapped; MUST recover
+   from inverted (the inverted-bank pitch-down IS the complaint); never fires
+   during active mouse input or held keys; inert behind a flag, red-teamed, one
+   flight — the standing cadence.
+2. **E1 RE-CAPTURE, pre-registered now:** same throw instrument, same protocol.
+   Expected: the bad-start population disappears from real throws; the floor
+   (8–15°) and the low-frac extremes PERSIST — they are clean-start phenomena. If
+   the floor MOVES with E1, that is a surprise finding; record it, re-attribute.
+3. **E2 — the PHASED PULL second** (the structural fix). Ranked above promptness
+   because by construction it addresses BOTH remaining signatures: it removes the
+   floor (the pull is no longer railed through a developing bank) AND it
+   neutralises the low-bank_frac extremes (if the pull grows with the bank, a slow
+   bank means the pull WAITS — the arc becomes timing-independent). Promptness as a
+   curl fix is structurally superseded by E2.
+4. **Promptness RE-CLASSIFIES to the R5 feel thread** ("lighter, a little faster in
+   the bottom end") — it governs how fast the eagle answers the hand, not whether
+   the answer curls. It is not dead; it changed departments. Revisit only if E2's
+   re-capture contradicts this.
+5. **lineHoldFF LAST — the sub-saturation character trim.** Chad's sweep resumes on
+   the E2-landed kernel (the dial finally has an unsaturated command to shape), his
+   number, one value per flight.
+
+**Standing intent governs all of it:** "The eagle curl behavior is beautiful but I
+want the players to command the eagle." E1 gives the eagle the right posture for
+the call; E2 makes the answer arrive as one motion instead of a pull through a
+half-set wing; the dial then decides how much bird is in the answer.
