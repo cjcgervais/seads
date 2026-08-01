@@ -2176,3 +2176,43 @@ the dive set. The three-move fix-flight pass stands as pre-registered; on
 all-pass the broad-knife thread closes flown-approved. Noted for both
 kernels: the astern exclusion has now earned load-bearing-conjunct status
 twice -- once designed on the plane, once by its absence on the eagle.
+
+---
+
+## 2026-08-01 — ARCHIVE CONSULT (inline, token-lean): astern fix flight — core passes; the surviving oscillation/curl is ONE of two KNOWN things, and the shipped [EvC push] log discriminates in one flight
+
+**Chad's report on `8610740` (verbatim):** *"stamp correct , straight down
+dosent roll, straight sideways wont pitch down but there is osscilations
+and pulling toward the middle z direction like it wants to stop turning go
+up then a big curl. smae for the down direction."* Moves 2–3 of the
+pre-registered pass: PASSING. The oscillation/pull/curl on sustained hard
+holds is the open item. Archive says it is one of exactly two things:
+
+**Hypothesis A — push-gate leg chatter (NEW, would be `8610740`'s own).**
+A hard lateral/down hold parks the aim near leg boundaries (the forward
+bound 87/96 and turnover 88/96 both sit astride the ~90° off-nose geometry
+of exactly these holds), and the port's red-team F3 pre-registered that the
+side cone is a self-judging gate. If pushW cycles: `hCmd` cuts (turn
+stops), the port's known F5 seam UN-gates levelAssist (roll toward level +
+bankFF pull = "go up"), then the leg exits and roll slams back = "a big
+curl." **Signature: `[EvC push]` ENTER/EXIT lines spamming (≥3/s) during
+the hold.**
+
+**Hypothesis B — the E2 STRUCTURAL FLOOR, already measured, fix already
+ruled (NOT new).** If the console is SILENT, push never engaged and the
+felt package is the eagle's documented cascade floor arriving at the front
+of the stage now that everything above it is fixed: the S59 throw capture's
+"pull grows WITH the bank" (elevator rails on hard throws — the pull toward
+the middle and up), plus the three-co-owner curl partition (stage D
+capture). The ruled E-series order (E1 → E1 re-capture → E2 phased pull)
+was interrupted by the wobble arc; E1 is now settled and flown — **B means
+the board simply resumes: E1 re-capture on the standing throw instrument
+(pre-registered: chaos population vanishes, floor persists), then E2, the
+designed fix for exactly this feel.** Nothing new to design; do not open a
+new thread for a pre-measured floor.
+
+**One-flight read:** repeat the hard lateral hold, watch the console.
+Spamming push lines = A (engineer damps/widens the offending leg's band —
+the printed line names WHICH leg flips). Silent = B (log it, resume the
+E-series per the standing ruling). Both paths are fully pre-registered;
+no further consult needed to proceed on either.
