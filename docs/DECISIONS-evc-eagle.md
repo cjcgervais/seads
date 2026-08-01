@@ -2291,3 +2291,34 @@ planned) + the ±2° elevation band belt-and-suspenders. Pre-registered
 pass: the same two holds on the fixed build show near-zero push
 transitions in the logs (read from disk), oscillation gone, dive set
 unchanged.
+
+---
+
+## 2026-08-01 — ARCHIVE INPUT TO THE ARCHITECT VET: `bank_eff` needs NO mapping — the plane never computes a commanded bank either. It is one atan2 on the body-frame aim
+
+Exact, from `reference/seads-feel/control/controller.h` (`bank_error`) and
+`controller.cpp` (~line 577):
+
+- **`bank_error = atan2(target_body.x, target_body.y)`** — the roll angle
+  that would put the AIM above the nose (aim's body-frame x=right, y=up).
+  Pure geometry; no commanded-bank state exists on the plane either. The
+  eagle computes it identically from its body-frame aim direction — one
+  atan2, no rate-law impedance mismatch. The architect's "lift plane vs
+  required turn plane" formulation is an approximation of exactly this;
+  use the archive's form.
+- `bank_eff` = bank_error with the roll-direction latch applied
+  (`roll_latch` on 135°/off 120° keeps the sign committed near-astern);
+  `have_bank` requires lateral magnitude > 1e-12 AND blend > 0 —
+  singularity guard, deliberately NOT hysteretic (the snapshot's own
+  comment: hysteresis targets regime chatter, not singularity guards).
+- **Floor values confirmed:** enter push only when `|bank_eff| > 120°`
+  (bank_hi), exit below 100° (bank_lo) — i.e. push requires the aim
+  DOWN-DOMINANT relative to body-up. An established tracking hold keeps
+  the aim near body-up (|bank_eff| small) → push structurally unreachable
+  → the bare sacred elevation term never chatters. This is the whole
+  protection, in two constants the port already has names for.
+
+Vet checklist, then: (1) body-frame aim, not camera-frame (the paid
+lesson); (2) latch the sign like the plane (135/120) if the eagle keeps
+near-astern rolls committed; (3) the 120/100 floor legs hysteretic as
+planned; (4) singularity guard non-hysteretic, per the snapshot comment.
