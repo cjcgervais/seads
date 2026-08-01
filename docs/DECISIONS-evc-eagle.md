@@ -2086,3 +2086,59 @@ noted latent. Red-team confirmed hCmd has exactly three consumers -- the
 one-seam claim is exhaustive, not asserted. Ships aimPushMode=true on
 Chad ask; pre-registered pass = the plane measured check mapped (6 rows in
 the commit). Cone widths become Chad character-sheet values after the fly.
+
+---
+
+## 2026-08-01 — BROAD-KNIFE BUG (Chad, flown on `e9114ac 04:22`): push fires on a hard LATERAL REVERSAL while banked. Attribution: the port dropped the plane's ASTERN EXCLUSION — the near-astern degeneracy reaches push through the sacred-middle arm + a signed turnover leg
+
+**Chad's report (verbatim):** *"hard sideways drag one lateral direction
+then the other treats down as relative and it maintains its banked
+orientation pitching down to go the other lateral direction horizontall
+across my screen with no banking, but at teh wrong time / direction."*
+
+**Attribution (from the `e9114ac` code + the plane's cascade doc):** the
+port's geometry IS world-frame (the pre-flagged hazard was avoided) — the
+hole is different and also documented on the plane. During a hard lateral
+reversal the aim sweeps NEAR-ASTERN of the nose, where the side-cone
+measurement DEGENERATES (the vertical plane contains the astern direction:
+at azimuth-off-nose 180±18°, `sideDeg = asin(|aim·n|)` reads ≤ 18° — the
+toml comment's own degeneracy, the one `horizon_enter=45` was built to
+blanket). Three port details then line up:
+
+1. **Sacred-middle arm needs only ANY depth below horizon**
+   (`pushSac = sideDeg ≤ 18/23 and elevDownDeg > 0`) — correct per rung F,
+   but it bypasses the 45° horizon leg, so the astern degeneracy reaches
+   push with a one-degree dip.
+2. **The turnover leg is SIGNED:** `pitchDownDeg = atan2(aim·dvec,
+   aim·birdLook)` — a near-astern aim slightly HIGH of the nose-plane
+   (easy with the nose a little low in the banked turn) reads ≈ −177°,
+   which passes `≤ 96` through the sign. The plane's `down_enter/exit`
+   is a below-nose MAGNITUDE; astern reads ~180 and is denied.
+3. **The plane's astern exclusion was dropped in port:** the plane's enter
+   conjuncts include `target_body.z <= push_down_z_enter` (cascade doc
+   `push-gate-knife-edge.md`, Math; `params.h push_down_z_enter/exit`) — a
+   BODY-frame forward bound that denies astern aims outright, independent
+   of the degenerate side read. The eagle port has hz/sac/side/turnover/
+   bank-guard legs and no forward bound.
+
+Result: push engages mid-reversal while banked (bank guard passes below
+100–120°), `hCmd → 0` kills rollP AND coordinated yaw ("no banking"), and
+the elevator chases the reversed aim in the BIRD'S banked frame — pitching
+"down"-in-body = horizontally across the screen: Chad's report, mechanism
+for mechanism, including "treats down as relative."
+
+**Pre-registered confirmation (the port ships its own instrument):** the
+`[EvC push]` transition log. Prediction for this bug's ENTER line:
+`hz=false sac=true side=true(<18) turn=true(NEGATIVE large, ~ -150..-179)
+bank=true(large) elevDn=small(0-10)`. A line matching that shape confirms;
+`turn` printing a large negative number is the signed-leg smoking gun.
+
+**Advisement (fix families named, design the engineer's; both deny astern
+independently, plane-precedented):** (a) restore the forward bound — the
+plane's `push_down_z` conjunct, e.g. require `aim·birdLook` above a
+threshold (aim in the nose's forward hemisphere with margin), hysteretic
+like every other leg; (b) take the turnover leg on MAGNITUDE
+(`|pitchDownDeg| ≤ enter/exit`), matching the plane's below-nose-angle
+semantics. (a) is the missing conjunct proper; (b) closes the signed back
+door even alone. Neither touches the flown dive/sacred-middle behavior —
+astern was never push-eligible on the plane.
