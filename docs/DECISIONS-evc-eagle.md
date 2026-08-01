@@ -434,3 +434,55 @@ maneuvers, SET ASIDE (not deleted — set aside, named).
 want the players to command the eagle." E1 gives the eagle the right posture for
 the call; E2 makes the answer arrive as one motion instead of a pull through a
 half-set wing; the dial then decides how much bird is in the answer.
+
+---
+
+## 2026-07-31 (archive verification) — CONDITION SATISFIED (`456dbad`, 34 rows); ARTIFACT RE-VERIFICATION CORRECTS THE EVIDENCE MAP: P1's flagship rows are COMPOUND, the FLOOR gains its own discriminator. RULED ORDER STANDS on corrected grounds. E1 design catch ENDORSED + falsifier registered
+
+**The archive condition is satisfied:** `docs/tapes/2026-07-31-throws-b39d7e6.csv`
+committed (`456dbad`), provenance in-file, 34 rows vs 29 read live — honestly
+flagged. `docs/tapes/` accepted as the recorder's permanent home.
+
+**This agent re-derived the three signatures from the artifact itself** (the whole
+point of the condition). Stated plainly, no smooth phrasing — the echo and the
+artifact disagree in places:
+
+- **P1 (bad-start chaos) DOWNGRADED from "confirmed" to "supported, chiefly by
+  compound rows."** The flagship "monster" (bank0 67° → 32°/50°) is a COMPOUND row
+  (settle 3.54 s) — outside the adjudication's own single-throw predicate. Among
+  true singles, bad starts show only a MILD penalty: arc_under median 3.2° (not
+  ~9°) vs level-start mean 2.7°. The dramatic bad-attitude arcs live in the 13
+  compound rows (not five — recount from the artifact, settle ≥ 2 s), where
+  interpretation is genuinely ambiguous (sequential throws from maneuver exits —
+  which is still a pre-orientation story, but an unmeasured one).
+- **The FLOOR is UPGRADED — the artifact contains a discriminator the echo
+  missed.** High-frac singles WITH a railed elevator (pp ≈ 0.93–1.0) arc
+  12.8–15.5°; high-frac singles WITHOUT the rail (pp 0.01–0.10) arc 0–2.8°. The
+  rail IS the arc, visible directly in the data, no inference needed. **E2's case
+  is now the strongest of the three levers.**
+- **P2 (timing extreme): confirmed EXACTLY but n=1.** The 0.24-frac/0.13-s/28.3°
+  row reproduces verbatim; the only other low-frac single (0.38) arced just
+  3.4° — the extreme is real but rarer than the echo implied.
+
+**RULING AMENDED IN GROUNDS, NOT IN ORDER.** E1 remains first — but explicitly on
+its true supports: (1) Chad's OWNER RULING (he does not want inverted flight
+anymore; a character ruling needs no statistics), (2) bed-cleaning for every later
+measurement, (3) smallest structural risk. It no longer claims a measured
+chaos-deletion in single throws. **E1 re-capture pre-registration CORRECTED
+accordingly:** expect the bank0/up0 columns to cluster level (the mechanism working)
+and the compound-row chaos to shrink; the floor and the rail discriminator PERSIST.
+A large single-throw arc improvement from E1 alone would now be a SURPRISE, not a
+confirmation.
+
+**E1 design catch — ENDORSED, and its falsifier is REGISTERED as a must-not-regress
+row on E1's fly card:** stillness alone is not idleness in a world-anchored-cursor
+architecture — a rim-pinned sustained turn has still hands and a commanded hard
+bank. The dwell gate therefore requires aim-RESOLVED (nose on cursor) as well as
+still hands. Falsifier, duration-stated: pin the cursor at the rim, freeze hands
+two full seconds — the bank MUST hold. Verb scope endorsed: roll-input term in the
+controller (the plant stays stability-free), full-range through inverted,
+proportional inside 45°, one-directional ease-in, instant collapse on any input.
+
+**The tally:** the federation's instruments are now four-for-four at correcting
+confident readings — and this one corrected an ECHO against its own ARTIFACT within
+the hour of the archive landing. The condition was not paperwork.
