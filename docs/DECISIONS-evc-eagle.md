@@ -1693,3 +1693,62 @@ arrives as a snap.
 Probe protocol unchanged: P2 hand-off level-off from ~40°, then P1 shake
 line if anything survives. If the corrected structure flies clean hand-off
 AND hand-resting, F4 closes as the wobble's cause on this ledger.
+
+---
+
+## 2026-08-01 — S61b (`4814e61`) FLOWN, SHAKE SURVIVES. F8 opened: the defiltered dwell loop is UNDAMPED BY DESIGN. Verdict held for the probe reads
+
+**Chad's report (verbatim): "It still shakes after this."** Build verified:
+`4814e61` committed + pushed, stamp `4814e61 2026-08-01 03:08`, the defilter
+is real and complete on inspection (dwellTerm zeroed out of the filtered
+channel; rollBoost applied direct; degenerate-viewport abort zeroes the
+boost; no screenshots from this flight are on disk — the log*.png set is
+all 2026-07-30). **The probe discrimination is NOT yet on record** — no
+hand-off result, no [EvC shake] line, no stamp word from the cockpit. Per
+no-stamp-no-verdict and the re-instrument SOP, no dial moves until those
+exist. But the S61b diff itself yields a new structural finding:
+
+**F8 — the dwell loop now has NO effective rate damping.** Pre-S61b the
+dwell command and the damps shared the filtered channel (consistently
+laggy — F4's ring). S61b moved the command OUT and left `aimRollDamp` /
+`aimHeadDamp` IN: the loop's only damping is now the 28 ms plant lag plus a
+rate term that arrives through the 143 ms filter — at the new loop's
+natural frequency (ωn ≈ 35 rad/s ≈ 5.6 Hz from K = mult·rollRate/stopRad =
+34.4/s over the plant pole) that filtered term is attenuated ~5× AND
+phase-lagged ~79°, i.e. nearly in quadrature — it is not damping there,
+and the commit's "only adds margin" claim is wrong in general (small
+magnitude ≈ 0.11 keeps it secondary, not stabilizing). The engineer's own
+math concedes the point: ζ = 0.51 is the PLANT-LAG-ONLY figure — an
+underdamped 5–6 Hz mode with ~15% overshoot per crossing. And because the
+dwell gates open in ordinary aimed cruise (the block's own comment), this
+underdamped 2.25-authority wing-leveler is live nearly ALL the time — a
+stiff spring with no damper, holding wings level, waiting to be excited.
+
+**For a SUSTAINED shake, ζ=0.51 needs an energy source. Two candidates,
+both already on this ledger:** (1) **residual gate chatter (F3), now
+unfiltered (W1 landing)** — each 1.5 px tremor frame now delivers an
+instant 2.25-authority step with only 28 ms smoothing; (2) **camera-coupled
+re-excitation** — `rollP` stays live during dwell; the bird's roll moves
+the camera (bankTiltFactor through ~93 ms followSmoothing), which moves the
+cursor's world ray, which changes hCmd — an outer feedback loop through the
+camera that the stiffened dwell loop can now hunt against.
+
+**The three reads that discriminate (before ANY dial):**
+- **R-a — stamp word:** `4814e61 2026-08-01 03:08` seen in the corner label.
+- **R-b — P2 hand-off:** bank ~40°, hand FULLY off. Shakes hand-off too →
+  F8 family (arrival ring / camera-coupled hunt); clean hand-off, shakes
+  hand-resting → F3 chatter, and the dial is the quantum/gate decay, not
+  any gain.
+- **R-c — the [EvC shake] line + WHEN:** does the shake live at the
+  level-off ARRIVAL (brief ring, ~5–6 Hz = F8 arrival mode) or run
+  CONTINUOUSLY while flying level (chatter or camera-coupled hunt)? A
+  SILENT console with felt shake = the oscillation is not in rollVel —
+  look at camAmp/the camera loop.
+
+**Advisement for the engineer (mechanism named, design his):** if hand-off
+still rings, the lever family is giving the dwell channel its OWN direct
+(unfiltered) rate-feedback term — e.g. a dwell-scoped rollVel damp applied
+on the rollBoost channel itself — restoring ζ without re-introducing the
+lag. That is the half of the S61b move that didn't ship: the command left
+the filter; its damping never followed. Size it with BOTH poles in the
+model, per the standing rule he just wrote to memory.
