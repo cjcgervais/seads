@@ -151,7 +151,15 @@ the eagle: CARD 2** — one shared requirement table C2-1..C2-5 under the
 plane's v12 instruments (floor depth semantics; chatter <3/s; the dip via
 E2 + lineHoldFF port designed whole; straight-line predicate <1°; pole
 clamp). Pipeline: one design → **docs-agent reconcile (this repo's step)**
-→ one red-team → one build → one flight. The old E-series ordering survives
+→ one red-team → one build → one flight. **Landing convention:** the
+engineer writes the Card 2 reconcile packet to
+`docs/consults/CARD2-RECONCILE-PACKET.md` in THIS repo; the reconcile
+verdict goes alongside as `CARD2-RECONCILE-VERDICT.md` and is banked on
+the eagle ledger. If no docs session is live when the packet lands, the
+pipeline PARKS at this gate — the step is never skipped. The reconcile
+checks the design's requirement table against the plane's v12 instruments
+in `reference/seads-feel/` and the eagle ledger's registrations
+(R1/R4 originals, S62 tape findings, C2-1..C2-5 as committed). The old E-series ordering survives
 only as folded into C2-3; the paragraph below is kept as it stood
 pre-closure for lineage. Stage D was built,
 swept 0.3/0.5, and HELD at the pre-registered gate (columns moved, hand didn't —
