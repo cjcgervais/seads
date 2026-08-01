@@ -136,9 +136,24 @@ FAIL was superseded as Chad's owned misattribution (hash `2229160` confirmed
 from the flight's own Studio logs — "no stamp, no verdict" compares the HASH;
 the eagle's `-dirty` suffix is a CONSTANT with zero discriminating power, per
 the corrected nugget). STOP lifted on his word; CS-8 rewrite + CAMERA-LAWS
-ratification are the engineer's motions. Next on the eagle: the E-series per
-the standing ruling below. The paragraph below is kept as it stood
-pre-closure; its E-series ordering still governs. Stage D was built,
+ratification are the engineer's motions.
+**UPDATE 2026-08-01 night: the E-series-next pointer is SUPERSEDED.** Chad's
+process ruling (ledger 2026-08-01, commit `909c8ff`) stopped the whack-a-mole
+and replaced serial porting with ONE consolidation card; that card (S62,
+stamp `516899a`) was built and FLOWN ONCE on its pre-registered fly card.
+Verdict of record (commit `7ff13be`): the death-latch is DEAD (R4/R5 pass;
+the e32c497 regression class did not recur), but the tape convicts the
+bank-error floor of MAGNITUDE-BLINDNESS (direction-only, no depth — push
+admits during ordinary level sweeps), counted as a requirement, not dialed.
+Chad's 05:51 felt sweep was verified PRE-EXISTING on receipts (commit
+`8110970`: R1 dip residual, S-straightline class, R4 pole clamp). **Next on
+the eagle: CARD 2** — one shared requirement table C2-1..C2-5 under the
+plane's v12 instruments (floor depth semantics; chatter <3/s; the dip via
+E2 + lineHoldFF port designed whole; straight-line predicate <1°; pole
+clamp). Pipeline: one design → **docs-agent reconcile (this repo's step)**
+→ one red-team → one build → one flight. The old E-series ordering survives
+only as folded into C2-3; the paragraph below is kept as it stood
+pre-closure for lineage. Stage D was built,
 swept 0.3/0.5, and HELD at the pre-registered gate (columns moved, hand didn't —
 dial proven sub-saturation, held as the last-in-line character trim). Chad's
 bank-timing hypothesis was instrumented and BOUNDED, not overturned; the capture
