@@ -123,7 +123,19 @@ re-tag annotated at leisure if the convention is kept. **The board now:** COMS-1
 rendering wording (Chad's copy approval, at leisure); vessel roster (A6M2 awaits the
 ×1.5-vs-×2 power ruling; brief inherits the capture-machine AND roll-first re-arm
 converses); Scarce Skies (recon carries the Phase-1 Environment* seam); any new felt
-thread on a felt report. The horizon-gate thread is **PARKED-PENDING-RECURRENCE**
+thread on a felt report.
+
+**THE EAGLE IS A REGISTERED VESSEL (2026-07-30/31)** — read
+**`docs/DECISIONS-evc-eagle.md`** before touching anything eagle-related; it is
+current through stage C (KEPT by Chad's word: `aimOwnFrame = true` — pole + drift
+fixed, zero regressions) and carries the full attribution history (three overturned
+attributions across the federation — measure-before-rank is the law). **Eagle next:
+STAGE D** — the two-eyed instrument (`arc_over_deg`/`arc_under_deg`) FIRST, then the
+`line_hold_ff`-concept character dial (eagle's own algebra, NOT the plane's crab
+cancellation; Chad sweeps 0.3/0.5/0.7, one per flight, and rules where the eagle sits
+between bird and plane). Consult packet + reply pattern established — the eagle
+engineer reads this repo's ledgers directly. EvC2026 tree is READ-ONLY to this agent,
+same as the other live trees. The horizon-gate thread is **PARKED-PENDING-RECURRENCE**
 (live ledger `cdfa7b0b4`, mirrored in DECISIONS.md: the symptom did not reproduce on the
 sealed tape — do not design against it; #4's clean segment B is the ready-made A/B, and
 re-opened fix work should request a dedicated recording set).
