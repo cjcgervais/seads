@@ -848,3 +848,59 @@ every row on it. The card order is now: warm-up → F8 → judged rows → verdi
 rival causes stated in advance, the decision made by the scorer rows + Chad's
 answer BEFORE the fix is designed, and the dominant term is the term that gets
 fixed. No threshold patches on the minority term.
+
+---
+
+## 2026-07-31 (Chad's directive: mine the history) — THE HISTORY NAMES THE DEFECT AND THE FIX. The oblique is the plane's Card-1/keychase phenomenon: the camera follows a PARKED AIM while held keys walk the nose away. And the superseded-golden precedent (carry=0, v10) is the discipline the fix needs
+
+**Chad's directive, verbatim:** "look at the history of this fix. There is a golden
+that needed to be superceded, find that is the key to this look at the history of
+this problem will be the right fix."
+
+**Mined, from DECISIONS.md's v8→v10 arc — the mapping is one-to-one:**
+
+1. **The eagle's port likely works in its own lane, and the oblique lives in the
+   NEXT lane — exactly as on the plane.** v8's scar: "the snap still fires" was a
+   tick-level fact that a kernel with the exact defect passed. v9's measured
+   Card-1 trade, verbatim from the ledger: *"post-snap, hard key-only turning
+   walks the nose away from the parked aim, and the lag camera follows the aim,
+   re-opening a ~17°+ deflection view until the mouse takes over"*
+   (`nose_after_1s` 23.1° → 40.9°). The eagle: release reseeds aim ON the nose
+   (verified in `a747da5`'s code — `aimTargetDir = nil`, reseed-on-nose under the
+   guard), the camera lag-follows the CURSOR (the S30 law) — then Chad MAINTAINS
+   the override key, the nose walks away from the parked aim, and the camera
+   stares oblique at the bird. His complaint is the Card-1 phenomenon, felt.
+2. **The plane's history already contains the answer's shape: keychase.** The v9
+   attribution entry records that S-keychase "had been masking a long-standing
+   up-debt by RE-ANCHORING FORWARD" during key flight — the mechanism family that
+   keeps the camera behind the plane while keys steer. The eagle received the
+   snap port tonight but has NEVER had the keychase half: nothing re-anchors its
+   aim/camera to the nose during sustained key-only flight. That absent half is
+   the defect's owner.
+3. **THE GOLDEN THAT NEEDED SUPERSEDING — the carry=0 precedent (v10):** the
+   right fix changed arrival dynamics that controller goldens protected, and the
+   discipline was a DELIBERATE golden move — pre-stated bar, pre-registered gate
+   count — never a workaround to keep goldens green, never a silent re-record.
+   That is Chad's key: **the eagle's right fix will touch behavior its own locked
+   expectations protect** (the S30 "camera lag-follows the cursor" law; CS-2's
+   exit-snap clause; the S21 ease already superseded under flag), **and the fix
+   is to supersede those expectations DELIBERATELY, via Chad's word on the CS
+   rows, with the bar stated before the numbers** — not to keep patching the
+   release tick while the protected law re-creates the oblique every frame after.
+
+**THE RULING SHAPE (Chad's own words tonight are the specification):** "It should
+only ever go to chase cam, right behind the eagle upon release of freelook" +
+maintained keys = **during ongoing key-override flight, the eagle's aim re-anchors
+to the nose (the eagle's keychase), so the lag camera stays behind the bird.** The
+S30 camera-follows-cursor law gains a KEY-FLIGHT clause by supersession — Chad's
+word, CS-row amendment, same-day sync — the cursor law remains untouched for
+mouse flight. Note the vessel divergence honestly: the plane ACCEPTED the Card-1
+deflection view as a feature (deflection gunnery); the eagle REJECTS it — two
+vessels, two rulings, both on the owner's stick, exactly what the vessel doctrine
+is for.
+
+**Gate for the fix build (supplements, does not replace, the prior entry's
+gates):** scorer read confirming t0 clean (predicted by this diagnosis: the snap
+fires; the oblique develops AFTER, while keys are held); rival-cause
+pre-registration collapses to confirming that prediction; the fix designs the
+keychase half, red-teamed, with the CS supersessions stated in advance.
