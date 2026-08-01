@@ -737,3 +737,46 @@ rim-pin, his speed verdict in his words. **On his clean keep, the closing sequen
 executes:** CS-5 lands with same-day sync entry here; `eagle-v1` annotated seal
 with his verdict verbatim in the tag message (recorded in mandalark VERSIONS.md);
 alliance asks L1/L2/L4/L5 in the same session.
+
+---
+
+## 2026-07-31 (STOP — owner's word) — E1.2 VERDICT FLIGHT BLOCKED on a camera regression: freelook release with override keys held gives an OBLIQUE view. The release law restated; attribution is a CLAIM to bisect, not context
+
+**Chad's word, verbatim:**
+
+> "I wont fly it and remark until the camera is fixed. It should only ever go to
+> chase cam, right behind the eagle upon release of freelook. I am getting a
+> oblique view when I maintain override key press this was a v12 migratory fix
+> that was dropped in the last build."
+
+**The law this violates — the kernel base's camera model, Chad's load-bearing
+ruling (SESSION_HANDOFF §3, quoted never paraphrased):** release freelook → camera
+snaps to chase, **directly behind** — every time, **keys held or not; keys are
+irrelevant to this**. This was the plane's entire v9 arc (four attempts to close),
+migrated to the eagle with v12-receive (R2 was a registered issue from day one).
+An oblique view at keys-held release is the EXACT symptom the plane's v9 killed.
+
+**Rulings:**
+
+1. **E1.2's verdict flight is BLOCKED until the camera is fixed and the fix is
+   flown.** The E1.2 card is unchanged behind the block; nothing else advances —
+   no CS-5, no seal, no paperwork.
+2. **"Dropped in the last build" is a CLAIM with the same standing as any
+   attribution — bisect before fixing.** The suspect set is every eagle commit
+   since the v12 release contract last demonstrably worked, not just `7dcdb95`.
+   Note for the diagnosis, stated honestly: Opus PROVED the E1.2 carry disjoint
+   from the snapToChase window — but a proof covers what it models; the keys-held
+   release path is a DIFFERENT lane than the one proven, and the E1.2 verify also
+   corrected "the builder's wrong single-anchor release claim" to a two-mechanism
+   contract — that correction is itself a marker that the release path was
+   misunderstood at build time at least once tonight. Bisect by stamp, reproduce
+   with a stated maneuver (enter freelook, hold an override key, release freelook,
+   keys still held — camera must arrive chase-behind), find the dropping commit,
+   THEN fix.
+3. **PERMANENT must-not-regress row added, effective immediately and on every
+   future eagle card:** freelook release with keys held → chase directly behind,
+   every time, duration-stated (arrival within the contract's snap time, no
+   oblique dwell). The plane paid four kernel versions for this law; the eagle
+   does not get to re-learn it by regression.
+4. The fix restores the v12-migrated contract as specified — no redesign, no
+   "improvement," restoration first; any redesign is a separate consult.
