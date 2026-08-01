@@ -2568,3 +2568,28 @@ consolidated gate is judged on the ORIGINAL asks, not only tonight's
 regressions. The E-series ruled order (E1 re-capture → E2 → lineHoldFF
 sweep) remains the standing path for the cascade half; the card covers the
 gate half — the two meet at the same requirement table.
+
+---
+
+## 2026-08-01 — S62 FLY VERDICT (stamp 516899a verified): the death-latch is DEAD; the tape convicts the floor's magnitude-blindness; card 2 scoped to the shared v12 bar
+
+**Chad flew ONCE on the pre-registered stamp.** PASS: R4/R5 — no
+pitch-instead-of-roll latch on tape or stick; the e32c497 regression class
+did not recur. FAIL, tape-read honestly (76 logged transitions/417 s):
+R2 + chatter — dozens of push ENTERs in near-level flight at elevDn 2–4°
+via the sacred arm, two clusters ≥4 transitions/2 s. Mechanism of record:
+the bank-error floor is MAGNITUDE-BLIND — ~6° off-nose, a hair below,
+reads be 125–179° ("down-dominant" by direction at trivial depth), so
+sacred+floor admit push mid-sweep and the seam mutes roll for the transit.
+Chad's felt "rises and dips side-to-side" = the pre-registered R1 dip
+(docs agent 8110970) PLUS this tape-found contributor. Per the law: a
+COUNTED requirement for card 2, no dial landed tonight.
+
+**Card 2 scope committed (EvC docs/UNIFIED-STEEP-AIM-PLAN.md):** one
+shared requirement table — C2-1 depth semantics for the floor/sacred
+family (magnitude, not direction alone; zero level-sweep ENTERs), C2-2
+chatter <3/s no exemptions, C2-3 the dip (E2 residual + lineHoldFF port
+designed whole with its two false-nulls modeled; plane v12 flew 1.0,
+eagle still gate-held at 0), C2-4 straight-line predicate <1°, C2-5 pole
+clamp residual. The plane's proven instruments; one design → docs-agent
+reconcile → one red-team → one build → one flight.
