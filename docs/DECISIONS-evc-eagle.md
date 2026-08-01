@@ -780,3 +780,25 @@ An oblique view at keys-held release is the EXACT symptom the plane's v9 killed.
    does not get to re-learn it by regression.
 4. The fix restores the v12-migrated contract as specified — no redesign, no
    "improvement," restoration first; any redesign is a separate consult.
+
+---
+
+## 2026-07-31 — PROTOCOL AMENDMENT (Chad's word): every fly card begins with a FREE WARM-UP — fly first, feel first, THEN F8 and the card
+
+**Chad's word, verbatim:**
+
+> "add to flight cards to always fly a bit first to practice regular feel and the
+> manouvers you will do before pressing f8 and going through the card becasue you
+> can feel if something is off before you make judgements on what is being
+> measured."
+
+**Standing, federation-wide** (the fly-card template is the kernel base's; this
+amends it at the source — mirrored in DECISIONS.md): every card's first line is now
+a free warm-up — ordinary flying plus dry runs of the card's own maneuvers, BEFORE
+F8, before any judged row. Purpose: the pilot's feel is the first instrument, and
+it runs before the measured ones — if something is off (a regression, a lying
+camera, a wrong build), it is caught before it can contaminate judged rows.
+
+**Founding evidence:** tonight's camera regression was caught EXACTLY this way —
+Chad felt the oblique release before flying the E1.2 card, and the STOP protected
+every row on it. The card order is now: warm-up → F8 → judged rows → verdict.
