@@ -1460,3 +1460,146 @@ the E1.2 card, queued and unflown (inverted park — wings level + honest
 horizon within ~2 s holding a further second; upright-45° ease judging the
 0.8 cap; two-second rim-pin; Chad's speed verdict) — on Chad's stick,
 whenever he's ready.
+
+---
+
+## 2026-08-01 — RED-TEAM CONSULT (docs agent, two-lens Fable panel): the wobble night reviewed. Pitch gain was NEVER touched; the autolevel is a chattering crossfade, not a separation; the camera constants were never in the compensation set
+
+**What was reviewed:** the eagle tree's UNCOMMITTED working state on `11aee38`
+(stamp `11aee38-dirty 2026-08-01 02:30`) — the S60 "compensated package"
+(rollRate 8.4 kept; aimRollGain 7.5→2.86, aimLevelGain 0.9→0.34,
+aimHeadDamp 0.45→0.17, bankKeyScale 0.40 added; aimRollDamp 0.94 applied and
+WITHDRAWN same night) plus the uniform level-off v2
+(`dwellLevelUniform=true`, rate 1.0, time 0.5→0.15, ramp 0.3→0.12,
+stopDeg 10) and the [EvC shake] tracker. Two independent read-only Fable
+red-team agents: one attacking the diff's engineering claims against the
+plant code, one tracing Chad's three felt symptoms. They converge.
+
+**Chad's words, the spec for this arc (verbatim):** *"I just didnt want to be
+upside down long as soon as inpu settles it should autorotate to wings
+level."* And the complaints: *"autolevel shakes everything"*, *"Eagle cascade
+is too pitchy"*, *"The camera feels laggy for the horizonal levelling"*, and
+his suspicion *"I think they turned up my pitch gain."*
+
+**⚠ Tree moved mid-review (M1):** a live engineer session landed an S61 block
+in `BirdController` (dwellBoost / `aimApplied.rollBoost`; comments declaring
+"rollRate restored to 3.2" and "bankKeyScale retired") while `GameConfig`
+still carries `rollRate=8.4`, `bankKeyScale=0.40`, and no `dwellLevelRateMult`
+— the boost is inert via `or 1` and the tree is HALF-LANDED and internally
+inconsistent. Everything below reviews the S60 state, which is still the live
+config. (M2: the S61 comment itself records the S60 package "flown REJECTED:
+pitchy + wobble" — the rejection is already on the engineer's record.)
+
+### Findings (both lenses, converged)
+
+- **F1 — PITCH WAS NEVER TOUCHED.** `aimPitchGain 8.2`, `aimPitchDamp 0.64`,
+  the pitch law, and profile pitchRate are byte-identical through the whole
+  night. Chad's suspicion is factually cleared — and his felt report is
+  STILL RIGHT: the pitchiness is real, manufactured by roll-side coupling.
+  Three paths: (1) `aimBankFeedforward 0.35` (sec-bank pull) now arrives
+  ~2.6× faster on big throws because the roll linear zone widened 13%→35%
+  and real bank onset reaches 480 deg/s; (2) roll saturation moved to ~35%
+  cursor offset while pitch still saturates at ~12% — a diagonal throw is
+  now NOSE-FIRST where it was bank-first; (3) every 305 deg/s level-off
+  removes the bankFF term (~0.35 of pitch command at 60° bank) in ~0.15 s —
+  a nose-down step synchronized with every autolevel. This is the E2
+  structural floor ("pull grows WITH the bank") amplified by the roll
+  speedup — the fix belongs to E2, not to any pitch constant.
+- **F2 — THE AUTOLEVEL IS NOT SEPARATED.** Every levelling author
+  (`levelAssist`, `dwellTerm`, both damps) sums into the ONE clamped roll
+  channel inside `computeMouseAim`; the dwell path's delivered rate depends
+  on the cascade's `rollRate` and `aimRollDamp` by construction
+  (`rate·rollRate/(1+aimRollDamp)`), which is exactly why raising the
+  autolevel speed dragged the whole cascade with it. Chad's model (a
+  separate assist that engages when input settles) is INVERTED in the code:
+  with time=0.15 s the dwell path is the de-facto permanent levelling
+  author in cruise, through a chattering crossfade.
+- **F3 — THE WOBBLE, leading mechanism: GATE-CHATTER RELAY.** Gate 1 is a
+  per-frame `|dx|+|dy| ≤ 1.5 px` stillness test; resting-hand tremor sits
+  astride it. One over-threshold frame collapses `dwellRamp` to 0
+  INSTANTLY; re-arm now takes only 0.15 s + 0.12 s ramp. At any bank >10°
+  that is a 2–4 Hz near-full-stick roll square wave (tens of degrees of
+  bank amplitude), which `bankTiltFactor 0.6` transmits straight to the
+  camera and bankFF pumps into pitch — "shakes everything." At the old
+  0.5 s this tremor cadence simply never armed. **0.15 s is what let the
+  gate cycle.**
+- **F4 — THE WOBBLE, second mechanism: LOOP MARGIN.** `dwellLevelRate 1.0`
+  + `stopDeg 10` raise the level-off loop bandwidth ~12× past the
+  UNMODELED `aimResponse = 7`/s ease (a ~143 ms lag inside the loop, 5×
+  slower than the 28 ms plant pole) — phase margin ~5–10°, ringing at
+  ~2.1 Hz with the damps live. Every ζ/overshoot number in the package was
+  computed without this pole (and the package carries two different ζ
+  claims, 0.68 and 0.54). The pre-S60 legacy dwell had ~45°+ margin.
+- **F5 — THE CAP IS BYPASSED.** The v2 block recomputes `dwellTerm` AFTER
+  the E1.2a headroom clamp: at full ramp |dwellTerm| = 1.0 >
+  `dwellLevelTotalCap 0.8`. The "enforced by construction, EXACTLY, every
+  frame" invariant is FALSE on the uniform path (i.e. always), and the S61
+  comment inherits the same false claim. Comment-vs-code divergence,
+  in-tree.
+- **F6 — THE CAMERA CANNOT FOLLOW THE NEW LEVEL-OFF.** No camera code was
+  touched (camera laws respected). But the horizon is served by two
+  cascaded ~0.5 s lags — `horizonLevelRate 2.0` on `camUp`, and the E1.2b
+  frameUp carry's hardcoded `2.0·dt·dwellRamp` on `levelRef` — sized for
+  the 183 deg/s era. A 305 deg/s level-off finishes in ~0.15–0.2 s; the
+  horizon trails it by ~1 s+. Aggravator: gate chatter freezes `frameUp`
+  mid-carry, parking the horizon reference off-level between dwells. The
+  camera constants are consumers of plant speed and were never in the
+  compensation set. Any change here is a camera-laws question → Chad's
+  word, CS-8 territory, never silent.
+- **F7 — "exactly four consumers" is FALSE (minor).** Missed:
+  `MEGA.updateDeflectionFeathers` (rollN normalizes by rollRate — feathers
+  now ~never fire; cosmetic) and the CROW: `Controls` aim gains are GLOBAL,
+  so the eagle-specific ×3.2/8.4 cut the crow's cascade authority to ~38%
+  with zero compensation. Harmless while combat is shelved; must be
+  re-derived before any 1-v-4 work (same class as the standing roll-
+  asymmetry note).
+
+### Governance (kernel-protector findings)
+
+- **G1 — The dirty-build discipline broke.** Three-plus tunings were flown
+  tonight under stamps differing only in TIMESTAMP (`11aee38-dirty …`) —
+  the `-dirty` suffix has zero discriminating power (the S60 corrected
+  nugget, already on this ledger), so no flight tonight can be paired with
+  certainty to the config it flew. No-stamp-no-verdict is degraded from a
+  hash check to a wall-clock check. Advisement: commit (or stamp a config
+  hash) per iteration before the next verdict-bearing flight.
+- **G2 — The E-series ruled order was jumped.** Standing order: E1 → E1
+  re-capture (pre-registered: chaos population vanishes, floor persists) →
+  E2 phased pull → lineHoldFF sweep. The re-capture was never run;
+  instead the session did rollRate 4x + cascade recompensation + a
+  structural level-off rewrite in one night. The pitchiness complaint is
+  the E2 floor arriving on schedule, amplified — predicted by the board.
+- **G3 — Nothing is on the CS registry** because nothing is committed; the
+  same-day sync rule has nothing to bite on. The dwell family is CS-5
+  amendment-pending context; the cascade constants are governed rows. The
+  registry protection is OFFLINE while the work rides the working tree.
+- **G4 — S61 direction note (no ruling implied):** the half-landed S61
+  shape — rollRate back to 3.2, dwell path gets its OWN rate authority —
+  is structurally the separation Chad asked for ("autorotate speed without
+  touching the cascade"). Recorded here as an observation for the
+  engineer's red team, not a design instruction from this ledger.
+
+### Pre-registered discriminating probes (before any further tuning)
+
+Written before the numbers exist, per doctrine:
+
+- **P1 — one `[EvC shake]` line captured DURING the wobble.** If `ramp`
+  prints strictly between 0 and 1 across rows → gate chatter (F3) is
+  confirmed. If `ramp=1.00` steady → the servo-margin mechanism (F4)
+  leads. (Caveat on old tapes: the tracker records the WINDOW MAX of ramp,
+  so `ramp=1.00` rows never excluded chatter as co-cause.)
+- **P2 — the hand-off probe:** bank ~40°, then take the hand FULLY OFF the
+  mouse. Zero tremor → gates hold → if the shake vanishes hand-off but
+  returns hand-resting, chatter is proven on the stick, no instrument
+  needed.
+- **P3 — the camera probe:** hand-off level-off from ~60°; time from
+  bird-level to horizon-level. ~1 s+ → the cascaded camera lags (F6).
+  ~0.1 s → F6 is wrong.
+- **P4 — the pitch probe:** a pure-vertical cursor throw. Feels identical
+  to pre-S60 → pitch untouched confirmed on the stick; the pitchy feel is
+  diagonal-throw rebalance + bankFF timing (F1).
+
+**Consult standing:** advisement only — no code was written, no live tree
+touched. The engineer's own red team owns the fix design; this ledger owns
+the record. Full agent reports retained in this session's transcript;
+symbols cited in-entry are the durable pointers.
