@@ -1348,3 +1348,78 @@ build.** The still-running serve (started 23:23) stamps `2229160-dirty`; a
 restarted serve stamps `c36f1c3`. Any other hash — especially `a747da5` —
 means the pipe. Chad is flying the re-run now; the verdict entry follows his
 word and his hash.
+
+---
+
+## 2026-08-01 — S60 RE-RUN FLOWN: **IT'S A GO.** Hash confirmed `2229160` from the flight's own logs. The earlier FAIL is SUPERSEDED as Chad's own misattribution, owned in his words. THE STOP LIFTS. The camera arc on the eagle CLOSES
+
+**The hash, first — no-stamp-no-verdict satisfied on both counts.** This
+agent read the flown sessions' Roblox Studio logs directly: both of tonight's
+sessions (boot lines 07:00:37Z and 07:25:06Z / 07:33:19Z) print
+`[BuildStamp] 2229160-dirty 2026-07-31 23:23`. **Chad flew the fix build.**
+(The `45ea3c2-dirty` line in the same logs is the FarmLevel baked-artifact
+stamp, not the camera code — the `a747da5` family never appears.) The verdict
+below is rendered on confirmed-fix code.
+
+**Chad's flown verdict, verbatim — this is the ruling:**
+
+> "Yea I think you got it all this time and last time too. I may have
+> missattributed one or two of these rounds to the oblique camera because in
+> a sustained turn, as said my own oblique law obeyed and my camera
+> independent of the keys, my eagle zooms a circle and I watch it from
+> wahtever angle I want as soon at my velocity stops changing with keyboard
+> override, the snap occurs as I was always looking at my mousee aim, but on
+> releasing keys the eagle goes back to follow the mouse aim too = alignment.
+> This is an improvement of my own understanding of my kernel laws and making
+> them explicit is warranted and right by the standards of this codebase. I
+> attribue my error to the tight turn circle of the eagle and to my rather
+> far back chase angle. With such a fast circle and my mouse going where i
+> want the camera is ideal. It looks different from the way the plane might
+> behave in the seads game because of the turn radius and manouver aspect
+> ratio to chase distance. It is the same thing but looks different. So we
+> are open I will record now .... check the logs for my flight but my its a
+> go stands.. Other proof that I was wrong and that this is actually correct
+> as asked is that I was able to follow my eagle through the movement of my
+> mouse with key override press performing tight loops. THe camera will chase
+> but I have to manual follow. But with taps of the keys, I stay in chase
+> view, when in full deflection looping I can choose to chase with mouse aim
+> and cam will follow otherwise release and aim my flightline rather than
+> sustain press full deflection keys. ---> I will come out of it knowing
+> where me eagle will point and my cam will point upon releasing the keys.
+> This one on me :)"
+
+**What this ruling does, organized (verbatim wins on any conflict):**
+
+1. **The 2026-08-01 FAIL entry ("no camera chase on release") is SUPERSEDED
+   as a misattribution — Chad's own, owned in his words** ("This one on me").
+   The snap fires; the law operates; what he saw in a sustained key turn was
+   Law 4 obeyed — camera on the mouse aim, eagle zooming its circle in frame,
+   watchable from any angle. The re-attribute gate closes with no code defect
+   found: the flag-state read's "branch 1 has no mechanism" was correct.
+2. **The vessel-presentation insight, cascade-worthy:** the eagle's tight
+   turn circle plus its far-back chase angle make the IDENTICAL shared-kernel
+   law LOOK different from the plane — "turn radius and manouver aspect
+   ratio to chase distance… It is the same thing but looks different." One
+   law, two presentations; presentation divergence is geometry, not law
+   divergence. (Candidate for a cascade entry when the law is extracted.)
+3. **The technique record, in the ruling:** taps of the keys keep chase view;
+   full-deflection looping is a CHOICE — chase with the mouse aim (camera
+   follows) or release and aim the flightline; and the predictability
+   outcome is the comfort doctrine satisfied on the eagle: *"I will come out
+   of it knowing where me eagle will point and my cam will point upon
+   releasing the keys."*
+4. **Explicitness ratified:** "making them explicit is warranted and right by
+   the standards of this codebase" — `docs/CAMERA-LAWS.md`'s
+   ratification-pending banner may flip to RATIFIED (engineer's tree, their
+   motion).
+
+**Consequences now unblocked (engineer's motions, same-day sync):** the CS-8
+rewrite + registry amendment on the flown word; `releaseSnapV12 = TRUE`
+stands ratified; the S60 fly card records hash `2229160` + this verdict.
+
+**THE STOP LIFTS. The eagle camera arc — R2, the oblique complaint, the
+keychase misreading, the state-law restatement, the Law-4 excision, the
+stale-build scare — CLOSES here, on Chad's word, on his hash, on his own
+improved understanding of his own law.** Next by the standing ruling: the
+E-series resumes (E1 dwell settle-to-level → E1 re-capture → E2 phased pull →
+lineHoldFF sweep last).
