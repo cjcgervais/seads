@@ -1339,3 +1339,12 @@ a "looks like your flight evidence" flag on `log3.png` to the docs agent — no
 such flag exists in this ledger or this seat's record (this ledger only ever
 listed the PNGs as untracked files); noted for accuracy, source unknown,
 nothing turns on it.
+
+**Addendum (pre-flight, re-run pending):** the CLAUDE.md fix landed as
+**`c36f1c3`** on `updraft` (verified at the artifact: doc-only, 1 line,
+CLAUDE.md alone). **The valid-hash set for the re-run is therefore
+{`2229160`, `c36f1c3`} — identical camera code, both count as the fix
+build.** The still-running serve (started 23:23) stamps `2229160-dirty`; a
+restarted serve stamps `c36f1c3`. Any other hash — especially `a747da5` —
+means the pipe. Chad is flying the re-run now; the verdict entry follows his
+word and his hash.
