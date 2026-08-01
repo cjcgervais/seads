@@ -213,3 +213,82 @@ sweep row exists, so no result can be rationalised):
    reduction.** k=1 is a plane; the sweep is looking for his number — how much bird
    stays in the bird. The instrument says whether the dial works; only the stick says
    where it sits. One value per flight (the S28 rule), his verdict verbatim.
+
+---
+
+## 2026-07-31 (night) — SWEEP FLIGHTS 1–2 FLOWN (k=0.3 @ 18:03, k=0.5 @ 18:20): the FELT curl barely moved. Pre-registered rule 2 is LIVE — sweep HELD at the gate; Chad's bank-timing hypothesis REGISTERED as candidate attribution #4
+
+**Chad's verdicts, verbatim (his words are the specification):**
+
+- **k=0.3** (stamp `1b68fe8-dirty 2026-07-31 18:03`): "Throws to mid screen the nose
+  indicator is going like an inch over the mouse aim, quite a large curl still at
+  0.3 …. full pinned turn works, full loop still works… 0.3 did little to fix the
+  curl lets try 0.5 next."
+- **k=0.5** (stamp `1b68fe8-dirty 2026-07-31 18:20`): "full turn is good, loop is
+  good, Quick halfway deflection still have the curl. It didnt change too much…
+  The curl behavior is still there it shooting a little straight but its going
+  straighter to a point still the one inch above the mouse aim then settleing down
+  into it."
+
+**Must-not-regress rows HELD on both flights** (rim-pinned circle full-rate, powered
+loop commits). The felt signal: a small straightening at 0.5 ("shooting a little
+straight… going straighter to a point") but the one-inch-over arc persists.
+
+**CHAD'S HYPOTHESIS — registered verbatim, the candidate for attribution #4:**
+
+> "I am hypothesizing that bank rate may be an issue as the eagle works to reconcile
+> the nose to the mouse aim the banking is not full yet before the full pitch is
+> going to try to reconcile the nose to the mouse aim by pitching and the eagle
+> hasnt full banked to that angle and as it continue during the pitch, its forming
+> the loop. So it may not be this straightline but a lack of banking propensity,
+> initial proptness or turing up banking rate might cure this (hypothesis only and
+> to be taken up with my doc manager… SO I think its the bank angle not being there
+> enough on time with the mouse input relative to pitch and yaw. The eagle curl
+> behavior is beautiful but I want the players to command the eagle… I think this
+> is a matter of control surface balancing.. But let us continue programmatically
+> as per instruments and SOPS…."
+
+In mechanism terms (this agent's translation, clearly marked as such): the curl is a
+TIMING/ordering claim — full pitch authority arrives while the bank is still
+developing, so the nose pitches through a partially-established lift vector; the
+defect would live in the bank/pitch PHASE relationship during the throw transient,
+not in the elevator's steady-state target (which is all stage D reshapes).
+
+**Why this hypothesis is credible against the stage-D design itself:** two mechanisms
+already on the record predict exactly a weak dial during fast hard throws — (a) the
+engineer's saturation rail (during a hard throw both `upc` and `upcLine` can
+saturate `shapeAxis`, making the blend weightless right when the curl forms); (b)
+the bank-taper fade (kEff fading above 40° of bank — a hard throw's bank transient
+passes through/above that band at the very moment of the arc). Both put the felt
+curl OUTSIDE the dial's active domain. Chad's timing hypothesis is compatible with,
+and sharper than, both.
+
+**RULING UNDER THE PRE-REGISTERED RULE — the sweep is HELD at the gate. NO k=0.7
+flight until:**
+
+1. The engineer reports the `arc_over`/`arc_under` diffs for the 0.3 and 0.5 rows
+   (F3 ×2 + F4 ×2 each) against the k=0 baseline (~8–10 over / 0–7 under), with the
+   two false-null exclusions checked (>55° silence; saturation rail).
+2. The branch is then decided by the numbers:
+   - **Columns did not move** → rule 2 fires clean: attribution overturn #4, sweep
+     closed, re-attribute.
+   - **Columns moved but the hand didn't** → lesson-2 territory (the instrument is
+     not modeling the maneuver Chad flies): F3 steps / F4 synthetic sweeps are not a
+     fast throw to mid-screen. Either way the naive sweep is over — the felt curl
+     lives outside what the current instrument+dial pair address.
+3. In BOTH branches the next step is the same, per the measure-before-rank law: a
+   **phase-resolved throw instrument BEFORE any bank-rate knob is touched** —
+   measure, during Chad's actual fast-throw reproduction, bank angle attained vs
+   pitch application over time (e.g. bank fraction of steady value at the moment of
+   peak pitch command / peak arc_over). If the bank is well short of its steady
+   value at peak pitch, Chad's hypothesis is confirmed by its own instrument;
+   only then does a banking-propensity/promptness lever get designed. His
+   hypothesis is a claim with the same standing as any plan's attribution — it gets
+   the instrument treatment, not a tuning pass. (Three overturned attributions say
+   this protects HIS hypothesis too: if it's right, the instrument makes it
+   unassailable.)
+
+**Standing intent restated for the eventual fix:** "The eagle curl behavior is
+beautiful but I want the players to command the eagle" — the goal is not curl
+removal; it is putting the curl under command. A bank-timing fix and a character
+dial may yet compose.
