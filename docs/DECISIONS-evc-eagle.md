@@ -430,8 +430,12 @@ maneuvers, SET ASIDE (not deleted — set aside, named).
    the E2-landed kernel (the dial finally has an unsaturated command to shape), his
    number, one value per flight.
 
-**Standing intent governs all of it:** "The eagle curl behavior is beautiful but I
-want the players to command the eagle." E1 gives the eagle the right posture for
+**Standing intent governs all of it:** ~~"The eagle curl behavior is beautiful but I
+want the players to command the eagle."~~ **STRUCK AS STANDING INTENT on Chad's
+2026-08-01 word ("get rid of the darn 'curl is beautiful' line — I asked more
+recently to fix the curl"): the governing intent is FIX THE CURL, at the archive
+value (042996b ruling). The old quote stays only as history in its dated entries.**
+E1 gives the eagle the right posture for
 the call; E2 makes the answer arrive as one motion instead of a pull through a
 half-set wing; the dial then decides how much bird is in the answer.
 

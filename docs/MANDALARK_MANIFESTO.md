@@ -38,9 +38,11 @@ it is the manifesto's oldest clause (DECISIONS.md, STANDING INTENT):
 
 > "I want to be unpredictable to them, not myself."
 
-With its newest sibling, born this session (eagle ledger, 2026-07-31):
+With its newest sibling, born this session (eagle ledger, 2026-07-31), **amended on
+Chad's word 2026-08-01 — the "beautiful" clause is struck; his later ruling is FIX
+the curl, at the archive value:**
 
-> "The eagle curl behavior is beautiful but I want the players to command the eagle."
+> "I want the players to command the eagle." *(and the curl gets fixed, not kept)*
 
 ## 2. Mode d'emploi — the operating law, distilled
 
