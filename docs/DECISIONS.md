@@ -32,6 +32,25 @@ past v12 at any time:
 
 ---
 
+## 2026-07-31 — THE MANDALARK MANIFESTO ADOPTED (Chad's word): `docs/MANDALARK_MANIFESTO.md` is the constitution's raison d'être + mode d'emploi
+
+At the close of the eagle adjudication session, Chad ruled his founding intent into
+the record: the Mandalark Gaming Engine's chronicle, with `mandalark-kernel` as its
+basis and this repo as the proxy engine. His words verbatim in the manifesto file;
+headline: *"proper sops and primary source data for information, testing hyposthesis
+then reasoning from data is the true anti slop."* The manifesto distills the
+operating law already paid for in these ledgers (primary sources over echoes;
+instrument before ranking; pre-registration with the unexpected outcome included;
+founder's words as specification; two-agent domain-separated verification; honest
+supersession; character-is-a-ruling; the repo as proxy engine). **Standing:** the
+manifesto governs spirit; narrower procedural rules win on mechanics. Amendments by
+Chad's word only. **Why:** the methodology was named by its owner while watching it
+correct its own adjudication echo against the archived artifact — the record of that
+session (DECISIONS-evc-eagle.md, 2026-07-31 entries) is the manifesto's founding
+evidence. **Status:** standing.
+
+---
+
 ## 2026-07-30 (late night) — CONSULT: the eagle receives v12 — reply issued, EAGLE REGISTERED as a governed vessel (Chad's R7)
 
 The EvC2026 eagle engineer's consult packet
