@@ -526,3 +526,53 @@ closing the loop Chad opened in session 9. Then the re-capture on the SAME stamp
 pre-registered read stands as corrected: bad-start rows migrate to level starts at
 unchanged throws-per-minute; the floor and the rail discriminator persist; E2 gets
 designed against a clean bed.
+
+---
+
+## 2026-07-31 (alliance audit) — IS EvC2026 FULLY ON BOARD? Audit verdict: SUBSTANTIALLY YES, five linkage asks (L1–L5) to close the gap; the automation Chad asked for rides their EXISTING SessionStart hook
+
+Chad's ask before the E1 verdict flight: is EvC2026 fully aligned with the engine's
+SOPs, and can the constitution linkage be automated as cultural alliance. Audited
+read-only against the manifesto's eight clauses.
+
+**Already on board (better than assumed — credit where due):** the CS-1..9 locked
+registry with grep-the-registry discipline; the `/evc-loop` SOP harness (orient →
+one-change → verify → red-team → memory → handoff → approved commit) reminded by a
+SessionStart hook every session; the red-team → build-to-spec → Opus-verify chain
+(three stages ran it flawlessly tonight); design-doc-per-stage; `docs/tapes/` with
+provenance-headed verbatim archives; mandalark conventions already cited in the
+consult packet (symbol-not-line citations, lesson 1, artifact identification); and —
+notable — their THREE existing eagle tags are all ANNOTATED (the convention the
+plane's v12 deviated from; the student outdoes the reference here).
+
+**THE FIVE LINKAGE ASKS (all changes in the EvC tree are the engineer's to make —
+this ledger authors the ask; Chad relays):**
+
+- **L1 — Constitution pointer in EvC's CLAUDE.md.** The orientation block names
+  /evc-loop and HANDOFF.md but never mandalark. Add: mandalark-kernel is the
+  governing preservation system; before any kernel-feel work read (read-only)
+  `docs/MANDALARK_MANIFESTO.md` + `docs/DECISIONS-evc-eagle.md` there; the CS-sync
+  rule named. A fresh EvC session today would not know its own vessel ledger exists.
+- **L2 — THE AUTOMATION: a constitution step inside `/evc-loop`'s orient phase.**
+  The SessionStart hook already fires every session and points at /evc-loop; add to
+  the skill's orient checklist: "kernel-feel work? → read the eagle ledger's latest
+  entry first; mandalark holds the base's seat; rulings land there." Cultural
+  linkage that runs itself — no new infrastructure, rides what exists.
+- **L3 — Execute the retro-seal: `eagle-v1` ANNOTATED tag, overdue.** Adopted at
+  registration "on Chad's next accept flight" — stage C's KEEP came and went
+  untagged. Natural moment: the E1 keep. Tag message carries Chad's verdict
+  verbatim; recorded in mandalark VERSIONS.md same day.
+- **L4 — `docs/tapes/README.md`.** The convention is currently only in one CSV's
+  header: provenance header mandatory (stamp, instrument commit, flag values),
+  verbatim always, append-only, supersede-never-overwrite; the four-file golden
+  convention for when Golden Eagle Felt Flight #1 arrives.
+- **L5 — Manifesto mirror: a short `docs/CONSTITUTION.md` in EvC** quoting the
+  eight clauses, marked MIRROR (mandalark authoritative, update on amendment only)
+  — so the culture is legible in-tree, not only by cross-repo reference.
+
+**On this side, already standing:** the vessel ledger, the manifesto, the memory
+system, and this repo's CLAUDE.md/SESSION_HANDOFF eagle sections. No new mechanism
+needed here; the sync rule covers the rest.
+
+**Sequencing:** none of L1–L5 blocks the E1 verdict flight (L3 explicitly WAITS for
+it). Fly first; land the linkage in the same session's cleanup.
