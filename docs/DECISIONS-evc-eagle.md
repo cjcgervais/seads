@@ -943,3 +943,40 @@ byte-identity.
 
 **Chain unchanged:** red-team → build → Opus → inert commit → Chad's flight. The
 STOP holds until his sentence is honored on his stick.
+
+---
+
+## 2026-07-31 (keychase red-team gate) — REVISE, no Critical/High; mechanism survives whole. CORRECTION TO THIS LEDGER'S OWN WORDING accepted (Low-6); the pure-B instrument and pre-registered floors are the findings that matter
+
+**Red-team verdict:** REVISE → PROCEED, no Critical/High — every finding a
+card/design-text amendment, eight revisions of record binding on the build
+(`docs/STAGE-B-KEYCHASE-DESIGN.md` in the eagle tree).
+
+**Correction accepted against THIS ledger's previous entry, stated plainly:** the
+endorsement's "structurally impossible" was overclaimed. The precise adjudication:
+CS-1 deletes the CONTROL fight (no live aim law under keys) — but the cursor
+remains mouse-movable under keys, and the tightened camera WILL send a pre-placed
+cursor off-screen where today's oblique incidentally kept it near view. That is an
+INTENT-VISIBILITY trade, not a control fight, and it is RULED by Chad's sentence
+(chase behind the eagle, period). The tombstone adjudication is sustained on the
+corrected wording.
+
+**The findings that will matter later, on the record:**
+
+- **The pure-B instrument (revision 3):** the §7.2 keys standing-oblique rows
+  (42–86°, no release involved) must collapse to the no-free-look control
+  ballpark — B's acceptance line independent of any release. Frame-1 = pure A;
+  keys-oblique = pure B; release 0.25/1/3 s = the composition. The key-PRESS seam
+  has no instrument — attributed by carded feel rows only, stated honestly.
+- **Pre-registered floors (revision 4)** so a CORRECT build reads clean: t0
+  tolerance absorbs one same-frame ease step; the 0.25 s keys-row floor is the
+  lookAheadFactor settle toward the flight path — correct behavior, not drift.
+- **Velocity-step honesty (revision 7):** the key-press hurry-behind is a
+  cap-limited ~206°/s swing — that IS the sentence, carded so pass/fail is
+  judgeable; `chaseTurnRate` OFF-LIMITS as a tuning response to the re-find row.
+- **A+B attribution for the combined flight** pre-stated: stage A is technically
+  unflown-clean; the scorer's t0-vs-later split carries the attribution; dirty t0
+  indicts A too → re-attribute.
+
+**Chain position:** Sonnet building; Opus next; inert commit; both flags flipped
+for Chad's flight; the STOP holds until his sentence is honored on his stick.
