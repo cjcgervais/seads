@@ -2644,3 +2644,61 @@ confirmed by search); the phase algebra satisfies both ruled properties and
 is literally the McRuer composition form. CL-4 answered: the plane has no
 per-transition schema at all; the eagle's row schema is strictly finer —
 acceptable, bar stays the edge-count rule, AT-15/AT-16 named as analogs.
+
+---
+
+## 2026-08-01 — CARD 2 BUILT AND STAMPED (EvC 9ac7c7a, pushed): full pipeline ran per the ruled process while Chad slept; C2-4 translation APPROVED on spot-check; serve verified live and stamp verified clean by the docs agent
+
+**Pipeline of record (close-out packet `docs/consults/CARD2-BUILD-REPORT.md`):**
+reconcile folds F1–F3 landed → ONE red-team (BLOCK, 4 MAJORs, all folded —
+best catch: E2's original weighting would have starved the sacred dive to
+half authority) → ONE Sonnet build → Opus verify SHIP-WITH-FIXES (three
+instrument bugs that would have burned the flight, incl. a chatter window
+printing false-fails) → fix round → Opus delta-verify SHIP (659/659, zero
+new findings, register floor held, reverts byte-traced). The reconcile's
+three red-team handoffs adjudicated: H1 → C2-1 pass is now witness>0 AND
+zero shallow ENTERs via a denial witness on the convicted geometry
+(elevDn ∈ [2,10) ∧ side ≤ 18 ∧ be ≥ 120); H2 → CLEARED as lift-vector
+physics, φ_need normalize REJECTED as the ruled-flaw shape; H3 → split
+band pinned as the two-sided corrEff selector.
+
+**A real pole bug found and fixed in the build:** Stage-C's mid-flight
+upPerp fallback rebuilt the carried frame from cf.UpVector — body-roll
+contamination of the mouse basis near the pole; the concrete candidate for
+the R4 z-clamp residual and part of the straight-up veer class. Now an
+explicit zenith cone-hold (rotations skipped, frame untouched) — the
+plane's §9.2 ban, honored.
+
+**C2-4 SPOT-CHECK VERDICT (asked in the packet, answered here): the eagle
+translation is FAITHFUL to the F2 fold.** F2's requirement was the envelope
+discipline, not the plane's quantity: scoped committed-entry population,
+stated window, parasitic never conflated with commanded, never a blanket
+cap. The eagle form (maneuver-plane departure |asin(look·planeN)| < 1.0°,
+hysteresis-scoped free episodes + deterministic F6 leg, command-following a
+SEPARATE column) carries all four; the quantity swap is geometry-forced
+(the plane's near-level dip form cannot measure a straight-up hold), and
+the G-envelope false-fail class F2 guarded against cannot fire on a lateral
+departure quantity. APPROVED for judging the flight.
+
+**Docs-agent verification of the parked state (this machine, direct):**
+Rojo serve LIVE on 127.0.0.1:34872 (the transcript's exit-code-1 was the
+stale-port first attempt — the stale serve from the earlier session was
+the exact stale-build class of flights 8–12, killed); stamp file reads
+`9ac7c7a 2026-08-01 12:32`, NO -dirty suffix; the on-disk BuildStamp.luau
+modification is the generated stamp overwriting the committed S62 value,
+documented normal in the file's own header. Fly-card pre-registration
+("stamp must read 9ac7c7a clean") satisfiable as parked.
+
+**Also banked from the packet:** (N4) degenerate nose-vertical push hold
+has NO per-knob revert — aimPushMode=false or whole-card only, deliberate;
+(N1) F1 row-#6 corrected — eagle cosPhiTheta unsigned by construction,
+inverted region defended by uprightFade; (N5) inverted-lateral-throw
+corner (asin saturates ±90°) pre-registered on the fly card, lever named;
+D1b's revert is the PAIR to 0/0 (enter-only diverges, MAJOR-2,
+boolean-traced). lineHoldFF k-sweep = Chad's post-card procedure, now
+non-null (FN-1 killed by E2, FN-2 by the knife decouple); kEff fades by
+(1−pushW), the recorded push-interaction decision.
+
+**PENDING: Chad's one flight** on the S63 fly card (EvC docs/HANDOFF.md
+top box). The tape judges C2-1..C2-5 + the S62 regression set (death-latch
+stays dead) + the felt dip verdict. Every kill-flag is one config line.
