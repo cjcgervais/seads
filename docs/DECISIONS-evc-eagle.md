@@ -2322,3 +2322,24 @@ Vet checklist, then: (1) body-frame aim, not camera-frame (the paid
 lesson); (2) latch the sign like the plane (135/120) if the eagle keeps
 near-astern rolls committed; (3) the 120/100 floor legs hysteretic as
 planned; (4) singularity guard non-hysteretic, per the snapshot comment.
+
+**BANK-ERROR FLOOR SHIPPED (engineer, eagle commit f9f0e5c, stamp 05:04):**
+the sixth conjunct lands per the GO (7fd0a74) and the archive form
+(91c6173) exactly: pushBE hysteretic entry conjunct, bankErr =
+|atan2(aim.Right, aim.Up)|, enter >=120 / exit <100; singularity -> 0 ->
+deny, non-hysteretic per the plane's own comment; sign latch ruled NOT
+needed this pass (magnitude-only consumer, astern pushFwd-excluded) --
+revisit only if a future pass consumes the sign. Sacred elevation half
+gains the +-2 deg band. Architect vet vs ground truth: homology exact;
+inverted + the 96-100 bank window double-covered; knobs
+aimPushBankErrDeg/ExitDeg (renamed in-vet to avoid the aimPushBankDeg
+vehicle-phi collision -- same two numbers, opposite sense, flagged in
+config). ON THE RECORD, the felt hypothesis of this dial: the eagle
+converges aim ONTO the nose (not above it, unlike the plane), so at dive
+RESOLUTION the floor exits push -- fine lateral corrections near the dive
+bottom ROLL again. Tell if wrong: "knife got sharp again near the dive
+bottom" -> the scoped answer is holding the floor with the sacred latch,
+not widening. LOG PRE-DECLARATION (F3 false-alarm guard): ENTER/EXIT
+clusters at dive resolution / on-nose convergence are the floor at its
+singularity, behaviorally inert while |hCmd|~=0. Fix-flight pass stands
+as pre-registered: the same two holds, telemetry read from disk.
