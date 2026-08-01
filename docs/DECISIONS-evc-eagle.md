@@ -576,3 +576,50 @@ needed here; the sync rule covers the rest.
 
 **Sequencing:** none of L1–L5 blocks the E1 verdict flight (L3 explicitly WAITS for
 it). Fly first; land the linkage in the same session's cleanup.
+
+---
+
+## 2026-07-31 (E1 verdict flight) — FLOWN. Verdict: FIX-AND-REFLY, not keep (two defects: too-slow ease, inverted flip-no-level). CS-5 does NOT land; retro-seal WAITS. And Chad's in-flight natural experiment CONFIRMS E2's thesis by feel
+
+**Chad's verdict, verbatim (stamp `ee20bc5-dirty 2026-07-31 20:15`):**
+
+> "the autolevel of wings kicked in when expected, but the time to level is way too
+> slow. Also when auto level occurs the horizon flips, and does not autolevel. The
+> curl is still happenning form a wings level to horizon orientation off a medium
+> throw… When it goes straight (presiding condition being wings not level and
+> closer to the max bank needed already by sheer chance of past manouver, the
+> condition of a straight flight line profile from operator pov is achieved in this
+> environmental circumstance and impetus directive relation."
+
+**Rulings from the oversight seat:**
+
+1. **E1 is FIX-AND-REFLY.** The verb fires when expected (gate stack works) but
+   fails two card rows: ease rate way too slow, and the inverted case — which was
+   a registered MUST — flips the horizon and does not level. **CS-5 amendment does
+   NOT land; `eagle-v1` retro-seal WAITS; the CS registry stays as-is** until a
+   kept refly.
+2. **The too-slow finding collides with the ceiling law of record.** `0.5` is both
+   the flown value AND the ~0.55 design ceiling (clamp saturation above). "Way too
+   slow" therefore CANNOT be fixed by turning the knob — the authority envelope
+   itself needs redesign, which is a red-team-again change, not a tune. The
+   ceiling law did its job: it converts "just raise it" into a design question
+   before a wasted flight.
+3. **Inverted flip-no-level: defect candidates named for the engineer's
+   diagnosis** (from the design as ledgered, not from the code): the direction
+   latch past 90° (IEEE ±π chatter zone), and/or the crossfade with levelAssist's
+   complement at extended bank. The inverted-recovery MUST came from Chad's
+   original complaint (the inverted-bank pitch-down) — it is not optional.
+4. **The persisting wings-level curl off a medium throw is the PRE-REGISTERED
+   floor, confirmed on the stick** — expected, not a surprise; E2's territory.
+5. **THE GOLD: Chad ran E2's discriminating experiment by accident and it
+   confirmed the thesis by feel.** When past maneuver happens to leave the wings
+   already near the needed bank, the same throw flies STRAIGHT from the operator's
+   POV. Bank-present-at-pull = no arc; bank-arriving-during-pull = arc. That is
+   the phased pull's entire mechanism, observed in the wild before E2 exists —
+   the felt twin of the tape's rail discriminator (pp≈1.0 arcs 13–15°, pp≈0.05
+   arcs ~0°). E2's design now starts with BOTH an instrumented and a felt
+   confirmation on record.
+
+**Next:** engineer's row-read of the E1 flight (in progress at entry time), then
+the E1 revision through the standing chain (red-team the authority envelope +
+inverted path), refly the SAME card with the two-second rim-pin rider intact.
