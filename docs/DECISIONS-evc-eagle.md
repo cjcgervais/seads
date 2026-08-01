@@ -1603,3 +1603,59 @@ Written before the numbers exist, per doctrine:
 touched. The engineer's own red team owns the fix design; this ledger owns
 the record. Full agent reports retained in this session's transcript;
 symbols cited in-entry are the durable pointers.
+
+---
+
+## 2026-08-01 — ADDENDUM: S61 (`85c93d2`) scored against the consult. The wobble SURVIVING S61 is the F4 prediction landing — the super-unity channel rides the SAME unmodeled ease
+
+Chad reports the autolevel still wobbles on the S61 build (clean stamp
+`85c93d2 2026-08-01 02:55` — G1 satisfied). The engineer's independent
+red-team consult (recorded in `85c93d2`'s message) had not seen this
+ledger's entry; the two consults converged on most findings independently.
+Scorecard of S61 against F1–F7/G1–G4:
+
+**Fixed by S61:** F2 (true decouple — `dwellLevelRateMult 2.25` super-unity
+channel, cascade knobs byte-restored to flown 3.2/7.5/0.9/0.45; the rollRate
+tombstone is written); F1's root (pitch harmony restored with the cascade);
+F7 (crow regression undone; deflection feathers re-normalized implicitly;
+`bankKeyScale` retired); G1 (committed, clean stamp); G2 partially (the
+detour is over); F3 partially (`dwellLevelTime 0.25` kills the
+decel-tail arming — the engineer's own diagnosis — but the per-frame 1.5 px
+gate + instant one-directional ramp collapse remain, so resting-tremor
+chatter is reduced, not excluded).
+
+**NOT fixed — and now the leading suspect for the surviving wobble:**
+
+- **F4 — THE UNMODELED EASE POLE, verbatim in the S61 diff:** the rollBoost
+  channel deliberately rides *"the same resp ease as the axes it shares a
+  frame with"* — `aimResponse = 7`/s, a ~143 ms first-order lag INSIDE the
+  level-off loop, 5× slower than the 28 ms plant pole. S61 loop gain in the
+  landing band: `mult·rollRate/(rad(stopDeg)·(1+aimRollDamp))` =
+  2.25·3.2/(0.209·1.58) ≈ **22/s** — same marginal structure as S60's
+  ~30/s, crossover still ~2× past the ease pole, phase margin still thin,
+  predicted ring ~2 Hz. The S61 stability claim ("coast 8.6° < 12° →
+  single crossing, no limit cycle") repeats the S60 analytical omission:
+  computed with the plant pole only, ease pole absent. Every generation of
+  this loop has now been sized without its slowest pole.
+- **F5 — the cap bypass stands:** uniform-path `dwellTerm` (rate 1.0) still
+  overwrites the E1.2a headroom clamp; the S61 comment's claim that the
+  boost "inherits … headroom cap" inherits the falsehood.
+- **F6 — camera untouched:** both ~0.5 s horizon lags (`horizonLevelRate`,
+  the frameUp-carry literal) still face a ~306 deg/s level-off — the laggy
+  horizontal levelling will persist on S61 as-is.
+
+**Discriminating read, pre-registered (P1/P2 now sharpened for S61):** if
+the wobble occurs with the hand FULLY OFF the mouse (P2), chatter is
+excluded and F4 is confirmed on the stick alone — tremor is required for
+chatter, not for a marginal servo. On the [EvC shake] line: steady
+`ramp=1.00` + `keys=0%` + f~2 Hz = F4; `ramp` strictly inside (0,1) across
+rows = residual chatter (F3).
+
+**Advisement (mechanism named, design left to the engineer):** the lever
+families that restore margin are (a) take the ~143 ms ease OUT of the dwell
+loop — the boost channel bypasses `resp` (its own faster ease or none; the
+28 ms plant then dominates and 22/s gain is comfortable), or (b) lower the
+loop gain into the existing lag — wider `stopDeg` / lower `mult` (costs
+Chad's ruled speed). Family (a) preserves the ~306 deg/s ask. Whichever is
+chosen: size it WITH the ease pole in the model this time, and state the
+predicted crossover and margin in the card before it flies.
