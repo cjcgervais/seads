@@ -32,6 +32,65 @@ past v12 at any time:
 
 ---
 
+## 2026-08-03 — EAGLE ITER-17 RULED: **OPTION A, ungate S-STRAIGHTLINE from `blend`** (Chad's word). Scoped to the eagle; propagation to the C++ kernel is a SEPARATE gate
+
+**Chad's ruling, verbatim:** *"I chose option A for the iter17 - question."*
+
+Option A, as put to him in `docs/consults/EAGLE-ITER17-QUESTION.md`: *let the straight-line
+correction work in FINE too, so the nose holds its line through the whole transition.*
+
+**What the ruling is founded on (measured, not asserted):** the leading `blend *` that makes
+S-STRAIGHTLINE structurally zero in FINE is **in the v12 spec** (`SPEC-LINE-003`,
+`TESGI-SEADS-KERNEL-SPEC-v12-MIRROR.md:901`) **and in the shipped C++ kernel**
+(`reference/seads-feel/control/controller.cpp`, identical expression). The eagle did not
+introduce it; it ported v12 faithfully and thereby exposed the gap. It became visible only
+because eagle iter 16 fixed the lean law — before that `held_bank` never left 0, the aircraft
+tracked small offsets flat on rudder, and nothing banked in FINE.
+
+**⚠ THE FACT CHAD DID NOT HAVE WHEN HE RULED, recorded because it is material and because he
+may want to revisit:** the blend-gated form is **flown and approved**. On 2026-07-30 he flew
+S-straightline and said *"yes I really like it. This is now the baseline for a quality flight
+kernel."* That is the v12 seal and it is what `COMS-1`'s truth-check cleared on. **Option A
+therefore is not repairing a mechanism he rejected — it is changing one he accepted.** Raised
+to him the same session; the ruling stands unless he says otherwise.
+
+**Do NOT conflate two instruments.** The `0.92/1.08/4.50°` figures in the 2026-07-30 entry are
+**line-closure under 15/30/60° flicks**. The eagle's bar measures **dip depth**
+(`asin(nose_elev@entry) − asin(min nose_elev)`, `SPEC-PRED-007`), whose v12 reference is
+**`0.58°`**. Different quantities; an earlier draft of this entry treated the 30° closure of
+`1.08°` as if it corroborated the eagle's `1.030°` dip. It does not.
+
+### Scope of the ruling — this is the load-bearing part
+
+1. **A is implemented in the eagle**, whose provisional goldens are explicitly unblessed and
+   whose `line_hold_ff = 0.0` kill-switch is a structural off arm. Cheap and reversible.
+2. **A does NOT propagate to `feel/kernel-v5` on this ruling.** The C++ mechanism is
+   flown-approved and sealed at v12; changing it requires Chad's stick, not a bench bar. That
+   is a separate gate and a separate ruling. This repo is read-only to that tree regardless.
+3. **The §3 diagnostic still runs**, now as *validation* rather than as a gate on the ruling:
+   the eagle's `1.030°` is a **synthetic bench** number and v12's `0.58°` was **flown**. If the
+   bench scenario enters the transition harder than a hand can, A may be tuning against an
+   artefact.
+
+### The risk A carries, named so it is checked rather than discovered
+
+`blend` is not what enforces the non-cancellation rules — `SPEC-LINE-006..009`'s one-sided
+`w_dn`/`w_up` parasitic definition does that, and it survives ungating. What `blend` plausibly
+buys is **suppression of pitch activity during fine tracking**. Removing it may therefore trade
+dip depth for **pitch chatter in FINE**. The eagle must report `BAR-SMOOTH-PITCH` (and YAW/ROLL)
+**alongside** `BAR-STRAIGHTLINE-DIP`, not the dip bar alone. A run that fixes the dip and moves
+a smoothness bar is not a pass.
+
+**The exact form of the ungate is the eagle's to derive and state, not this agent's to pick** —
+delete the factor, floor it, or arm a FINE-scoped weight. Whatever it chooses, `SPEC-LINE-003`
+is being deviated from and the deviation must be registered in `EUCLIDEAN_DERIVATION.md`'s
+manner: derived openly, marked as a claim, never absorbed as a fact (`SPEC-SCOPE-018`).
+
+**Status:** ruled, dispatched to the eagle at `docs/consults/EAGLE-ITER17-VERDICT.md`. The bar
+stays at `< 1.0°` — pre-registered, and `SPEC-ACC-004` forbids moving it to fit a result.
+
+---
+
 ## 2026-07-31 — FLY-CARD TEMPLATE AMENDED (Chad's word): every card opens with a FREE WARM-UP before instruments
 
 Chad's ruling, verbatim in the eagle ledger (same-day entry there): *"always fly a
