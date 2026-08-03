@@ -1,9 +1,14 @@
 # The tape under test. Pinned for determinism (SOP-01 H1).
 # Change deliberately, never silently: the gate hashes this file and prints it.
 #
-# REPINNED 2026-08-03 (S67, second dry run) from ...20260803T075251Z... to the tape below.
-# Reason: the 08-02 tape was 2,644 rows of EvCTAPE-v1 produced by 93e5ee4-dirty, with
-# kbRoll constant zero and no aimRollCeilingDeg in the header. This one is 14,002 rows
-# of EvCTAPE-v2 from a clean b720114, carrying both new header keys, with the pole and
-# line instruments fault-injected in-session for the first time.
+# REPINNED 2026-08-03 (S67) to the SECOND dry-run tape of that day.
+#   16,826 data rows, EvCTAPE-v2, build b720114 (clean stamp, tree=EvC2026_sandbox_cascade).
+#   Carries the paired free-look A/B blocks and a clean-flight FI-5 in which the nose
+#   actually reached -89.9 deg. This is the tape the free-look reconciliation finding rests on.
+#
+# PROVENANCE WARNING. The commit carrying this file, c84f51c, has a message describing the
+# FIRST 08-03 tape (...075251Z..., 13,765 rows) while the pointer below names the SECOND
+# (...081310Z...). That commit was made by a CONCURRENT session that picked this file up
+# mid-edit. The pointer is correct and was verified against the log on disk; the commit
+# message is not. Trust the path, not c84f51c's body.
 C:\Users\Chad\AppData\Local\Roblox\logs\0.732.0.7321043_20260803T081310Z_Studio_FF78B_last.log
