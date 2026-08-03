@@ -1,9 +1,9 @@
 # The tape under test. Pinned for determinism (SOP-01 H1).
 # Change deliberately, never silently: the gate hashes this file and prints it.
 #
-# REPINNED 2026-08-03 (S67) from ...20260802T230506Z... to the dry-run tape below.
+# REPINNED 2026-08-03 (S67, second dry run) from ...20260803T075251Z... to the tape below.
 # Reason: the 08-02 tape was 2,644 rows of EvCTAPE-v1 produced by 93e5ee4-dirty, with
 # kbRoll constant zero and no aimRollCeilingDeg in the header. This one is 14,002 rows
 # of EvCTAPE-v2 from a clean b720114, carrying both new header keys, with the pole and
 # line instruments fault-injected in-session for the first time.
-C:\Users\Chad\AppData\Local\Roblox\logs\0.732.0.7321043_20260803T075251Z_Studio_31215_last.log
+C:\Users\Chad\AppData\Local\Roblox\logs\0.732.0.7321043_20260803T081310Z_Studio_FF78B_last.log
