@@ -142,3 +142,84 @@ no remote and that stands — but I earlier called `D:/EvC2026_sandbox_cascade` 
 It is a **git worktree** of `D:/EvC2026`; its `.git` is a file, not a directory, and my probe
 tested for a directory. The branch is `cascade/rebuild` with no upstream. The conclusion
 survives — that work is unpushed — but the reason I gave was wrong.
+
+---
+
+# UPDATE — 2026-08-03, later the same day: Chad ruled, and §3's REDs are mostly closed
+
+**Appended, not rewritten.** Everything above is left exactly as it was written earlier today,
+including the claims this update supersedes. A packet that edits its own past is the mutable-
+pinned-tape defect wearing a different hat. Read §3 as the state at the time; read this as now.
+
+## Chad's rulings
+
+1. **`harness/TAPE-SCHEMA.tsv` is transferred to `cascade-recorder`.** Verbatim: *"I agree on
+   transfer to cascade recorder."* It tracks the emitter, so the agent that owns the emitter
+   owns it. The v3 content is committed unmodified as `cascade-recorder`'s edit.
+
+   `agents.tsv` gained **`!` exclusion syntax** to express this: `harness` keeps `harness/**`
+   *minus* that one file. Without it the wider grant shadows the narrower one and two agents
+   read as co-owners of a path with exactly one owner. Implemented in `audit_graph.py` in the
+   same commit — a token the tool silently ignored would be the inert-check failure occurring
+   inside the file that defines the inert-check law.
+
+2. **`D:/mandalark-cascade-research` now has a remote** — `github.com/cjcgervais/mandalark-cascade-research`
+   — and is pushed, including the six WIP files. It is also now a **rooted tree** in
+   `agents.tsv` (second tree of the same agent); it was writable-but-unrooted, which the audit
+   flagged as its own blind spot.
+
+3. **`cascade/rebuild` is pushed** to the EvC2026 remote and tracking.
+
+4. **The eagle tree is under version control** — `3f3dfc1`, 103 files, nothing modified.
+   Still no remote: there is no `gh` CLI on this box, so Chad creates the repo.
+
+## `cascade-recorder` — your WIP was committed for you, and one claim was checked
+
+Your six uncommitted files in `D:/mandalark-cascade-research` are committed as `b606db8` and
+pushed. Authored by you, committed by kernel-docs on Chad's word **with your explicit
+delegation** (*"say the word and I'll commit them, or leave them for the docs agent"*).
+**Content unmodified.**
+
+**Your v2 archive claim was verified before it was made permanent, not taken on your word:**
+`sha256[:16] = 9b0ec34dcef62326`, matching your stated value exactly; 34 fields, 21
+`required_header_keys`. The outgoing v2 is in the same commit as the v3 bump, so the archive
+law is satisfied in fact. That archive is contract **C4**, kept beside **C3** — the v1 archive
+that was back-filled and over-claims 19 keys against a true 17. Same task, both methods, side
+by side on purpose.
+
+**Your two regressions are now law**, `AGENT-GRAPH.md` §2b. `G21` going RED by its
+`count(old) != 1` guard and `check_tape`'s constant-column check going silently inert are the
+same event with opposite outcomes, and only the guard is acceptable.
+
+**Your dry run is unblocked and the build now has a second copy.** Nothing in the graph gates
+it. On your two deferred calls: not wiring G22 was right — the before/after boards are only
+comparable because you didn't — and `DESCRIPTIVE ONLY` on the decomposition is the correct
+label for one tape with no control arm.
+
+## `harness` — C3 is yours and it is the only contract RED left
+
+`schemas/EvCTAPE-v1.json` claims 19 `required_header_keys`; true v1 is 17, witnessed by
+`gate.py`'s own literal. **Do not silence it by editing the archive.** Correct it only with a
+note recording that it was back-filled, or leave it RED as a visible defect. Your
+`blocked_on` is now `none` — the TAPE-SCHEMA dispute is resolved and out of your lane.
+
+## `eagle` — your stop is now an answerable question, and it is not your bug
+
+`docs/consults/EAGLE-ITER17-QUESTION.md`. The finding inverted while it was being written:
+
+**The `blend *` that switches S-STRAIGHTLINE off in FINE is in the v12 SPEC** (`SPEC-LINE-003`,
+mirror line 901) **and in the shipped C++ kernel** (`reference/seads-feel/control/controller.cpp`,
+identical line). You did not introduce it. You ported v12 faithfully and thereby lit up a hole
+in the kernel Chad flies today — visible only because your iter 16 fixed the lean law, since
+before that `held_bank` never left 0 and nothing banked in FINE to expose the gap.
+
+**One thing to measure before Chad rules, and it is yours:** your bar reports `1.030°` from a
+**synthetic bench scenario**; v12's `0.58°` was measured on a **flown tape**. Your ledger
+compares them as if they were the same measurement. Run the v12 comparison through your own
+bench scenario. If v12 also exceeds 1.0°, the bar is mis-scoped and Chad is ruling on a real
+feel defect; if it stays under, it is a port defect to hunt and no ruling is needed at all.
+
+## Board now: RED 3 — C3, and the eagle's missing remote (2 rows)
+
+Everything else in §3 is closed. Run the audit yourself; do not take this paragraph's word for
+it. That is the entire point of the tool.
