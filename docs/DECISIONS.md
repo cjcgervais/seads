@@ -96,8 +96,40 @@ were reached by *"compensating for an underpowered plant, and the goldens then f
 compensations in place."* Thrust doubled (`9000 → 18000`) and the G limit doubled (`16 → 32`),
 and the dials were never re-derived. S-STRAIGHTLINE is one of those compensations.
 
+### ⚠ AMENDED 2026-08-03 (loop pass 4) — three corrections forced by `flying_architecture`'s `V021`
+
+**1. "A" and "2" are labels from two different option sets, and this entry did not say so.**
+`A/B/C/D` are from `docs/consults/EAGLE-ITER17-QUESTION.md` §4 (written by this agent).
+`1/2/3/4` are from the **eagle's own** question to Chad, built on its
+`docs/ITER17-MEASUREMENT.md`. Chad's two utterances — *"I chose option A"* and *"I went with 2"*
+— answer **different documents**. The substance of the supersession is unchanged, but a bare
+option label is **not an identifier**. Registered as a standing law in `AGENT-GRAPH.md` §2c.
+
+**2. The Option A entry is superseded IN PART, not in full.** Its **control-arm warning is not
+retired**: the v12-through-the-eagle-bench comparison was never run, and the eagle has since
+shown it is **unrunnable by that route** — Euclidean vs spherical plant, no C++ build on that
+box, and reporting a number from it would be the `SPEC-ACC-039` echo failure. A bare
+supersession pointer would have killed that warning by implication, which is the reverse of
+what happened. The warning stands and is now known to be unsatisfiable **as originally stated**.
+
+**3. The record failed to establish that Chad's selection was informed — the defect is the
+record, not the act.** `V021` correctly observes that *"what was selected is not what is being
+built"*: Option 2 **as the eagle framed it** was the `yaw_scale`/`K_coord` trade, and this agent
+substituted `M1-STATE-005`'s bank/elevator direction. `V014` says a mechanism is not an agent's
+to pick that way, and on the artefacts alone that flag is correct.
+
+**The missing fact, recorded here because nothing in the tree carried it:** the bank/elevator
+correction was **put to Chad before he selected**, in the advisory that his *"I went with 2"*
+answered — under the heading *"One correction to option 2 as the eagle framed it,"* citing
+`M1-STATE-005` verbatim and stating that `A4`/`A5` are *"evidence the cause is reachable, not
+the fix."* He selected **2-as-corrected**, having read it. That is disclosure before selection,
+not substitution after it. **But an auditor reading only the tree could not know that, and was
+right to flag it.** An informed selection whose record omits the disclosure is indistinguishable
+from an agent's substitution — so the disclosure is now part of the record.
+
 **Status:** ruled; dispatched at `docs/consults/EAGLE-ITER17-VERDICT-2.md`. The Option A entry
-below is **SUPERSEDED** and retained for its reasoning trail, not as standing guidance.
+below is **SUPERSEDED IN PART** — its option choice and propagation clause are void; its
+control-arm warning survives. Retained for its reasoning trail, not as standing guidance.
 
 ---
 

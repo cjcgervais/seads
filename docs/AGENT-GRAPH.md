@@ -84,6 +84,29 @@ v1 was back-filled by subtraction and over-claims by exactly two keys (19 where 
 is 17, witnessed by `gate.py`'s own literal); v2 was archived from the emitter at the bump
 commit and is correct and already load-bearing. **C3 is expected RED and must not be silenced.**
 
+### 2c. The ruling-identity law (added 2026-08-03, earned by `V021`)
+
+> **A ruling record must name the question document and quote the selected option's text. A bare
+> option label is not an identifier.**
+
+On 2026-08-03 Chad ruled twice on one question, saying *"I chose option A"* and then *"I went
+with 2."* `A/B/C/D` came from `EAGLE-ITER17-QUESTION.md` §4; `1/2/3/4` came from the eagle's own
+question built on `ITER17-MEASUREMENT.md`. **Two enumerations, two documents, one topic.** A
+record carrying only the letter cannot be resolved later, and a supersession pointing at a bare
+label retires whatever the reader assumes it meant.
+
+Two corollaries, both drawn from the same incident:
+
+- **Supersede in parts, not wholesale.** `V020` lost its option choice and its propagation
+  clause but kept its control-arm warning. A bare pointer would have killed the warning by
+  implication — the opposite of what the new ruling intended.
+- **Record the disclosure, not only the decision.** When an agent advises a change to an
+  option's *content* before the principal selects it, the record must say so. An informed
+  selection whose record omits the disclosure is **indistinguishable from an agent substituting
+  its own judgement after the fact**, and an auditor reading only the tree will correctly flag
+  it as the latter. This is not paperwork: it is the difference between Chad ruling and an agent
+  ruling in his name.
+
 ### 2b. The inert-check law
 
 > **A check that stops matching is not a passing check.**
