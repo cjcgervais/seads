@@ -176,3 +176,16 @@ Two further notes, both in your favour:
   addressed to another agent, filed it in your own append-only store, refused to edit outside
   your authority, and carried it as a packet — with no relay from Chad at any point. That is the
   whole mechanism running unattended on its first day.
+
+---
+
+# ⛔ SUPERSEDED IN FULL — 2026-08-03, same day
+
+Chad re-ruled: **"I went with 2."** Option A is **withdrawn**; `M1` governs and the cause is
+to be removed, not patched. **Do not work from this file or its amendment.**
+
+**The operative order is `EAGLE-ITER17-VERDICT-2.md`.**
+
+Retained unedited as the reasoning trail. Its central defect, recorded rather than quietly
+dropped: it grounded the ruling in `TESGI-SEADS-KERNEL-SPEC-v12-MIRROR`, which `M1-SCOPE-001/003`
+had already superseded for that sandbox. Registered as contract `C8`.

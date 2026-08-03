@@ -32,7 +32,76 @@ past v12 at any time:
 
 ---
 
-## 2026-08-03 — EAGLE ITER-17 RULED: **OPTION A, ungate S-STRAIGHTLINE from `blend`** (Chad's word). Scoped to the eagle; propagation to the C++ kernel is a SEPARATE gate
+## 2026-08-03 (later) — ITER-17 RE-RULED: **OPTION 2, M1 GOVERNS — REMOVE THE CAUSE** (Chad's word). Supersedes the Option A entry below
+
+**Chad's ruling:** *"I went with 2."* — Option A is **withdrawn**. The `blend` gate stays. The
+tree stays at `249/257` while the cause is worked, and that is accepted, not a failure.
+
+**Why A fell, and it is not because the measurement went against it.** The eagle prototyped A,
+measured it (dip `1.030° → 0.466°`) and reverted it, leaving the tree clean. A works. It is
+barred anyway, by Chad's own specification:
+
+- **`M1-PLANT-010`** — *"The straight-line property must be a **property of the plant**, not of
+  a downstream correction. The dip bar must be met with the S-STRAIGHTLINE mechanism
+  **disabled**."*
+- **`S-8`** (supersession register) — S-STRAIGHTLINE is **Provisional**; *"the dip's cause is
+  over-rudder; **remove the cause**"* — with the rationale, written 2026-08-01: *"The mechanism
+  is gated on `blend`, so it is off in FINE — exactly where the lean law banks. **A patch that
+  is absent where the problem now occurs.**"*
+
+**Chad diagnosed this hole two days before the eagle measured it, and ruled the direction then.**
+Option 2 is therefore not a new decision; it is `M1` being obeyed.
+
+### ⛔ THIS AGENT'S DEFECT — the reason Chad ruled A on incomplete grounds
+
+`docs/consults/EAGLE-ITER17-QUESTION.md`'s option table was written **against the v12 mirror**
+and never mentioned `M1-PLANT-010` or `S-8`. But `M1-SCOPE-001/003` are explicit: *"It replaces
+the v12 mirror as the governing document… where this specification and the v12 mirror disagree,
+**this specification wins**."* The v12 mirror is *"evidence, not law"* (`M1-SCOPE-002`).
+
+**I grounded a ruling in a superseded authority.** That is the same class as the back-filled v1
+archive (`C3`): a document that looks official, cited without checking whether it still governs.
+Chad was not choosing against `M1` — he did not know it was in the room. Registered as contract
+**`C8`** so it cannot recur, and `C8`'s scope is wider than this incident: `M1`'s own header says
+it supersedes the v12 mirror *"for this sandbox **and for EVC2026**"* — which puts the
+cascade-recorder's tree under it too.
+
+### The correction to Option 2 as the eagle framed it
+
+The eagle proposed pursuing the `yaw_scale`/`K_coord` direction (`A4` = `0.730°`,
+`A5` = `0.187°` with S-STRAIGHTLINE fully disabled). **`M1-STATE-005` says that is not the
+direction:** *"The likely direction is more turning authority from bank and elevator — so the
+rudder is not needed to point — **rather than further trading between the three dials above.**"*
+
+`A4`/`A5` are exactly that trade. They buy coordination by **removing rudder authority**, which
+costs resolve time — `M1 §5` measures **5.45 s to resolve a 30° step at `K_coord 16` against
+v12's 1.60 s** — and `M1-PLANT-011` bars a configuration that meets one bar by losing the other.
+Peak bank also moves `57.4° → 83.3° → 86.9°` on a half-second flick: a character change, not a
+tuning nudge. **`A4`/`A5` are evidence the cause is reachable, not the fix.**
+
+**First move, and it is a prerequisite rather than a parallel task:** build `M1 §5`'s 30° step
+scenario into the ladder so resolve time is **measured, not assumed**. No arm settled inside the
+existing 5 s bench, so that bench cannot arbitrate this trade at all.
+
+### What stands unchanged
+
+The bar stays `< 1.0°` and the denominator stays `257` (`SPEC-ACC-004`). Goldens do not move —
+A was reverted, so `SPEC-ACC-006` is not engaged. `M1-STATE-005` is openly marked **OPEN** —
+*"No configuration yet meets `M1-PLANT-009` and `M1-PLANT-011` together… the open engineering
+problem of this specification"* — so choosing 2 accepts that the tree sits short of `257` while
+that is worked.
+
+**The deeper reason S-STRAIGHTLINE was ever provisional**, from `M1-SCOPE-004`: v12's numbers
+were reached by *"compensating for an underpowered plant, and the goldens then froze those
+compensations in place."* Thrust doubled (`9000 → 18000`) and the G limit doubled (`16 → 32`),
+and the dials were never re-derived. S-STRAIGHTLINE is one of those compensations.
+
+**Status:** ruled; dispatched at `docs/consults/EAGLE-ITER17-VERDICT-2.md`. The Option A entry
+below is **SUPERSEDED** and retained for its reasoning trail, not as standing guidance.
+
+---
+
+## 2026-08-03 — ~~EAGLE ITER-17 RULED: **OPTION A, ungate S-STRAIGHTLINE from `blend`**~~ — **SUPERSEDED the same day by the Option 2 entry above. Retained as history, not guidance.**
 
 **Chad's ruling, verbatim:** *"I chose option A for the iter17 - question."*
 
