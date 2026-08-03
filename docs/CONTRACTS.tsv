@@ -1,0 +1,40 @@
+# CONTRACT GRAPH -- the edges that actually break. Tab-separated. Read by tools/audit_graph.py.
+#
+# A CONTRACT is a fact that must be true in more than one file. Each has exactly ONE
+# authority; every other file holding it is a DERIVED COPY. Drift between them is the
+# defect class that produced every inversion of 2026-08-02/03.
+#
+# ARCHIVE LAW (Chad-ratified, 2026-08-03): archive the outgoing version in the bump
+# commit, reconstructed from the emitter as it stood -- NEVER back-filled from the
+# current list. An archive is a claim about the past; building one from present state
+# produces a false contract wearing a version number. C3 below is that law's corpse.
+#
+# INERT-CHECK LAW: a check that stops matching is not a passing check. Every probe here
+# fails RED when its anchor goes stale, never silently. (G21's five emitter-mutation
+# anchors and check_tape's constant-column check both went inert on the v3 bump; one
+# went RED by guard, one stayed GREEN. Only the guard is acceptable.)
+#
+# AUTHORITY RULE: the authority is the file that PHYSICALLY DOES THE THING. For the row
+# contract that is the emitter format string -- not any schema describing it. Everything
+# else is a description, and a description that disagrees with the artefact is wrong by
+# definition, however official it looks.
+#
+# probe grammar (see tools/audit_graph.py):
+#   sha256                     -> file digest, first 16 hex
+#   json_len:<dotted.path>     -> len() of the list/dict at that path
+#   json_key:<dotted.path>     -> stringified value at path
+#   json_required_count        -> len of required|fields|columns, first found
+#   tsv_max_ord                -> max int in column 0 of data rows
+#   tsv_field:<rowkey>:<col>   -> cell by first-column key, 0-indexed col
+#   regex_capture:<pattern>    -> first capture group of first match
+#   regex_count:<pattern>      -> number of matches
+#   literal:<value>            -> constant
+# derived_copies entries: <path>::<probe>[::<prefix to strip before comparing>]
+contract_id	name	kind	authority	authority_probe	derived_copies	verifier	bump_checklist	notes
+C1	EvCTAPE row contract -- schema version	version	D:/EvC2026_sandbox_cascade/src/client/BirdController.client.luau	regex_capture:schema=EvCTAPE-(v\d+)	D:/mandalark-cascade-research/tools/evctape_schema.json::json_key:schema_version::EvCTAPE-;D:/mandalark-kernel/harness/TAPE-SCHEMA.tsv::tsv_field:schema_version:1::EvCTAPE-	tools/audit_graph.py C1	emitter header string -> evctape_schema.json -> ARCHIVE THE OUTGOING schemas/EvCTAPE-vN.json FIRST -> harness/TAPE-SCHEMA.tsv -> tape_fixtures.py -> gate.py anchors	Authority is the emitter's own header literal, the only copy that physically writes a tape. Anchored on 'schema=' so a v2 mention in a comment cannot be mistaken for the emitted version -- the first draft of this probe made exactly that error and read v2 off a comment at :3770.
+C2	EvCTAPE row contract -- field count	count	D:/mandalark-cascade-research/tools/evctape_schema.json	json_len:fields	D:/mandalark-kernel/harness/TAPE-SCHEMA.tsv::tsv_max_ord	tools/audit_graph.py C2	same as C1	A mismatch here is the fixture-goes-inert failure: hand-written rows stop matching the width, usable_rows falls below 2, check_tape returns gating=False, and 0/6 becomes 0/5 -- still GREEN, because a skipped check is not a failed one. That is H3's exact shape.
+C3	EvCTAPE-v1 archive fidelity	archive	D:/mandalark-cascade-research/tools/gate.py	regex_capture:all (\d+) required config keys	D:/mandalark-cascade-research/tools/schemas/EvCTAPE-v1.json::json_len:required_header_keys	tools/audit_graph.py C3	never edit an archive to silence this; correct it only with a note recording that it was back-filled	EXPECTED RED, DO NOT SILENCE. The v1 archive claims 19 required_header_keys; true v1 is 17, witnessed by gate.py's own literal. Back-filled by subtracting from the then-current list, over-claiming by exactly aimRollCeilingDeg and lookAheadFactor. Bites a v1 tape only. Owner: harness agent. This row keeps the defect visible until that agent fixes it.
+C4	EvCTAPE-v2 archive fidelity	archive	D:/mandalark-cascade-research/tools/schemas/EvCTAPE-v2.json	json_len:fields	NONE	manual -- compare against the v2 emitter at bump commit 7e8c36a	as C1	Negative control for C3. v2 was archived correctly (34 fields, 21 header keys, sha256[:16] 9b0ec34dcef62326, archived in the bump commit BEFORE any edit touched the schema) and is already load-bearing -- the pinned v2 tape resolves through it. C3 and C4 differ only in method, which is the whole argument for the archive law.
+C5	Kernel identity stamp	identity	D:/flight_sim2/seads-recon/KERNEL_SEAL	sha256	NONE	manual -- goldens/*_VERDICT.md signing metadata	on every graft, carry the seal WITH the kernel	The 'tag=' git-describe half is machine-derived and 0/3 wrong where present. The 'kernel=' half is fed by this hand-maintained file and is 2/3 wrong (goldens #3, #5). Do NOT found a law on tag= wholesale; found it on the describe half only. Golden #1 is the trap: unflagged because its hardcoded constant was truthful by coincidence of era. An unflagged header is not a verified header.
+C6	Verdict seal completeness	typing	D:/flying_architecture/VERDICTS.tsv	regex_count:^V\d+	NONE	flying_architecture VERDICTS-v2 seal_completeness column	every new verdict row must carry seal_completeness	RESOLVED by the architecture agent 2026-08-03 (a3a6ecb): SEAL-AGREES split three ways, seal_completeness made structural. A 64-hex column must not be able to represent 'partial' as 'full'. Row count tracked here so a silent truncation of the file is visible.
+C7	Eagle gate denominator	count	D:/mandalark-kernel_sandbox_eagle/GATE_REGISTRY.md	regex_capture:^(\d+)$	D:/mandalark-kernel_sandbox_eagle/ledger.tsv::tsv_field:17:4	tools/audit_graph.py C7	amend the registry BEFORE a run, never after (SPEC-ACC-004)	257 is final: first registered 259, corrected to 257 before any full ladder run because SPEC-LAY-A03 and SPEC-CAM-A08 were double-counted. The correction removed a duplicate, not coverage. The pass condition is the pre-registered denominator -- a run with fewer gates written than registered is a FAIL, never a pass on a smaller denominator.
