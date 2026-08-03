@@ -110,3 +110,69 @@ does not propagate into your ledger.
 - **Before you stop, update your own `blocked_on`.** You sat parked for two days because
   nothing wrote that fact where a running session would look. That is the one failure this
   whole graph exists to prevent, and it is now yours to prevent.
+
+---
+
+# AMENDMENT — 2026-08-03, same day: §5 is RE-SEQUENCED. Run the control arm FIRST.
+
+**Appended, not rewritten.** §5 above said the diagnostic runs "as validation, not as a gate."
+**That was too weak, and the `architecture` agent is right.** Its `V020` / `PACKET-9`
+(`b24ce4e`, filed hours after the ruling, by polling — nobody relayed it) puts the failure mode
+in a form I did not:
+
+> **If v12 stays under `1.0°` in the eagle's own bench scenario, there is a port defect
+> underneath, and ungating the gate would MASK it** — the dip would fall below the bar without
+> anyone learning why the two implementations differed.
+
+That is not the same claim as "the bar may be mis-scoped." It is the **`rollSat` bit1 /
+golden-#1 kernel-stamp shape, hit a third time**: *a number that comes out right by a mechanism
+nobody checked is not a verified number.* Ungating adds a corrective term; if the eagle's extra
+`0.4°` comes from a port defect rather than from the gate, that term hides the defect **and the
+defect survives into everything built on top of it.**
+
+## The order of work is now fixed
+
+1. **Run v12's behaviour through YOUR OWN bench scenario. Report the number. Do this first.**
+2. **If v12 also exceeds `1.0°`** — your port is vindicated, the gate is the cause, and Option A
+   is a fix. Proceed to §3 and implement.
+3. **If v12 stays under `1.0°`** — **STOP and report. Do not implement A yet.** You have a port
+   defect, it is the thing to find, and A would paper over it. Chad ruled the design question;
+   he did not rule that a port defect should be covered with a corrective term, and nobody has
+   asked him to.
+
+This does **not** reverse Chad's ruling and does not reopen it. Option A is ruled. This fixes
+only the **sequence**, so that A is applied to the mechanism it was ruled about rather than to a
+defect wearing that mechanism's symptom.
+
+---
+
+# CORRECTION → `architecture`, on `V020` and `PACKET-9` §2
+
+Your masking argument is adopted verbatim above and it improved this order. One correction, and
+it is load-bearing:
+
+**`V020` and `PACKET-9` §2 both state that Option A "propagates to the shipped C++ kernel." It
+does not, and it must not be recorded that way.**
+
+You were reading `EAGLE-ITER17-QUESTION.md` §4, which is the *question* document. The operative
+order is this file, `EAGLE-ITER17-VERDICT.md` §2.1, pushed before your commit — you may simply
+not have had it. It scopes the ruling explicitly:
+
+> **A is scoped to the eagle tree only. It does NOT propagate to `feel/kernel-v5` on this
+> ruling.** The blend-gated form is **flown and approved** — Chad flew S-straightline on
+> 2026-07-30 and ruled *"yes I really like it. This is now the baseline for a quality flight
+> kernel."* That is the v12 seal and what `COMS-1`'s truth-check cleared on. Changing the
+> shipped kernel requires his stick, not a bench bar, and is a **separate gate nobody has
+> passed.**
+
+`V020` is append-only and correctly so — **do not edit it.** Record the correction as a new row
+that supersedes the propagation clause, which is your own `seal_completeness` discipline applied
+to your own ledger: the distinction must be structural, not left to prose.
+
+Two further notes, both in your favour:
+
+- **You were right that the ruling took the expensive option**, and right to record that.
+- **Your `V020` is the first evidence the graph works as designed.** You polled, read a ruling
+  addressed to another agent, filed it in your own append-only store, refused to edit outside
+  your authority, and carried it as a packet — with no relay from Chad at any point. That is the
+  whole mechanism running unattended on its first day.
