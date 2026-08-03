@@ -1,0 +1,17 @@
+# LINE ENDINGS FOR THE CONTRACT FILES.
+#
+# core.autocrlf=true and no .gitattributes means git stores LF and checks out CRLF, so the
+# worktree bytes and the blob bytes of the same file at the same commit differ -- and a hash over
+# one disagrees with a hash over the other with nothing visibly wrong. That is the failure that
+# broke golden #5's fnv1a check.
+#
+# TAPE-SCHEMA.tsv is the human-readable half of the record format: the file check_schema.py
+# cross-checks against evctape_schema.json, and the one an analyst reads to learn what a column
+# means. It was rewritten with CRLF by accident this session (a Python text-mode write) and had to
+# be normalised back by hand -- exactly the class of silent byte change this pin prevents.
+#
+# Matches the pin on the machine schema in D:/mandalark-cascade-research/.gitattributes, so the
+# two halves of one contract cannot drift in encoding either.
+#
+# Deliberately narrow: the file whose bytes are a contract, not the whole tree.
+harness/TAPE-SCHEMA.tsv   text eol=lf

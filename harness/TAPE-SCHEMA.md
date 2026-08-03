@@ -23,7 +23,7 @@ a fixed-width contract, not a message."*
 prose scattered across a Luau file's comments. Every consumer — the print statement in
 `BirdController.client.luau`, the harvest script (`Harvest-Tape.ps1` / `tools/*`), the analysis
 tooling in §6 of `PREFLIGHT-GATE.md`, and any human reading a tape six months from now — reads
-the same 31-row table instead of re-deriving field order and precision from memory or from a
+the same 34-row table instead of re-deriving field order and precision from memory or from a
 comment that has drifted.
 
 `check_schema.py` exists because a schema file that nobody checks is exactly the kind of
@@ -84,7 +84,7 @@ careful reader" is exactly the standard SOP-01 rejects (H4: *"anything an agent 
 code must refuse"* — a human being careful is not code refusing). `NA` needs no field-specific
 knowledge to recognize.
 
-**Practical note on when `NA` is actually expected to appear:** for most of the 31 fields
+**Practical note on when `NA` is actually expected to appear:** for most of the 34 fields
 (`n`, `t`, `dt`, and anything read from `flightEngine`/`rootPart.CFrame`/`aimTargetDir`, all of
 which are established, always-populated locals inside `onFlightStep`), `NA` should essentially
 never appear on a healthy tape — its purpose is defensive: if a future refactor breaks one of
@@ -135,6 +135,39 @@ violation.
 
 ---
 
+## Version history
+
+| version | ords | what changed | why |
+|---|---|---|---|
+| `EvCTAPE-v1` | 1–31 | the original comprehensive record | PREFLIGHT-GATE §5 |
+| `EvCTAPE-v2` | 1–34 | **appended** `mouseDx`, `mouseDy`, `keyMask` (ords 32–34); added `aimMouseSensitivity` and `aimAnglePerPixel` to the required header keys | v1 was an **observation** record, not a **replay** record: 31 fields answering *what did the aircraft do*, none answering *what did the pilot ask*. See `D:/mandalark-cascade-research/findings/S65-REPLAY-FEASIBILITY.md` §2. |
+
+**v1 is archived at `D:/mandalark-cascade-research/tools/schemas/EvCTAPE-v1.json` and every tool
+reads a tape against the version the tape's own header declares** (RECORDER-CONTRACT R5). Bumping
+without archiving is what orphans a corpus from its own checker; the archive was written *before*
+the bump, and `check_tape.py`, `reconcile_roll.py`, `parse_tape.py` and `gate.py` all resolve
+through the one shared `schema_resolve.py` so they cannot disagree about what a row is.
+
+**Why the new columns are appended and never inserted:** R5. A trailing column leaves every
+left-indexed reader of a v1 tape working unchanged. An inserted column silently changes the
+meaning of every ord after it — the same prohibition as never reusing an ord.
+
+**Where ords 32/33 are captured, and why it is load-bearing:** at
+`BirdController.client.luau:3770`, **before** `sens = aimMouseSensitivity * aimAnglePerPixel`.
+The value on the tape is therefore RAW SCREEN PIXELS — the pilot's hand, not the hand times a
+knob. Recording the post-`sens` value would have meant a sensitivity change silently made old and
+new tapes incomparable with nothing on either tape saying so, which defeats the exact question
+the input columns exist to answer. Both knobs are required v2 header keys, so the commanded angle
+stays reconstructible and a knob change is a header difference `compare_arms.py` can see.
+
+**The `keyMask` bit map is minted into the emitted header**, alongside the pole bits
+(`keybit1=pitchUp` … `keybit256=freeLook`). A bitfield whose legend lives only in this file is
+readable only by someone holding the matching revision of this file; a tape must carry its own
+dictionary or it stops being self-identifying the moment the two drift. **Bits are permanent at
+mint, exactly as ords are:** a future key gets a new bit, never a reused one.
+
+---
+
 ## Retirement rule (H1)
 
 No field is retired as of this schema version. When one is:
@@ -158,7 +191,7 @@ accepted.
 
 ```
 $ python check_schema.py D:/mandalark-kernel/harness/TAPE-SCHEMA.tsv
-checked 31 data row(s)
+checked 34 data row(s)
 GREEN: TAPE-SCHEMA.tsv passes all checks (no duplicate ords, no gaps, every field has a sentinel
 distinct from its range, every field cites a source).
 exit=0
