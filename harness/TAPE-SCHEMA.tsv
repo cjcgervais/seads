@@ -1,4 +1,4 @@
-schema_version	EvCTAPE-1.0.0
+schema_version	EvCTAPE-v1
 ord	name	units	type	precision	range	sentinel	question_it_answers	source_ref
 1	n	int	int	0	[0,+inf) monotonic, resets to 0 only at process start	NA	Did any row get dropped? Monotonic row index; makes the sink self-verifying (G8/gap check).	PREFLIGHT-GATE.md Sec5 field1; field-map.md row1 (NEW STATE: no existing counter, add module-level local evcTapeN, increment at print site in onFlightStep)
 2	t	s	float	3	[0,+inf) session clock, monotonic non-decreasing	NA	When, on an absolute session clock, did this row happen? Joins markers and log timestamps.	PREFLIGHT-GATE.md Sec5 field2; field-map.md row2 (os.clock() precedent BirdController.client.luau:4185,4190)
