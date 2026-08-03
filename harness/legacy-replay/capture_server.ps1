@@ -1,4 +1,29 @@
 <#
+############################################################################
+# DEAD — DO NOT USE. This server has no producer.
+#
+# It pairs with src/shared/FlightRecorder.luau, whose POST draft was struck
+# down by review and rewritten as print-only (recorded in FlightRecorder's
+# own header, and independently confirmed by PREFLIGHT-GATE.md S2/S3 and
+# SOP-01-PRIMARY-DATA.md's "WHY THIS EXISTS" incident report, 2026-08-02).
+# Four independent things also block the path even if that weren't true:
+# HttpEnabled=false in every .rbxlx in the EvC2026 tree, nothing ever
+# listens on this script's port from the shipped client, this script listens
+# on 8790 expecting JSON {session, frames} while the client (when it posted
+# at all) sent text/plain CSV, and BirdController.client.luau printed
+# "sent N bytes -> server relay" on FireServer's RETURN — i.e. it reported
+# success for a send that had already been discarded server-side. Starting
+# this server and believing data is landing is the exact defect SOP-01
+# exists to prevent.
+#
+# The only sink SOP-01 trusts is the Studio log itself: print -> CreatorOutput
+# -> the log file, read directly. See ../SOP-01-PRIMARY-DATA.md and
+# ../TAPE-SCHEMA.md. gate.py's item E1 checks for this banner.
+#
+# Left in place, not deleted, so the SEADS-side workflow in
+# ../legacy-replay/REPLAY_ROADMAP.md and replay_diff.py --help text that
+# still mentions this file remain traceable to why it stopped being used.
+############################################################################
 .SYNOPSIS
     Flight-feel capture server for the Eagles vs Crows golden replay harness.
 

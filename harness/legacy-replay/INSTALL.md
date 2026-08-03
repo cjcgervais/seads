@@ -1,5 +1,15 @@
 # Wiring the Roblox FlightRecorder (Eagles vs Crows)
 
+> ## ⛔ DEAD — DO NOT FOLLOW THESE INSTRUCTIONS
+> `FlightRecorder`'s HTTP-POST path was struck down by review and rewritten
+> print-only; `capture_server.ps1` (same directory) has no producer and never
+> will while that stands. Wiring this in gets you a client that warns once
+> and buffers forever, or — worse — a server print that claims success for a
+> POST that was discarded. See `capture_server.ps1`'s own DEAD banner and
+> `../SOP-01-PRIMARY-DATA.md`. The only sink SOP-01 trusts today is
+> `print` → the Studio log, per `../TAPE-SCHEMA.md`. Left here, not deleted,
+> as a record of the path that was tried and rejected.
+
 The recorder module is **additive** — the one new file
 `D:\EvC2026\src\shared\FlightRecorder.luau`. It requires nothing from
 BirdController and changes flight by exactly zero until you start it.

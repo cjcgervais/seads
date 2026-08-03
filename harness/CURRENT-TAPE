@@ -1,0 +1,3 @@
+# The tape under test. Pinned for determinism (SOP-01 H1).
+# Change deliberately, never silently: the gate hashes this file and prints it.
+C:\Users\Chad\AppData\Local\Roblox\logs\0.732.0.7321043_20260802T230506Z_Studio_4320B_last.log
