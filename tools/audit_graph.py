@@ -151,11 +151,25 @@ def probe(spec, path):
 def audit_trees(agents):
     """Mechanical hazards, plus the cross-authority dirty-file check."""
     # (tree, glob) -> agent, so a dirty path can be attributed to its true owner.
-    authority = []
+    # An entry may be prefixed '!' to CARVE A PATH OUT of a broader lane the same
+    # agent holds -- e.g. harness owns harness/** except TAPE-SCHEMA.tsv, which Chad
+    # transferred to cascade-recorder on 2026-08-03 because it tracks the emitter.
+    # Without this, the narrower grant would be shadowed by the wider one and two
+    # agents would read as co-owners of a path with exactly one owner.
+    authority, excluded = [], []
     for a in agents:
         for entry in filter(None, a["write_authority"].split(";")):
-            tree, _, glob = entry.partition("::")
-            authority.append((tree.rstrip("/"), glob, a["agent_id"]))
+            neg = entry.startswith("!")
+            tree, _, glob = entry.lstrip("!").partition("::")
+            (excluded if neg else authority).append(
+                (tree.rstrip("/"), glob, a["agent_id"]))
+
+    def owns(tree, rel, aid):
+        if any(t == tree and aid_ == aid and fnmatch.fnmatch(rel, g)
+               for t, g, aid_ in excluded):
+            return False
+        return any(t == tree and aid_ == aid and fnmatch.fnmatch(rel, g)
+                   for t, g, aid_ in authority)
 
     # Audit every tree an agent may WRITE to, not only trees an agent is rooted in.
     # A tree someone can write but nobody is rooted in is the blind spot this tool
@@ -228,8 +242,8 @@ def audit_trees(agents):
         ok, porcelain = git(tree, "status", "--porcelain")
         for line in filter(None, porcelain.splitlines()):
             rel = line[3:].strip().strip('"')
-            file_owners = sorted({aid_ for t, g, aid_ in authority
-                                  if t == tree and fnmatch.fnmatch(rel, g)})
+            file_owners = sorted({aid_ for _t, _g, aid_ in authority
+                                  if owns(tree, rel, aid_)})
             # git records WHAT changed, never WHICH AGENT changed it. So this check
             # does not claim to detect authorship. It reports two things it can
             # actually know, and refuses to imply a third.
