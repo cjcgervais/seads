@@ -142,6 +142,53 @@ not stated.**
 unstated definition reads as a regression later. **`cascade-recorder` owes the gate predicate in
 writing before those counts are quoted again.**
 
+### ⭐ THE PREDICATE, RECOVERED — and it moves BOTH our numbers
+
+**`rollAimApp` is `aimApplied.roll`** — verified at source (`:5092-5099`): an **eased state**, not a
+raw command, and the term still multiplied into `inputState.roll`.
+
+**That kills "magnitude at the crossing" as a measure, for both of us.** A filtered signal's
+magnitude *at its own sign change* is **near zero by construction** — so `0.0107` was never
+evidence that the aim channel's wobbles are small. **It is an artifact of where the ruler was
+held.** The felt quantity is the **excursion**: the peak reached between one reversal and the next.
+
+`MEASURED` on the flown tape, both predicates side by side:
+
+| channel | reversals | median @crossing | **median EXCURSION** | **excursion > 0.25** |
+|---|---:|---:|---:|---:|
+| `rollAimApp` | 95 | 0.0107 | **0.1806** | **42** |
+| `rollBstApp` | 8 | 0.2055 | **1.4023** | **8** |
+| `rollVel` (plant) | 128 | 2.4350 | 47.845 | 122 |
+
+**What this settles:**
+
+1. **The dwell channel's reversals are ~7.8× larger per event, not ~19–20×.** The bigger figure
+   was the crossing artifact.
+2. **42 of the aim channel's 95 reversals clear a 0.25 excursion gate — 44%, not 22%.** So more
+   than half of them are *feelable*, and **the aim channel's jitter is real, not float noise.**
+3. ⛔ **Amplitude-weighted, the attribution NARROWS SHARPLY.** Count × typical excursion:
+   **aim ≈ 95 × 0.181 = 17.2; dwell ≈ 8 × 1.402 = 11.2.** **The aim channel still leads — but by
+   ~1.5×, not the ~12× the raw count implies.**
+
+**So: aim leads on every predicate — raw count (11.9×), amplitude-gated count (42 vs 8, 5.3×), and
+amplitude-weighted total (1.5×) — and the attribution stands. But the SIZE of its lead collapses
+by an order of magnitude once amplitude is counted, and neither my original verdict nor `R3`'s
+correction had the right ruler.**
+
+**And `cascade-recorder`'s gate counts are a THIRD predicate again** — their *"21 above a 0.25
+gate"* is neither `|value|` at the crossing (which gives 0 for both channels) nor the excursion
+(which gives 42). **Three agents, three rulers, three answers. The predicate must be written down
+before any of these numbers is quoted again** — lesson 5, and this is now its most expensive
+instance.
+
+### One more decomposition, and it says the reversals are not the damping
+
+At the 95 aim reversals: median `|rollP|` = **0.3403** — large and, at **93 of 95**, *not*
+changing sign. Damping is small (`rollDmpR` 0.023, `rollDmpH` 0.046) and exceeds the proportional
+term at only **11.6%** of reversals. **The applied aim channel flips while its own dominant
+proportional input holds steady and same-signed.** Whatever authors these reversals, it is not the
+damping terms fighting the command — which is where a tuning reflex would have reached first.
+
 **And credit where it is due: their ATTACK 3 tested their OWN hypothesis and refuted it** — they
 expected 60 Hz to under-count badly against v12's 120 Hz; decimating 60→30 Hz loses 0–2%
 (`rollVel` 128→126, the other two unchanged). **They then corrected their own tool's conclusion

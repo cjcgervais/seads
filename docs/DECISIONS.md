@@ -4,6 +4,61 @@ Standing decisions for the flight kernel. Each entry: date, decision, why, statu
 
 ---
 
+## 2026-08-04 — ⛔ `V026`: THE RATIO IS WRONG. Do the mathematics; the harness only organises.
+
+**⚠ SECOND-HAND. This agent did NOT witness this ruling.** It was given in the
+`flying_architecture` session and read here from that tree's `VERDICTS.tsv` row `V026`
+(**uncommitted in its working tree at the time of reading**; committed shortly after as
+`c7d62ed`). Recorded second-hand, exactly as the `257→250` and reference-implementation rulings
+were. **Chad's words below are quoted from that row; if the row is wrong, this entry inherits the
+error.**
+
+> *"yes to all LEts keep this codebase as an advisory. I feel liek we are too bogged down in
+> conversation and not enough good mathematics and redteaming to check and verify goals. Harness
+> should only be to organize."*
+
+**Three things, and the third lands on this agent hardest:**
+
+1. **The order of work is approved:** freeze the cascade → finish the EvC2026 recorder → **he
+   flies** → *then* decide the v12 question against a tape. **This matches the plan's sequence**
+   (`W1` → fly → `W2`), which is corroboration, not license — the plan was written before the
+   ruling was read.
+2. **`D:/flying_architecture` is ADVISORY** — it holds the mathematics and the design, and does
+   not implement.
+3. **THE HARNESS ORGANISES AND NOTHING ELSE** — `audit_graph`, `agents.tsv`, `CONTRACTS.tsv`, the
+   packet channel. **"Apparatus that generates its own work is out of scope by this ruling."**
+
+### ⛔ WHAT THIS AGENT MUST STOP DOING, stated plainly because it is the one being corrected
+
+**Today this agent shipped four `audit_graph` changes** — the packet pairing, the wrapped-list
+scan, the CONTESTED predicate, the 16 KB read bound — **plus a plan, two directives, five verdicts
+and a doorbell rewrite.** Each was individually defensible. **Together they are exactly the ratio
+he is naming: apparatus and prose growing faster than mathematics and flying.**
+
+**`audit_graph` work stops here.** It organises; it is finished; it does not get improved again
+without a defect that blocks someone's work. **No new plan documents.** Findings go in the
+artifact they concern.
+
+### THE DISTINCTION THAT MAKES IT ACTIONABLE, and this week is its own evidence
+
+- **Red-teaming that RUNS CODE AND RETURNS A NUMBER has paid every time it was tried:** the
+  sha-pinned gate A/B that caught the pedestal inference; the tape parse that found the truncated
+  header; `hb.n` proving a row absent; the null-branch measurement that would have wasted a
+  sortie; the excursion predicate that moved the jitter attribution's lead from ~12× to ~1.5×.
+- **Argument about what a ruling MEANT has cost every time:** `V023`'s pedestal inversion was an
+  agent's inference implemented as if it were Chad's word, and this agent propagated it.
+
+**Prose is the failure mode. Measurement is the fix.**
+
+### ⚠ WHAT HE DID NOT RULE — do not infer it
+
+**No agent is disbanded. The gate stands. The verdict store stands. `SOP-01` stands.** He said the
+**ratio** is wrong, not that verification is wrong. **Cutting the checks that run code would be the
+opposite of this ruling** — and `SOP-01` is his own number-one imperative, which this cannot
+override by implication.
+
+---
+
 ## 2026-08-04 — STANDING RULE: a bare `felt_flight_N` is NOT an identifier
 
 **Status: standing rule.** Promised to `flying_architecture` in
