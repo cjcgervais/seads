@@ -331,6 +331,27 @@ def audit_contracts(contracts):
 
 # ---------------------------------------------------------------- main
 
+def audit_rulings():
+    """Count Chad's open queue. A ruling nobody surfaces is the eagle-parked-two-days
+    failure; reporting it every run is what stops that recurring."""
+    path = DOCS / "RULINGS-PENDING.md"
+    if not path.exists():
+        report(AMBER, "rulings", "docs/RULINGS-PENDING.md is missing")
+        return
+    text = path.read_text(encoding="utf-8", errors="replace")
+    open_ids = re.findall(r"^## (R-\d+)\s*—\s*(.*)$", text, re.MULTILINE)
+    if not open_ids:
+        report(GREEN, "rulings", "no open rulings queued for Chad")
+        return
+    blocking = [(i, h) for i, h in open_ids if "BLOCKING" in h]
+    for rid, head in blocking:
+        report(RED, "rulings",
+               f"{rid} is BLOCKING and awaits Chad: {head.split('·')[1].strip() if '·' in head else head}")
+    report(AMBER, "rulings",
+           f"{len(open_ids)} ruling(s) queued for Chad ({len(blocking)} blocking) "
+           f"-- docs/RULINGS-PENDING.md")
+
+
 def main():
     if not AGENTS_TSV.exists() or not CONTRACTS_TSV.exists():
         print(f"missing {AGENTS_TSV} or {CONTRACTS_TSV}", file=sys.stderr)
@@ -341,6 +362,7 @@ def main():
 
     audit_trees(agents)
     audit_contracts(contracts)
+    audit_rulings()
 
     order = {RED: 0, AMBER: 1, GREEN: 2}
     findings.sort(key=lambda f: (order[f[0]], f[1]))

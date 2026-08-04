@@ -84,6 +84,19 @@ v1 was back-filled by subtraction and over-claims by exactly two keys (19 where 
 is 17, witnessed by `gate.py`'s own literal); v2 was archived from the emitter at the bump
 commit and is correct and already load-bearing. **C3 is expected RED and must not be silenced.**
 
+### 2d. Stage explicitly; never `git add -A` (added 2026-08-03, found in this agent's own commits)
+
+> **Commit named paths. A blanket stage sweeps another agent's edits into your commit, and
+> authorship in the log then says you wrote them.**
+
+Found by tracing a stale `blocked_on` line in `agents.tsv` that this agent had never written:
+another agent edited it in this tree, and `git add -A docs/` carried it into commit `56a6643`
+under kernel-docs' name. Nothing was lost, but **the log became wrong about who decided what** —
+the same class as `V021`'s finding, arriving through tooling rather than through wording.
+
+Corollary: `captures/` and `harness/` are the harness agent's. A blanket stage from this repo's
+root would commit its files too. Stage what you wrote; leave the rest for its owner.
+
 ### 2c. The ruling-identity law (added 2026-08-03, earned by `V021`)
 
 > **A ruling record must name the question document and quote the selected option's text. A bare
