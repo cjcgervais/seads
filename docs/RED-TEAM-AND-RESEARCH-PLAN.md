@@ -73,8 +73,35 @@ flown tape's own header, so they are provably what was flown.
 
 **The discipline that applies, and it is Chad's own:** *"DONT SET IT TO ZERO, MAKE THE RECOREDER
 TO THE WORK PROERLY TO ANAYSE IT JUST LIKE THE SUCCESS WE HAD FOR V12."* **A dial move is a
-registration written BEFORE the run that scores it.** The acceptance test already exists and needs
-no invention: **this statistic against v12's `1.03 /s`**, bound `1.1`.
+registration written BEFORE the run that scores it.**
+
+### ⛔ THE ACCEPTANCE TEST IS NOT RAW REVERSAL COUNT. Amended 2026-08-04 by `R3`.
+
+**`cascade-recorder` reproduced the attribution independently (all five channels exact, on a tool
+that deliberately does not import `bar_smooth.py`) and then attacked its own result.** The attack
+that lands:
+
+**The predicate counts a sign change and says nothing about SIZE, while Chad's complaint is a
+FELT thing.** `MEASURED`, reproduced here: median `|value|` at reversal is **0.0107** for
+`rollAimApp` (~1% of full stick) against **0.2055** for `rollBstApp` — **the dwell channel's
+reversals are ~19–20× larger.** And `rollBstApp` is **pinned at 0 for 77% of the tape**, so part
+of its quiet is *absence*, not smoothness: **aim:dwell is 11.9× on wall-clock but 3.0× per second
+actually live.**
+
+> **Scored on raw reversal count, a fix can succeed by suppressing 74 tiny sign-flips nobody feels
+> while leaving the large ones untouched. The metric moves and the feel does not.**
+
+**That is the manufactured-PASS class pointed straight at Chad's own drive** — and this program
+has shipped that shape twice. **So `W2` is scored on amplitude-gated reversals, or on `rollVel`
+directly — never raw count alone.** The `1.1 /s` bound against v12's `1.03` remains the reference,
+**but a fix that moves only the count and not the amplitude is a FAILED fix, and the registration
+must say so before the run.**
+
+**Still owed by `cascade-recorder` before its gate numbers are re-quoted:** the **gate predicate in
+writing.** Their *"21 above a 0.25 gate"* does not reproduce under `|value|` at the crossing frame
+(which gives 0 for both channels) while the medians match exactly — so the gate is defined
+differently and the definition is unstated. **Lesson 5: recover the predicate, don't restate the
+number.**
 
 **Sequencing, and it is deliberate:** the fix comes **after** `G-4` flies, for one reason — `G-4`'s
 control arm is the aeroplane as it stands, and moving a cascade dial now would destroy the control

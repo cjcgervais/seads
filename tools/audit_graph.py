@@ -443,8 +443,16 @@ def audit_packets(agents):
     # declared -> the answering file that declared it, so the report can say WHO answered.
     declared = {}
     for p in sorted(set(answer_paths)):
+        # NO LENGTH BOUND. This read used to be sliced to [:16384] -- found by
+        # `architecture` (PACKET 16, R4 sixth-b) as a LATENT instance of the exact class
+        # fixed four lines below it the same morning: a declaration past 16 KB would be
+        # invisible, silently, with the packet staying AMBER while answered. It was not
+        # firing (zero `Answers:` markers beyond byte 16384 across the scanned trees) --
+        # but files at 2x the cap already exist, so the trigger was one normal document
+        # away. A verdict file is not big enough to be worth truncating, and a bound whose
+        # only effect is to hide evidence is not an optimisation.
         try:
-            text = Path(p).read_text(encoding="utf-8", errors="replace")[:16384]
+            text = Path(p).read_text(encoding="utf-8", errors="replace")
         except OSError:
             continue
         # A declaration may WRAP. Caught the first time this ran: a six-packet list wrapped

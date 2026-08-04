@@ -57,15 +57,35 @@ THINKING ABOUT FREE LOOK? i JUST WANT A CASCASE FREE LOOK WORKS FINE."* **Free-l
 camera are OUT OF SCOPE** by his ruling of 2026-08-03, and this agent broke that ruling in
 writing after recording it. **A defect being real does not make it in scope.**
 
-**The in-scope reframing is sharper anyway, and it is the one to work:** the header is **where
-every cascade dial is recorded** — `aimResponse`, `aimRollGain`, `aimRollDamp`,
-`dwellLevelRateMult`, `dwellLevelDamp`, `lineHoldFF` and the rest — it is the artifact `G-4`'s
-one-variable check reads as **exact strings**, and **it is already AT the 1,022-character limit.**
-**The next dial anyone adds silently falls off the end, and the check that compares arms would be
-reading a truncated contract.** Today the severed tokens are only key-bit legends, so **the dials
-survive — but there is no margin left and nothing guards it.**
+**The in-scope reframing:** the header is **where every cascade dial is recorded** — it is the
+artifact `G-4`'s one-variable check reads as **exact strings** — and the record is cut at
+**exactly 1,022 characters**, mid-token, with no terminator.
 
-**That is a "record properly" defect aimed straight at the cascade.** Sweep on that basis.
+> ⛔ **CORRECTED 2026-08-04 by `PACKET 16` R4, and the correction is upheld.** This section
+> originally said *"the next dial anyone adds silently falls off the end."* **Measured, that is
+> wrong: there are ~216 characters of runway — about ten dials — and `REQUIRED_HEADER_KEYS`
+> catches a dial that goes MISSING.** My claim was stated more strongly than the artifact
+> supports, which is the same class as the other defects on this list, **and it aimed the fix at
+> the wrong thing.**
+>
+> **The exposures that will actually bite, both found by the red team:**
+> 1. **Adjacency corruption.** The `cols=` fold rule (*"a token without an `=` folds onto the
+>    previous key's value"*) means a cut **mid-key silently appends the fragment to the preceding
+>    dial** — demonstrated on the real header as `lineHoldFF = '1.000,aimBankFeed'`.
+>    **Present, wrong, and not "missing" — so `REQUIRED_HEADER_KEYS` does not catch it.**
+> 2. **The dials are protected only by their POSITION in a format string, and nobody chose that
+>    ordering as a guard.** Append a dial *after* the legend block — the natural thing to do — and
+>    it falls off immediately. **Right by coincidence, not by mechanism.**
+>
+> **And it lands on `C2`:** both arms truncate at the same offset, being the same emitter, so a
+> corrupted dial is corrupted *identically* in both, **compares equal, and
+> `check_c2_one_variable` reports no difference.** The one-variable guarantee holds only over the
+> dials that survived truncation intact.
+
+**Fix order is the red team's and it is right:** (1) **check the header terminator** — one
+predicate, catches F1 and everything downstream; (2) move the legend block *ahead* of the dials so
+the sacrificial text is what we can afford to lose; (3) use `hb.n` for completeness; (4) **seal the
+tape.**
 
 ## 2. R2 — THE `G-4` EXPERIMENT AS BUILT. Assume it is still wrong, because it was wrong this morning.
 

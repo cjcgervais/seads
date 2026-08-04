@@ -63,6 +63,50 @@ schema = "prereg-v1"
 # Original wording is struck in place below, never deleted.
 # ============================================================================
 
+# ============================================================================
+# AMENDMENT 2 -- 2026-08-04, kernel-docs. THE NULL BRANCH WAS UNINTERPRETABLE.
+# Found by `architecture` (PACKET 16 R2 sec3b) doing the red team it was asked
+# to do. NO ARM DATA EXISTS. Nothing has been flown.
+#
+# WHAT WAS WRONG: amendment 1 ruled that the surviving S61c damper is a MEDIATOR,
+# not a confounder, and that a DIFFERENCE verdict is therefore attributable to
+# the intervention as a total effect. That classification is correct and stands
+# -- architecture conceded it explicitly. BUT IT ONLY EVER ADDRESSED THE
+# DIFFERENCE BRANCH. It never addressed a NULL, and a null is the cheaper
+# outcome to reach.
+#
+# THE PROBLEM: dwellBoost = -dwellD, so the mediator OPPOSES the direct effect.
+# MEASURED on the flown control tape, reproduced here to the digit:
+#     mean|dwellD| / mean|dwellT|  = 0.461   (46% of the manipulated term)
+#     corr(rollVel, dwellT)        = +0.415
+#     corr(rollVel, dwellD)        = +0.414  (tracks roll rate JUST AS TIGHTLY)
+#     corr(rollVel, rollAimApp)    = +0.682  (the AIM channel dominates roll
+#                                             rate, and is IDENTICAL in both arms)
+#     frames rollAimApp != 0       = 4721 (91.3%)  vs dwell live ~23-29%
+#
+# So a "no difference" result is consistent with TWO INCOMPATIBLE WORLDS:
+#     (i)  the levelling drive does not matter; or
+#     (ii) a real direct effect was CANCELLED by its own mediator.
+# Amendment 1's directional argument ("less drive -> lower roll rate -> smaller
+# |dwellD|") assumed the dwell channel drives the roll rate. IT MOSTLY DOES NOT
+# -- the aim channel does, and it is identical in both arms -- so the shrinkage
+# is bounded and modest, not the comfortable margin amendment 1 implied. That
+# overstatement is conceded.
+#
+# THE FIX, PRE-SPECIFIED HERE, BEFORE THE FLIGHT, AT ZERO EXTRA COST:
+# see [interpretation.null_branch] below. Both arms log dwellD (ord 23), so the
+# data that discriminates (i) from (ii) is ALREADY IN THE TAPES ABOUT TO BE
+# COLLECTED. No extra sortie, no new instrument.
+#
+# WHY THIS IS NOT A C3 RE-POINT: variable, values, statistic, threshold,
+# population and order are ALL UNMOVED (verified by parsing this file back).
+# What is added is an INTERPRETATION RULE for one outcome branch, written
+# BEFORE any data exists. C3 forbids choosing an interpretation AFTER seeing the
+# data; fixing an uninterpretable branch before the flight is what a
+# pre-registration is FOR. Leaving it would risk spending Chad's sortie on a
+# result that cannot answer its own question.
+# ============================================================================
+
 [meta]
 experiment_id = "CLAIM2-ROLL-IN-VERTICAL"
 author = "kernel-docs agent (D:/mandalark-kernel), for Chad"
@@ -128,6 +172,17 @@ unit = "deg"
 # compute_stat counts ROWS, so the population is rows, not episodes. 1800 rows at
 # 60 Hz = 30 s of flight per arm. The fly card asks for more than this so a partial
 # sortie still clears the floor.
+# ADDED BY AMENDMENT 2, 2026-08-04, before any arm data exists.
+# The DIFFERENCE branch is unchanged and needs no rule: >= 2.0 deg is attributable
+# to the intervention as a total effect (amendment 1, mediator not confounder).
+# The NULL branch is the one that was uninterpretable.
+[interpretation.null_branch]
+rule = "A result below the 2.0 deg threshold is reported INDETERMINATE, not NULL, unless the mediator-cancellation world is excluded by measurement."
+discriminator = "mean_abs(dwellD) per arm, from ord 23, which BOTH arms log every frame"
+exclusion_test = "The between-arm change in mean_abs(dwellD) must be small relative to the direct effect being removed (mean_abs(dwellT) * 1.880 in the control arm). If |dwellD| barely moves between arms, the mediator cannot have cancelled a real direct effect, and the null is a true null: the levelling drive does not matter. If |dwellD| moves substantially, cancellation is live and the result is INDETERMINATE."
+reporting = "State the two per-arm mean_abs(dwellD) values and the ratio in the verdict, whatever they are. A null reported without them is not a result."
+control_tape_reference = "mean|dwellD| / mean|dwellT| = 0.461; corr(rollVel,dwellD) = +0.414 vs corr(rollVel,dwellT) = +0.415 -- design input only, NOT an arm (clause C3)."
+
 [sample]
 floor_n = 1800
 population = "tape row at 60 Hz (>= 30 s of qualifying flight per arm)"

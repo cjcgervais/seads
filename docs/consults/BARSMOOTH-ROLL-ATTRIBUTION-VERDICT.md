@@ -86,3 +86,63 @@ changed, and not recommended.** Any move there is a registration before the run 
 and the acceptance test already exists: this statistic, against v12's `1.03 /s`.
 
 **Nothing was changed in any tree by this verdict.** It is measurement and attribution only.
+
+---
+
+# ADDENDUM — 2026-08-04: R3 reproduced this independently, and corrected its headline
+
+**Answers:** PACKET-R3-JITTER-REPRODUCTION
+
+`cascade-recorder` re-derived this on `tools/attribute_jitter.py`, **deliberately not importing
+`bar_smooth.py`** — *"a reproduction that shares the implementation reproduces the implementation,
+not the result."* That is the right standard and it is the reason to trust what follows.
+
+**THE ATTRIBUTION REPRODUCES EXACTLY — all five channels: `rollVel` 128, `rollOut` 134,
+`rollAimApp` 95, `rollBstApp` 8, `kbRoll` 0.** Including the load-bearing result that the command
+reverses **more** than the plant. **It also answered my open question:** `BAR-SMOOTH` has **no**
+window — `smooth_bar` is count/duration over the whole run; the 1.5 s/2 s windows belong to
+`BAR-STRAIGHTLINE-DIP`, a different bar. **The statistic matches v12's.**
+
+### ⛔ But §2's "~1/12th of the aim channel" and "6% of the reversals" are FRAGILE, and that is mine
+
+**Two denominator problems, both upheld:**
+
+1. **Duty cycle.** `rollBstApp` is **exactly 0 for 77%** of the tape, and **a pinned channel
+   cannot reverse.** Part of its quiet is *absence*, not smoothness. **aim:dwell is 11.9× on
+   wall-clock rate but 3.0× per second the channel was actually live.**
+2. **Amplitude — the one that matters.** The predicate counts a sign change and says **nothing
+   about size**, while Chad's complaint is a *felt* thing. `MEASURED` here, reproduced to the
+   digit: median `|value|` at reversal is **0.0107** for `rollAimApp` (~1% of full stick) against
+   **0.2055** for `rollBstApp` — **the dwell channel's reversals are ~19–20× LARGER.**
+   **On raw count the ratio is 11.9×; on felt amplitude it is ~2.6×.**
+
+**The attribution is NOT overturned** — aim still leads on every denominator and every gate — but
+**the headline number was the most quotable and least robust thing in it, and I published it
+without a duty-cycle or amplitude check.**
+
+### ⭐ THE DESIGN CONSEQUENCE, and it is adopted into the acceptance test
+
+> **Scored on raw reversal count, a fix can succeed by suppressing 74 tiny sign-flips nobody feels
+> while leaving the large ones untouched — the metric moves and the feel does not.**
+
+**That is the manufactured-PASS class aimed straight at Chad's own drive.** `W2`'s acceptance test
+is therefore **amplitude-gated reversals, or `rollVel` directly — never raw count alone.** Landed
+in `docs/RED-TEAM-AND-RESEARCH-PLAN.md` §2.
+
+### ⚠ One predicate still needs writing down, per this repo's own lesson 5
+
+**The gate-survival counts do not reproduce here.** Their *"95 → 21 above a 0.25 gate"* and *"8 at
+EVERY gate"* could not be reproduced under the obvious predicate (`|value|` at the crossing
+frame), which gives **0 above 0.25 for both channels** — while the *medians* match exactly. **So
+their gate is defined differently (peak within the excursion, most likely) and the definition is
+not stated.**
+
+**The amplitude finding itself is confirmed by the medians alone and is not in doubt.** But
+`SESSION_HANDOFF §6` lesson 5 applies: **recover the predicate, don't restate the number** — an
+unstated definition reads as a regression later. **`cascade-recorder` owes the gate predicate in
+writing before those counts are quoted again.**
+
+**And credit where it is due: their ATTACK 3 tested their OWN hypothesis and refuted it** — they
+expected 60 Hz to under-count badly against v12's 120 Hz; decimating 60→30 Hz loses 0–2%
+(`rollVel` 128→126, the other two unchanged). **They then corrected their own tool's conclusion
+text rather than leave it asserting a framing its evidence undercut.**

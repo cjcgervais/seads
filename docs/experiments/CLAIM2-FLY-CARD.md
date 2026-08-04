@@ -83,11 +83,18 @@ calmer if anything, never looser. **If it feels loose or divergent, that is wort
 
 - **Blocks differ by ≥ 2.0°** → the dwell servo's **levelling push** is a real contributor to
   the roll you feel. A named cause, and something to fix.
-- **Blocks differ by < 2.0°** → **the levelling push is not the cause.** That is a real result,
-  not a wasted flight — the search moves to the aim channel, which carried 71.4% of the roll
-  magnitude and, on the 2026-08-04 attribution, **essentially all of the jitter**.
-  ⚠ **It does not clear the dwell channel outright**, because the damper flew in both blocks.
-  Clearing the whole channel would be a separate flight with its own card.
+- **Blocks differ by < 2.0°** → **one of two things, and we check which before saying which.**
+  Either the levelling push is not the cause, **or** it is a cause and its own damper quietly
+  cancelled it — the damper pushes the opposite way, at about half the strength of the thing we
+  turned off. **We can tell these apart from the tapes you are about to fly**, because both blocks
+  record the damper every frame. **Until that check is run the answer is reported as
+  "indeterminate," not "no."** ⚠ It also does not clear the dwell channel outright, because the
+  damper flew in both blocks.
+
+  > **Why this is written here and not decided afterwards:** a red-team agent found that a
+  > "no difference" outcome had two incompatible explanations and no way to choose between them.
+  > That was found **before** you flew, so the rule for reading it is written **before** you fly.
+  > Deciding what a result means after seeing it is how you get an answer you can't trust.
 - **Your feel disagrees with the numbers** → **the instrument is wrong and gets rebuilt.**
   Not you. (`THE LAW` clause 3.)
 
