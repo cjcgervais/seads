@@ -114,6 +114,23 @@ def probe(spec, path):
                 return False, "no numeric ord rows found"
             return True, str(max(ords))
 
+        if name == "tsv_last":
+            # Last DATA row (first cell numeric), column `arg`. A ledger row is a
+            # frozen record of one moment: pinning a contract to a fixed row number
+            # compares a live authority against history and goes RED the moment a new
+            # row lands. C7 did exactly that when the eagle's denominator moved.
+            idx = int(arg)
+            last = None
+            for line in text.splitlines():
+                cells = line.split("\t")
+                if cells and cells[0].strip().isdigit():
+                    last = cells
+            if last is None:
+                return False, "no numeric-keyed data rows found"
+            if idx >= len(last):
+                return False, f"last row has {len(last)} cols, wanted {idx}"
+            return True, last[idx].strip()
+
         if name == "tsv_field":
             row_key, _, col = arg.partition(":")
             idx = int(col)
