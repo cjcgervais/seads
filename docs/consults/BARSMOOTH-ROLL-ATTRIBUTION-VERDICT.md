@@ -2,6 +2,7 @@
 
 **From:** the kernel-docs agent. **Date:** 2026-08-04.
 **Inbound:** `cascade-recorder`'s `PACKET-BARSMOOTH-FIRST-MEASUREMENT-2026-08-03` (`916ff10`).
+**Answers:** PACKET-BARSMOOTH-FIRST-MEASUREMENT-2026-08-03
 **Scope:** *"mouse aim cascade only as it affects the plant"* (Chad, ruled twice). No keyboard,
 no camera, no free-look — and on this tape `kbRoll` reverses **0** times, so the flight is
 mouse-cascade throughout by measurement, not by assertion.

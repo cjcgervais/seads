@@ -386,6 +386,26 @@ def audit_packets(agents):
     verdict. Deliberately dumb about pairing: `PACKET-11-...` is answered by any file in an
     outbox whose name contains `PACKET-11`. A wrong pairing shows up as a packet that stays
     listed, which is the safe direction to fail.
+
+    AMENDED 2026-08-04 by kernel-docs, after the instrument reported this agent's OWN
+    answered packets as unanswered. The number heuristic keys on `PACKET-\\d+`, so a packet
+    with a NAMED stem -- `PACKET-BARSMOOTH-FIRST-MEASUREMENT-2026-08-03`,
+    `PACKET-G2-ROLLOUT-RECONCILED-2026-08-03` -- got `key = None` and could never be
+    credited, no matter what was written in reply. Both of those ARE answered
+    (`BARSMOOTH-ROLL-ATTRIBUTION-VERDICT.md`, `G2-RECONCILE-VERDICT.md`) and both sat AMBER
+    permanently. That is the same class of defect the check was built to catch, inverted:
+    not a channel nobody reads, but a board that cannot go green, which trains every agent
+    to skim past the amber list -- and the backlog it hides is real.
+
+    The fix is an EXPLICIT declaration rather than a smarter guess. An answering file states,
+    in its own text:
+
+        **Answers:** PACKET-BARSMOOTH-FIRST-MEASUREMENT-2026-08-03
+
+    and the pairing credits it. Declarations are read only from files in a DECLARED OUTBOX --
+    an answer written outside the channel is not in the channel, which is the same law the
+    rest of this tool enforces. Unstated pairing still fails to AMBER, so the safe direction
+    is preserved: this can only credit a pairing an agent wrote down on purpose.
     """
     import glob as _glob
 
@@ -400,8 +420,40 @@ def audit_packets(agents):
 
     # every verdict/answer this graph can see, from every declared outbox
     answers = []
+    answer_paths = []
     for a in agents:
-        answers.extend(Path(p).name for p in expand(a.get("outbox", "")))
+        for p in expand(a.get("outbox", "")):
+            answers.append(Path(p).name)
+            answer_paths.append(p)
+
+    # explicit pairings: "**Answers:** PACKET-FOO, PACKET-BAR" inside an outbox file.
+    # declared -> the answering file that declared it, so the report can say WHO answered.
+    declared = {}
+    for p in sorted(set(answer_paths)):
+        try:
+            text = Path(p).read_text(encoding="utf-8", errors="replace")[:16384]
+        except OSError:
+            continue
+        # A declaration may WRAP. Caught the first time this ran: a six-packet list wrapped
+        # onto a second line, the line-wise scan took only the first line, and three packets
+        # stayed AMBER while sitting in the declaration -- silent truncation, the same class
+        # this whole check exists to catch. Continuation lines are consumed while they contain
+        # nothing but packet stems and separators, so prose can never be swallowed.
+        lines = text.splitlines()
+        for i, line in enumerate(lines):
+            m = re.match(r"^[^\S\n]*\**Answers?:\**[^\S\n]*(.+)$", line, re.IGNORECASE)
+            if not m:
+                continue
+            chunk = [m.group(1)]
+            for nxt in lines[i + 1:]:
+                if re.fullmatch(r"[^\S\n]*(?:PACKET-[A-Za-z0-9._-]+[,;]?[^\S\n]*)+", nxt,
+                                re.IGNORECASE):
+                    chunk.append(nxt)
+                else:
+                    break
+            for tok in re.findall(r"PACKET-[A-Za-z0-9._-]+", " ".join(chunk), re.IGNORECASE):
+                tok = tok.upper().rstrip(".,;`").removesuffix(".MD")
+                declared.setdefault(tok, Path(p).name)
 
     seen = set()
     for a in agents:
@@ -417,8 +469,19 @@ def audit_packets(agents):
                 key in x.upper() and not x.upper().startswith("PACKET-" + key.split("-")[1] + "-TO")
                 for x in answers if "VERDICT" in x.upper()
             )
+            # explicit declaration: exact stem, or a prefix of it (PACKET-12 credits
+            # PACKET-12-TO-MANDALARK-DOCS). Prefix must end on a '-' so PACKET-1 never
+            # silently credits PACKET-13.
+            stem = name.upper().removesuffix(".MD")
+            by = None
+            if not answered:
+                for tok, src in declared.items():
+                    if stem == tok or stem.startswith(tok + "-"):
+                        answered, by = True, src
+                        break
             if answered:
-                report(GREEN, f"packet:{aid}", f"{name} -- answered")
+                suffix = f" -- answered (declared by {by})" if by else " -- answered"
+                report(GREEN, f"packet:{aid}", f"{name}{suffix}")
             else:
                 report(AMBER, f"packet:{aid}",
                        f"UNANSWERED packet from '{aid}': {path}")

@@ -280,6 +280,12 @@ re-opened fix work should request a dedicated recording set).
   DRAFTS until he approves; a coms promise that stops being true of the shipped kernel
   is a STOP.
 
+- **A bare `felt_flight_N` is NOT an identifier — always cite its directory.** `build-play/` is
+  the canonical corpus (20 files); **Golden #1 is the permanent exception and is
+  `build/felt_flight_1.seadsrec`** (SHA-verified; `build-play/felt_flight_1` is a *different*
+  file). `build/` must never be globbed as "the recordings." Numbers 1–6 exist in both
+  populations, so only `N ≥ 7` is unambiguous by number alone. Full rule + evidence in
+  `DECISIONS.md` (2026-08-04).
 - **Never re-snapshot `reference/` at an unflown seal.** (This is why v8 was never
   snapshotted. v9 is a FLOWN seal — snapshotted 2026-07-29 night.)
 - **Goldens are append-only in practice.** Never re-derive, re-record or tidy one. Supersede,

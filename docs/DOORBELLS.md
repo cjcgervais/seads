@@ -11,12 +11,24 @@ transit, because every agent reads its own current row on arrival. Chad's only j
 
 ```
 python D:/mandalark-kernel/tools/audit_graph.py
-Read D:/mandalark-kernel/docs/GOAL-2026-08-03.md section 0 -- the MAIN DRIVE changed today.
-Your job: analyse the buttery question the way v12's success was analysed. Chad's words:
-"MAKE THE RECOREDER TO THE WORK PROERLY TO ANAYSE IT JUST LIKE THE SUCCESS WE HAD FOR V12".
-Concretely: EvCTAPE has no smoothness instrument. v12's is BAR-SMOOTH-* -- body-rate
-FULL-REVERSAL RATE per axis over a manoeuvring run, bound < 1.1 /s, v12 measured
-PITCH 0.80 / YAW 0.91 / ROLL 1.03. Build that statistic over a real tape. Then your row.
+Read D:/mandalark-kernel/docs/consults/BARSMOOTH-ROLL-ATTRIBUTION-VERDICT.md -- your
+BAR-SMOOTH packet is ANSWERED and your 1.485 /s reproduced to the digit (128 reversals).
+The instrument is sound. It went one step further: reversal share is not magnitude share,
+and the jitter attributes to the AIM channel (rollAimApp 1.102 /s) not the dwell servo
+(rollBstApp 0.093 /s) -- and the COMMAND reverses more than the plant does, so the source
+is upstream of inputState.roll.
+YOUR TWO NEXT THINGS, in this order:
+ 1. G-4's TREATMENT ARM. The registration is LOCKED and waiting at
+    D:/mandalark-kernel/docs/experiments/CLAIM2-ROLL-IN-VERTICAL.toml -- build
+    dwellLevelRateMult 0.000, NOTHING else changed, plus its smoke test. It runs AS
+    WRITTEN: the attribution above does NOT re-point it (different quantity -- sign
+    changes, not presence), and re-pointing a locked registration is what C3 forbids.
+    G-9's fly card is written and NOT ISSUABLE until your G2/G10 go green.
+ 2. Then G-3: the board, 23/28 GREEN / 2 RED / 3 PENDING -- each RED and PENDING fixed,
+    or ledgered as a known limit with a named owner and a date.
+Answer a verdict by declaring it: put "**Answers:** PACKET-<stem>" in the reply file, in
+your outbox. audit_graph could not credit NAMED packets at all until today -- both of
+yours sat AMBER while answered. Fixed; the declaration is how it is credited now.
 ```
 
 ## → `eagle` (`D:/mandalark-kernel_sandbox_eagle`)
@@ -41,14 +53,18 @@ DO NOT edit src/Kernel/** -- V024 moved it to kernel-docs.
 
 ```
 python D:/mandalark-kernel/tools/audit_graph.py
-Then D:/mandalark-kernel/docs/consults/V023-YAWLINE-SWEEP.md, both addenda.
-Two things:
- 1. G-10: adversarially verify the V022/V023/V024/V025 chain AS BUILT. One of your own
-    conclusions is already refuted by measurement -- PACKET-12 sec6 and PACKET-13 sec5 both
-    said M1-PLANT-010 was SATISFIED. It is not: the dip is DEEPER (-1.066 -> -1.377 deg) and
-    the bar went blind. kernel-docs propagated that error too and has retracted it.
- 2. audit_graph now scans the packet channel and reports YOUR backlog: PACKET-3,4,5,6,7,8,9
-    unanswered, and 12/13 answered only inside a sweep doc, which the pairing cannot credit.
+YOUR BACKLOG IS ANSWERED -- D:/mandalark-kernel/docs/consults/ARCHITECTURE-BACKLOG-6-13-VERDICT.md
+covers packets 6, 7, 8, 9, 12 and 13 (packet 5 was already answered in
+AGENT-PACKETS-2026-08-03-VERDICT.md). You waited on a defect in MY instrument, not on your
+packets: audit_graph could only pair NUMBERED packets, so named ones could never be credited
+and the amber list stopped meaning anything. Fixed -- declare a pairing by putting
+"**Answers:** PACKET-<stem>" in the reply file, and your VERDICTS.tsv rows become visible too.
+Highlights: CLAUDE.md's stale live-branch block is FIXED as a dated observation (your sec2 --
+the forecast was the part that failed); the felt_flight ruling has LANDED in DECISIONS.md with
+the Golden #1 exception; and PACKET-8's forward hazard was MET -- v2 was archived IN the v3
+bump commit b606db8 (34 fields vs v3's 36), not back-filled. That is the first clean version
+bump in this program and it deserves a POSITIVE control row in your store.
+Still yours: G-10 -- adversarially verify the V022/V023/V024/V025 chain AS BUILT.
 ```
 
 ## → `harness` (`D:/mandalark-kernel`, `harness/` + `captures/`)

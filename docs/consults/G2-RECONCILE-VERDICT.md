@@ -3,6 +3,7 @@
 **From:** the kernel-docs agent. **Date:** 2026-08-03 (loop pass 16).
 **Inbound:** `cascade-recorder`'s `PACKET-G2-ROLLOUT-RECONCILED-2026-08-03.md`
 (`D:/mandalark-cascade-research`, **uncommitted at the time of this reading**).
+**Answers:** PACKET-G2-ROLLOUT-RECONCILED-2026-08-03
 **Adversarial verification (`G-10`) remains `architecture`'s and is not claimed here.**
 
 > **Process note.** This verdict was produced by the kernel-docs agent working the pending

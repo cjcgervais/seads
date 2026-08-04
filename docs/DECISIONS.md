@@ -4,6 +4,105 @@ Standing decisions for the flight kernel. Each entry: date, decision, why, statu
 
 ---
 
+## 2026-08-04 — STANDING RULE: a bare `felt_flight_N` is NOT an identifier
+
+**Status: standing rule.** Promised to `flying_architecture` in
+`consults/AGENT-PACKETS-2026-08-03-VERDICT.md §2` on 2026-08-03 and **landed here 2026-08-04,
+a day late — the promise itself was the defect**: a ruling that lives only in a reply is exactly
+the "echo, not artifact" failure this repo has now paid for three times.
+
+> **`D:/flight_sim2/seads-recon/build-play/` is the canonical `felt_flight_*` corpus (20 files),
+> with one permanent exception: Golden #1 is `build/felt_flight_1.seadsrec`, and `build/` is
+> otherwise a superseded parallel population that must never be globbed as "the recordings."**
+>
+> **No `felt_flight_N` may be cited without its directory. A bare filename is not an identifier
+> in this corpus.**
+
+**Why the exception is load-bearing and a bare ruling would be the wrong ruling.** `MEASURED` by
+SHA-256, and independently reproduced by `flying_architecture`:
+`goldens/golden_1_first_v5_flight.seadsrec` = `714E0B1E…64B26A6` = **`build/felt_flight_1`**
+(7,445,954 bytes). `build-play/felt_flight_1` is a **different file** (`25B2CF72…`, 45.8 MB).
+Goldens #2–#5 are all from `build-play/`. **A clean "build-play is canonical" would have
+mis-identified the founding golden.**
+
+Two populations, 1–6, share one filename pattern — so only `N ≥ 7` is unambiguous by number
+alone. `reference/seads-feel/docs/jitter_attribution.md` already analyses `build/felt_flight_{2..6}`
+in its body and `build-play/felt_flight_{12,13,14}` in its addendum: **two populations, same
+filenames, one document.** It states its paths, so it is correct — and it proves a bare
+`felt_flight_2` already resolves two ways in this corpus.
+
+**This is the `recorder.h` shape:** the declaration is fine, the *name* is ambiguous, and a
+reader resolving by name gets a silently wrong set with no error. `captures/` is **not** the
+corpus (harness agent's, different artifact class).
+
+---
+
+## 2026-08-04 — ⭐ THE ROLL JITTER IS LOCATED: the AIM channel, and it is COMMANDED, not plant-generated
+
+**Status: measured and banked. Nothing was changed in any tree by this entry.**
+Verdict: `docs/consults/BARSMOOTH-ROLL-ATTRIBUTION-VERDICT.md`.
+
+`cascade-recorder` built v12's smoothness statistic over the flown `EvCTAPE`
+(`tools/bar_smooth.py`) and found **ROLL is the only axis over the bound** — `1.485 /s`
+against v12's `1.03`, bound `1.1`. **Reproduced here at source to the digit** (128 reversals,
+indices from the tape's own `cols=` header), so the instrument is sound and the finding stands.
+
+### The result that changes the suspect: reversal share is not magnitude share
+
+`G-8` and `G-2` had established that the **dwell servo carries 28.6% of the roll magnitude** —
+and that number had been carrying the standing suspicion. **Jitter is not magnitude; it is sign
+changes.** Attributed by channel:
+
+| channel | reversals | rate |
+|---|---:|---:|
+| `rollVel` — the plant, what the bar measures | 128 | 1.485 /s |
+| `rollOut` — the **command** reaching the plant | **134** | **1.555 /s** |
+| `rollAimApp` — the **aim** channel | **95** | **1.102 /s** |
+| `rollBstApp` — the dwell servo | 8 | 0.093 /s |
+| `kbRoll` — keyboard | 0 | 0.000 /s |
+
+**(a) The jitter is COMMANDED.** The command reverses **more often than the plant does**. The
+airframe is *filtering* the roughness, not producing it — so **anything upstream of
+`inputState.roll` owns this**, and no amount of plant-side work addresses it.
+
+**(b) The AIM channel is the jittery one; the dwell servo is quiet.** Dwell carries **28.6% of
+the magnitude and 6% of the reversals**. Two independent checks agree: dwell-live rows hold
+**14.1%** of plant reversals against **23.0%** expected by chance — *fewer* than chance, not
+more — and **64.1%** of plant reversals fall within ±6 ticks of an **aim** reversal against
+**3.1%** for a dwell one.
+
+**Why this is a lesson and not just a number: an attribution by magnitude was about to be read
+as an attribution by jitter.** They are different statistics and on this tape they point at
+different channels. This is lesson 1 of `SESSION_HANDOFF.md §6` — *audit the attribution before
+the implementation* — reaching the measurement itself: **the quantity a number measures is part
+of the claim, and a share of the wrong quantity is not evidence.**
+
+### What this does NOT do — the locked registration runs as written
+
+**This does not overturn claim 2 and must not be read as doing so.** Claim 2 is *"a straight-up
+deflection has **roll in it**"* — roll **being present** in a vertical pull. This measures roll
+**changing sign** across an 86 s flight. A channel can supply steady roll into a vertical pull
+while contributing almost none of the reversals. `docs/experiments/CLAIM2-ROLL-IN-VERTICAL.toml`
+stays **LOCKED** (`2026-08-04T05:22:15Z`) with its variable `dwellLevelRateMult`, and **`G-4`
+runs as written** — **re-pointing a locked registration because a later instrument suggested a
+different suspect is precisely what clause `C3` forbids**, and the registration was locked
+*before* this measurement existed, which is the entire reason it is locked.
+
+### Scope held, by measurement
+
+Chad ruled twice that this work is *"mouse aim cascade only as it affects the plant"* (entry
+below). **`kbRoll` reverses 0 times on the tape** — the flight is mouse-cascade throughout as a
+measured fact, not an assertion.
+
+### The dials, named and not moved
+
+`aimResponse = 13.000`, `aimRollGain = 7.500`, `aimRollDamp = 0.580`, read off the flown tape's
+own header. **Named as where the evidence points — not swept, not changed, not recommended.**
+Any move there is a registration written *before* the run that scores it, and the acceptance
+test already exists: this statistic against v12's `1.03 /s`.
+
+---
+
 ## 2026-08-03 — ⛔ SCOPE, RULED TWICE: THE MOUSE-AIM CASCADE AS IT AFFECTS THE PLANT. NOTHING ELSE.
 
 **Chad, verbatim, two messages — this is the specification and the scope. Quote it, never

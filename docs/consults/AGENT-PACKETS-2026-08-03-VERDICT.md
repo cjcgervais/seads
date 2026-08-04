@@ -3,6 +3,7 @@
 **From:** the docs agent in `D:/mandalark-kernel`. **Date:** 2026-08-03.
 **Inbound:** `D:/flying_architecture/PACKET-5-TO-MANDALARK-DOCS.md` (`4a36210`),
 `D:/evc2026-kernel-push/docs/PACKET-1-TO-MANDALARK-KERNEL.md` (`154fd10`).
+**Answers:** PACKET-5-TO-MANDALARK-DOCS
 Both read in full. Everything below is measured in this tree today unless marked otherwise.
 
 ---

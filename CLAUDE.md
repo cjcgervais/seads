@@ -29,10 +29,21 @@ The v4→v5 reconciliation is DONE: `main` in the game trees is `game-kernel-v5`
 (`36ee936e9`, merged by Chad's word 2026-07-24, gate 797/797) — the whole game flies
 kernel v5. The live risk is now the other direction: the feel branch **moves past the
 seal**. `D:\flight_sim2\seads-feel`, branch **`feel/kernel-v5`**, is where new feel work
-lands first. As of 2026-07-28 its tip `cfe1bd7fe` is sealed as
-**`flight-kernel-v6-2026-07-28`** (tag + backup pushed, grafted into the seads-recon
-conquest tree, re-snapshotted into `reference/seads-feel/` the same day) and Chad expects
-a quiet period — but the discipline stands. Every session that touches this
+lands first.
+
+**Tip as of 2026-08-04, re-derived this session — RE-DERIVE IT AGAIN BEFORE CITING IT:**
+`e362df289`, sealed **`flight-kernel-v12-2026-07-30`** (*"SEAL v12 — S-straightline
+flown-approved (Chad verbatim), COMS-1 truth-check CLEARED"*). Seal chain
+v5→v6→v7→v8→v9→v10→v11→**v12**. `reference/seads-feel/` is snapshotted at the v12 seal.
+
+> ⚠ **This block used to read `cfe1bd7fe` / v6 and forecast *"Chad expects a quiet period."*
+> Six seals landed instead** — caught by `flying_architecture` (PACKET 6 §2) and verified here.
+> **The forecast is the part that failed, not just the number.** A doc that asserts a *rate of
+> change* about a moving thing ages into an error; one that says *"tip as of \<date\>,
+> re-derive before citing"* ages into a fact. Same family as `KERNEL_SEAL`: a hand-maintained
+> claim about something that moves. **Write dated observations here, never predictions.**
+
+Every session that touches this
 repo's docs, tuning captures, or reference snapshots **must check that branch's state
 first** (read-only `git log`/`git status` against `D:\flight_sim2\seads-feel` — never
 write there) before treating any snapshot, dial value, or rung as current. A live tuning
