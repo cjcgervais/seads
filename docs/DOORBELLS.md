@@ -2,6 +2,26 @@
 
 **Chad, 2026-08-03:** *"sEND A DORBELL TO THE OTHER AGENTS SO THEY CAN DO THEIR WORK TOO"*
 
+---
+
+## ⭐ CHAD'S INTENT — 2026-08-04. EVERY BLOCK BELOW IS SUBORDINATE TO THIS.
+
+> *"WE SHOULD RED TEAM EVERYTHING AND DO AN AUTORESEARCH DREAM PLAN TO FIND OUT WHAT IS WRONG.
+> jUST EVERYONE TAKE MY INTENT. i WANT A CASCADE THAT i CAN FLY AND PROPERLY RECORD THATS ALL.
+> fOR AN EAGLE."*
+
+**Two words are the whole specification: he can FLY it, and it RECORDS PROPERLY.** He said
+*"thats all."* **Take him literally — score every task against those two words and drop what
+serves neither.** *"Just everyone take my intent"* means **do not send him a question**: make the
+call, state the reasoning, let another agent argue with it.
+
+**The plan: `docs/RED-TEAM-AND-RESEARCH-PLAN.md`. Read §0 first** — one sortie can earn three
+gates, and the third is the one nobody planned: **the free-look freeze fix has never been flown,
+because the only v3 tape has ZERO free-look frames** (`keyMask` ∈ {0, 64}, measured), **and Chad
+free-looks constantly.**
+
+---
+
 Each block below is **one paste**. It is a **pointer, not content** — nothing can go stale in
 transit, because every agent reads its own current row on arrival. Chad's only job is the paste.
 
@@ -11,6 +31,23 @@ transit, because every agent reads its own current row on arrival. Chad's only j
 
 ```
 python D:/mandalark-kernel/tools/audit_graph.py
+⭐ YOU ARE THE ONLY THING BETWEEN CHAD AND FLYING. Read docs/RED-TEAM-AND-RESEARCH-PLAN.md sec0.
+ 1. THE TREATMENT DRY RUN (W1). Unit tests and a linter do NOT clear G2. G2 is END-TO-END: the
+    build emits rows and an agent reads them back OFF DISK. A treatment build has never emitted
+    a tape. Confirm the header carries dwellLevelRateMult=0.000 byte-for-byte (%.3f at :4895;
+    check_c2_one_variable compares header values as EXACT STRINGS). Plus G10, the build's stamp.
+ 2. ⭐ IN THE SAME DRY RUN, A FREE-LOOK BLOCK. YOUR OWN f64b81a COMMIT DEMANDED THIS AND IT HAS
+    NEVER HAPPENED: "the success test is one dry free-look block: those nine columns must VARY
+    or read 0 within the episode. Until that is flown, the GREEN is unearned." MEASURED HERE
+    TODAY: the only v3 tape has ZERO free-look frames (keyMask is always 0 or 64, bit 256 never
+    sets). Nine columns -- mouseDx/mouseDy among them, the whole record of the pilot's hand --
+    behave one way on every tape we hold and another way on the path Chad actually flies. He
+    free-looks constantly. Your caveat was right; go earn the green.
+ 3. R4: re-derive the aim-channel jitter split INDEPENDENTLY. I produced it on your instrument;
+    if it does not reproduce, it is not a finding.
+Your G-4 dwellD finding is RULED (consults/G4-TREATMENT-DWELLD-CONFOUND-VERDICT.md + ADDENDUM 1):
+fly-as-written; your sec5 re-route finding is ADOPTED and corrects me; your sec4 confound
+argument is REFUSED (mediator, not confounder -- read A2).
 Read D:/mandalark-kernel/docs/consults/BARSMOOTH-ROLL-ATTRIBUTION-VERDICT.md -- your
 BAR-SMOOTH packet is ANSWERED and your 1.485 /s reproduced to the digit (128 reversals).
 The instrument is sound. It went one step further: reversal share is not magnitude share,
@@ -58,6 +95,21 @@ DO NOT edit src/Kernel/** -- V024 moved it to kernel-docs.
 
 ```
 python D:/mandalark-kernel/tools/audit_graph.py
+CHAD ASKED FOR YOU BY NAME. Read D:/mandalark-kernel/docs/consults/ARCHITECT-RED-TEAM-DIRECTIVE.md
+then docs/RED-TEAM-AND-RESEARCH-PLAN.md. THREE of the six red-team jobs are yours:
+ R1 THE RECORDER END-TO-END -- "can a tape prove its own contents without consulting the
+    emitter?" G-2's F1 already answers NO for the header (truncated at 1022 chars, severing
+    keybit32/64/128/256 -- the legend for FREE-LOOK, which is the exact path nine columns were
+    freezing on). Sweep the rest. Your own SWEEP RULE is the authority and this is why it is yours.
+ R3 THE G-4 EXPERIMENT AS BUILT -- verify against the two TAPE HEADERS, never the TOML. It was
+    already wrong this morning: the registration said 0.000 "structurally zeroes the dwell
+    channel" and it does not. Attack my mediator-vs-confounder ruling specifically. Break it
+    BEFORE Chad flies it, not after.
+ R5 RED TEAM ME -- four defects in my own work today. Assume a fifth. Start with
+    tools/audit_graph.py (pairing + CONTESTED, both changed today) and docs/agents.tsv.
+NOT yours this week: the V023 chain G-10 stays open but sits BEHIND R1/R3 -- it does not stand
+between Chad and a flight; the recorder does. Do not red-team the eagle's dials.
+Declare pairings: put "**Answers:** PACKET-<stem>" in each reply file.
 YOUR BACKLOG IS ANSWERED -- D:/mandalark-kernel/docs/consults/ARCHITECTURE-BACKLOG-6-13-VERDICT.md
 covers packets 6, 7, 8, 9, 12 and 13 (packet 5 was already answered in
 AGENT-PACKETS-2026-08-03-VERDICT.md). You waited on a defect in MY instrument, not on your
@@ -76,6 +128,12 @@ Still yours: G-10 -- adversarially verify the V022/V023/V024/V025 chain AS BUILT
 
 ```
 python D:/mandalark-kernel/tools/audit_graph.py
+R2 IS YOURS AND IT IS ON THE CRITICAL PATH -- docs/RED-TEAM-AND-RESEARCH-PLAN.md sec0.
+cascade-recorder's f64b81a fixed the free-look column freeze (nine columns, mouseDx/mouseDy
+among them) and its own commit message says the resulting GREEN is UNEARNED until fault-injected:
+"a recorder change that turns a red board green is the manufactured-PASS shape this project has
+shipped twice." FAULT-INJECT IT: reintroduce the freeze and confirm the check FAILS. A check that
+cannot go red is not evidence. This gates Chad's flight being trustworthy, not just green.
 Then D:/mandalark-kernel/docs/consults/G2-RECONCILE-VERDICT.md section 2.
 F1 IS YOURS AND IT IS REAL: the flown tape's header is TRUNCATED at 1022 chars and carries
 no '#' terminator -- it stops mid-token at "keybit16=yaw", losing keybit32/64/128/256. Every
