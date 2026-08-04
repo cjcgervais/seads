@@ -32,6 +32,60 @@ past v12 at any time:
 
 ---
 
+## 2026-08-03 (evening) — ⛔ ITER-18: THE OVERSHOOT WAS NOT A DEFECT. IT IS THE PRICE OF THE TURN. A FEEL QUESTION STANDS FOR CHAD
+
+**The eagle corrected its own iter-17 finding, and this agent had amplified the wrong half.**
+
+`M1-COORDINATION-FINDING` §4 called the 86° bank on a 30° step an *overshoot-and-recover
+problem*. This agent then paired it with `M1-STATE-004`'s *"roll first, pull later"* and recorded
+the convergence as **"much stronger evidence than either alone."** That amplification was wrong,
+and it was wrong in the most seductive way available: **two independent lines agreeing on a
+conclusion that neither had actually tested.**
+
+**The physics, which nobody had run:** a coordinated level turn gives `ω = g·√(n²−1)/V`. At
+`V = 140 m/s`, 30° of heading in `1.60 s` costs **~80° of bank and ~5.8 g**. The ~86° the trace
+showed is approximately *what the turn requires*. Every measured arm lands where that table
+predicts.
+
+**And it explains v12.** v12 buys its `1.60 s` with **9.3° of sideslip** — it points the nose
+*without turning the aeroplane*. That is exactly the pointed rudder `M1-PLANT-002` outlaws and
+`M1-STATE-003` names as the origin of the crab. **Chad wrote M1 to forbid the very mechanism that
+gives v12 its fast resolve**, and the cost of that is now measured rather than assumed.
+
+### The roll-out law was built, works as specified, and makes the aeroplane worse
+
+Behind `rollout_bank_gain`, default `0.0`, knob-off arm **bit-identical** — ladder unchanged at
+`246/250`, same four failures at the same values. With it on: bank tracks deflection
+(`88.6° → 31.3°`), dip goes to `0.000°`, and **resolve30 goes from `5.36 s` to never inside a
+10 s bench.**
+
+### ⛔ THE FEEL QUESTION — Chad's alone, and no sweep can answer it
+
+**A routine 30° aim step becomes an 80°-bank, ~5.8 g manoeuvre.** Nothing forbids it (`n_max`
+is `32`) and it is genuinely coordinated. Three readings offered, none chosen:
+
+1. **Hold `1.60 s`, accept the bank.** *Control is king* read as: the aeroplane goes where you
+   point, promptly, whatever it costs in attitude — and the pilot asked for it by deflecting 30°.
+2. **Relax the resolve target, keep the aeroplane docile.** `M1-PLANT-004` literally: bank
+   proportional to deflection, `31°` of bank, a clean line at `dip 0.000°`, and it costs seconds.
+   *A different aeroplane, not a worse one.*
+3. **The target is deflection-dependent.** Small corrections prompt and gentle; a 30° step is a
+   commitment. The eagle finds this most consistent with Chad's own `M1-PLANT-001` — *"the
+   steepness of the bank angle I will need for the tightness of the turn radius I want to
+   achieve."* **Reading 3 would change what `M1-PLANT-011` says — a specification change, Chad's
+   alone.**
+
+**Nothing was left changed:** no dial, no pin, no gate, no denominator movement, no golden
+re-recorded. `rollout_bank_gain`/`_max` are not spec constants and carry no `PIN-` gate — pin debt
+**recorded, not incurred.**
+
+**Lesson for this agent, recorded because it is the reusable part:** convergence between an
+independent measurement and a prior static analysis is *not* verification when neither tested the
+underlying claim. It felt like corroboration; it was two descriptions of the same unexamined
+assumption. **The check that would have caught it was arithmetic anyone could have run.**
+
+---
+
 ## 2026-08-03 (later still) — TWO RULINGS MADE IN THE EAGLE'S SESSION, recorded here second-hand
 
 **⚠ PROVENANCE, stated first because it is the point.** This agent did **not** witness either
