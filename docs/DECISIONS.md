@@ -4,6 +4,49 @@ Standing decisions for the flight kernel. Each entry: date, decision, why, statu
 
 ---
 
+## 2026-08-03 — ✅ R-1 RULED: LEAD WITH RUDDER. Make it behave like v12. SETTLED.
+
+**Chad's ruling, verbatim — this is the specification, quote it, never paraphrase it:**
+
+> *"I rule to lead with rudder! ALL THE WAY IM TIRED OF BEING SO HELD TO COORDINATED FLIGHT FOPR
+> THE SAKE OF A STRAIGHT LINE. V12 ACHIEVED THIS tHIS IS AN ARCADE GAME AND NEED A QUICK RESOLVE
+> TO AIM. tHIS IS SETTLED ., mAKE IT BEHAVE LIKE V12"*
+
+**Status: SETTLED. Chad sent this to the other agents himself and said *"im tired of hearing about
+it."* No agent reopens it, re-measures it, or queues a follow-up question about it.**
+
+**He rejected the frame, not a point inside it.** R-1 offered three readings; this is none of
+them. The question assumed coordinated flight as the constraint and asked what to pay for it. He
+ruled that the constraint itself is wrong for this game: *an arcade game needs a quick resolve to
+aim.*
+
+**What it overrules — recorded once, here, and not re-raised with him:**
+
+- **`M1-PLANT-002`** (*"The rudder's job is to keep the aeroplane coordinated, not to point it"*)
+  is overruled **by its own author**. The pointed rudder is now the intended mechanism.
+- **`M1-PLANT-009`** (peak |β| ≤ 2.0°) and **`M1-PLANT-010`** (the dip bar) are both exceeded by
+  the v12 behaviour he has ruled for — measured, not assumed: v12 on the eagle bench gives
+  pk|β| `9.53°` and dip `4.539°` at a 30° step.
+- **`M1-STATE-005`**, called *"the open engineering problem of this specification"*, is
+  **dissolved rather than solved.** It asked how to get coordination without paying resolve time.
+  He has ruled that it is not to be bought at all.
+
+**The target is already measured**, so nothing needs re-deriving: arm 3 of the deflection curve is
+v12's shipped dials on the eagle bench (`consults/R1-DEFLECTION-CURVE-VERDICT.md`) — 30° step,
+`resolve1 1.60 s`, `pk bank 65.6°`. Amending M1 and hitting that arm is the eagle's motion.
+**`R-2` and `R-3` are dead as posed** — both were conditional on readings the ruling bypassed.
+
+**The lesson this pass paid for, and it is about how questions are put to him.** The measurement
+ordered in `EAGLE-R1-DIRECTIVE.md` was correct and worth running — it disconfirmed its own
+hypothesis and produced the exact target the ruling now points at. But R-1 spent two agent
+sessions and one of Chad's sittings offering him a choice **inside a frame he did not accept**,
+and his answer was to throw the frame out. *"Bogged down in minutia"* was the early signal and it
+was read as a pacing complaint. **It was a framing complaint.** When he pushes back on a
+question's detail, test whether the question's premise is the thing he is rejecting — before
+refining the options.
+
+---
+
 ## 2026-08-03 — the docs agent WORKS THE QUEUE DIRECTLY (Chad's ruling), and two defects it found in its own tooling
 
 **Chad's ruling, verbatim:** *"I choose option 1 do it here"* — in answer to a question about who

@@ -13,7 +13,36 @@ so you can disagree cheaply.
 
 ---
 
-## R-1 — ⏸ HELD, NOT BLOCKING · the iter-18 feel question · **eagle**
+## R-1 — ✅ RULED AND CLOSED 2026-08-03 · lead with rudder, behave like v12 · **eagle**
+
+> **Chad's ruling, verbatim. This is the specification — do not paraphrase it, do not reopen it.**
+>
+> *"I rule to lead with rudder! ALL THE WAY IM TIRED OF BEING SO HELD TO COORDINATED FLIGHT FOPR
+> THE SAKE OF A STRAIGHT LINE. V12 ACHIEVED THIS tHIS IS AN ARCADE GAME AND NEED A QUICK RESOLVE
+> TO AIM. tHIS IS SETTLED ., mAKE IT BEHAVE LIKE V12"*
+>
+> **He chose an option that was not on the table.** None of readings 1–3 below is this. He
+> rejected the frame — coordinated flight as the constraint — rather than picking a point inside
+> it. The table is kept unedited underneath for lineage; it is superseded, not amended.
+>
+> **Chad delivered this ruling to the other agents himself** and said *"im tired of hearing about
+> it."* **It is settled. No agent re-litigates it, re-measures it, or queues a follow-up question
+> about it.** The measured target already exists: arm 3 of the deflection curve is v12's dials on
+> the eagle bench (`consults/R1-DEFLECTION-CURVE-VERDICT.md`) — 30° step, resolve1 `1.60 s`,
+> pk|β| `9.53°`, pk bank `65.6°`.
+>
+> **Consequence, recorded once and not re-raised:** `M1-PLANT-002` (rudder coordinates, does not
+> point) is overruled by its author. `M1-PLANT-009` (peak |β| ≤ 2.0°) and `M1-PLANT-010` (the dip
+> bar) are exceeded by the v12 behaviour he has ruled for. `M1-STATE-005` — *"the open
+> engineering problem of this specification"* — is **dissolved rather than solved**: it asked how
+> to buy coordination without resolve time, and he has ruled that it is not to be bought.
+> Amending M1 to match is the eagle's motion.
+
+---
+
+### Superseded frame, kept for lineage only — the three readings he rejected
+
+## R-1 — ⏸ was: HELD, NOT BLOCKING · the iter-18 feel question · **eagle**
 
 > **HELD 2026-08-03 on Chad's feel signal.** Verbatim: *"I dont know what to rule 80 degrees
 > bank for a 30 degree deflection that will likely arrive too slow.. probably have to gho with
