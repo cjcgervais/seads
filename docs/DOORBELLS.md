@@ -39,7 +39,10 @@ transit, because every agent reads its own current row on arrival. Chad's only j
 
 ```
 python D:/mandalark-kernel/tools/audit_graph.py
-⭐ YOU ARE THE ONLY THING BETWEEN CHAD AND FLYING. Read docs/RED-TEAM-AND-RESEARCH-PLAN.md sec0.
+⭐ CHAD ASKED FOR YOU BY NAME ("ALSO FOR THE CASCASE GUY"). Read
+D:/mandalark-kernel/docs/consults/CASCADE-RECORDER-DIRECTIVE.md -- sec0 is a RETRACTION aimed at
+you and it cancels work an earlier version of this doorbell asked for. Then the plan.
+YOU ARE THE ONLY THING BETWEEN CHAD AND FLYING.
  1. THE TREATMENT DRY RUN (W1). Unit tests and a linter do NOT clear G2. G2 is END-TO-END: the
     build emits rows and an agent reads them back OFF DISK. A treatment build has never emitted
     a tape. Confirm the header carries dwellLevelRateMult=0.000 byte-for-byte (%.3f at :4895;
