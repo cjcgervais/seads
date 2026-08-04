@@ -79,9 +79,36 @@ point 3 states that rule 3 requires a carve-out be recorded *before* a run and t
 camera gates were discovered untestable *during* runs at iter 14, so this is *"an openly-recorded
 deviation from rule 3… not a clean application of it."*
 
-**Still open unless Chad has set it elsewhere:** the `M1-PLANT-011` **resolve bar number**. The
-proposal refused to invent it and the amendment did not register the `M1-PLANT-*` gates, so that
-number appears to remain unset.
+### RULING 3 — `M1-PLANT-011` resolve **working target** `≤ 1.60 s`, deliberately NOT a gate
+
+(Superseding this agent's earlier note that the number appeared unset — it was set in the same
+session, in `docs/M1-PLANT-011-TARGET.md`, committed at `a643497`.)
+
+**`≤ 1.60 s`** to resolve a 30° lateral aim step from level cruise — v12's own figure from
+`M1 §5`, on the reasoning that it is what Chad flies today so anything slower is a regression he
+would feel. **It is not registered, not in the 250, and must not be added to the ladder.**
+
+**The registered bar is set only AFTER Chad flies it** (`M1-ACC-003`: *feel is the first
+instrument*, and resolve time is the one bar here he can judge with his hand on the stick).
+
+**Why that split is the right one, in the eagle's words:** *"A working target that is not a pass
+condition cannot be gamed for a pass, so it can be used to steer engineering without touching
+`SPEC-ACC-004`. The moment it goes into the ladder, setting it becomes a registration event and
+has to happen before the run it scores."*
+
+A counter-argument was considered and rejected on measurement, not preference: v12 bought its
+`1.60 s` with the pointed rudder `M1-PLANT-002` outlaws, so equal resolve from a coordinated
+aeroplane might be unobtainable — rejected because `sweep_authority` moved peak `|β|` `9.53° →
+0.91°` without hitting an authority ceiling, and `trace_step30` shows the cost is an
+**86°-overshoot-and-recover**, not a gain trade.
+
+### RULING 4 — `OPEN_QUESTIONS` Q9 carve-out RULED (the `SPEC-CAM-A01/A02/A03/A06` camera gates)
+
+Folded into amendment 2: those four are **reported, not counted**.
+
+**Ladder state after all four rulings: `246/250`.** Four red remain, none of them a bar that was
+lowered: `SPEC-CTL-A04`, `GOLDEN-CTRL-900`, `GOLDEN-CTRL-1200` (all `SPEC-ACC-005/006` STOPs) and
+`BAR-STRAIGHTLINE-DIP` (a real bar miss).
 
 ---
 
