@@ -1,0 +1,78 @@
+# PREG-1 pre-registration — SOP-01 clause C3
+#
+# G-4 of docs/GOAL-2026-08-03.md. Written 2026-08-03 by the kernel-docs agent,
+# working the queue directly on Chad's ruling. LOCK THIS BEFORE THE FLIGHT.
+#
+# WHY THE SORTIE IS THE SELECTOR, and this is load-bearing:
+#   compare_arms.py computes its statistic over ALL rows of each arm's tape. It has
+#   no row filter and no selection predicate — verified by reading compute_stat().
+#   Claim 2 is specifically about STRAIGHT-UP deflections, so the population cannot
+#   be carved out after the fact. It must be created by the sortie: each arm is
+#   flown as repeated near-vertical pulls and nothing else, so that "all rows" IS
+#   "vertical deflection rows". The fly card enforces this and is part of this
+#   registration by reference: docs/experiments/CLAIM2-FLY-CARD.md.
+#
+#   Filtering after the fact would also be a C3 violation in spirit: choosing the
+#   elevation cut once the data is visible is choosing the answer.
+
+schema = "prereg-v1"
+
+[meta]
+experiment_id = "CLAIM2-ROLL-IN-VERTICAL"
+author = "kernel-docs agent (D:/mandalark-kernel), for Chad"
+hypothesis = "If the dwell servo is the source of the roll Chad feels in a straight-up deflection, then disabling it (dwellLevelRateMult 1.880 -> 0.000) reduces mean |bankRaw| across a sortie of repeated near-vertical pulls by at least 2.0 degrees."
+
+# The ONE variable. dwellBoost = dwellTerm * (C.dwellLevelRateMult or 1) at the
+# emitter, so 0.000 structurally zeroes the dwell channel without touching any
+# other law. It is a config key and appears in the tape header, so compare_arms.py
+# can diff it and fail if anything else moved.
+[variable]
+name = "dwellLevelRateMult"
+control_value = "1.880"
+treatment_value = "0.000"
+
+# CONTROL = the shipped config, i.e. the aeroplane Chad flew when he reported
+# claim 2. TREATMENT = dwell off. Every other key below must be identical in both
+# tape headers.
+[arms.control]
+config = { dwellLevelRateMult = "1.880", dwellLevelUniform = "true", dwellLevelDamp = "0.750", aimRollGain = "7.500", aimRollDamp = "0.580", aimHeadDamp = "0.450", aimResponse = "13.000", lineHoldFF = "1.000", aimBankFeedforward = "0.350", aimRollCeilingDeg = "85.000", aimPushMode = "false", aimFreeCursor = "true" }
+
+[arms.treatment]
+config = { dwellLevelRateMult = "0.000", dwellLevelUniform = "true", dwellLevelDamp = "0.750", aimRollGain = "7.500", aimRollDamp = "0.580", aimHeadDamp = "0.450", aimResponse = "13.000", lineHoldFF = "1.000", aimBankFeedforward = "0.350", aimRollCeilingDeg = "85.000", aimPushMode = "false", aimFreeCursor = "true" }
+
+# THE STATISTIC MEASURES THE SYMPTOM, NOT THE MECHANISM.
+#
+#   bankRaw is the bank angle the aircraft actually held — "the roll that is in it",
+#   which is what Chad reports feeling. It is deliberately NOT rollBstApp (ord 36):
+#   rollBstApp is the dwell channel itself and is zero in the treatment arm BY
+#   CONSTRUCTION, so testing it would be circular — it would prove only that the
+#   knob we turned off is off.
+#
+# THRESHOLD DERIVATION — the one judgement call in this file, stated not hidden:
+#   On the flown v3 tape (sha b85c43bb..), mean |bankRaw| at aimElev > 45 deg is
+#   8.43 deg (n=633); at aimElev > 60 deg it is 19.44 deg (n=60). 2.0 deg is ~24%
+#   of the 8.43 figure — large enough to plausibly be felt, and far above the
+#   frame-to-frame noise of a 4dp bank column. Proceeding under this stated
+#   assumption per DELEGATION.md sec3 (reversible; re-lock with a different number
+#   costs one command) rather than queuing another question for Chad.
+#   NOTE: that tape is DESIGN INPUT ONLY. It sets the scale. It is not an arm, it
+#   predates this registration, and clause C3 forbids analysing it against this file.
+[statistic]
+field = "bankRaw"
+metric = "mean_abs"
+threshold = 2.0
+unit = "deg"
+
+# compute_stat counts ROWS, so the population is rows, not episodes. 1800 rows at
+# 60 Hz = 30 s of flight per arm. The fly card asks for more than this so a partial
+# sortie still clears the floor.
+[sample]
+floor_n = 1800
+population = "tape row at 60 Hz (>= 30 s of qualifying flight per arm)"
+
+# C5 — blind arm order. Chad is NOT told which arm he is flying. Control first so
+# the familiar aeroplane is flown while he is freshest; the free warm-up (fly card,
+# per the 2026-07-31 amendment) precedes both and is NOT recorded as either arm.
+[order]
+sequence = ["control", "treatment"]
+blind = true
