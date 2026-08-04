@@ -130,7 +130,30 @@ suite; a one-shot pin now kills it.
 
 ## 4. Code — grounded in `reference/seads-feel/` (snapshot @ `51eb5b9e3` = the v7 seal, 2026-07-29)
 
-Snapshot status: **current**, and it now includes `app/main.cpp` (the per-frame camera glue
+> ## ⛔ SNAPSHOT STATUS: **STALE — DO NOT TREAT THIS ENTRY'S CODE LEVEL AS CURRENT**
+>
+> **Corrected 2026-08-03.** This line previously read *"Snapshot status: **current**."* **It was
+> not.** It cites the **v7** seal (`51eb5b9e3`); `reference/seads-feel/` has since been
+> re-snapshotted at v9, v10 and the **v12** seal (`e362df289`).
+>
+> **This is not a stale date on stable content — the mechanism itself moved.** The **v9 camera
+> arc (S-nosesnap, `b4c0751`) changed exactly what this entry describes.** The v12 snapshot's
+> `app/instructor_tick.h` says so in its own comment: the release snap now lands on the
+> **NOSE** via `orient_snap_dir`, *"was the"* velocity. This entry was written before that and
+> **does not contain the words v9, v10, v11 or v12 anywhere.** Related: `SESSION_HANDOFF.md`
+> records that Chad **corrected the law quote** for v9 — the aim never snaps, and the release
+> snap includes upright relative to the earth.
+>
+> **Ground any reading of this mechanism in `reference/seads-feel/app/instructor_tick.h` at the
+> v12 seal, not in §4 below.** The Feel/Principle levels are likely still sound; the Code level
+> is the part known to have moved.
+>
+> **Owner: kernel-docs. Deliberately left un-re-grounded rather than re-grounded quickly** — the
+> sibling entry `rudder-coordination-ladder.md` was re-grounded the same day and the dial-by-dial
+> check caught a superseded damping model that a pointer-bump would have preserved. Four seals of
+> camera work deserve that same treatment, not a date edit.
+
+§4 as written at the v7 grounding follows. It included `app/main.cpp` (the per-frame camera glue
 that earlier readings of this mechanism had to fetch from the live tree).
 
 - `input/aim_state.h` — `struct Freelook`: latches `override_used`, `freelook_prev`,

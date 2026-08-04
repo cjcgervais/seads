@@ -88,8 +88,23 @@ yaw  = sqrt_law(e_y, K_theta * yaw_scale, aB_yaw, yaw_max)     // pointing
 - S-wvane plant side-force: `F = −q · S · Cy_beta · sin β · cos β` (lateral, ⊥ velocity),
   giving crab decay `τ_β = 2m / (ρ · V · S · Cy_beta)` ≈ 1.1 s at V=140 with the shipped
   `Cy_beta = 2.5`. `Cy_beta = 0` is structurally OFF (bit-identical pre-S-wvane).
-- Yaw damping pair: ζ ≈ 0.77 (`K_w_yaw` 200k against ~338k critical). Constitutional
-  order if buzz appears: raise `K_w_yaw` first, then walk `yaw_scale` back toward 2.0.
+- **Yaw damping pair — CORRECTED 2026-08-03 at the v12 re-grounding. The previous text here
+  was superseded by the kernel itself and is quoted so the change is visible:** it read
+  *"ζ ≈ 0.77 (`K_w_yaw` 200k against ~338k critical). Constitutional order if buzz appears:
+  raise `K_w_yaw` first, then walk `yaw_scale` back toward 2.0."* **That model dropped the
+  `dQ` term.** The honest model (plan-audit P0, quoted in `controller.toml`'s `damp_ff_yaw`
+  block) is `ζ = sqrt((K_w + dQ) / (4·I·K_theta·yaw_scale))` with `dQ = damp_yaw · q_eff`,
+  giving **ζ = 0.91 @ V140 and 1.15 @ V250 — already near-critical at 200k.** The
+  `K_w_yaw` ladder `{200k…300k}` **probed FLAT**, so *"raise `K_w_yaw` first" is
+  explicitly unmotivated* and higher `K_w` slightly *widens* the park.
+- **`damp_ff_yaw = 1.0` (Rung Y3, 2026-07-12) — a mechanism this entry omitted entirely.**
+  FLIP-ONLY; `K_w_yaw` stays 200k. The earlier *"47–49 reversals BLOCKED"* ruling was
+  **100% instrument artifact** (deadzone park taps inside the 20 s counter; the
+  deadzone-kill arm gave 47 → 2). Measured buys: peak yaw rate **+35% @ V140 / +90% @ V250**
+  (the fade-at-speed is gone, V-flat); V250 capture carry-past `0.21 → 0.02°`; `integ_y` at
+  trim `0.924 → 0.030`. **The trade, and it is a rudder-ladder fact:** max-rate-turn
+  transient peak |β| **17.9 → 21.3°** — faster crab-on into the roll-in. `0.0` is
+  bit-identical legacy.
 - AT-16 wall: sustained-coordinated-turn peak β ≤ 5.0°.
 
 ### The dial ladder (history, all Chad-ruled)
@@ -108,7 +123,16 @@ Pre-agreed, untaken fallbacks from the 2026-07-28 session (kept for the record):
 `Cy_beta 2.5 → 1.5` (if speed snap-back survived), `center_frac 0.0 → 0.3` (if
 crab-at-rest survived — ⚠ walks back Rung M1).
 
-## 4. Code — grounded in `reference/seads-feel/` (snapshot @ `cfe1bd7fe`, 2026-07-28)
+## 4. Code — grounded in `reference/seads-feel/` (snapshot @ `e362df289` = the **v12** seal, 2026-07-30)
+
+> **Re-grounded 2026-08-03.** This section previously cited snapshot `cfe1bd7fe` (the **v6**
+> seal, 2026-07-28) and declared its status *"current."* `reference/seads-feel/` had been
+> re-snapshotted twice since — at v10, then at the v12 seal — so the entry asserted a status
+> its own artefact contradicted. **That is the `KERNEL_SEAL` defect class**, and the fix was
+> **not** a version-string bump: every dial below was re-verified against the v12 snapshot,
+> which is how the superseded damping model in §3 was caught. Re-grounding by editing the
+> pointer alone would have preserved the wrong physics under a right-looking date — the same
+> method error the `C3` archive law exists to forbid.
 
 - `control/controller.cpp` — `sqrt_law` (the shaped gain law; comment block names the
   yaw call convention), the yaw pointing call sites (`cp.K_theta * cp.yaw_scale`), and the
@@ -124,9 +148,22 @@ crab-at-rest survived — ⚠ walks back Rung M1).
 - `config/controller.toml` `[coordination]` — the dials with Chad's rulings quoted inline;
   the richest single narrative of this ladder lives in those comments.
 
-**Snapshot status:** current. The 2026-07-28 re-snapshot carries `yaw_scale = 2.0` with
-the trim ruling quoted inline in the toml. Everything in this entry is present in the
-snapshot.
+**Snapshot status: current at the v12 seal, verified dial-by-dial 2026-08-03.** Confirmed
+present in `reference/seads-feel/config/` at `e362df289`: `K_theta = 3.2`, `yaw_scale = 2.0`,
+`K_coord = 1.0`, `center_frac = 0.0`, `center_band = 1.5`, `yaw_max = 55.0`,
+`K_w_yaw = 200000.0`, `Cy_beta = 2.5`. **Every dial in §3 survived v6 → v12 unchanged; only
+the damping model and `damp_ff_yaw` moved**, and both are now corrected above.
+
+## ⛔ Scope note — Chad's 2026-08-03 "lead with rudder" ruling does NOT change this entry
+
+His ruling (*"MAKE IT BEHAVE LIKE V12"*, `DECISIONS.md`) makes **v12 the reference, not the
+target of change.** This entry describes v12's own rudder ladder — the thing the eagle is being
+told to match. **Nothing here is overruled by it**, and `AT-16`'s β ≤ 5.0° wall stands for this
+kernel.
+
+**What the ruling overrules is `MANDALARK1`'s `M1-PLANT-002`**, in the **eagle sandbox and the
+EvC2026 lineage** (contract `C8`) — a different tree and a different plant. **Do not "apply the
+ruling" to the seads-feel kernel.** It is already the aeroplane he ruled for.
 
 ## Lineage
 
