@@ -38,9 +38,14 @@ python D:/mandalark-kernel/tools/audit_graph.py
 Then your row in D:/mandalark-kernel/docs/agents.tsv, then
 D:/mandalark-kernel/docs/consults/V023-YAWLINE-SWEEP.md.
 THREE things are yours and all three block progress:
- 1. The M1 amendment -- and SPEC-AIMFF-002 must join the reversed list. It encodes
-    coordination-over-pointing, which is exactly what Chad reversed. SPEC-AIMFF-A01 now
-    fails at ANY nonzero yaw_line_gain. This is the true blocker.
+ 1. The M1 amendment. ** RETRACTED 2026-08-03: THERE IS NO SPEC BLOCKER.** This line used to
+    say SPEC-AIMFF-002 must join the reversed list and was "the true blocker." That was wrong
+    and it was mine: I adopted architecture's PACKET-12 sec2 pedestal-inversion INFERENCE as
+    if it were Chad's ruling. His ruling was "use yaw in the cascade to assist making the line
+    to the aim" -- the az_lat TERM. Moving it INSIDE the existing clamp preserves
+    SPEC-AIMFF-002 verbatim and SPEC-AIMFF-A01 PASSES. Do not amend that clause.
+    The M1 amendment itself is still yours (M1-PLANT-002 and S-8 reversed; M1-PLANT-010
+    UNDEMONSTRATED -- do NOT write "satisfied", it is refuted by measurement).
  2. Golden re-baseline. CHAD HAS GIVEN HIS WORD ("YOU HAVE MY WORD"). Deliberate, never a
     silent re-record. tests/ is yours; V024 gave kernel-docs src/Kernel/** only.
  3. An instrument that can SEE BANK AUTHORITY. lean_gain 8/10/12/14 gives byte-identical
