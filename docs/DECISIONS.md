@@ -15,6 +15,41 @@ Standing decisions for the flight kernel. Each entry: date, decision, why, statu
 **Status: SETTLED. Chad sent this to the other agents himself and said *"im tired of hearing about
 it."* No agent reopens it, re-measures it, or queues a follow-up question about it.**
 
+### ⭐ THE PILOT RULED FIRST AND THE INSTRUMENT AGREED — keep this one
+
+**He ruled without the curve in front of him.** The deflection curve was ordered as a
+*precondition* — `EAGLE-R1-DIRECTIVE.md` said in terms *"do not rule this until the curve is in."*
+He ruled anyway, and **the curve then corroborated him at every step size that matters:**
+
+| aim step | coordinated `res90` | v12 crab `res90` | cost of coordination |
+|---:|---:|---:|---:|
+| 1° | 2.37 s | 0.32 s | **7.4×** |
+| 2° | 3.20 s | 0.33 s | **9.7×** |
+| 3° | 3.62 s | 0.36 s | **10.1×** |
+| 5° | 4.05 s | 0.40 s | **10.1×** |
+
+**Flat.** There is no small-deflection regime where coordinated flight is cheap — and small
+deflections are what he tracks with.
+
+> *"I feel so bogged down in minutia seems too slow anyways"* **was a correct reading of the
+> aeroplane, not a mood.** It was read at the time as a pacing complaint about process. It was
+> telemetry.
+
+`THE LAW` clause 3 covers pilot-vs-instrument disagreement: the instrument is wrong and gets
+rebuilt. **It has no clause for this case — they agreed independently, with the pilot ruling
+first, on a question two agent sessions had failed to resolve.** That is worth more than either
+alone, and it is the strongest evidence this project has that Chad's feel reports are primary
+data in the SOP-01 sense rather than input to be translated.
+
+**The rejected alternative measures worse**, which closes the loop: `ARM 2` — the roll-out law,
+the `M1-PLANT-004` bank-and-elevator direction that `M1-STATE-005` named as *"the likely
+direction"* — gives `res90` **8.04 s at 10°** and **12.11 s at 30°** against as-built's `4.03 s`
+and `0.60 s`. **The specification's own stated direction buys dip and pays for it in exactly the
+currency he had just said he was out of.**
+
+*(Corroborated independently by `architecture` in `V022` / PACKET 11, which read the curve at
+source. Accepted in `consults/PACKET-11-VERDICT.md`.)*
+
 **He rejected the frame, not a point inside it.** R-1 offered three readings; this is none of
 them. The question assumed coordinated flight as the constraint and asked what to pay for it. He
 ruled that the constraint itself is wrong for this game: *an arcade game needs a quick resolve to
