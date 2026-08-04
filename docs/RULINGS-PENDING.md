@@ -13,7 +13,20 @@ so you can disagree cheaply.
 
 ---
 
-## R-1 — ⛔ BLOCKING · the iter-18 feel question · **eagle**
+## R-1 — ⏸ HELD, NOT BLOCKING · the iter-18 feel question · **eagle**
+
+> **HELD 2026-08-03 on Chad's feel signal.** Verbatim: *"I dont know what to rule 80 degrees
+> bank for a 30 degree deflection that will likely arrive too slow.. probably have to gho with
+> the crab I feel so bogged down in minutia seems too slow anyways"*
+>
+> **Reading 1 is rejected on feel.** The rest is a LEAN, not a ruling — "probably", "I feel" —
+> and going with the crab would contradict his own `M1-PLANT-002`, so it is not carried.
+>
+> **The question may be malformed, and that is being tested before he is asked again.** Every
+> number here comes from a **30° step**; he mostly flies 2–10° corrections. The eagle is
+> measuring the deflection curve (`consults/EAGLE-R1-DIRECTIVE.md`). If small deflections
+> resolve promptly *and* coordinated, R-1 collapses to reading 3 and `M1-PLANT-002` may not need
+> relaxing at all. **Do not rule this until the curve is in.**
 
 **Should a routine 30° aim step be an ~80°-bank, ~5.8 g manoeuvre?**
 
@@ -32,9 +45,7 @@ heading in `1.60 s` costs ~80° of bank and ~5.8 g. v12 only achieves `1.60 s` b
 agent will answer it. The eagle notes reading 3 sits closest to your own `M1-PLANT-001`
 (*"the steepness of the bank angle I will need for the tightness of the turn radius I want"*).
 
-**BLOCKS:** the eagle's next iteration entirely. Its roll-out law is built, measured, and parked
-at default `0.0`.
-**Cheapest path:** fly it. `rollout_bank_gain` is a knob — you can feel both aeroplanes.
+**BLOCKS:** nothing right now — the eagle has delegated measurement work in front of it.
 
 ---
 
