@@ -32,6 +32,59 @@ past v12 at any time:
 
 ---
 
+## 2026-08-03 (later still) — TWO RULINGS MADE IN THE EAGLE'S SESSION, recorded here second-hand
+
+**⚠ PROVENANCE, stated first because it is the point.** This agent did **not** witness either
+ruling. Both were made by Chad in the eagle's own session and are recorded in that tree
+(`GATE_REGISTRY.md` amendment 2, `70603ec`+). They reached this repo because the loop read the
+tree, **not because anyone relayed them** — which is the agent graph working as designed. Per
+`AGENT-GRAPH.md` §2c both are recorded with their source document named. **Chad should confirm
+both if either is mis-stated here.**
+
+### RULING 1 — the eagle is a REFERENCE IMPLEMENTATION, not the kernel EvC2026 ships
+
+This answers `GOAL-2026-08-03.md` §3, the open question this agent raised and explicitly
+declined to answer. It is **reading 2** of the three offered.
+
+Quoted from `GATE_REGISTRY.md`: *"Chad ruled that this kernel is a **reference implementation
+proving `MANDALARK1`**, not the kernel EVC2026 ships… A reference implementation is judged by
+whether it demonstrates the specification's claims — so the `M1-PLANT-*` bars, which have **no
+gate in this 250 yet**, are the part that matters most, and `250/250` would not by itself mean
+the spec is proven."*
+
+**This changes what the standing goal means.** The flyable cascade Chad tests and rules on comes
+from the **EvC2026 / cascade-recorder** track. The eagle's deliverable is **the specification
+proven**, and its gate score is not the measure of that.
+
+### RULING 2 — the gate denominator moves `257 → 250` (amendment 2)
+
+Ruled on `docs/PROPOSAL-257-REDERIVATION.md`, with parts **declined**. Seven gates carved out of
+the count and **kept in the report**: four `SPEC-CAM-A0*` (the `SPEC-GAP-001` / Q9 carve-out,
+plus a bar measured on a pacing law `M1 S-1` deletes) and three `BAR-BLEND-*` (measured on a
+spherical v12 tape flown by a human, which `M1-ACC-002` forbids from blessing this kernel).
+
+**Note the landing number is 250, not the proposal's 256.** Not a discrepancy: the eagle
+declined to register the twelve candidate `M1-PLANT-*`/`M1-CAM-*` gates and the `SPEC-LINE-A0*`
+legs *because their benches do not exist yet* — *"registering a count for gates whose benches do
+not exist is how 259 acquired its arithmetic error."* `250` is openly flagged as **a number with
+a known pending addition.**
+
+**Three properties that make it checkable rather than trustworthy**, all the eagle's own:
+nothing stopped being measured (removal is from the denominator, not the report, and the
+carve-out list lives beside `EXPECTED_TOTAL` in the pre-registered document so no gate author
+can exempt their own gate); **it does not buy a pass** — the three blend bars were *passing*, so
+striking them removes 3 from numerator and denominator alike, and the score moved
+`249/257 → 246/250` with four gates still red; and the deviation is **named, not hidden** —
+point 3 states that rule 3 requires a carve-out be recorded *before* a run and that these four
+camera gates were discovered untestable *during* runs at iter 14, so this is *"an openly-recorded
+deviation from rule 3… not a clean application of it."*
+
+**Still open unless Chad has set it elsewhere:** the `M1-PLANT-011` **resolve bar number**. The
+proposal refused to invent it and the amendment did not register the `M1-PLANT-*` gates, so that
+number appears to remain unset.
+
+---
+
 ## 2026-08-03 (later) — ITER-17 RE-RULED: **OPTION 2, M1 GOVERNS — REMOVE THE CAUSE** (Chad's word). Supersedes the Option A entry below
 
 **Chad's ruling:** *"I went with 2."* — Option A is **withdrawn**. The `blend` gate stays. The
