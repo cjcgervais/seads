@@ -4,6 +4,47 @@ Standing decisions for the flight kernel. Each entry: date, decision, why, statu
 
 ---
 
+## 2026-08-03 — the docs agent WORKS THE QUEUE DIRECTLY (Chad's ruling), and two defects it found in its own tooling
+
+**Chad's ruling, verbatim:** *"I choose option 1 do it here"* — in answer to a question about who
+does the remaining work, given that every separate agent session needed him to press start.
+**Status: STANDING.** The kernel-docs agent now executes pending work itself rather than
+sequencing other sessions to do it.
+
+**The authority rule is NOT relaxed by this, and was not violated.** This agent reads the other
+trees and writes only paths inside its own `write_authority`. Verified mechanically, not asserted:
+after landing `G-2` and the `R-1` curve, `tools/audit_graph.py` reported every dirty file in this
+repo as `dirty, in-authority (kernel-docs)`, and nothing dirty in any other tree was attributable
+to it. **Verification of another agent's work does not require writing in its tree** — both items
+below were verified by *re-running the other agent's tool at source* and comparing.
+
+**What was landed this pass:** `G-2` DONE (`consults/G2-RECONCILE-VERDICT.md`, three findings, the
+first being a silently truncated tape header with no guard) and the `R-1` deflection curve
+reproduced (`consults/R1-DEFLECTION-CURVE-VERDICT.md` — R-1 is **not** malformed and does **not**
+collapse to reading 3).
+
+### Two defects in this agent's OWN tool, found because the tool was actually run
+
+Recorded because `tools/` is this agent's authority, which removes the "someone else owns it"
+backstop — the same reasoning `CLAUDE.md` applies to `goldens/`.
+
+1. **`audit_graph.py` reported `R-1 is BLOCKING` for a ruling whose heading says
+   `NOT BLOCKING`.** The test was `"BLOCKING" in heading`, and `"BLOCKING"` is a substring of
+   `"NOT BLOCKING"`. It had been firing falsely from the moment R-1 was held. **A check that
+   inverts on the negation of its own keyword is worse than no check — it teaches the reader to
+   discount the RED**, which is the same class as the INERT-CHECK LAW in `CONTRACTS.tsv`.
+   Fixed: negations are tested first and win.
+
+2. **The audit died with `UnicodeEncodeError` on a non-ASCII character in `agents.tsv`** — on a
+   cp1252 console, mid-report, *after* the REDs had printed. **The audit must never fail because
+   of a character in the data it audits.** Fixed at the stream, not by policing the data.
+
+**And one defect in this agent's own practice, in the same pass:** it wrote an action item into
+the eagle's `blocked_on`, which is the field for *what you await from someone else*. The audit
+correctly went RED (`CONTESTED`) on the eagle's dirty tree as a result. **The register was
+corrected rather than the check silenced** — the instruction moved to `motion`, `blocked_on`
+returned to `none`. A message channel is not a status field.
+
 ## LIVE-BRANCH WATCH-ITEM — `feel/kernel-v5` moves past the seal (reconciliation is DONE)
 
 **Resolved 2026-07-24:** the v4→v5 reconciliation merged. `main` in the game trees is

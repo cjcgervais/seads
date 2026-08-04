@@ -25,6 +25,14 @@ import subprocess
 import sys
 from pathlib import Path
 
+# Windows consoles default to cp1252 here, and a single non-ASCII character anywhere in
+# agents.tsv (an arrow, a warning sign, a degree symbol) killed the whole audit with an
+# UnicodeEncodeError mid-report -- after the REDs above it had already printed, which is the
+# worst place to die. The audit must never fail because of a character in the data it audits.
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 DOCS = Path(__file__).resolve().parent.parent / "docs"
 AGENTS_TSV = DOCS / "agents.tsv"
 CONTRACTS_TSV = DOCS / "CONTRACTS.tsv"
@@ -343,7 +351,17 @@ def audit_rulings():
     if not open_ids:
         report(GREEN, "rulings", "no open rulings queued for Chad")
         return
-    blocking = [(i, h) for i, h in open_ids if "BLOCKING" in h]
+    # "BLOCKING" is a SUBSTRING OF "NOT BLOCKING", so a bare `in` test reports a heading that
+    # declares itself not blocking as RED -- which it did for R-1 from the moment R-1 was held.
+    # A check that inverts on the negation of its own keyword is worse than no check: it teaches
+    # the reader to discount the RED. Negations are tested first and win.
+    def is_blocking(h):
+        u = h.upper()
+        if re.search(r"\b(NOT|NON[- ]?)\s*BLOCKING\b", u) or "HELD" in u:
+            return False
+        return "BLOCKING" in u
+
+    blocking = [(i, h) for i, h in open_ids if is_blocking(h)]
     for rid, head in blocking:
         report(RED, "rulings",
                f"{rid} is BLOCKING and awaits Chad: {head.split('·')[1].strip() if '·' in head else head}")

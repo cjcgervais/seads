@@ -22,11 +22,20 @@ so you can disagree cheaply.
 > **Reading 1 is rejected on feel.** The rest is a LEAN, not a ruling — "probably", "I feel" —
 > and going with the crab would contradict his own `M1-PLANT-002`, so it is not carried.
 >
-> **The question may be malformed, and that is being tested before he is asked again.** Every
-> number here comes from a **30° step**; he mostly flies 2–10° corrections. The eagle is
-> measuring the deflection curve (`consults/EAGLE-R1-DIRECTIVE.md`). If small deflections
-> resolve promptly *and* coordinated, R-1 collapses to reading 3 and `M1-PLANT-002` may not need
-> relaxing at all. **Do not rule this until the curve is in.**
+> **The question was tested for malformation. It is NOT malformed.** The curve is in
+> (`consults/R1-DEFLECTION-CURVE-VERDICT.md` — the eagle measured it, kernel-docs reproduced it
+> at source to the digit). **The hypothesis that the bench was testing a rare case is
+> disconfirmed:** bank asked per degree is **5.2–5.9:1 across 1–10°** and only **3.0:1 at 30°**,
+> so the ratio Chad objected to is the *gentlest* point on the curve. **R-1 does not collapse to
+> reading 3**, and the three readings below stand as written.
+>
+> **What changed is the size of the question, not its shape.** He is not ruling on a rare 30°
+> corner. He is ruling on a **uniform ~10× price for coordinated flight at every deflection he
+> flies** (verified on two independent resolve predicates), against **a crab he cannot feel below
+> 3°** — v12's sideslip is inside the 2.0° bar at 1° (0.72°) and 2° (1.40°).
+>
+> **Still HELD, and no recommendation is offered** — this is `M1-ACC-003`, feel, and it is his.
+> Put it to him **at his next sitting for this queue**, not as a fresh interruption.
 
 **Should a routine 30° aim step be an ~80°-bank, ~5.8 g manoeuvre?**
 
@@ -76,7 +85,12 @@ get registered — with your word, before the run that scores them. **Debt recor
 proves attribution works on the real tape — a card whose instruments cannot attribute what you
 felt is the 2026-08-02 failure again.
 
-**BLOCKS:** nothing yet; gated behind `G-2`.
+**RELEASED 2026-08-03 — `G-2` is DONE**, per-row roll attribution is arithmetically valid on the
+flown tape. This is now writable. **Sequenced behind `G-4`** by this agent's own judgement: `G-4`
+pre-registers the claim-2 A/B, and a card written before that pre-registration exists is a card
+whose instruments were chosen after the fact.
+
+**BLOCKS:** nothing.
 
 ---
 
