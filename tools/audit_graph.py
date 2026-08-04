@@ -370,6 +370,69 @@ def audit_rulings():
            f"-- docs/RULINGS-PENDING.md")
 
 
+def audit_packets(agents):
+    """Does anything actually READ the channel?
+
+    Added 2026-08-03 after `cascade-recorder` reported that its outbox and this agent's
+    inbox were different paths AND inverted naming (`PACKET-*.md` vs `*-PACKET.md`), so no
+    packet written to an outbox could ever appear in an inbox -- and that this tool scanned
+    NEITHER column. It had zero references to `inbox` or `outbox`.
+
+    That is the failure this whole apparatus exists to prevent, in the apparatus itself:
+    PACKET-10..13 all landed in flying_architecture and were found only because someone
+    went looking by hand. A channel nobody reads is not a channel.
+
+    Reports every packet found in a declared outbox, and flags the ones with no answering
+    verdict. Deliberately dumb about pairing: `PACKET-11-...` is answered by any file in an
+    outbox whose name contains `PACKET-11`. A wrong pairing shows up as a packet that stays
+    listed, which is the safe direction to fail.
+    """
+    import glob as _glob
+
+    def expand(spec):
+        out = []
+        for part in (spec or "").split(";"):
+            part = part.strip()
+            if not part or part.upper() == "NONE":
+                continue
+            out.extend(_glob.glob(part))
+        return out
+
+    # every verdict/answer this graph can see, from every declared outbox
+    answers = []
+    for a in agents:
+        answers.extend(Path(p).name for p in expand(a.get("outbox", "")))
+
+    seen = set()
+    for a in agents:
+        aid = a["agent_id"]
+        for path in expand(a.get("outbox", "")):
+            name = Path(path).name
+            if not name.upper().startswith("PACKET-") or path in seen:
+                continue
+            seen.add(path)
+            m = re.match(r"(PACKET-\d+)", name, re.IGNORECASE)
+            key = m.group(1).upper() if m else None
+            answered = bool(key) and any(
+                key in x.upper() and not x.upper().startswith("PACKET-" + key.split("-")[1] + "-TO")
+                for x in answers if "VERDICT" in x.upper()
+            )
+            if answered:
+                report(GREEN, f"packet:{aid}", f"{name} -- answered")
+            else:
+                report(AMBER, f"packet:{aid}",
+                       f"UNANSWERED packet from '{aid}': {path}")
+
+    # the defect that prompted this check: an inbox nothing can ever deliver to
+    for a in agents:
+        ins = expand(a.get("inbox", ""))
+        declared = (a.get("inbox") or "").strip()
+        if declared and declared.upper() != "NONE" and not ins:
+            report(AMBER, f"agent:{a['agent_id']}",
+                   f"inbox matches NO files on disk: {declared} "
+                   f"-- verify it points where senders actually write")
+
+
 def main():
     if not AGENTS_TSV.exists() or not CONTRACTS_TSV.exists():
         print(f"missing {AGENTS_TSV} or {CONTRACTS_TSV}", file=sys.stderr)
@@ -381,6 +444,7 @@ def main():
     audit_trees(agents)
     audit_contracts(contracts)
     audit_rulings()
+    audit_packets(agents)
 
     order = {RED: 0, AMBER: 1, GREEN: 2}
     findings.sort(key=lambda f: (order[f[0]], f[1]))

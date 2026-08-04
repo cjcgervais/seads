@@ -4,6 +4,57 @@ Standing decisions for the flight kernel. Each entry: date, decision, why, statu
 
 ---
 
+## 2026-08-03 — ⭐ CHAD'S FEEL REPORT NAMES THE FIX, and it corroborates the bar that failed
+
+**Chad, verbatim — this is the specification, quote it, never paraphrase it:**
+
+> *"YEA IT WAS JUIITER WE HAD TOO MUCH YAW WHEN WE TURNED IT DOWN AND TURNED UP TH E BANK IT GOT
+> TO BUTTERY. tHAT IS THE SAME FEEL i WANT WITH THE EAGLE"*
+
+**He is describing the PLANE's history and setting it as the eagle's target.** Read literally:
+too much yaw → **jittery**; yaw **down** and bank **up** → **buttery**; and *that* is the feel
+the eagle must reach.
+
+### ⭐ This independently corroborates `BAR-SMOOTH-PITCH`, which had just failed
+
+Measured hours earlier, before he said any of this: at `yaw_line_gain = 4.0` the pitch
+body-rate full-reversal rate went to **`1.467 /s`** against the `1.1 /s` bound, with **v12
+measured at `0.80 /s`**. **Too much yaw produced a measured jitter regression, and the pilot
+then named the same mechanism from feel alone.** Second time today the instrument and the pilot
+have agreed independently — and this time the pilot supplies the *direction*, which no bar can.
+
+### It does NOT contradict "lead with yaw" — it calibrates it
+
+`V025` already ruled *"yaw leads, bank still follows."* This adds the balance: yaw **initiates
+and points**, and it must not be so strong that it does the whole job. **`lean_gain` is
+UNCHANGED and must not be reduced** (`V025`, declined explicitly) — and he is now asking for
+bank authority to go the *other* way, **up**, which is consistent with that refusal rather than
+in tension with it.
+
+### The precedent is already in this repo, dated and Chad-approved
+
+`docs/cascade/rudder-coordination-ladder.md` — re-grounded to v12 earlier the same day — records
+exactly this move on the plane:
+
+- **2026-07-28: `yaw_scale` `2.2 → 2.0`**, on his report of *"a little too much rudder bias in
+  the equation."* **Flown, APPROVED.**
+- And his own verdict on why it worked, which is the mechanism in his voice:
+  > *"Now that the flight kernel was given a more sufficient engine per weight ratio… it feels
+  > much better now to not have to chase the mouse with so much rudder but now the plant is able
+  > to respond"*
+- The doc's own gloss: **a stronger airframe needs less rudder, because lift can carry the nose
+  to the aim instead of yaw skidding it there.**
+
+**So "turn the yaw down and the bank up" is not a new hypothesis — it is the plane's own
+recorded, flown, approved ladder, and he is asking for it to be reproduced in the eagle.** The
+re-grounding of that entry earlier today is what made the precedent findable.
+
+**Consequence for the work:** the search is no longer "find a gain." It is **find the yaw/bank
+balance whose jitter matches v12's `0.80 /s`**, with `BAR-SMOOTH-PITCH` as the instrument and
+his word as the acceptance test.
+
+---
+
 ## 2026-08-03 — ✅ V024 / V025: THE DOCS AGENT WRITES THE CASCADE, and "yaw leads, bank still follows"
 
 **`V024`, Chad verbatim:**
