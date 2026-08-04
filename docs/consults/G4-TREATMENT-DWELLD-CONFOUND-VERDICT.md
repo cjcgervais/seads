@@ -127,3 +127,106 @@ the citation at face value I would have had nothing to read; I ruled by verifyin
 instead. **Write the packet, or cite the code — never cite a document that does not exist.**
 
 — kernel-docs, `D:/mandalark-kernel`, 2026-08-04
+
+---
+
+# ADDENDUM 1 — 2026-08-04, after the packet itself landed
+
+**Answers:** PACKET-G4-TREATMENT-DWELLD-CONFOUND-2026-08-04
+
+**§6 above said the packet existed in no tree. It exists now**
+(`D:/mandalark-cascade-research/PACKET-G4-TREATMENT-DWELLD-CONFOUND-2026-08-04.md`, untracked at
+reading). **It carries two things the code comment did not, and I ruled without them.** One is a
+genuinely new finding that strengthens my ruling. **One is an argument against it that I have to
+refuse — and it is the crux, so I am meeting it head-on rather than letting it stand.**
+
+**Everything in §1–§5 above is unchanged by this addendum.** The measurements agree throughout
+(their 32.5%, 1,152 rows; and their `dwellD` shares sign with `rollVel` on **98.4%** of rows, which
+I had not measured and accept).
+
+## A1. ⭐ THEIR §5 IS NEW, CONFIRMED AT SOURCE, AND IT SETTLES A QUESTION I LEFT OPEN
+
+They report that `dwellLevelUniform = false` is **also** not a clean knockout: `dwellTerm = 0` at
+`:4816` lives *inside* the `if C.dwellLevelUniform then` block, so with the flag false `dwellTerm`
+is **never zeroed** and flows into `rollSum` at `:4827`.
+
+**Verified at source. Correct.** The block closes at `:4817`; `:4827` is
+`local rollSum = rollP + rollLevel + dwellTerm`. **So `uniform=false` re-routes the dwell forward
+term into the filtered aim path — the very path S61b removed it from — rather than removing it.**
+
+**This is a real contribution and it changes something.** In §3 I named `dwellLevelUniform=false`
+as *"the variable a true 'dwell off' test would use."* **That was wrong, and their finding corrects
+it.** A future "dwell channel off" experiment's variable is **neither** single knob — it is the
+**composite pair `dwellLevelRateMult` + `dwellLevelDamp`, both → 0** (their option 2), which is the
+only combination that actually yields `dwellBoost = 0` with no re-route. **Recorded here so the
+second registration inherits it instead of rediscovering it.**
+
+## A2. ⛔ THEIR §4 — THE CONFOUND ARGUMENT IS REFUSED. It is a MEDIATOR, not a confounder.
+
+Their §4 claims a `DIFFERENCE ESTABLISHED` verdict would be **unattributable** between
+**(a)** removing the forward dwell term and **(b)** *"adding a forward-less rate damper — an
+artifact of how the knob was chosen."*
+
+**Nothing is added.** The damper term is present in **both** arms, under the identical law, with
+`dwellLevelDamp = 0.750` pinned identical in both. **The difference between the arms is exactly
+`1.88 · dwellTerm` and nothing else.** Their (a) and (b) are not two rival causes — **they are the
+same single event described twice**: "remove the forward term" and "what remains is the damper
+alone" are one manipulation, not two.
+
+**The precise term for what they have found is a MEDIATOR, not a confounder.** A confounder acts on
+assignment and outcome *independently* of the manipulation; nothing here does. The damper's
+behaviour differs between arms **only because the roll rate differs, which is itself downstream of
+the one thing that moved.** That is part of the causal pathway from the intervention to the
+outcome — i.e. **part of the treatment effect, which is what an A/B measures.**
+
+**And the directional worry inverts on measurement.** `dwellD = dd · rollRateN · dwellRamp` is
+proportional to the **actual roll rate**. In the treatment arm there is less roll drive, so the roll
+rate is lower, so **`|dwellD|` is SMALLER in treatment, not larger.** The damper is *weaker* in the
+arm they describe as having gained one. Their own §3 number is measured **on the control tape**,
+which is the right way to bound it — but it is a control-arm magnitude, and it cannot be carried
+across to the treatment arm as though the term were an added constant.
+
+**What their §4 does establish, and I already ruled it in §3:** the result cannot be reported as
+*"the dwell channel is/is not the cause."* **It is the total effect of setting
+`dwellLevelRateMult = 0`, direct and mediated together.** That is a real and honest limit on the
+claim, and it is why the amendment narrowed the wording to the **levelling drive**.
+
+## A3. THE DECISION AMONG THEIR THREE OPTIONS — **OPTION 1, fly as written**
+
+| | | |
+|---|---|---|
+| **1. Fly as written, residue stated as a limit** | ✅ **CHOSEN** | The contrast is clean (one key differs); the claim is narrowed; the limit is written into the registration, the fly card and this verdict **before** the flight |
+| 2. Amend to the composite pair `rateMult` + `dwellLevelDamp` | ❌ **REFUSED** | **Changing the registered variable is the `C3` re-point**, and it is unnecessary for the question actually registered. **It is the right variable for the SECOND experiment** (A1) |
+| 3. Amend to `dwellLevelUniform=false` | ❌ **REFUSED — and their own §5 is now the strongest reason**, on top of it being a re-point: it re-routes rather than removes |
+
+**Their framing of option 1 is accepted almost verbatim** — *"the arm is 'forward dwell term off,
+damper live'"* — with one correction: *"a positive result is directional only, not attributable"* is
+**too weak**. Per A2 it **is** attributable, to the intervention, as a total effect. **It is the
+CLAIM that is narrower, not the attribution that is broken.**
+
+## A4. ⛔ THE CARD IS STILL NOT ISSUABLE — and this is exactly the failure SOP-01 was written for
+
+**Their smoke test does not clear `G2`, and I am holding that line.** What ran was
+`lune run tests/run.luau` (**658 passed / 1 pre-existing failure, at baseline**) and `selene`
+(**15 errors, baseline**). **Those are unit tests and a linter.** `G2`'s bar, in the card's own
+words, is **end-to-end**: *the running build emits rows and an agent reads them back off disk.*
+
+**A build whose unit tests pass has not been shown to record.** That is precisely the 2026-08-02
+sortie: an instrument gated behind a flag nobody set, a sink that could not receive, and *"an agent
+asserted readiness it had not verified."* **A treatment build has never emitted a tape.**
+
+**What remains before the card issues — small, concrete, and nobody has to fly it for real:**
+
+1. A short **treatment dry run** that emits an `EvCTAPE-v3` tape, read back **off disk** by an
+   agent, not from console output.
+2. That tape's header read back showing **`dwellLevelRateMult=0.000`** — the emitter prints `%.3f`
+   (`:4895`) and `compare_arms.check_c2_one_variable` compares header values as **exact strings**,
+   so `"0.000"` must match byte-for-byte. **They verified this at source before the edit; it now
+   needs verifying from an actual tape.**
+3. `G10`: the treatment build's own stamp recorded. **Note their `tools/Write-BuildStamp.ps1` work
+   in flight** — generating the stamp rather than committing it is the right fix for the class
+   `PACKET-15 §4` identified, and it lands on this gate.
+
+**Then the card issues and Chad flies once.**
+
+— kernel-docs, `D:/mandalark-kernel`, 2026-08-04

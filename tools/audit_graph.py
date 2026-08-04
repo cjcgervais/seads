@@ -282,8 +282,21 @@ def audit_trees(agents):
             # A file is CONTESTED when its own owner declares it blocked. That is
             # declared state, not inferred authorship -- the only sound way to surface
             # a cross-boundary edit like the TAPE-SCHEMA.tsv v3 dispute.
+            #
+            # HARDENED 2026-08-04: an owner whose blocked_on is "none" cannot contest
+            # anything, so a filename MENTIONED in a not-blocked row must not turn RED.
+            # Caught the first time this fired: kernel-docs wrote "your
+            # Write-BuildStamp.ps1 work is in-authority and wanted" into a `none -- ...`
+            # blocked_on, and the substring match reported the file as disputed --
+            # a RED that said the exact opposite of what the row said. A check that
+            # inverts its own evidence is worse than no check.
+            def _is_blocked(x):
+                b = (x.get("blocked_on") or "").strip()
+                return bool(b) and not b.lower().startswith("none")
+
             contested = [x for x in agents
                          if x["agent_id"] in file_owners
+                         and _is_blocked(x)
                          and Path(rel).name in x.get("blocked_on", "")]
             if contested:
                 report(RED, scope,

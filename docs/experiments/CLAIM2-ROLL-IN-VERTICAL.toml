@@ -47,10 +47,17 @@ schema = "prereg-v1"
 # the dwell CHANNEL. A null result does NOT clear the dwell channel, because
 # the damper flew in both arms.
 #
-# NOT RE-POINTED: dwellLevelUniform=false is what actually kills the channel
-# (the code says so at :4788). It is NOT adopted here -- switching the variable
-# after the fact is precisely what C3 forbids. "Dwell channel off" is a SECOND
+# NOT RE-POINTED: the variable does not move. "Dwell channel off" is a SECOND
 # experiment with its own registration, not an edit to this one.
+#
+# ADDENDUM (same day): cascade-recorder's packet then showed that
+# dwellLevelUniform=false is ALSO not a clean knockout -- dwellTerm = 0 at :4816
+# sits INSIDE the `if C.dwellLevelUniform` block, so with the flag false dwellTerm
+# is never zeroed and flows into rollSum at :4827. That is a RE-ROUTE into the
+# filtered aim path, not a removal. Verified at source here. So the second
+# experiment's variable is NEITHER single knob: it is the COMPOSITE PAIR
+# dwellLevelRateMult + dwellLevelDamp, both -> 0. Recorded so that registration
+# inherits it rather than rediscovering it.
 #
 # Full ruling: docs/consults/G4-TREATMENT-DWELLD-CONFOUND-VERDICT.md
 # Original wording is struck in place below, never deleted.
