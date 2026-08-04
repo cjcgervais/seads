@@ -4,6 +4,101 @@ Standing decisions for the flight kernel. Each entry: date, decision, why, statu
 
 ---
 
+## 2026-08-03 — ✅ V024 / V025: THE DOCS AGENT WRITES THE CASCADE, and "yaw leads, bank still follows"
+
+**`V024`, Chad verbatim:**
+
+> *"THE MANDALARK-KERNEL DOCS AGENT IS WRITING THE CASCADE"*
+
+**`V025`, option-selected** (his choice, architecture's wording): **Yaw leads, bank still
+follows.** This closes the item `V023` flagged for veto. **`SPEC-BTT-017` stands and is NOT
+reversed** — *"nose should crab immediately AND BANK IMMEDIATELY."* Yaw initiates and points;
+the lean law still banks. **Flat wings-level rudder tracking is REFUSED.**
+
+⛔ **He specifically did NOT take the third option** — keep bank but cut the lean law's
+`8.0 deg/deg`. **So `lean_gain = 8.0` and `lean_max = 30°` are UNCHANGED and may not be reduced
+as part of this work.** Recorded loudly because reducing them would look like a natural part of
+"lead with yaw" and has been specifically not authorised. If the ~5.9° of bank per degree is to
+move, that is a separate ruling. **Corroborated by measurement:** `ARM 3` — the v12 target — banks
+2.3–10.5° across 1°–5° steps. **The target itself does not fly level.**
+
+### The single-writer collision this created, and how it was resolved
+
+`agents.tsv` gave `src/Kernel/**` to the eagle **exclusively**, and the eagle's `blocked_on` —
+written by this agent earlier the same day — said R-1 was *"ruled and settled, do not reopen."*
+Correct when written, but **it read as PROCEED**, and `V024` put a second writer on the same
+path. That is `CLAUDE.md` sweep instance 7 with a larger blast radius.
+
+**Resolved in the order architecture prescribed, before any code was written:** `agents.tsv`
+`write_authority` amended to match the ruling (**his word outranks the registry — the registry is
+what gets brought into line, never the ruling**), and the eagle **explicitly stood down** in its
+`blocked_on`, naming `V024`. The eagle keeps everything else in its tree, **and the `M1`
+amendment is still its motion and is now the critical path**, since `G-8` blocks on it.
+
+### ⚠ One ambiguity, resolved by this agent under a stated assumption rather than by asking again
+
+*"The cascade"* has two referents: **the code** (`src/Kernel/**`) or **the doc**
+(`docs/cascade/`, `G-8`). **Taken as THE CODE.** The question Chad was answering was explicitly
+headed *"Who writes the cascade CODE?"*; his standing complaint all session has been
+*"WHEN ARE WE GOING TO MAKE THE CASCADE WORK?"* — a question about behaviour, not documentation;
+and he has twice said he is tired of being asked. **Re-asking would have put the same question to
+him twice.** Flagged here rather than buried: if this reading is wrong, say so and it reverts —
+the de-confliction above binds under either reading, so nothing was lost either way.
+
+---
+
+## 2026-08-03 — ✅ EXTENDED (V023): LEAD WITH YAW, and YAW JOINS THE CASCADE AS A LINE-MAKING TERM
+
+**Chad's second ruling, verbatim — extends the one below, does not replace it:**
+
+> *"yEA MAKE THE CHANGS AS PER MY RULING, WE ARE GOING TO LEAD WITH YAW AND USE YAW IN THE
+> CASCADE TO ASSIST MAKING THE LINE TO THE AIM"*
+
+**Two clauses. The second is new and is the bigger one.** (1) Implement the ruling below.
+(2) **Yaw becomes a participant in *line-making*, not just turn initiation** — yaw helps *hold
+the line to the aim*, which is the job `S-STRAIGHTLINE` has been doing as a downstream
+correction.
+
+**This satisfies `M1-PLANT-010` by the mechanism `M1` did not anticipate.** That clause demands
+the straight-line property be *"a property of the plant, not of a downstream correction."*
+`S-8` wanted the over-rudder cause **removed**; Chad has made the rudder **the instrument of the
+fix**. **`M1-PLANT-010` is SATISFIED, not reversed — it must NOT be deleted in the amendment.**
+
+**Why seventeen iterations of dial-trading never found this** (architecture's `V023`, read at
+source in `CtrlController.luau`): yaw's base demand is purely β-nulling (`:302`), there is **no
+yaw term on lateral aim error anywhere in the cascade today**, and the `SPEC-AIMFF-002` shape at
+`:637` makes `yaw_coord` an **unclamped pedestal** with every pointing contribution a *clamped
+deviation from it*. Coordination cannot be limited; pointing is what gets limited when they
+compete. `A4`/`A5` swept `yaw_scale` against `K_coord` — **a search inside a structure when the
+structure was the question.** The ruling inverts which term is privileged. No gain sweep reaches
+that.
+
+**Minimum honest shape of the change:** yaw gains a term on **`az_lat`** (the aim-*error*
+quantity the lean law already trusts at `8.0 deg/deg`, `SPEC-BTT-017`), and `yaw_coord` stops
+being the pedestal. The existing aim feedforward is on aim **rate** — it assists while the aim
+*moves* and vanishes when the aim is *steady*, so it cannot make a line. Everything else is
+calibration.
+
+### ⚠ ONE READING THAT MUST NOT BE TAKEN — flagged for Chad's veto, never inferred
+
+**"Lead with yaw all the way" is NOT "fly flat on rudder, wings level."** His own earlier
+verbatim settles it (`SPEC-BTT-017`): ***"nose should crab immediately AND BANK IMMEDIATELY."***
+`CtrlController.luau:558-563` already carries a warning comment against exactly this failure — a
+lost `held_bank` integration makes the aircraft *"track small aim offsets FLAT, on rudder, wings
+level."* **Yaw leads. Bank still follows.** If he does mean wings-level rudder tracking, that
+reverses `SPEC-BTT-017` too and **he must say so — no agent may infer it (`V014`).**
+
+### What is still unset — unchanged from `V022`
+
+**No numbers.** No β bar, no resolve bar, no yaw gain, no `az_lat` coefficient, no `yaw_max`.
+The one **mechanical** target: `sweep_deflection.luau` `ARM 3` — v12 on the eagle's own bench,
+`res90` `0.32 / 0.33 / 0.36 / 0.40 s` at 1°/2°/3°/5°. *"Behave like v12"* means match that
+curve, and it is measurable the day the change lands.
+
+**Recorded from `PACKET-12-TO-MANDALARK-DOCS.md` / `V023` (`987b463`), verified committed.**
+
+---
+
 ## 2026-08-03 — ✅ R-1 RULED: LEAD WITH RUDDER. Make it behave like v12. SETTLED.
 
 **Chad's ruling, verbatim — this is the specification, quote it, never paraphrase it:**
