@@ -4,6 +4,32 @@ The core control mechanism of the flight kernel: a "War Thunder instructor"-styl
 system where a freely-moveable cursor represents desired flight direction, and the bird's
 nose chases it.
 
+> ## ⛔ RE-GROUNDED 2026-08-03 (`G-8`). Read this before the sections below.
+>
+> **The governing authority for this lineage is `MANDALARK1`** (`10_spec/MANDALARK1-FLIGHT-KERNEL-SPEC.md`
+> in the eagle sandbox), **not the v12 mirror** — contract `C8`. M1's header supersedes the
+> mirror *"for this sandbox **and for EVC2026**."* Any clause cited for this mechanism must be
+> cited from M1.
+>
+> **Two things below were false against the kernel actually flown, and both are the reason
+> `G-8` exists:**
+>
+> 1. **§Code cited `reference/evc2026/`, a snapshot taken 2026-07-23 from `D:\EvC2026`.** The
+>    mechanism under test now lives in **`D:/EvC2026_sandbox_cascade` @ `d5e0717`**, and the
+>    snapshot **predates most of it**: `dwellBoost` **0 occurrences**, `EvCTAPE` **0**,
+>    `lineHoldFF` **0**. **The dwell servo — an entire roll channel — is absent from the file
+>    this entry pointed at, while the flown tape attributes 28.6% of the roll to it.**
+> 2. **§Lineage claimed `feel/kernel-v5` @ `89447aba5`, "unpushed, diverging from main/v4"** as
+>    current authority. That is long dead: the feel branch is sealed at **v12 `e362df289`** and
+>    the game flies it.
+>
+> **Chad's 2026-08-03 ruling changes this mechanism's governing principle** and is recorded in
+> `docs/DECISIONS.md` verbatim: *"I rule to lead with rudder! ALL THE WAY IM TIRED OF BEING SO
+> HELD TO COORDINATED FLIGHT FOPR THE SAKE OF A STRAIGHT LINE… mAKE IT BEHAVE LIKE V12."*
+> **`M1-PLANT-002` — "the rudder's job is to keep the aeroplane coordinated, not to point it" —
+> is OVERRULED by its author.** The rudder may now point. See §Principle, which was written
+> before that ruling.
+
 ---
 
 ## Feel (Chad's own words)
@@ -56,6 +82,27 @@ Holding the cursor pinned at the edge of its reachable "cone" is a **sustained-t
 command** — the gap can't close, so the bird just keeps turning/looping at its own
 plant-limited rate. This is what makes uncapped loops and sustained hard turns possible
 (as opposed to an older attitude-command model that capped out).
+
+> **⚠ AMENDED 2026-08-03 — TWO THINGS THIS SECTION NEVER SAID.**
+>
+> **(a) THE DWELL SERVO IS A THIRD ROLL CHANNEL, and this entry omits it entirely.** Roll
+> reaching the plant is **not** just the shaped aim term. Measured on the flown v3 tape
+> (`consults/G2-RECONCILE-VERDICT.md`), the identity is
+> `rollOut = clamp(kbRoll + rollAimApp·aimGate, ±1) + rollBstApp·aimGate` — **the dwell boost
+> is added OUTSIDE the clamp**, so it can push roll past the saturation the aim term is bound
+> by. Share of summed |term| on that tape: **aim 71.4%, dwell 28.6%, keyboard 0%.**
+> *(Descriptive only — one tape, no control arm. The pre-registered A/B for it is
+> `docs/experiments/CLAIM2-ROLL-IN-VERTICAL.toml`.)*
+>
+> **(b) `aimGate` — keyboard suppresses the whole aim path.** `aimGate = 0` if any of
+> `kb.pitch/roll/yaw` is non-zero, else `1`, and **both** the aim term and the dwell term are
+> multiplied by it. So a single flight-axis key mutes mouse-aim roll entirely. The doc's
+> *"Keyboard adds on top"* (§Feel) is **wrong as written**: the keyboard does not add on top of
+> the aim, it **replaces** it.
+>
+> **(c) The coordinated-turn description below is superseded in intent.** `M1-PLANT-002` is
+> overruled: the rudder leads and may point. `V025` calibrates it — *"yaw leads, bank still
+> follows"* — and `SPEC-BTT-017` stands, so this is not wings-level rudder tracking.
 
 The instructor is a coordinated-turn controller, not three independent axis servos:
 horizontal cursor offset drives bank + rudder together (roll the lift vector onto the
@@ -121,7 +168,39 @@ Per-frame, in `computeMouseAim(dt)`:
 
 ## Code
 
-Snapshot: `reference/evc2026/BirdController.client.luau`, `reference/evc2026/GameConfig.luau`.
+> ## ⛔ GROUNDING CORRECTED 2026-08-03 — cite the CASCADE TREE, not the snapshot
+>
+> **Authority for this mechanism: `D:/EvC2026_sandbox_cascade` @ `d5e0717`**, branch
+> `cascade/rebuild` — the build that flew the tape everything is now measured on
+> (`captures/EvCTAPE-v3_20260803T2049_d5e0717-dirty.log`, sha `b85c43bb…`).
+>
+> **`reference/evc2026/` is a 2026-07-23 snapshot of a DIFFERENT TREE (`D:\EvC2026`) and is
+> stale for this entry.** It has `dwellBoost` **0**, `EvCTAPE` **0**, `lineHoldFF` **0**. It is
+> kept for lineage; **do not cite it for the mechanism under test.**
+>
+> **Symbols verified at source in `d5e0717`, character-for-character, during `G-2`:**
+>
+> - `:5260` — `local aimGate = (kb.pitch ~= 0 or kb.roll ~= 0 or kb.yaw ~= 0) and 0 or 1`
+> - `:5272` — `local rollOutSum = kbRoll + aimApplied.roll * aimGate`
+> - `:5273-5274` — `inputState.roll = math.clamp(rollOutSum, -1, 1) + (aimApplied.rollBoost or 0) * aimGate`
+> - `:5170` — `aimApplied.rollBoost = aimCursor.dwellBoost or 0` *(the steering branch)*
+> - `:5200` — `aimApplied.rollBoost = 0` *(the non-steering branch — free-look / RMB-zoom /
+>   aim-off. **Two assignment sites, not one**; the flown tape exercises only the first, since
+>   free-look was never active on it)*
+> - `:4790-4818` — the dwell servo itself (`dwellBoost = dwellTerm * dwellLevelRateMult`, so
+>   `dwellLevelRateMult = 0` structurally disables the channel — the A/B's variable)
+> - `:4885-5042` — the **EvCTAPE-v3 emitter**, 36 columns. `⚠` its header line is **truncated at
+>   1,022 chars** and loses the `keyMask` legend from `keybit16` on (`G2-RECONCILE-VERDICT.md` F1)
+>
+> **Shipped config keys, read off the flown tape's own header:** `dwellLevelRateMult = 1.880`,
+> `dwellLevelDamp = 0.750`, `dwellLevelUniform = true`, `aimRollGain = 7.500`,
+> `aimRollDamp = 0.580`, `aimHeadDamp = 0.450`, `aimResponse = 13.000`, `lineHoldFF = 1.000`,
+> `aimBankFeedforward = 0.350`, `aimRollCeilingDeg = 85.000`, `aimPushMode = false`.
+> **These supersede the `GameConfig.Controls` list below where they differ** — they are what the
+> flown build actually carried.
+
+*Lineage snapshot, kept for history:* `reference/evc2026/BirdController.client.luau`,
+`reference/evc2026/GameConfig.luau`.
 
 - `computeMouseAim(dt)` — `BirdController.client.luau` — the whole instructor: cursor swing,
   clamps, error, lead, shaping, PD+feedforward elevator, coordinated roll/rudder.
@@ -147,13 +226,31 @@ current-authority C++ kernel (below) and not yet reflected here.
 
 ---
 
-## Lineage: this is the testbed; `feel/kernel-v5` is current authority
+## Lineage — ⛔ CORRECTED 2026-08-03. Three trees now, and `MANDALARK1` governs two of them.
 
-The EvC2026 Roblox/Luau `computeMouseAim` documented above is a **prior-generation
-testbed** implementation of the same mechanism. The kernel Chad is actually flight-testing
-now — the one the rung-E push-gate story (`push-gate-knife-edge.md`) belongs to — is the C++
-kernel at `D:\flight_sim2\seads-feel`, branch `feel/kernel-v5` (HEAD `89447aba5` at
-snapshot time, **unpushed**, diverging from `main`/v4). Snapshot:
+**The old heading and first paragraph were stale and are struck.** They named
+`feel/kernel-v5 @ 89447aba5, unpushed, diverging from main/v4` as current authority. That state
+has not existed since July: the feel branch is **sealed at v12 `e362df289`**, the game trees fly
+it, and `reference/seads-feel/` is snapshotted there.
+
+| tree | what it is now |
+|---|---|
+| **`D:/EvC2026_sandbox_cascade` @ `d5e0717`** | **THE MECHANISM UNDER TEST.** Where `computeMouseAim` is instrumented and flown. This entry's Math/Code describe *this*. Governed by **`MANDALARK1`** (`C8`) |
+| `D:/mandalark-kernel_sandbox_eagle` | the **reference implementation** proving `MANDALARK1` — **not** what EvC2026 ships (Chad's ruling, `GOAL §3`). Governed by `MANDALARK1` |
+| `D:/flight_sim2/seads-feel` @ `e362df289` | the sealed **v12** C++ kernel — **the feel target**. *"mAKE IT BEHAVE LIKE V12"* |
+
+**`MANDALARK1` supersedes the v12 mirror for the EvC2026 lineage** (`C8`, `M1-SCOPE-001/002/003`:
+the mirror is *"evidence, not law"*). **This entry previously grounded itself in the mirror by
+default. That was the `C8` violation `G-8` exists to close.**
+
+**And v12 is now a feel reference in a second, measured sense:** its smoothness statistic —
+body-rate full-reversal rate, `PITCH 0.80 / YAW 0.91 / ROLL 1.03 /s`, bound `< 1.1` — is the
+acceptance test for the current main drive (`GOAL §0`). `cascade-recorder` has built that
+statistic over EvCTAPE (`tools/bar_smooth.py`) and **reports ROLL over the bound on real tape
+data** — the first time this mechanism has been measured against v12's own smoothness numbers.
+
+*Superseded text, kept for history:* ~~The EvC2026 Roblox/Luau `computeMouseAim` documented
+above is a prior-generation testbed…~~ Snapshot:
 `reference/seads-feel/control/controller.cpp`, `control/controller.h`,
 `input/aim_state.h`.
 
