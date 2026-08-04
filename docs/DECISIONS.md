@@ -125,6 +125,28 @@ plant."* **Keyboard and override behaviour are OUT OF SCOPE.** *"Please don't me
 part."* **Do not reopen it, do not re-document it, do not raise defects in it, and do not drag
 it into cascade work.**
 
+### ⛔ THIRD CORRECTION ON THIS SAME BOUNDARY — 2026-08-04, and it was this agent again
+
+> *"WHY ARE WE THINKING ABOUT FREE LOOK? i JUST WANT A CASCASE FREE LOOK WORKS FINE"*
+
+Asked for a red-team and research plan, this agent made a **free-look recorder defect the
+headline** of `docs/RED-TEAM-AND-RESEARCH-PLAN.md` and reordered the whole board around it —
+**after writing this very entry, and after quoting its scope clause in the `BARSMOOTH` verdict
+hours earlier the same day.**
+
+**The finding was true. That is precisely what made it dangerous.** Nine tape columns do freeze
+during free-look, the fix at `f64b81a` is unproven, and the only v3 tape has zero free-look
+frames — all measured, all correct, **all out of scope.**
+
+**THE LESSON, and it is now a standing test:** *a defect being real does not make it in scope.*
+Before promoting any finding to the top of a plan, check it against the scope ruling **first** —
+scope is a filter applied *before* interest, not a caveat added after. The clause above already
+said it in the imperative: **"do not drag it into cascade work."**
+
+**Demoted, not deleted:** the free-look finding is now a known limit in the plan's §6, gating
+nothing, owned by `cascade-recorder`, whose own commit already states its success test. It waits
+until Chad reopens it.
+
 ### This agent's error, owned once, and it took two corrections
 
 `cascade/mouse-aim-instructor-cascade.md` §Feel carried Chad's own framing. During the `G-8`

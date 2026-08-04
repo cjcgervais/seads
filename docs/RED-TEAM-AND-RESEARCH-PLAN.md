@@ -2,165 +2,160 @@
 
 **Chad's intent, verbatim. This is the specification. Quote it, never paraphrase it:**
 
-> *"ANYTHINGN FO THE ARCHITECT... WE SHOULD RED TEAM EVERYTHING AND DO AN AUTORESEARCH DREAM PLAN
-> TO FIND OUT WHAT IS WRONG. jUST EVERYONE TAKE MY INTENT. i WANT A CASCADE THAT i CAN FLY AND
-> PROPERLY RECORD THATS ALL. fOR AN EAGLE."*
+> *"WE SHOULD RED TEAM EVERYTHING AND DO AN AUTORESEARCH DREAM PLAN TO FIND OUT WHAT IS WRONG.
+> jUST EVERYONE TAKE MY INTENT. i WANT A CASCADE THAT i CAN FLY AND PROPERLY RECORD THATS ALL.
+> fOR AN EAGLE."*
 
-**Two requirements, and they are the whole of it: he can FLY it, and it RECORDS PROPERLY.**
-Everything below is ranked by distance from those two words. **Anything that does not serve
-"fly" or "record properly" is not on this plan.**
+**And his correction of this document's first draft, same day, which is why it was rewritten:**
 
-**"Just everyone take my intent"** — so this document does not ask him a single question. Every
-open choice below is made, with the reasoning stated so it can be argued with by an agent, not by
-him.
+> *"WHY ARE WE THINKING ABOUT FREE LOOK? i JUST WANT A CASCASE FREE LOOK WORKS FINE"*
 
 ---
 
-## 0. ⭐ THE HEADLINE — one sortie can earn three gates, and the third is the one nobody planned
+## 0. ⛔ THIS PLAN'S FIRST DRAFT WAS WRONG AND THE ERROR IS RECORDED, NOT QUIETLY FIXED
 
-**The recorder's largest known blind spot is FIXED, its own author wrote down exactly what would
-prove the fix, and that proof has never been flown.**
+**The first draft made a free-look recorder defect its headline and reordered the whole board
+around it.** Chad struck it in one line: **free-look works fine, and he asked for a cascade.**
 
-`cascade-recorder`'s commit `f64b81a` — *"nine columns stopped lying"* — is excellent work, and
-its message ends with a warning it wrote against itself:
+**He is right, and it is worse than a bad priority call — it broke a standing ruling this agent
+had written down itself and quoted hours earlier the same day.** From `DECISIONS.md`, his words,
+ruled **twice** on 2026-08-03:
 
-> ⛔ *"This will move G18 from RED to GREEN, and that is ONLY legitimate once fault-injected. A
-> recorder change that turns a red board green is the manufactured-PASS shape this project has
-> shipped twice. **The success test is one dry free-look block: those nine columns must VARY or
-> read 0 within the episode. Until that is flown, the GREEN is unearned and must not be quoted.**"*
+> *"mOUSE AIM CASCADE ONLY AS IT AFFECTS THE PLANT CO0ME ON!"*
 
-**`MEASURED` here today: the only flown v3 tape contains ZERO free-look frames.**
-`keyMask` takes exactly two values across all 5,173 rows — `{0, 64}`. **Bit 256 never sets.**
+and the standing instruction attached to it: **"Keyboard and camera and free-look are OUT OF
+SCOPE. Do not reopen it, do not re-document it, do not raise defects in it, and do not drag it
+into cascade work."** **The draft did exactly the last one.** `SESSION_HANDOFF §7` names the
+mechanism: *his words are the specification; do not translate them into mechanism language and
+then reason from your translation.* **A defect being real does not make it in scope.**
 
-**So the proof its author demanded has not happened, and cannot have.** Nine columns —
-including `mouseDx`/`mouseDy`, the entire record of what the pilot's hand did — behave one way on
-every tape we hold and a different way on the path **Chad actually flies**. The whole v9 camera arc
-is about free-look releases. **He free-looks constantly. The recorder has never been watched while
-he does.**
+**The free-look column-freeze finding is factually true and is NOT deleted** — it is demoted to
+where it belongs: a known limit, out of scope, owned by `cascade-recorder`, **gating nothing**,
+listed in §6. **It is not on the critical path and no agent should spend a day on it.**
 
-### The plan that falls out, and it costs zero extra flights
-
-**The fly card already opens with a free warm-up that is explicitly not recorded as either arm.**
-Put a deliberate **free-look block** in that warm-up — recorded, but as a *recorder-verification*
-block, never as arm data. One sortie then earns:
-
-1. **G-4** — the claim-2 A/B (its two blocks, unchanged, untouched by any of this).
-2. **G-2 end-to-end** — the treatment build proves it can emit a tape at all.
-3. **G18 / the free-look freeze** — the green its author refused to claim, **earned on the path
-   Chad flies**, and earned *before* the arms so a defect stops the sortie rather than spoiling it.
-
-**Nothing about the registration, the arms, the statistic or the blinding changes.** The warm-up
-was already outside the data by rule; this only makes it *recorded* rather than discarded.
+**The filter, restated and this time actually applied: a CASCADE he can FLY and that RECORDS
+PROPERLY.** Cascade = **mouse aim as it affects the plant.** That is the subject. Everything else
+is backlog.
 
 ---
 
-## 1. WHAT IS WRONG — the honest list, ranked by distance from "fly and record properly"
+## 1. ⭐ WHAT IS WRONG — the in-scope list
 
 | # | what is wrong | serves | owner | state |
 |---|---|---|---|---|
 | **W1** | **A treatment build has never emitted a tape.** Unit tests (658/1) and a linter are not `G2`. `G2` is end-to-end: the build emits rows and an agent reads them **off disk**. This is the 2026-08-02 lost sortie exactly | **fly** | cascade-recorder | **THE ONLY THING BETWEEN CHAD AND FLYING** |
-| **W2** | **The free-look freeze fix is unproven** (§0). Nine columns, `mouseDx`/`mouseDy` among them, on the path he actually flies | **record** | cascade-recorder | fixed at `f64b81a`, **unearned green** |
-| **W3** | **The tape header is truncated at 1,022 chars**, losing `keybit32/64/128/256` — **the legend for the free-look bit itself**. Rows are fine (max 323). W2 and W3 are the same axis: the one record that overflowed is the one nobody checks | **record** | harness | F1, open |
-| **W4** | **The jitter is LOCATED but not FIXED.** Roll, the aim channel, commanded upstream of the plant. No fix designed, none registered. *Located ≠ buttery* | **fly** | kernel-docs + cascade-recorder | open, and it is the main drive |
-| **W5** | **"The cascade" and "the eagle" each have two referents.** Sandbox vs game; doc vs code. This has already caused one two-writers-on-one-file incident (`V024`) | both | kernel-docs | §3 below settles it |
-| **W6** | **Nothing has been adversarially verified end-to-end by an agent that did not build it.** `G-10` open, `G-3` board open (23/28 green, 2 red, 3 pending), `G-5`'s `C3` RED unledgered | both | architecture, harness | open — **this is the red team** |
-| **W7** | **The `-dirty` in the build stamp is the stamp itself** — the artifact whose only job is recording what the build was is what makes it look unreproducible | record | cascade-recorder | found by architecture (P15 §4); fix in flight |
+| **W2** | ⭐ **THE JITTER IS LOCATED AND NOT FIXED.** Roll is the only axis over v12's bound — `1.485 /s` vs `1.03`. It is **commanded, not plant-generated** (`rollOut` reverses *more* than the plant), and it is the **aim channel** (`rollAimApp` `1.102 /s` alone; the dwell servo `0.093 /s`). **This is the cascade, and it is what "buttery" means in numbers** | **fly** | kernel-docs + cascade-recorder | **THE ACTUAL WORK** |
+| **W3** | **The `G-4` question is one dry run from being answerable** — does a straight-up pull have roll in it | **fly** | cascade-recorder | card written, not issuable |
+| **W4** | **The header truncates at 1,022 chars with no terminator.** Today it severs only key-bit legends, so **the cascade dials survive** — but **the header is where every cascade dial is recorded**, and it is already at the limit. **The next dial added silently falls off the end** | **record** | harness | F1, open, **reframed** |
+| **W5** | **"The cascade" and "the eagle" each have two referents.** Already caused one two-writers-on-one-file incident (`V024`) | both | kernel-docs | §4 settles it |
+| **W6** | **Nothing has been adversarially verified end-to-end by an agent that did not build it.** `G-10` open, `G-3` board open, `G-5`'s `C3` RED unledgered | both | architecture, harness | **this is the red team** |
 
-**W1 and W2 are the whole of Chad's sentence.** W1 is "fly." W2+W3 are "properly record."
-**Everything else on this board can wait behind those three.**
+**W1 gets him in the air. W2 is the cascade he asked for. Everything else is behind those two.**
+
+### What is NOT wrong, and is worth saying because it is the part he asked about
+
+**The cascade's own recording is in good shape, and it is measured, not assumed.** On the flown
+tape, `reconcile_rollout` passes **5,173 / 5,173** rows, `max|resid|` **1.0e-04** against a 2.0e-04
+tolerance — **every roll term the cascade computes reconciles to the command that reached the
+plant.** And the tape is pure mouse-cascade **by measurement**: `kbRoll` reverses **0** times,
+`keyMask ∈ {0, 64}` — **no flight-axis key held anywhere on it.**
+
+**So "properly record," for the cascade specifically, is largely already true.** The live risk is
+`W4` — a header at its limit — not the cascade columns.
 
 ---
 
-## 2. THE RED TEAM — everyone, and nobody grades their own work
+## 2. THE CASCADE WORK ITSELF — W2, and it is the thing he actually wants
 
-**The rule, and it is the only rule that makes a red team mean anything:**
-**no agent verifies what it produced.** Assignments are chosen so each reviewer is the one with
-the least stake and the most independent instrument.
+**The jitter has a location and no fix.** Named, not moved: `aimResponse = 13.000` (the one-pole
+that smooths aim into `aimApplied`), `aimRollGain = 7.500`, `aimRollDamp = 0.580` — read off the
+flown tape's own header, so they are provably what was flown.
 
-| # | target | red team is | the specific question, not a vibe |
+**The discipline that applies, and it is Chad's own:** *"DONT SET IT TO ZERO, MAKE THE RECOREDER
+TO THE WORK PROERLY TO ANAYSE IT JUST LIKE THE SUCCESS WE HAD FOR V12."* **A dial move is a
+registration written BEFORE the run that scores it.** The acceptance test already exists and needs
+no invention: **this statistic against v12's `1.03 /s`**, bound `1.1`.
+
+**Sequencing, and it is deliberate:** the fix comes **after** `G-4` flies, for one reason — `G-4`'s
+control arm is the aeroplane as it stands, and moving a cascade dial now would destroy the control
+arm before it is flown. **This is not caution, it is the same one-variable rule that makes any of
+it mean anything.**
+
+---
+
+## 3. THE RED TEAM — everyone, and nobody grades their own work
+
+**The only rule that makes a red team mean anything: no agent verifies what it produced.**
+
+| # | target | red team is | the question |
 |---|---|---|---|
-| **R1** | **The recorder, end-to-end** — does a tape record what the pilot did? | **architecture** | Take one flown tape and one claim per column class. **Can the tape prove its own contents without consulting the emitter?** `G-2`'s F1 says no for the header. Sweep the rest |
-| **R2** | **The `f64b81a` free-look fix** | **harness** | Fault-inject it. Its author says the green is unearned without it and is right. **Does the check fail when the freeze is reintroduced?** A check that cannot fail is not a check |
-| **R3** | **The G-4 experiment as built** — registration, arms, fly card | **architecture** | It has already been wrong once today (see §4). **Assume it is still wrong.** Re-derive the one-variable property from the two tape headers, not from the TOML |
-| **R4** | **The jitter attribution** (aim channel, `1.102 /s`) | **cascade-recorder** | It was produced by kernel-docs on cascade-recorder's instrument. **Re-derive the channel split independently.** If it does not reproduce, it is not a finding |
-| **R5** | **This agent's own docs and graph** | **architecture** | It has landed four self-caught defects today (§4). **Assume a fifth.** Start with `audit_graph`'s pairing and CONTESTED logic |
-| **R6** | **The eagle's `M1` claims** | **kernel-docs** | Reference implementation is judged by whether it *demonstrates the spec*. `M1-PLANT-010` is UNDEMONSTRATED — neither deleted nor satisfied. **Do not let it drift to "satisfied" by repetition** |
+| **R1** | **The cascade's recording, end-to-end** | **architecture** | *Can a tape prove its own contents without consulting the emitter?* `F1` says no for the header. **Scope it to the cascade columns and the dial header** — that is what must be trustworthy |
+| **R2** | **The `G-4` experiment as built** | **architecture** | Verify against the **two tape headers**, never the TOML. It was already wrong this morning. **Attack the mediator-vs-confounder ruling specifically** |
+| **R3** | **The jitter attribution** (aim channel, `1.102 /s`) | **cascade-recorder** | Produced by kernel-docs **on cascade-recorder's instrument**. Re-derive the channel split independently. **If it does not reproduce, it is not a finding — and W2 is built on it** |
+| **R4** | **This agent's docs, graph and rulings** | **architecture** | Four self-caught defects today, **plus this document's first draft, caught by Chad.** Assume a fifth. Start with `tools/audit_graph.py` and `docs/agents.tsv` |
+| **R5** | **The eagle's `M1` claims** | **kernel-docs** | `M1-PLANT-010` is UNDEMONSTRATED — neither deleted nor satisfied. **Do not let it drift to "satisfied" by repetition** |
 
-**Every red-team result lands as a packet with an `**Answers:**` declaration, so the board can
-credit it.** A red team whose result the board cannot see is the defect this program fixed today.
+**Every result lands as a packet with an `**Answers:**` declaration**, so the board can credit it.
 
 ---
 
-## 3. ⛔ THE TWO-REFERENT AMBIGUITY — settled here, not sent to Chad
+## 4. ⛔ THE TWO-REFERENT AMBIGUITY — settled here, not sent to Chad
 
-**"For an eagle" has two possible readings and I am not asking him which.** His intent is the
-tiebreaker and it is unambiguous: *"a cascade that I can fly."*
+*"Just everyone take my intent"* means **do not send him a question.** So:
 
-- **The `eagle` sandbox** (`D:/mandalark-kernel_sandbox_eagle`) is a **reference implementation**
-  proving `MANDALARK1`. **Chad cannot fly it.** It has no game around it.
-- **EvC2026** — *"Eagle to the Rescue"* — is **the game with the eagle in it, and it is the thing
-  he flies.**
+- **The `eagle` sandbox** is a **reference implementation** proving `MANDALARK1`. **Chad cannot
+  fly it** — there is no game around it.
+- **EvC2026** — *"Eagle to the Rescue"* — **is the game he flies.**
 
-**Therefore "for an eagle" = the EvC2026 / cascade-recorder track**, which is exactly where `G-4`,
-the recorder and the fly card already are. **This is consistent with `GOAL §3`'s ruling, not a
-reversal of it** — no ruling is being overturned and none needs to be.
+**"For an eagle" = the EvC2026 / cascade-recorder track**, which is exactly where `G-4`, the
+recorder and the cascade already are. **Consistent with `GOAL §3`, not a reversal — no ruling is
+overturned.**
 
-**The standing wording rule, because this has already cost a two-writer collision:** never write
-"the eagle" or "the cascade" unqualified. **Say which tree and which artifact.** A path plus a
-branch plus a commit is an identifier; a name is not.
+**Standing wording rule:** never write "the eagle" or "the cascade" unqualified. **Say which tree
+and which artifact.**
 
 ---
 
-## 4. WHY THIS PLAN ASSUMES ITS OWN AUTHORS ARE WRONG
-
-**Five defects were caught today, and four of them were in the work of the agent that found
-them:**
-
-- `audit_graph` could not credit a named packet — **found in this agent's own instrument**, and it
-  had been hiding a six-packet backlog.
-- The declaration scanner then **silently truncated a wrapped list** — the same class, one commit
-  later.
-- The CONTESTED check **reported a file as disputed on a row that said the opposite**.
-- `CLAIM2-ROLL-IN-VERTICAL.toml` claimed `0.000` *"structurally zeroes the dwell channel."* **It
-  does not** — found by `cascade-recorder` while obeying it.
-- `architecture` exported `git archive HEAD`, labelled it with a stale sha, and **refuted two of
-  its own published conclusions** when it re-ran pinned.
-
-**That is the base rate this plan is built on.** Six red-team assignments, none self-graded, and
-an explicit instruction to each reviewer to assume the thing in front of them is wrong. **The
-program's failure mode is not laziness — it is agents diagnosing a class and then producing an
-instance of it within the hour.** `flying_architecture` named it best: *"diagnosing a class does
-not immunise you against it."*
-
----
-
-## 5. SEQUENCE — what actually happens, in order
+## 5. SEQUENCE
 
 1. **`cascade-recorder`: the treatment dry run** (W1). Emit a tape, read it back **off disk**,
    confirm the header carries `dwellLevelRateMult=0.000` byte-for-byte. **Clears `G2`/`G10`.**
-2. **In the same dry run: a free-look block** (§0/W2). Nine columns must **vary or read 0** within
-   the episode. **Clears the green its author refused to claim.**
-3. **`harness`: fault-inject that check** (R2) — reintroduce the freeze, confirm the check fails.
-   **A green that cannot go red is not evidence.**
-4. **THE CARD ISSUES. Chad flies once.** Warm-up, free-look block, then the two blind blocks.
-5. **Red team fans out** (§2) — R1, R3, R5 to `architecture`; R4 to `cascade-recorder`; R6 to
-   `kernel-docs`. These do **not** block step 4; they run alongside.
-6. **Then, and only then, the jitter fix** (W4). The aim channel is located; a fix is a
-   registration written **before** the run that scores it, and the acceptance test already exists:
-   this statistic against v12's `1.03 /s`.
-
-**Steps 1–3 are hours of desk work, not a sortie.** Step 4 is the first time Chad flies since
-2026-08-02, and by then three gates are green instead of one.
+2. **THE CARD ISSUES. Chad flies once** — warm-up, then the two blind blocks. **First flight since
+   2026-08-02.**
+3. **`cascade-recorder`: R3**, independently re-deriving the aim-channel split — because **W2 is
+   built on it** and it was produced by another agent on their instrument.
+4. **Then the cascade fix** (W2): a pre-registered aim-channel dial move, scored against v12's
+   `1.03 /s`. **After `G-4` flies, so the control arm survives.**
+5. **Red team runs alongside**, blocking nothing.
 
 ---
 
-## 6. WHAT THIS PLAN REFUSES TO DO
+## 6. KNOWN LIMITS — real, out of scope, gating nothing
 
-- **It does not re-point `G-4`.** The registration is locked; the aim-channel finding does not
-  re-aim it; `C3` forbids it. The narrowing to *levelling drive* is a prose amendment, already
-  landed, moving no scored element.
-- **It does not ask Chad to choose between mechanisms.** *"Just everyone take my intent."*
-- **It does not add a bar, a gate or a doc that serves neither "fly" nor "record properly."**
-  This program's real risk now is not that it moves too fast — **it is that the apparatus grows
-  faster than the flying.** Chad has not flown since 2026-08-02. **Every item above either gets
-  him into the air or makes the tape from that flight trustworthy. Nothing else qualifies.**
+**Listed so they are not lost, and explicitly NOT prioritised. No agent should spend a day on
+these without Chad reopening them.**
+
+- **Free-look column freeze.** Nine columns froze during free-look; fixed at `f64b81a`; the fix is
+  unproven because no v3 tape contains a free-look frame (`keyMask ∈ {0,64}`, measured).
+  **Chad: free-look works fine. OUT OF SCOPE by his ruling of 2026-08-03, restated 2026-08-04.**
+  Owner `cascade-recorder`, whose own commit already states the success test. **It waits.**
+- **The `-dirty` build stamp is the stamp itself** (architecture, `PACKET-15 §4`). Fix in flight.
+- **`C3`'s v1-archive over-claim** — `audit_graph`'s only RED, marked EXPECTED. `harness`, `G-5`:
+  ledger it with an owner and a date.
+
+---
+
+## 7. WHY THIS PLAN ASSUMES ITS OWN AUTHORS ARE WRONG
+
+**Today's defects, all caught, four of them in the finder's own work:** `audit_graph` could not
+credit a named packet, hiding a six-packet backlog; the scanner written to fix it silently
+truncated a wrapped list; the CONTESTED check reported a file as disputed on a row saying the
+opposite; the `CLAIM2` registration misdescribed its own manipulation; `architecture` exported a
+moving `HEAD` and refuted two of its own published conclusions.
+
+**And the fifth was this document, caught by Chad, for dragging an out-of-scope mechanism into
+cascade work after ruling it out of scope in writing.**
+
+**That is the base rate.** Five red-team assignments, none self-graded, each told to assume the
+thing in front of it is wrong. `flying_architecture` put it best: **"diagnosing a class does not
+immunise you against it."**

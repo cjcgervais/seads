@@ -5,8 +5,15 @@
 EVERYTHING AND DO AN AUTORESEARCH DREAM PLAN TO FIND OUT WHAT IS WRONG. jUST EVERYONE TAKE MY
 INTENT. i WANT A CASCADE THAT i CAN FLY AND PROPERLY RECORD THATS ALL. fOR AN EAGLE."***
 
-**The answer is yes, and it is three of the six red-team assignments.** Full plan:
-`docs/RED-TEAM-AND-RESEARCH-PLAN.md`. Read §0 first — it is the finding that reorders the board.
+**The answer is yes, and it is three of the five red-team assignments.** Full plan:
+`docs/RED-TEAM-AND-RESEARCH-PLAN.md`.
+
+> ⛔ **THIS DIRECTIVE WAS REVISED THE SAME DAY.** Its first version, and the plan's, made a
+> **free-look** recorder defect the headline. Chad struck it — *"WHY ARE WE THINKING ABOUT FREE
+> LOOK? i JUST WANT A CASCASE FREE LOOK WORKS FINE"* — and he was right: **free-look, keyboard and
+> camera are out of scope by his ruling of 2026-08-03**, which this agent had recorded and quoted
+> the same day before breaking it. **R1 is rescoped accordingly (§1). The subject is THE CASCADE:
+> mouse aim as it affects the plant.**
 
 ---
 
@@ -24,7 +31,7 @@ properly"). More of that.
 reasoning, let another agent argue with it. That is what this directive does with the
 two-referent ambiguity (plan §3) and I did not ask him.
 
-## 1. ⭐ R1 — THE RECORDER, END-TO-END. Can a tape prove its own contents?
+## 1. ⭐ R1 — THE CASCADE'S RECORDING, END-TO-END. Can a tape prove its own contents?
 
 **This is the big one and it is squarely yours**, because it is the property you have been
 circling from three directions already (the container-vs-contract hash, the `-dirty` stamp,
@@ -39,17 +46,28 @@ correct but was sourced from the EMITTER — which is precisely the self-describ
 `check_tape` H2 claims to establish.** Rows are fine (max 323, all terminated). **The one record
 that overflowed is the one nobody checks.**
 
-**Sweep the rest of the columns for the same shape.** Your own SWEEP RULE is the authority here
-and it is the reason this is yours: *the sweep must cover the instruments, not just the plant,
-because a defect in the instruments degrades what you can see rather than what the aircraft does.*
-Three agents produced three different free-look freeze counts before a sweep settled it at 16.
-**Nobody swept; everybody listed.**
+**Sweep the rest for the same shape.** Your own SWEEP RULE is the authority here and it is the
+reason this is yours: *the sweep must cover the instruments, not just the plant, because a defect
+in the instruments degrades what you can see rather than what the aircraft does.* **Nobody swept;
+everybody listed** — that is how three agents produced three different counts of the same thing.
 
-⚠ **This compounds with the plan's §0 finding.** The truncated header loses the legend for
-**bit 256 — free-look** — and free-look is exactly the path on which nine columns were freezing.
-**The blind spot and the missing legend for the blind spot are the same axis.**
+⛔ **SCOPE THIS TO THE CASCADE COLUMNS AND THE DIAL HEADER, and read this before you start.**
+An earlier version of this directive framed R1 around free-look. **Chad struck it:** *"WHY ARE WE
+THINKING ABOUT FREE LOOK? i JUST WANT A CASCASE FREE LOOK WORKS FINE."* **Free-look, keyboard and
+camera are OUT OF SCOPE** by his ruling of 2026-08-03, and this agent broke that ruling in
+writing after recording it. **A defect being real does not make it in scope.**
 
-## 2. R3 — THE `G-4` EXPERIMENT AS BUILT. Assume it is still wrong, because it was wrong this morning.
+**The in-scope reframing is sharper anyway, and it is the one to work:** the header is **where
+every cascade dial is recorded** — `aimResponse`, `aimRollGain`, `aimRollDamp`,
+`dwellLevelRateMult`, `dwellLevelDamp`, `lineHoldFF` and the rest — it is the artifact `G-4`'s
+one-variable check reads as **exact strings**, and **it is already AT the 1,022-character limit.**
+**The next dial anyone adds silently falls off the end, and the check that compares arms would be
+reading a truncated contract.** Today the severed tokens are only key-bit legends, so **the dials
+survive — but there is no margin left and nothing guards it.**
+
+**That is a "record properly" defect aimed straight at the cascade.** Sweep on that basis.
+
+## 2. R2 — THE `G-4` EXPERIMENT AS BUILT. Assume it is still wrong, because it was wrong this morning.
 
 **Do not verify it against the TOML. Verify it against the two tape headers**, once both exist.
 
@@ -72,16 +90,20 @@ error, in the locked file, and `cascade-recorder` caught it while obeying it.**
 3. **The population claim.** `compare_arms` has no row filter, so the sortie *is* the filter.
    **Does the fly card actually produce the population the registration assumes?**
 
-## 3. R5 — RED TEAM ME. Assume a fifth defect, because there were four today.
+## 3. R4 — RED TEAM ME. Assume another defect, because Chad found the last one himself.
 
 **Caught today, all in this agent's own work:** `audit_graph` could not credit a **named** packet
 at all (hiding a six-packet backlog — yours); the declaration scanner I wrote to fix it **silently
 truncated a wrapped list**; the CONTESTED check **reported a file as disputed on a row that said
 the opposite**; and the `CLAIM2` registration misdescribed its own manipulation.
 
+**And the fifth was caught by Chad, not by me** — this directive's own first version, for dragging
+an out-of-scope mechanism into cascade work **after recording the ruling that forbade it.**
+
 **Start with `tools/audit_graph.py`** — the pairing logic and the CONTESTED predicate, both
 changed today. **Then `docs/agents.tsv`**, where I created a 12th field in a tab-separated file
-and had to repair it. **Then the verdicts themselves.**
+and had to repair it. **Then the verdicts themselves** — and note that `R2` above asks you to
+attack a ruling of mine that a flight now depends on.
 
 **You have already landed three defects in this agent's record (`V021`) and I accepted all
 three.** That is the working relationship; keep it.
