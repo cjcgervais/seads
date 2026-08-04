@@ -120,3 +120,59 @@ anything about `M1-PLANT-010`.**
 
 **Nothing changed in the eagle tree as a result of this. `yaw_line_gain` remains `0.0` and
 committed OFF.**
+
+---
+
+# ⛔ ADDENDUM 2 — the gain WAS registered on Chad's word, it FAILED its own bars, and it is reverted
+
+**Chad, verbatim, 2026-08-03: *"YOU HAVE MY WORD."*** Given in answer to two named items: the
+gain value, and the deliberate golden re-baseline.
+
+**Scope note, recorded rather than assumed:** the goldens live in `tests/`, which `V024` did
+**not** give this agent — `V024` gave `src/Kernel/**`. **His authorisation for the golden
+re-baseline is real but is the eagle's to execute**, and has been relayed rather than acted on.
+The gain is `src/Kernel/**` and was this agent's to set.
+
+## What was done, and what it cost
+
+A gap in this agent's own evidence was closed first: every earlier sweep ran on the
+**coordinated experiment arm**, never on the **shipped dials Chad would actually fly**. On the
+shipped config (`line_hold_ff = 1.0`, all four pointing dials PIN-gated and untouched):
+
+| `yaw_line_gain` | 1° | 3° | 5° | 10° | 30° dip |
+|---:|---:|---:|---:|---:|---:|
+| 0 (shipped) | 0.32 s | 0.36 | 0.40 | 0.56 | **1.15°** |
+| 2 | 0.23 | 0.25 | 0.27 | 0.38 | 2.49° |
+| **4** | **0.18** | **0.19** | **0.21** | **0.30** | **3.37°** |
+| 8 | 0.13 | 0.14 | 0.16 | 0.26 | 4.54° |
+
+**It roughly halves tracking time in the 1–10° band.** It buys **nothing** at 30° and makes the
+30° dip worse. `4.0` was registered on that basis, before the run that scores it
+(`SPEC-ACC-004`), and the full gate was then run.
+
+## ⛔ IT FAILED. 239/250, and three failures are NOT the goldens
+
+| failure | reading |
+|---|---|
+| **`SPEC-AIMFF-A01`** | ***A SPEC VIOLATION, and it fails at ANY nonzero gain.*** The clamp now bounds the TOTAL yaw to `±yaw_max`; `SPEC-AIMFF-002` requires the pedestal shape, whose result can reach `-yaw_max + yaw_coord`. Expected `-2.18166156`, got `-0.959931089`. **This is structural, not magnitude** — no gain makes it green |
+| **`SPEC-LINE-A01-15/30/60`** | flick closure degrades: `1.243°` vs bound `0.92`; `2.93` vs `1.08`; **`14.32` vs `4.50`** — 3× worse at 60° |
+| **`BAR-SMOOTH-PITCH`** | pitch body-rate full-reversal **`1.467 /s` vs the `1.1 /s` bound** (v12 measured `0.80`). **A smoothness regression — the opposite of "buttery"** |
+| goldens ×4 | move, as expected — a STOP by design |
+
+**REVERTED. `yaw_line_gain` is `0.0` and the eagle tree is clean.** The shape stays committed
+(`29b6491`) and off.
+
+## The honest conclusion, and it is not "pick a smaller gain"
+
+**`SPEC-AIMFF-002` gates everything.** The pedestal inversion — which *is* Chad's ruling, not a
+tuning choice — **structurally violates the clause as written.** Until that clause is amended,
+no value of `yaw_line_gain` can produce a green gate, so hunting for a smoothness-safe gain now
+would be tuning underneath a spec violation.
+
+**That amendment is already the eagle's live motion** (it is drafting the `M1` amendment this
+session). `SPEC-AIMFF-002` must join `M1-PLANT-002` and `S-8` on the reversed list — **it is the
+clause that encodes coordination-over-pointing, which is exactly what Chad reversed.** Nobody
+had identified it as in scope; the gate did.
+
+**Then, and only then:** re-tune the gain against `BAR-SMOOTH-PITCH` and `SPEC-LINE-A01`, which
+are real feel regressions and not bookkeeping.
