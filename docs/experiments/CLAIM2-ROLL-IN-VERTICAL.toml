@@ -17,23 +17,72 @@
 
 schema = "prereg-v1"
 
+# ============================================================================
+# AMENDMENT 1 -- 2026-08-04, kernel-docs. PROSE ONLY. NO SCORED ELEMENT MOVED.
+#
+# NO ARM DATA EXISTS. NOTHING HAS BEEN FLOWN. This amendment was made before
+# any tape from either arm was recorded, and it changes NONE of the four
+# elements clause C3 protects:
+#     variable + values   dwellLevelRateMult, 1.880 -> 0.000   UNCHANGED
+#     statistic           mean_abs(bankRaw)                    UNCHANGED
+#     threshold           2.0 deg                              UNCHANGED
+#     population/order    1800 rows, control-first, blind      UNCHANGED
+#
+# WHAT WAS WRONG, and it was mine: this file said 0.000 "structurally zeroes
+# the dwell channel." IT DOES NOT. Verified at source in BirdController's
+# computeMouseAim -- the multiply is followed, six lines later, by
+#     local dwellD = dd * rollRateN * dwellRamp
+#     dwellBoost   = dwellBoost - dwellD
+# and dwellD has NO dependence on dwellLevelRateMult. So at 0.000 the channel
+# is not off: dwellBoost = -dwellD, a pure unopposed S61c damper. MEASURED on
+# the flown design-input tape, over its 1,487 dwell-live rows: the damper is
+# 32.5% of |dwellB| (24.5% of total channel magnitude), non-zero on 1,152 rows.
+# Found by cascade-recorder while building the treatment arm; reproduced here.
+#
+# WHY THE EXPERIMENT SURVIVES: dwellLevelDamp = 0.750 is IDENTICAL in both arms
+# (see [arms.control] and [arms.treatment] below). The damper law flies in BOTH
+# arms, so the contrast is still attributable to the one registered variable.
+#
+# WHAT IT NARROWS: this tests removing the dwell LEVELING DRIVE, not removing
+# the dwell CHANNEL. A null result does NOT clear the dwell channel, because
+# the damper flew in both arms.
+#
+# NOT RE-POINTED: dwellLevelUniform=false is what actually kills the channel
+# (the code says so at :4788). It is NOT adopted here -- switching the variable
+# after the fact is precisely what C3 forbids. "Dwell channel off" is a SECOND
+# experiment with its own registration, not an edit to this one.
+#
+# Full ruling: docs/consults/G4-TREATMENT-DWELLD-CONFOUND-VERDICT.md
+# Original wording is struck in place below, never deleted.
+# ============================================================================
+
 [meta]
 experiment_id = "CLAIM2-ROLL-IN-VERTICAL"
 author = "kernel-docs agent (D:/mandalark-kernel), for Chad"
-hypothesis = "If the dwell servo is the source of the roll Chad feels in a straight-up deflection, then disabling it (dwellLevelRateMult 1.880 -> 0.000) reduces mean |bankRaw| across a sortie of repeated near-vertical pulls by at least 2.0 degrees."
+# STRUCK 2026-08-04 (amendment 1) -- "disabling it" is false; see the header block:
+#   hypothesis = "If the dwell servo is the source of the roll Chad feels in a straight-up deflection, then disabling it (dwellLevelRateMult 1.880 -> 0.000) reduces mean |bankRaw| across a sortie of repeated near-vertical pulls by at least 2.0 degrees."
+hypothesis = "If the dwell servo's LEVELING DRIVE is the source of the roll Chad feels in a straight-up deflection, then removing that drive (dwellLevelRateMult 1.880 -> 0.000, which leaves the S61c damper live and identical in both arms) reduces mean |bankRaw| across a sortie of repeated near-vertical pulls by at least 2.0 degrees."
 
 # The ONE variable. dwellBoost = dwellTerm * (C.dwellLevelRateMult or 1) at the
-# emitter, so 0.000 structurally zeroes the dwell channel without touching any
-# other law. It is a config key and appears in the tape header, so compare_arms.py
+# emitter. It is a config key and appears in the tape header, so compare_arms.py
 # can diff it and fail if anything else moved.
+#
+# STRUCK 2026-08-04 (amendment 1) -- this said "so 0.000 structurally zeroes the
+# dwell channel without touching any other law." FALSE. It zeroes the leveling
+# DRIVE; the S61c damper is subtracted downstream and survives (dwellBoost =
+# -dwellD). The damper is identical in both arms, so the A/B is unaffected; only
+# the CLAIM is narrowed. See the amendment block at the top of this file.
 [variable]
 name = "dwellLevelRateMult"
 control_value = "1.880"
 treatment_value = "0.000"
 
 # CONTROL = the shipped config, i.e. the aeroplane Chad flew when he reported
-# claim 2. TREATMENT = dwell off. Every other key below must be identical in both
-# tape headers.
+# claim 2. TREATMENT = dwell LEVELING DRIVE off, S61c damper RETAINED.
+# (STRUCK 2026-08-04, amendment 1: this said "TREATMENT = dwell off." False.)
+# Every other key below must be identical in both tape headers -- and note
+# dwellLevelDamp = "0.750" IS identical in both, which is exactly why the
+# surviving damper does not confound the contrast.
 [arms.control]
 config = { dwellLevelRateMult = "1.880", dwellLevelUniform = "true", dwellLevelDamp = "0.750", aimRollGain = "7.500", aimRollDamp = "0.580", aimHeadDamp = "0.450", aimResponse = "13.000", lineHoldFF = "1.000", aimBankFeedforward = "0.350", aimRollCeilingDeg = "85.000", aimPushMode = "false", aimFreeCursor = "true" }
 
@@ -43,10 +92,16 @@ config = { dwellLevelRateMult = "0.000", dwellLevelUniform = "true", dwellLevelD
 # THE STATISTIC MEASURES THE SYMPTOM, NOT THE MECHANISM.
 #
 #   bankRaw is the bank angle the aircraft actually held — "the roll that is in it",
-#   which is what Chad reports feeling. It is deliberately NOT rollBstApp (ord 36):
-#   rollBstApp is the dwell channel itself and is zero in the treatment arm BY
-#   CONSTRUCTION, so testing it would be circular — it would prove only that the
-#   knob we turned off is off.
+#   which is what Chad reports feeling. It is deliberately NOT rollBstApp (ord 36).
+#
+#   STRUCK 2026-08-04 (amendment 1). The original reason was FALSE and this is the
+#   load-bearing instance, because it was the stated justification for the choice:
+#     "rollBstApp is the dwell channel itself and is zero in the treatment arm BY
+#      CONSTRUCTION, so testing it would be circular."
+#   rollBstApp is NOT zero in the treatment arm — it equals -dwellD, non-zero on
+#   1,152 rows of the design-input tape. THE CHOICE OF bankRaw STILL STANDS, on the
+#   better reason that was always the real one: it measures the SYMPTOM Chad
+#   reports, not the mechanism we are manipulating.
 #
 # THRESHOLD DERIVATION — the one judgement call in this file, stated not hidden:
 #   On the flown v3 tape (sha b85c43bb..), mean |bankRaw| at aimElev > 45 deg is

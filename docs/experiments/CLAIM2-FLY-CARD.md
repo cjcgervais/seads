@@ -60,17 +60,34 @@ something and you can't name it, say the something.
 | **why that number** | on the flown tape of 2026-08-03, mean \|bank\| at near-vertical aim is **8.43°**. 2.0° is about a quarter of that — big enough to be felt, far above the noise of the column |
 | **floor** | 1,800 rows (30 s) per block, or the tool refuses to conclude anything |
 
-**It deliberately does NOT measure the dwell channel itself.** That channel is the thing being
-switched off, so measuring it would only prove the switch works. It measures **the symptom you
+**It deliberately does NOT measure the dwell channel itself.** It measures **the symptom you
 reported.**
+
+### ⚠ What the second block actually changes — corrected 2026-08-04, before the flight
+
+**One block has the dwell servo's *levelling push* turned off. It does NOT have the whole dwell
+channel turned off** — the servo's own *damper* is still running, in **both** blocks, unchanged.
+
+I had this wrong in the registration and said "dwell off." The build agent found it while
+building the block and was right: turning that dial to zero removes the push but leaves the
+damper, which is about a third of what that channel does. **The comparison is still clean —
+the damper is identical in both blocks, so anything that differs is still the one thing I
+changed.** It just means the answer is narrower than I first wrote, and the wording below is
+the corrected version.
+
+**One thing to notice, not a problem:** the second block is a configuration this aeroplane has
+arguably never flown — damper with no push. It can only ever *resist* roll, so it should feel
+calmer if anything, never looser. **If it feels loose or divergent, that is worth saying.**
 
 ### What the outcomes mean — written now, so nothing can be rationalised later
 
-- **Blocks differ by ≥ 2.0°** → the dwell servo is a real contributor to the roll you feel.
-  A named cause, and something to fix.
-- **Blocks differ by < 2.0°** → **the dwell servo is not the cause.** That is a real result,
-  not a wasted flight — it removes the prime suspect and the search moves to the aim channel,
-  which carried 71.4% of the roll on the last tape.
+- **Blocks differ by ≥ 2.0°** → the dwell servo's **levelling push** is a real contributor to
+  the roll you feel. A named cause, and something to fix.
+- **Blocks differ by < 2.0°** → **the levelling push is not the cause.** That is a real result,
+  not a wasted flight — the search moves to the aim channel, which carried 71.4% of the roll
+  magnitude and, on the 2026-08-04 attribution, **essentially all of the jitter**.
+  ⚠ **It does not clear the dwell channel outright**, because the damper flew in both blocks.
+  Clearing the whole channel would be a separate flight with its own card.
 - **Your feel disagrees with the numbers** → **the instrument is wrong and gets rebuilt.**
   Not you. (`THE LAW` clause 3.)
 
