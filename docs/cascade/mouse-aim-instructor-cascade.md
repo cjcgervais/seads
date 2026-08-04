@@ -94,11 +94,16 @@ plant-limited rate. This is what makes uncapped loops and sustained hard turns p
 > *(Descriptive only — one tape, no control arm. The pre-registered A/B for it is
 > `docs/experiments/CLAIM2-ROLL-IN-VERTICAL.toml`.)*
 >
-> **(b) `aimGate` — keyboard suppresses the whole aim path.** `aimGate = 0` if any of
-> `kb.pitch/roll/yaw` is non-zero, else `1`, and **both** the aim term and the dwell term are
-> multiplied by it. So a single flight-axis key mutes mouse-aim roll entirely. The doc's
-> *"Keyboard adds on top"* (§Feel) is **wrong as written**: the keyboard does not add on top of
-> the aim, it **replaces** it.
+> **(b) SCOPE — Chad, 2026-08-03, verbatim:** *"THE AIM IS THE MOUSER AIM, NOT THE NOSE… THE
+> MOUSE AIM IS INDEPENDENT OF QWEASD… mOUSE AIM CASCADE ONLY AS IT AFFECTS THE PLANT."*
+>
+> **The mouse aim is a world-anchored cursor and QWEASD never touches it.** Keys change the
+> **plane's direction**, not the aim. **This entry covers the mouse-aim cascade as it reaches
+> the plant, and nothing else.**
+>
+> *An earlier version of this note editorialised about the keyboard path and was twice
+> corrected by Chad. It is withdrawn in full; §Feel stands as written. Keyboard behaviour is
+> out of scope for this entry.*
 >
 > **(c) The coordinated-turn description below is superseded in intent.** `M1-PLANT-002` is
 > overruled: the rudder leads and may point. `V025` calibrates it — *"yaw leads, bank still

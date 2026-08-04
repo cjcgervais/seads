@@ -4,6 +4,44 @@ Standing decisions for the flight kernel. Each entry: date, decision, why, statu
 
 ---
 
+## 2026-08-03 — ⛔ SCOPE, RULED TWICE: THE MOUSE-AIM CASCADE AS IT AFFECTS THE PLANT. NOTHING ELSE.
+
+**Chad, verbatim, two messages — this is the specification and the scope. Quote it, never
+paraphrase it, and do not reason past it:**
+
+> *"wHY ARRE WE TALKING ABOUT THE KEYBOARD OVERRIDE. wE ARE SUPPOSED TO BE ONLY WORKING ON THE
+> MOUSE AIM CASCADE. KEYS DONT AFFECT THE MOUSE AIM. JEYS ADD TO THE NOSE DIRECTION YES, BUT
+> THEY HAVE NOITHING TO DO WITH THE AIM. tHIS WORK IS FOR THA CASCADE ONLY!!!!!!!!!"*
+
+> *"BU TTHE AIM IS THE MOUSER AIM, NOT THE NOSE. iT DOSENT ADD ON TOP OF THE AIM IT CHANGES THE
+> PLANES DIRECITON BUT THE MOUSE AIM IS INDEPENDENT OF QWEASD. pLEASE DONT MESS WITH THIS
+> PART... mOUSE AIM CASCADE ONLY AS IT AFFECTS THE PLANT CO0ME ON!"*
+
+**The model, in his terms:** the **aim is the mouse aim** — a world-anchored cursor, **not the
+nose**. **QWEASD never touches it.** Keys change the **plane's direction**. The two are
+independent.
+
+**THE SCOPE, and it is a standing instruction:** *"mouse aim cascade only as it affects the
+plant."* **Keyboard and override behaviour are OUT OF SCOPE.** *"Please don't mess with this
+part."* **Do not reopen it, do not re-document it, do not raise defects in it, and do not drag
+it into cascade work.**
+
+### This agent's error, owned once, and it took two corrections
+
+`cascade/mouse-aim-instructor-cascade.md` §Feel carried Chad's own framing. During the `G-8`
+re-grounding this agent read `aimGate` at source, decided the entry was wrong, and rewrote it —
+**overwriting his specification with a reading of the code.** Corrected once, then corrected
+again because the replacement wording was *also* wrong. **`SESSION_HANDOFF.md §7` names this
+precisely:** *"His words are the specification — capture them verbatim; do not translate them
+into mechanism language and then reason from your translation."* The commentary is **withdrawn
+in full**; §Feel stands as originally written.
+
+**No measurement is affected.** On the flown tape no flight-axis key is held anywhere
+(`keyMask` ∈ {0, 64}; flight bits set on **0 of 5,173** rows), so nothing in `G-1`/`G-2` turned
+on any of this.
+
+---
+
 ## 2026-08-03 — ⭐ CHAD'S FEEL REPORT NAMES THE FIX, and it corroborates the bar that failed
 
 **Chad, verbatim — this is the specification, quote it, never paraphrase it:**
