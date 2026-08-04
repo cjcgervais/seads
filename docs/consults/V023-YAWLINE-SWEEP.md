@@ -69,3 +69,54 @@ touches this:
 
 **Nothing was registered, no dial was taken, the denominator did not move, and no spec clause
 was edited.**
+
+---
+
+# ⛔ ADDENDUM 2026-08-03 — H1 IS REFUTED. The dip is NOT gone; the INSTRUMENT went blind.
+
+§3 above offered two readings of the zero-entry result and refused to pick one. **Measured now,
+and the answer is the unfavourable one.** The dip scenario was run at both gains with `blend`
+and `nose_elev` instrumented directly (scratchpad copy; the eagle tree was not touched).
+
+| | `yaw_line_gain = 0` (shipped) | `yaw_line_gain = 4` |
+|---|---:|---:|
+| max `blend` | **1.0000** | **0.1558** |
+| first tick `blend >= 1` | 117 | **never** |
+| qualifying entries | 1 | **0** |
+| `nose_elev` minimum | **−1.066°** | **−1.377°** |
+
+**H1 — "the parasitic dip is eliminated, `M1-PLANT-010` satisfied in the plant" — is REFUTED.**
+The nose still dips, and its minimum is **deeper**, not shallower.
+
+**H2 — "the scenario stopped qualifying entries" — is CONFIRMED, with a mechanism.** The
+bank-turn barely engages: `blend` peaks at `0.156` and never reaches `1`, so
+`SPEC-PRED-007`'s entry condition is never met. Yaw resolves the aim flick before the bank-turn
+can commit — which is *"lead with yaw"* working exactly as ruled, and is precisely why the
+instrument stops seeing anything.
+
+## Why this matters more than the sweep above
+
+**`BAR-STRAIGHTLINE-DIP` goes INERT under a yaw-led kernel.** A bar whose entry predicate
+depends on the bank-turn committing cannot measure a kernel in which the bank-turn no longer
+commits. That is this program's named failure class — *a check that stops matching is not a
+passing check* (`CONTRACTS.tsv`, INERT-CHECK LAW) — arriving inside the eagle's own gate, caused
+by this change. **The gate's refusal to score it was correct and is the only reason this was
+visible at all.**
+
+## ⚠ A CORRECTION TO GUIDANCE THIS AGENT PROPAGATED
+
+`PACKET-11-VERDICT.md` §2 and the eagle's `blocked_on` both carry architecture's instruction that
+**`M1-PLANT-010` is "NOT reversed — SATISFIED"** and must not be deleted from `M1`.
+
+**That claim is now unsupported by measurement.** `M1-PLANT-010` demands the straight-line
+property be *a property of the plant*. On this evidence V023 does **not** deliver it: the dip
+persists and is slightly worse. **The clause should be neither deleted nor marked satisfied —
+it is UNDEMONSTRATED, and its instrument no longer works.**
+
+**For the eagle, drafting the M1 amendment now:** do not write "satisfied" into `M1` on the
+strength of PACKET-12 §6 or PACKET-13 §5. Both were reasoned before anyone ran the scenario.
+**Re-instrumenting the straight-line bar for a yaw-led kernel is a prerequisite to claiming
+anything about `M1-PLANT-010`.**
+
+**Nothing changed in the eagle tree as a result of this. `yaw_line_gain` remains `0.0` and
+committed OFF.**
