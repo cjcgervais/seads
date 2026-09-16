@@ -84,7 +84,7 @@ TEST_CASE("flaps: the plant slews toward the command (deploy is physics)") {
     in.flap_cmd = 1.0f;
     in.gear_cmd = 1.0f;
     // One tick moves exactly slew*dt (boundary-exact, the S4a discipline).
-    const sim::SimState s1 = sim::step(s, in, kAp, kAp.sim_dt);
+    const sim::SimState s1 = sim::step(s, in, kAp, nullptr, kAp.sim_dt);
     CHECK(s1.flap == kAp.flap_slew * kAp.sim_dt);
     CHECK(s1.gear == kAp.gear_slew * kAp.sim_dt);
     // Reaches the target and HOLDS (no overshoot past the clamp).
@@ -92,15 +92,15 @@ TEST_CASE("flaps: the plant slews toward the command (deploy is physics)") {
     const int deploy_ticks =
         static_cast<int>(std::ceil(1.0 / (kAp.flap_slew * kAp.sim_dt))) + 2;
     for (int i = 0; i < deploy_ticks; ++i)
-        cur = sim::step(cur, in, kAp, kAp.sim_dt);
+        cur = sim::step(cur, in, kAp, nullptr, kAp.sim_dt);
     CHECK(cur.flap == 1.0);
     // Retract: command 0 walks it back down.
     in.flap_cmd = 0.0f;
-    cur = sim::step(cur, in, kAp, kAp.sim_dt);
+    cur = sim::step(cur, in, kAp, nullptr, kAp.sim_dt);
     CHECK(cur.flap == 1.0 - kAp.flap_slew * kAp.sim_dt);
     // A clean airframe at 0 command stays EXACTLY 0 (the bit-identity arm's
     // slew leg: clamp(0-0) == 0).
-    const sim::SimState c1 = sim::step(s, sim::Inputs{}, kAp, kAp.sim_dt);
+    const sim::SimState c1 = sim::step(s, sim::Inputs{}, kAp, nullptr, kAp.sim_dt);
     CHECK(c1.flap == 0.0);
     CHECK(c1.gear == 0.0);
 }
@@ -121,13 +121,13 @@ TEST_CASE(
     // base lift (0 at alpha = 0), and drag (along -vhat, perpendicular to
     // body_up here) all cancel — the residual body-up acceleration IS the
     // flap's dCl shift, exactly.
-    const sim::SimState c1 = sim::step(s, in, kAp, kAp.sim_dt);
+    const sim::SimState c1 = sim::step(s, in, kAp, nullptr, kAp.sim_dt);
     // Deployed (state.flap set directly — the slewed position, not the cmd;
     // hold it with a matching command so the slew doesn't walk it).
     sim::SimState sf = s;
     sf.flap = 1.0;
     in.flap_cmd = 1.0f;
-    const sim::SimState f1 = sim::step(sf, in, kAp, kAp.sim_dt);
+    const sim::SimState f1 = sim::step(sf, in, kAp, nullptr, kAp.sim_dt);
     const double dv_up_delta =
         glm::dot(f1.velocity - c1.velocity, body_up) / kAp.sim_dt;
     // Expected: q*S*dCl_flap/m along body-up (lift axis == body_up here:
@@ -178,8 +178,8 @@ TEST_CASE(
     sim::SimState sf = s;
     sf.flap = 1.0;
     in.flap_cmd = 1.0f;
-    const sim::SimState clean = sim::step(s, sim::Inputs{}, kAp, kAp.sim_dt);
-    const sim::SimState flapped = sim::step(sf, in, kAp, kAp.sim_dt);
+    const sim::SimState clean = sim::step(s, sim::Inputs{}, kAp, nullptr, kAp.sim_dt);
+    const sim::SimState flapped = sim::step(sf, in, kAp, nullptr, kAp.sim_dt);
     CHECK(glm::length(flapped.velocity) < glm::length(clean.velocity));
     const glm::dvec3 body_up = s.orientation * glm::dvec3{0.0, 1.0, 0.0};
     const double dv_up = glm::dot(flapped.velocity - clean.velocity, body_up);
@@ -199,8 +199,8 @@ TEST_CASE(
     sg.gear = 1.0;
     sim::Inputs in;
     in.gear_cmd = 1.0f;
-    const sim::SimState clean = sim::step(s, sim::Inputs{}, kAp, kAp.sim_dt);
-    const sim::SimState geared = sim::step(sg, in, kAp, kAp.sim_dt);
+    const sim::SimState clean = sim::step(s, sim::Inputs{}, kAp, nullptr, kAp.sim_dt);
+    const sim::SimState geared = sim::step(sg, in, kAp, nullptr, kAp.sim_dt);
     CHECK(glm::length(geared.velocity) < glm::length(clean.velocity));
     const glm::dvec3 body_up = s.orientation * glm::dvec3{0.0, 1.0, 0.0};
     CHECK(std::abs(glm::dot(geared.velocity - clean.velocity, body_up)) < 1e-9);
@@ -297,7 +297,7 @@ TEST_CASE(
         }
         const glm::dvec3 v = s.velocity;
         const DeployedPower P = deployed_power_config(s, in, kAp);
-        const sim::SimState next = sim::step(s, in, kAp, kAp.sim_dt);
+        const sim::SimState next = sim::step(s, in, kAp, nullptr, kAp.sim_dt);
         const double plant_work = kAp.mass * glm::dot(v, next.velocity - v);
         residual += std::abs(plant_work - P.net * kAp.sim_dt);
         throughput += P.comp * kAp.sim_dt;
@@ -324,14 +324,14 @@ TEST_CASE("flaps: instructor passthrough (throttle pattern), incl. GROUNDED") {
     in.gear_cmd = 0.3;
     control::Internal internal = control::reset();
     const control::Output o =
-        control::step(s, in, internal, kAp, kCp, kAp.sim_dt);
+        control::step(s, in, internal, kAp, kCp, nullptr, kAp.sim_dt);
     CHECK(o.inputs.flap_cmd == static_cast<float>(0.7));
     CHECK(o.inputs.gear_cmd == static_cast<float>(0.3));
     // GROUNDED passes the device commands through like throttle (no one-tick
     // retract twitch under a held setting on a spawn/mode-toggle tick).
     in.grounded = true;
     const control::Output g =
-        control::step(s, in, internal, kAp, kCp, kAp.sim_dt);
+        control::step(s, in, internal, kAp, kCp, nullptr, kAp.sim_dt);
     CHECK(g.inputs.flap_cmd == static_cast<float>(0.7));
     CHECK(g.inputs.gear_cmd == static_cast<float>(0.3));
     // Out-of-range commands clamp (caller robustness, the throttle clamp).
@@ -339,7 +339,7 @@ TEST_CASE("flaps: instructor passthrough (throttle pattern), incl. GROUNDED") {
     in.flap_cmd = 1.7;
     in.gear_cmd = -0.4;
     const control::Output c =
-        control::step(s, in, internal, kAp, kCp, kAp.sim_dt);
+        control::step(s, in, internal, kAp, kCp, nullptr, kAp.sim_dt);
     CHECK(c.inputs.flap_cmd == 1.0f);
     CHECK(c.inputs.gear_cmd == 0.0f);
 }

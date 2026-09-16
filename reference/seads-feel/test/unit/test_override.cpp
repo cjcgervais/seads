@@ -131,7 +131,7 @@ TEST_CASE("4c override: overridden axis integrator is frozen, not zeroed") {
     in.override_sign[kPitch] = 1.0;  // full pitch-up
 
     const control::Output o =
-        control::step(s, in, internal, kAp, kCp, kAp.sim_dt);
+        control::step(s, in, internal, kAp, kCp, nullptr, kAp.sim_dt);
     // Pitch integral FROZEN at trim (bit-exact: it is never touched).
     CHECK(o.internal.integ[kPitch] == trim[kPitch]);
     // The other axes integrated (coordination on the injected sideslip gives
@@ -174,7 +174,7 @@ TEST_CASE("4c override: pursuit suspended kills pointing, keeps coordination") {
             in.override_mask[kPitch] = true;
             in.override_sign[kPitch] = 1.0;
         }
-        return control::step(s, in, control::reset(), kAp, kCp, kAp.sim_dt);
+        return control::step(s, in, control::reset(), kAp, kCp, nullptr, kAp.sim_dt);
     };
 
     const control::Output live = run(false);
@@ -209,13 +209,13 @@ TEST_CASE("4c override: pursuit suspended kills pointing, keeps coordination") {
         in.throttle = 0.7;
         in.override_mask[kPitch] = true;
         in.override_sign[kPitch] = 1.0;
-        return control::step(s, in, control::reset(), kAp, flat, kAp.sim_dt);
+        return control::step(s, in, control::reset(), kAp, flat, nullptr, kAp.sim_dt);
     }();
     control::Input dz_in;
     dz_in.target_dir_world = nose;  // deadzone: pointing off, coordination on
     dz_in.throttle = 0.7;
     const control::Output dz =
-        control::step(s, dz_in, control::reset(), kAp, flat, kAp.sim_dt);
+        control::step(s, dz_in, control::reset(), kAp, flat, nullptr, kAp.sim_dt);
     CHECK(held_flat.telem.omega_des.y < 0.0);
     CHECK(
         held_flat.telem.omega_des.y ==
@@ -350,7 +350,7 @@ TEST_CASE(
     mouse.target_dir_world = aim;
     mouse.throttle = 0.7;
     const control::Output prot =
-        control::step(s, mouse, base, kAp, kCp, kAp.sim_dt);
+        control::step(s, mouse, base, kAp, kCp, nullptr, kAp.sim_dt);
     REQUIRE(prot.telem.omega_des.x < 0.0);  // protection pushed the demand down
     CHECK(prot.inputs.pitch < 0.0f);
 
@@ -365,7 +365,7 @@ TEST_CASE(
     control::Input keys = mouse;
     keys.override_mask[kPitch] = true;
     keys.override_sign[kPitch] = 1.0;
-    const control::Output o = control::step(s, keys, ovr, kAp, kCp, kAp.sim_dt);
+    const control::Output o = control::step(s, keys, ovr, kAp, kCp, nullptr, kAp.sim_dt);
     CHECK(o.telem.omega_des.x < 0.0);  // in-envelope: AoA pushback, not a pull
     CHECK(o.inputs.pitch < 1.0f);      // NOT full up (bypass gone)
     CHECK(o.inputs.pitch < 0.0f);      // obeys the AoA clamp, like mouse aim
@@ -406,7 +406,7 @@ TEST_CASE("4c override: BALLISTIC attitude-hold is suspended under override") {
             in.override_mask[kPitch] = true;
             in.override_sign[kPitch] = 1.0;
         }
-        return control::step(s, in, control::reset(), kAp, kCp, kAp.sim_dt);
+        return control::step(s, in, control::reset(), kAp, kCp, nullptr, kAp.sim_dt);
     };
     const control::Output live = run(false);
     const control::Output held = run(true);
@@ -478,7 +478,7 @@ TEST_CASE("4c override: step is pure with override state populated") {
     in.override_sign[kPitch] = 1.0;
 
     const control::Output a =
-        control::step(s, in, internal, kAp, kCp, kAp.sim_dt);
+        control::step(s, in, internal, kAp, kCp, nullptr, kAp.sim_dt);
     CHECK(before.integ == internal.integ);
     CHECK(before.ovr_ramp == internal.ovr_ramp);
     CHECK(before.pursuit == internal.pursuit);
@@ -486,7 +486,7 @@ TEST_CASE("4c override: step is pure with override state populated") {
     CHECK(before.held_bank == internal.held_bank);
 
     const control::Output b =
-        control::step(s, in, internal, kAp, kCp, kAp.sim_dt);
+        control::step(s, in, internal, kAp, kCp, nullptr, kAp.sim_dt);
     CHECK(a.inputs.pitch == b.inputs.pitch);
     CHECK(a.inputs.yaw == b.inputs.yaw);
     CHECK(a.inputs.roll == b.inputs.roll);

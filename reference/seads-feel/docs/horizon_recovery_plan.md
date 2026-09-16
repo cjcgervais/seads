@@ -1,3 +1,5 @@
+> **LANDED (2026-07-07).** S7-hrz + S7-nest were implemented, flown ("totally perfect"), and merged — see §11/§12. The "Status: PLANNED" line below is the frozen plan-time snapshot; this doc is now the design record.
+
 # Horizon recovery — righting the world after a split-S (plan, 2026-07-07)
 
 *Status: PLANNED, nothing implemented. Consulted with Chad 2026-07-07; this doc is the

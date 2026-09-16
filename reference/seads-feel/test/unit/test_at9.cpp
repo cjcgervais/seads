@@ -156,8 +156,9 @@ RunResult run_at(double frame_dt, int n_frames, double throttle,
                 }
             }
         }
-        const app::FrameResult fr = app::step_frame(
-            r.loop, accum, frame_dt, fin, pending_dx, pending_dy, kAp, cp);
+        const app::FrameResult fr =
+            app::step_frame(r.loop, accum, frame_dt, fin, pending_dx,
+                            pending_dy, kAp, cp, nullptr);
         cum += fr.ticks;
         r.rate_integral += fr.aim_rate_dt_sum;
         r.max_capture =
@@ -177,6 +178,47 @@ bool exact_eq(const glm::dquat& a, const glm::dquat& b) {
 }
 
 }  // namespace
+
+// rig-B: FrameResult.last_inputs forwards the Inputs FED to sim::step on the
+// LAST tick — the report the Fleet Rig poses the PLAYER's control surfaces
+// from. A dead report field is invisible to the goldens/mirror (the consumed_dx
+// / M1 class Fable before-consult flagged), so pin it: a RAW-mode frame feeds a
+// KNOWN stick, so last_inputs must equal it exactly; and a 0-tick frame leaves
+// it at the default {} so the caller carries the previous command.
+TEST_CASE("rig-B: step_frame reports the last-tick commanded Inputs") {
+    const glm::dvec3 up{1.0, 0.0, 0.0}, heading{0.0, 0.0, -1.0};
+    const sim::SimState s = harness::level_state(kAp, 140.0, 1.0, up, heading);
+
+    app::FrameInput fin;
+    fin.raw_mode = true;
+    fin.raw_in.pitch = 0.4f;
+    fin.raw_in.roll = -0.2f;
+    fin.raw_in.yaw = 0.1f;
+    fin.raw_in.throttle = 0.6f;
+
+    // A ticking frame: last_inputs == the raw stick fed to sim::step.
+    app::LoopState loop = flying(s);
+    app::Accumulator accum(kAp.sim_dt);
+    double pdx = 0.0, pdy = 0.0;
+    const app::FrameResult fr = app::step_frame(
+        loop, accum, 4.0 * kAp.sim_dt, fin, pdx, pdy, kAp, kCp, nullptr);
+    REQUIRE(fr.ticks > 0);
+    REQUIRE(fr.last_inputs.pitch == fin.raw_in.pitch);
+    REQUIRE(fr.last_inputs.roll == fin.raw_in.roll);
+    REQUIRE(fr.last_inputs.yaw == fin.raw_in.yaw);
+    REQUIRE(fr.last_inputs.throttle == fin.raw_in.throttle);
+
+    // A 0-tick frame (dt < one sim tick from a fresh accumulator): no tick, so
+    // last_inputs stays default {} — the caller keeps the prior command.
+    app::LoopState loop0 = flying(s);
+    app::Accumulator accum0(kAp.sim_dt);
+    double p0 = 0.0, q0 = 0.0;
+    const app::FrameResult fr0 = app::step_frame(
+        loop0, accum0, 0.1 * kAp.sim_dt, fin, p0, q0, kAp, kCp, nullptr);
+    REQUIRE(fr0.ticks == 0);
+    REQUIRE(fr0.last_inputs.pitch == 0.0f);
+    REQUIRE(fr0.last_inputs.throttle == 0.0f);
+}
 
 TEST_CASE("AT-9: 30 fps and 240 fps fly the bit-identical trajectory") {
     const glm::dvec3 up{1.0, 0.0, 0.0}, heading{0.0, 0.0, -1.0};
@@ -239,6 +281,14 @@ TEST_CASE("AT-9: 30 fps and 240 fps fly the bit-identical trajectory") {
     CHECK(exact_eq(slow.loop.internal.integ, fast.loop.internal.integ));
     CHECK(exact_eq(slow.loop.aim.q, fast.loop.aim.q));
 
+    // tick_count (little_planet Stage 1): TICK-derived celestial time must be
+    // frame-rate independent — both runs stepped kTotalTicks ticks, so the
+    // count is identical AND equal to the wall-time-derived truth. A mutation
+    // dropping the increment leaves it 0 (!= 600); making it per-FRAME diverges
+    // 150 vs 1200. This is why t_cel is tick_count*sim_dt, never GetTime().
+    CHECK(slow.loop.tick_count == kTotalTicks);
+    CHECK(fast.loop.tick_count == kTotalTicks);
+
     // Companion 2 (Fable P0-1): EFFICACY. A pure `==` also survives dropping
     // the mouse->aim entirely (both runs then fly the same hands-off path).
     // Assert the scripted flicks actually moved the flight vs a null-input run,
@@ -282,6 +332,7 @@ TEST_CASE("AT-9 aim-ff: shipped gain keeps the cross-rate integral and aim") {
     const sim::SimState s0 =
         harness::level_trim_state(kAp, 150.0, 4000.0, up, heading, &thr);
     REQUIRE(kCp.aim_ff_gain > 0.0);  // premise: the shipped table flies the FF
+
     // Machine retired in the committed table (carry 0); this leg pins the
     // PARKED machinery for the walk-back — its widened 15 m bound is
     // JUSTIFIED by the capture event firing, so it self-arms at the
@@ -372,8 +423,8 @@ app::LoopState post_crash_frame(const app::FrameInput& fin) {
     app::LoopState loop = flying(s);
     app::Accumulator accum(kAp.sim_dt);
     double pdx = 0.0, pdy = 0.0;
-    const app::FrameResult fr =
-        app::step_frame(loop, accum, 4.0 * kAp.sim_dt, fin, pdx, pdy, kAp, kCp);
+    const app::FrameResult fr = app::step_frame(
+        loop, accum, 4.0 * kAp.sim_dt, fin, pdx, pdy, kAp, kCp, nullptr);
     REQUIRE(fr.ticks == 4);  // exact 4-tick frame regardless of the input
     REQUIRE(fr.respawned);   // the dive crashed within the frame
     return loop;
@@ -421,8 +472,8 @@ sim::SimState expected_post_crash(bool raw) {
     ho.raw_mode = raw;
     ho.throttle = e.curr.throttle;  // reborn at cruise (F2)
     ho.raw_in.throttle = static_cast<float>(e.curr.throttle);
-    app::tick(e, ho, kAp, kCp);  // tick 2: GROUNDED
-    app::tick(e, ho, kAp, kCp);  // tick 3: flying, hands-off
+    app::tick(e, ho, kAp, kCp, nullptr);  // tick 2: GROUNDED
+    app::tick(e, ho, kAp, kCp, nullptr);  // tick 3: flying, hands-off
     return e.curr;
 }
 }  // namespace
@@ -467,6 +518,13 @@ TEST_CASE(
     CHECK(held.fl.freelook_prev == false);
     CHECK(held.fl.override_used == false);
     CHECK(held.fl.easeback == 0.0);
+
+    // tick_count is MONOTONE across the crash-reset (little_planet Stage 1):
+    // celestial time survives the plane's death. The frame stepped 4 ticks
+    // (crash on tick 1 did NOT reset the counter), so both arms read 4. A
+    // mutant that resets tick_count in the crash branch reads < 4 here.
+    CHECK(held.tick_count == 4);
+    CHECK(off.tick_count == 4);
 }
 
 // The crash predicate + neutralization are MODE-COMMON: raw mode reaches them
@@ -572,7 +630,7 @@ app::LoopState ref_compose(const std::vector<Frame>& sched,
                 pdx = pdy = 0.0;
                 consumed = true;
             }
-            const app::TickResult r = app::tick(loop, in, kAp, kCp);
+            const app::TickResult r = app::tick(loop, in, kAp, kCp, nullptr);
             if (consuming) fwd_rate = r.aim_rate_ff;
             if (r.respawned) {
                 rin = sim::Inputs{};
@@ -612,8 +670,8 @@ app::LoopState sf_compose(const std::vector<Frame>& sched,
         }
         pdx += fm.mdx;
         pdy += fm.mdy;
-        const app::FrameResult fr =
-            app::step_frame(loop, accum, fm.frame_dt, fin, pdx, pdy, kAp, kCp);
+        const app::FrameResult fr = app::step_frame(
+            loop, accum, fm.frame_dt, fin, pdx, pdy, kAp, kCp, nullptr);
         // This schedule never crashes (high alt): the respawned flag must be
         // FALSE every frame. Nothing else pins the false case, yet main.cpp
         // keys its persistent-device reset on it — a stuck-true flag re-zeroes
@@ -639,7 +697,9 @@ bool loopstate_eq(const app::LoopState& a, const app::LoopState& b) {
            a.grounded == b.grounded &&
            a.fl.override_used == b.fl.override_used &&
            a.fl.freelook_prev == b.fl.freelook_prev &&
-           a.fl.easeback == b.fl.easeback;
+           a.fl.easeback == b.fl.easeback &&
+           a.tick_count ==
+               b.tick_count;  // Stage 1: celestial time in the mirror
 }
 }  // namespace
 

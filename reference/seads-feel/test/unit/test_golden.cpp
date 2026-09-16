@@ -30,7 +30,7 @@ TEST_CASE(
     int next_checkpoint = 0;
 
     for (int tick = 1; tick <= harness::kGoldenTicks; ++tick) {
-        s = sim::step(s, harness::golden_input(tick - 1), p, p.sim_dt);
+        s = sim::step(s, harness::golden_input(tick - 1), p, nullptr, p.sim_dt);
 
         if (tick % harness::kGoldenCheckpointEvery != 0) continue;
         REQUIRE(next_checkpoint < static_cast<int>(std::size(golden::kFlight)));

@@ -130,7 +130,7 @@ inline app::TickResult drive(app::LoopState& st, MiniCamera& cam,
     in.throttle = 1.0;
     in.cam_fwd = cam.cam_fwd;  // previous tick's basis (one-tick lag)
     in.cam_up = cam.cam_up;
-    const app::TickResult r = app::tick(st, in, p, cp);
+    const app::TickResult r = app::tick(st, in, p, cp, nullptr);
     // S-orient (Q3): the ORIENT verb's hard camera cut fires BEFORE the frame's
     // camera advance (P2b red-team fix), mirroring main.cpp's shipped order:
     // step_frame -> `if (fr.orient_fired) cam_fwd = loop.aim.forward()` (the
@@ -276,7 +276,7 @@ inline void comfort_turnsteady_keys(const sim::AircraftParams& p,
         in.override_sign[0] = 1.0;
         in.cam_fwd = cam.cam_fwd;
         in.cam_up = cam.cam_up;
-        const app::TickResult r = app::tick(st, in, p, cp);
+        const app::TickResult r = app::tick(st, in, p, cp, nullptr);
         if (r.orient_fired) cam.orient_cut(st.aim.forward());
         cam.advance(st.curr, st.aim.forward(), st.aim.up(), cp, p.sim_dt);
         if (r.respawned) crashed = 1;

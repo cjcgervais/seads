@@ -2,9 +2,11 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 
-#include "sim/world.h"  // sim::altitude (MB-atm: the inversion/braking/
-                        // load_factor see the plant's thinned density)
+// R6: the inversion/braking/load_factor now take (position, env) and sample
+// the plant's thinned density via sim::rho_at(position,env,ap) — altitude is
+// derived inside sim/aero.h, so this TU no longer needs sim/world.h.
 
 // The cascade (SPEC §9.3/§9.4/§9.6), transliterated from SOLUTION §5.5's
 // five-times-red-teamed reference core into the SEADS sign primitives that
@@ -88,7 +90,7 @@ constexpr double kCapAxisMix = 0.3;
 
 Output step(const sim::SimState& s, const Input& in, const Internal& internal,
             const sim::AircraftParams& ap, const ControllerParams& cp,
-            double dt) {
+            const sim::Environment* env, double dt) {
     Output out;
 
     // Extract through the ONE shared path (SPEC §9.7). The controller guards
@@ -127,6 +129,10 @@ Output step(const sim::SimState& s, const Input& in, const Internal& internal,
             static_cast<float>(std::clamp(in.flap_cmd, 0.0, 1.0));
         out.inputs.gear_cmd =
             static_cast<float>(std::clamp(in.gear_cmd, 0.0, 1.0));
+        // R4g: the brake is a GROUNDED input above all — dropping it on this
+        // early-return would ship a brakeless instructor path (Fable (c)).
+        out.inputs.wheel_brake =
+            static_cast<float>(std::clamp(in.wheel_brake, 0.0, 1.0));
         out.telem.regime = fresh.regime;
         out.telem.held_bank = fresh.held_bank;  // the carried-bank mirror
         // telem.blend stays 0.0 BY CONVENTION on a GROUNDED tick (err is
@@ -202,6 +208,31 @@ Output step(const sim::SimState& s, const Input& in, const Internal& internal,
     const double az_lat = std::atan2(
         target_body.x * e.cos_phi_theta + target_body.y * std::sin(e.phi),
         -target_body.z);
+
+    // S-righthand: the hand-at-rest clock. Runs unconditionally (every
+    // regime, every tick) so the MB-right ramp below can never be fooled by a
+    // mode change. in.aim_moved is the CQ2-gated signal -- freelook and
+    // GROUNDED ticks read "not moved", which is correct: the hand is off the
+    // aim. Saturates at the dial so it cannot grow without bound.
+    // THE HAND IS LIVE if the mouse fed the aim this tick OR the smeared
+    // aim rate is still carrying this frame's motion. in.aim_moved ALONE is
+    // WRONG and frame-rate dependent (red-team P1, the AT-9 class): it is a
+    // per-TICK bit, true only on the ONE mouse-consuming tick of each frame,
+    // so a hand that never rests still accumulates hand_rest on the other
+    // N-1 ticks -- measured max 0 / 0.0083 / 0.025 / 0.058 / 0.092 s at
+    // 240 / 60 / 30 / 15 / 10 fps. At 10 fps that is already gate 0.55, and a
+    // 0.4 s frame hitch at an apex reaches 0.9967 -- the full 180 deg/s
+    // righting handed back to a pilot who never stopped flying.
+    // aim_rate_world is ZOH-smeared across ticks 2..N of the frame and
+    // carries the SAME CQ2 gate (freelook / grounded report zero), so it is
+    // the frame-rate-invariant reading of "the hand is on the aim".
+    const bool hand_live =
+        in.aim_moved ||
+        glm::dot(in.aim_rate_world, in.aim_rate_world) > 0.0;
+    ns.hand_rest = hand_live
+                       ? 0.0
+                       : std::min(internal.hand_rest + dt,
+                                  std::max(cp.right_hand_rest, 0.0));
 
     // Regime hysteresis + heldBank capture on FINE entry (SPEC §9.3). The
     // latch gates ONLY the capture edge + telemetry; commands blend
@@ -419,19 +450,20 @@ Output step(const sim::SimState& s, const Input& in, const Internal& internal,
 
         // Per-axis braking margins from the airframe's TRUE authority (the
         // measured==derived alpha_max of AT-18a), read from the shared params
-        // at the CURRENT altitude (MB-atm: authority thins with the
+        // at the CURRENT position (MB-atm: authority thins with the
         // atmosphere above the taper; the braking law must brake against the
-        // authority the plant actually has up there).
-        const double alt = sim::altitude(s.position, ap);
+        // authority the plant actually has up there). R6: SPATIAL density
+        // (position+env) so the estimate matches the plant's own thinned
+        // authority inside a bubble edge (null env => identical, bit-for-bit).
         const double aB_pitch =
             cp.k_b * sim::ang_accel_max_derived(ap.c_pitch, ap.I_pitch, e.speed,
-                                                alt, ap);
+                                                s.position, env, ap);
         const double aB_yaw =
-            cp.k_b *
-            sim::ang_accel_max_derived(ap.c_yaw, ap.I_yaw, e.speed, alt, ap);
+            cp.k_b * sim::ang_accel_max_derived(ap.c_yaw, ap.I_yaw, e.speed,
+                                                s.position, env, ap);
         const double aB_roll =
-            cp.k_b *
-            sim::ang_accel_max_derived(ap.c_roll, ap.I_roll, e.speed, alt, ap);
+            cp.k_b * sim::ang_accel_max_derived(ap.c_roll, ap.I_roll, e.speed,
+                                                s.position, env, ap);
 
         // Coordination: always on, OUTSIDE the pointing gate (SPEC §9.3), so
         // deadzone/override suspension can't kill it.
@@ -968,12 +1000,89 @@ Output step(const sim::SimState& s, const Input& in, const Internal& internal,
                 // roll_maneuver below is untouched, so a lateral turn keeps
                 // blend*roll_maneuver and the DOWN split-S still rolls through
                 // inverted. Clamped to +/-p_max.
+                // S-leanlead (feel/yaw-bank-balance, 2026-09-10; params.h):
+                // the wings-hold limb chases held_bank + lean_lead*d, where
+                // d is the live lean's SAME-SIGN EXCESS over held_bank:
+                //     d = lean_t - clamp(held_bank, min(0,lean_t), max(0,lean_t))
+                // i.e. only the part of the lean that is MORE bank in its
+                // own direction than the hold already carries. d == 0 (the
+                // SAME double as hold_target := held_bank, so the tree below
+                // is bit-identical to legacy) at: rest (lean_t == 0 -- the
+                // AT-13 banked-spawn capture, the MB-right hand-off), the
+                // lean RELEASE (held_bank at/beyond lean_t, same sign), an
+                // aim shrinking toward the nose. An OPPOSITE-sign held_bank
+                // (a MANEUVER->FINE capture at -40 deg with a small right
+                // aim) leads by lean_t ALONE, never by the old bank: the
+                // red-team P0 of the first cut (d = lean_t - held_bank fired
+                // whenever the signs differed, so the target STEPPED by
+                // lean_lead*|held_bank| -- ~30 deg/s of aileron at a 20 deg
+                // carry -- across az_lat = 0, a bare-threshold chatter edge
+                // under a dithering hand). This form is CONTINUOUS in lean_t
+                // and in held_bank everywhere (a clamp of continuous
+                // arguments), so no latch/hysteresis is needed: there is no
+                // threshold. Pinned by the continuity leg in
+                // test_yawbank_balance.cpp. lean_lead == 0 never enters the
+                // branch: the structural OFF arm. Gated on blend < 1 (the
+                // roll_target_mix precedent -- (1-blend) already zeroes this
+                // limb at/above blend_hi, and in the band the maneuver limb
+                // targets the live lean too, so the two limbs AGREE instead
+                // of tugging; a bare err < blend_lo gate here would be a new
+                // step at the FINE edge -- the McRuer transition trap).
+                // Pole-free: az_lat is the frame-true de-rolled azimuth
+                // hoisted above.
+                //
+                // S-leanlead-lateral (2026-09-12 walk-back fix; params.h
+                // carries the derivation): the lead is scaled by the aim
+                // offset's HORIZON-LATERAL SHARE |az_lat|/err. A pure-PITCH
+                // aim reads share == |sin(phi)| (the de-roll numerator
+                // collapses to sin(eps)*sin(e.phi) when target_body.x == 0),
+                // so the lead is gated OFF through the shallow banks where
+                // the loop/dive runaway seeds; a genuinely sideways aim
+                // reads share == 1 at ANY bank, so the turn entry the dial
+                // was built for keeps the full lead. Gating on |az_lat|
+                // ALONE would not discriminate -- az_lat is nonzero for pure
+                // pitch too, which is the whole bug. Continuous (a
+                // smoothstep of a continuous ratio), so no latch and no
+                // hysteresis. lean_lead_lateral == false takes the other
+                // limb -- the SAME double cp.lean_lead -- so the landed v14
+                // tree is bit-identical there, and lean_lead == 0 never
+                // enters the branch at all. The divide is guarded by the
+                // deadzone ENTER radius (config-relative, no magic
+                // constant): inside it the pointing term is zeroed anyway
+                // and the ratio is pure noise, so the lead is off.
+                double hold_target = ns.held_bank;
+                if (cp.lean_lead > 0.0 && blend < 1.0) {
+                    const double lean_t = std::clamp(cp.lean_gain * az_lat,
+                                                     -cp.lean_max, cp.lean_max);
+                    const double d =
+                        lean_t - std::clamp(ns.held_bank, std::min(0.0, lean_t),
+                                            std::max(0.0, lean_t));
+                    if (d != 0.0) {
+                        const double lead =
+                            cp.lean_lead_lateral
+                                ? cp.lean_lead *
+                                      ((err > cp.deadzone_lo)
+                                           ? smoothstep(cp.lean_lead_lat_lo,
+                                                        cp.lean_lead_lat_hi,
+                                                        std::abs(az_lat) / err)
+                                           : 0.0)
+                                : cp.lean_lead;
+                        if (lead != 0.0) {
+                            hold_target = ns.held_bank + lead * d;
+                        }
+                    }
+                }
                 const double roll_hold =
                     wings_level_gate *
                     std::clamp(
-                        cp.K_phi * roll_hold_demand(ns.held_bank, phi_full),
+                        cp.K_phi * roll_hold_demand(hold_target, phi_full),
                         -cp.p_max, cp.p_max);
-                roll = blend * roll_maneuver + (1.0 - blend) * roll_hold;
+                roll = blend * roll_maneuver +
+                       (1.0 - blend) * roll_hold;
+                // instrument-only report (Telemetry): the two limbs as
+                // emitted, WEIGHTED, so the tape shows what each contributed.
+                out.telem.roll_maneuver = blend * roll_maneuver;
+                out.telem.roll_hold = (1.0 - blend) * roll_hold;
             }
 
             // S-aimff (v4 rung 1): aim-rate feedforward — the aim vector's
@@ -1169,9 +1278,9 @@ Output step(const sim::SimState& s, const Input& in, const Internal& internal,
                             // honest direct approach only shrinks the error
                             // and can never trip it).
                             const double a_p = sim::ang_accel_max_derived(
-                                ap.c_pitch, ap.I_pitch, e.speed, alt, ap);
+                                ap.c_pitch, ap.I_pitch, e.speed, s.position, env, ap);
                             const double a_y = sim::ang_accel_max_derived(
-                                ap.c_yaw, ap.I_yaw, e.speed, alt, ap);
+                                ap.c_yaw, ap.I_yaw, e.speed, s.position, env, ap);
                             const double alpha_u =
                                 std::min(a_p / std::max(std::abs(ux), 1e-9),
                                          a_y / std::max(std::abs(uy), 1e-9));
@@ -1332,9 +1441,9 @@ Output step(const sim::SimState& s, const Input& in, const Internal& internal,
                     // is monotone-down (never re-raises a clamped hold).
                     {
                         const double a_p = sim::ang_accel_max_derived(
-                            ap.c_pitch, ap.I_pitch, e.speed, alt, ap);
+                            ap.c_pitch, ap.I_pitch, e.speed, s.position, env, ap);
                         const double a_y = sim::ang_accel_max_derived(
-                            ap.c_yaw, ap.I_yaw, e.speed, alt, ap);
+                            ap.c_yaw, ap.I_yaw, e.speed, s.position, env, ap);
                         const double alpha_u =
                             std::min(a_p / std::max(std::abs(ns.cap_ux), 1e-9),
                                      a_y / std::max(std::abs(ns.cap_uy), 1e-9));
@@ -1361,9 +1470,9 @@ Output step(const sim::SimState& s, const Input& in, const Internal& internal,
                         // against break_frac x this — a parked aim
                         // physically cannot trip them, a yanked one does.
                         const double a_pitch = sim::ang_accel_max_derived(
-                            ap.c_pitch, ap.I_pitch, e.speed, alt, ap);
+                            ap.c_pitch, ap.I_pitch, e.speed, s.position, env, ap);
                         const double a_yaw = sim::ang_accel_max_derived(
-                            ap.c_yaw, ap.I_yaw, e.speed, alt, ap);
+                            ap.c_yaw, ap.I_yaw, e.speed, s.position, env, ap);
                         const double alpha_u = std::min(
                             a_pitch / std::max(std::abs(ns.cap_ux), 1e-9),
                             a_yaw / std::max(std::abs(ns.cap_uy), 1e-9));
@@ -1510,9 +1619,9 @@ Output step(const sim::SimState& s, const Input& in, const Internal& internal,
                             // sampled once per tick; the fire lands 0..1
                             // tick late, half a tick in expectation).
                             const double a_p = sim::ang_accel_max_derived(
-                                ap.c_pitch, ap.I_pitch, e.speed, alt, ap);
+                                ap.c_pitch, ap.I_pitch, e.speed, s.position, env, ap);
                             const double a_y = sim::ang_accel_max_derived(
-                                ap.c_yaw, ap.I_yaw, e.speed, alt, ap);
+                                ap.c_yaw, ap.I_yaw, e.speed, s.position, env, ap);
                             const double alpha_u = std::min(
                                 a_p / std::max(std::abs(ns.cap_ux), 1e-9),
                                 a_y / std::max(std::abs(ns.cap_uy), 1e-9));
@@ -1650,7 +1759,7 @@ Output step(const sim::SimState& s, const Input& in, const Internal& internal,
                         // deadzone_lo would wedge the machine in RETURN
                         // forever.
                         const double q_arr = sim::q_eff(
-                            sim::q_dyn(sim::rho_at(alt, ap), e.speed), ap);
+                            sim::q_dyn(sim::rho_at(s.position, env, ap), e.speed), ap);
                         // The generalized DEAD-BLOW surface, in the FULL
                         // pointing-plane VECTORS (the u-projection
                         // under-reads near center: the demand direction
@@ -1809,9 +1918,9 @@ Output step(const sim::SimState& s, const Input& in, const Internal& internal,
                         demand.x * ns.cap_ux + demand.y * ns.cap_uy;
                     const double d_rem = std::max(0.0, -s_u);
                     const double a_pitch = sim::ang_accel_max_derived(
-                        ap.c_pitch, ap.I_pitch, e.speed, alt, ap);
+                        ap.c_pitch, ap.I_pitch, e.speed, s.position, env, ap);
                     const double a_yaw = sim::ang_accel_max_derived(
-                        ap.c_yaw, ap.I_yaw, e.speed, alt, ap);
+                        ap.c_yaw, ap.I_yaw, e.speed, s.position, env, ap);
                     const double alpha_u =
                         std::min(a_pitch / std::max(std::abs(ns.cap_ux), 1e-9),
                                  a_yaw / std::max(std::abs(ns.cap_uy), 1e-9));
@@ -1819,7 +1928,7 @@ Output step(const sim::SimState& s, const Input& in, const Internal& internal,
                     // S-truedepth: the event's own captured apex target.
                     const double rim_t = ns.cap_rim_t;
                     const double q_arr = sim::q_eff(
-                        sim::q_dyn(sim::rho_at(alt, ap), e.speed), ap);
+                        sim::q_dyn(sim::rho_at(s.position, env, ap), e.speed), ap);
                     const double tau_u =
                         ns.cap_ux * ns.cap_ux * ap.I_pitch /
                             (cp.K_w_pitch + ap.damp_pitch * q_arr) +
@@ -2088,9 +2197,24 @@ Output step(const sim::SimState& s, const Input& in, const Internal& internal,
                 roll = 0.0;
             } else {
                 ns.held_bank -= cp.auto_level_rate * dt * ns.held_bank;
-                roll = std::clamp(
-                    cp.K_phi * roll_hold_demand(ns.held_bank, phi_full),
-                    -cp.inverted_rate, cp.inverted_rate);
+                // S-righthand: scale the righting AUTHORITY by how long the
+                // hand has been off the aim (params.h carries the derivation
+                // and Chad's ruling). 0 while he is still flying it, full
+                // after right_hand_rest of rest. Continuous -- a smoothstep
+                // of a time integral -- so there is no new threshold and a
+                // mid-loop pause gets a proportional amount of righting.
+                // right_hand_rest == 0 skips the ramp entirely and this is
+                // the bit-identical legacy expression.
+                const double hand_gate =
+                    (cp.right_hand_rest > 0.0)
+                        ? smoothstep(0.0, cp.right_hand_rest, ns.hand_rest)
+                        : 1.0;
+                roll = hand_gate *
+                       std::clamp(
+                           cp.K_phi * roll_hold_demand(ns.held_bank, phi_full),
+                           -cp.inverted_rate, cp.inverted_rate);
+                out.telem.roll_right = roll;
+                out.telem.hand_gate = hand_gate;
             }
         }
 
@@ -2154,9 +2278,12 @@ Output step(const sim::SimState& s, const Input& in, const Internal& internal,
     const double damp_ax[3] = {ap.damp_pitch, ap.damp_yaw, ap.damp_roll};
     const double damp_ff[3] = {cp.damp_ff_pitch, cp.damp_ff_yaw,
                                cp.damp_ff_roll};
-    const double alt = sim::altitude(s.position, ap);
+    // R6: SPATIAL density (position+env) — the damp_ff feedforward q and the
+    // plant inversion below MUST see the SAME density the plant applies, or a
+    // bubble edge re-arms the S-dampff preload pathology / mis-deflects by
+    // 1/u (null env => the identical altitude q, bit-for-bit).
     const double q_eff_val =
-        sim::q_eff(sim::q_dyn(sim::rho_at(alt, ap), e.speed), ap);
+        sim::q_eff(sim::q_dyn(sim::rho_at(s.position, env, ap), e.speed), ap);
     double inputs[3];
     for (int i = 0; i < 3; ++i) {
         // Uniform rate-PI + plant inversion (S7-ovr): held and unheld axes run
@@ -2172,12 +2299,23 @@ Output step(const sim::SimState& s, const Input& in, const Internal& internal,
             // tau_cmd expression tree is the bit-identical legacy one.
             tau_cmd += damp_ff[i] * damp_ax[i] * q_eff_val * omega_des_total[i];
         }
-        inputs[i] = plant_invert(tau_cmd, c_ax[i], e.speed, alt, ap);
-        if (in.override_mask[i]) {
+        inputs[i] = plant_invert(tau_cmd, c_ax[i], e.speed, s.position, env, ap);
+        if (in.override_mask[i] || s.on_ground) {
             // Held axis: the integrator is FROZEN, not zeroed (ns.integ[i]
             // already == internal.integ[i], untouched here) — trim survives the
             // maneuver and is there when the axis re-enters the cascade on
             // release (zeroing manufactures post-maneuver sag).
+            // R4-FLY-5 GROUNDED freeze (review P2): on the ground the plant
+            // flies TRUE q (no q_att_floor — dead stick at rest) while this
+            // inversion still divides by the floored q_eff, so the commanded
+            // torque under-delivers below the ~24 m/s crossover and the
+            // integral would wind on any taxi aim motion, releasing as a
+            // pitch/yaw twitch mid-takeoff-roll. Freeze (the override
+            // pattern), never zero. on_ground is false on every env-null
+            // path — goldens bit-identical.
+            // v4 merge: the grounded-freeze branch (fields-forge) and the
+            // capture unwind-only branch (v4) both survive — a grounded plane
+            // is never in a capture event, so the two conditions are disjoint.
         } else if (i != 2 && ns.capture != CaptureState::IDLE) {
             // S-rimshot v3: pointing axes UNWIND-ONLY while the capture
             // event owns the demand. Two failure modes bracket this rule
@@ -2221,6 +2359,10 @@ Output step(const sim::SimState& s, const Input& in, const Internal& internal,
     // MB-flaps passthrough (the throttle pattern — the plant owns the slew).
     out.inputs.flap_cmd = static_cast<float>(std::clamp(in.flap_cmd, 0.0, 1.0));
     out.inputs.gear_cmd = static_cast<float>(std::clamp(in.gear_cmd, 0.0, 1.0));
+    // R4g wheel brakes: this tail serves cascade AND ballistic AND override —
+    // the one other emission site (Fable (c): two sites, both must forward).
+    out.inputs.wheel_brake =
+        static_cast<float>(std::clamp(in.wheel_brake, 0.0, 1.0));
 
     out.internal = ns;
     out.telem.e = err;
@@ -2239,7 +2381,7 @@ Output step(const sim::SimState& s, const Input& in, const Internal& internal,
     // (SPEC §16 CQ1) — telemetry, never a gate. The formula is sim/aero.h's
     // single source (H1), shared bit-identically with the HUD.
     out.telem.load_factor = sim::load_factor(
-        e.alpha, e.speed, sim::altitude(s.position, ap), s.flap, ap);
+        e.alpha, e.speed, s.position, env, s.flap, ap);
     return out;
 }
 

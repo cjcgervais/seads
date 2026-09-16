@@ -71,7 +71,8 @@ TEST_CASE("cascade: pointing-demand signs reach the emitted Inputs") {
         control::Input in;
         in.target_dir_world = target;
         in.throttle = 0.7;
-        return control::step(s0, in, control::reset(), kAp, kCp, kAp.sim_dt);
+        return control::step(s0, in, control::reset(), kAp, kCp, nullptr,
+                             kAp.sim_dt);
     };
 
     // FINE (3 deg): elevator + rudder point directly.
@@ -145,8 +146,8 @@ TEST_CASE("MB-rud: bank-aligned rudder gate + shared yaw ceiling") {
         control::Input in;
         in.target_dir_world = target;
         in.throttle = 0.7;
-        const control::Output o =
-            control::step(s0, in, control::reset(), kAp, kCp, kAp.sim_dt);
+        const control::Output o = control::step(s0, in, control::reset(), kAp,
+                                                kCp, nullptr, kAp.sim_dt);
         return o.telem.omega_des.y - ff_y;
     };
 
@@ -236,8 +237,8 @@ TEST_CASE("MB-rud: coordination rides OUTSIDE the bank-aligned gate") {
         control::Input in;
         in.target_dir_world = target;
         in.throttle = 0.7;
-        const control::Output o =
-            control::step(s, in, control::reset(), kAp, kCp, kAp.sim_dt);
+        const control::Output o = control::step(s, in, control::reset(), kAp,
+                                                kCp, nullptr, kAp.sim_dt);
         return std::pair<double, double>{o.telem.omega_des.y - ff_y,
                                          o.telem.extracted.beta};
     };
@@ -279,7 +280,7 @@ TEST_CASE("MB-rud: push-branch yaw is ungated (full law, shared ceiling)") {
     in.target_dir_world = target;
     in.throttle = 0.7;
     const control::Output o =
-        control::step(s0, in, control::reset(), kAp, kCp, kAp.sim_dt);
+        control::step(s0, in, control::reset(), kAp, kCp, nullptr, kAp.sim_dt);
     REQUIRE(o.telem.push_mode);  // premise: this aim ARMS push on tick 1
     const double pointed = o.telem.omega_des.y - ff_y;
     std::printf("[MB-rud push-yaw] pointed=%.4f expect=%.4f push=%d\n", pointed,
@@ -318,8 +319,8 @@ TEST_CASE("MB-rud: gate is continuous across the FINE->MANEUVER boundary") {
         control::Input in;
         in.target_dir_world = target;
         in.throttle = 0.7;
-        const control::Output o =
-            control::step(s0, in, control::reset(), kAp, kCp, kAp.sim_dt);
+        const control::Output o = control::step(s0, in, control::reset(), kAp,
+                                                kCp, nullptr, kAp.sim_dt);
         return o.telem.omega_des.y - ff_y;
     };
     const double y_below = pointed_yaw(4.9);  // blend = 0 (FINE side)
@@ -337,10 +338,15 @@ TEST_CASE("MB-rud: gate is continuous across the FINE->MANEUVER boundary") {
 // amendment of S7-loop-invert — [auto_level] inverted_delay/inverted_rate).
 // Closed-loop on the real spherical plant, belly-up (170 deg bank) with the
 // aim parked on the nose:
-//   Phase A — within the delay window the old ruling HOLDS: no righting, the
-//     plane stays inverted (mutation: `>= inverted_delay` -> `>= 0` fires the
-//     roll immediately -> the no-righting-before-delay assert FAILS).
-//   Phase B — after the delay the latch fires and the roll is SLOW: every
+//   Phase A — the ARM EDGE (pilot ruling 2026-08-06: inverted righting carries
+//     NO added delay — "as soon as the hands rest, the plane rolls level",
+//     which REVERSES the S7-loop-invert "an inverted rest stays inverted"
+//     window): the latch fires on the FIRST rest tick, so the pin is the arm
+//     edge itself (mutation: an added dwell, or `inv_rest >= delay` re-welded
+//     to a nonzero floor -> the fire tick slips past the bound and FAILS). The
+//     only wait left is the REST CONDITION (pursuit, err < blend_lo, past the
+//     knife-edge band), which the fixture needs a couple of ticks to establish.
+//   Phase B — the roll is SLOW: every
 //     righting tick's |omega_des.z| <= inverted_rate (+ the ~V/R feedforward
 //     crumb) (mutation: clamp +/-inverted_rate -> +/-p_max saturates at ~7.6
 //     rad/s -> FAILS), and the plane reaches upright and stays (mechanism
@@ -352,30 +358,26 @@ TEST_CASE("MB-rud: gate is continuous across the FINE->MANEUVER boundary") {
 // inverted for the whole window — the S7-loop-invert behavior preserved
 // structurally (the strict-superset proof shape).
 // ---------------------------------------------------------------------------
-TEST_CASE("MB-right: belly-up rest slow-rights after the delay") {
+TEST_CASE("MB-right: belly-up rest rights with no added delay") {
     const glm::dvec3 up{1.0, 0.0, 0.0}, heading{0.0, 0.0, -1.0};
     const sim::SimState s0 = harness::flight_state(
         kAp, 140.0, 3000.0, up, heading, rad(170.0), 0.0, 0.0);
+    // The dial ships 0 (the ruling); the legs below are written against the
+    // LOADED value so a walk-back to a positive delay re-derives them loud
+    // instead of silently passing.
     const int delay_ticks =
         static_cast<int>(kCp.inverted_delay / kAp.sim_dt + 0.5);
+    REQUIRE(delay_ticks == 0);  // the ruling: no added delay
 
-    SECTION("arms after the delay, rolls slow, reaches upright") {
+    SECTION("arms on the first rest tick, rolls slow, reaches upright") {
         harness::ClosedLoop cl(s0, glm::dvec3{0.0, 0.0, -1.0});
         cl.aim_nose();
         cl.tick(0.7, kAp, kCp, /*grounded=*/true);  // capture held_bank
-        // Phase A: strictly inside the delay window (allow a couple of ticks
-        // of slack for the rest-condition to establish), NO righting and the
-        // plane stays belly-up.
-        bool early_righting = false;
-        double cpt_at_a_end = 0.0;
-        for (int i = 0; i < delay_ticks - 12; ++i) {
-            const control::Telemetry t = cl.tick(0.7, kAp, kCp);
-            early_righting = early_righting || t.righting;
-            cpt_at_a_end = t.extracted.cos_phi_theta;
-        }
-        CHECK_FALSE(early_righting);
-        CHECK(cpt_at_a_end < -0.8);  // still inverted (S7-loop-invert holds)
-        // Phase B: the latch fires within ~0.5 s past the delay; while
+        // Phase A: the ARM EDGE. With no added delay the latch must fire as
+        // soon as the rest condition holds — a handful of ticks for the aim to
+        // settle inside blend_lo on this fixture, never a dwell. (The old
+        // "no righting before the delay" assert is DELETED by the ruling.)
+        // Phase B: while
         // righting, the roll command stays inside the slow clamp; upright is
         // reached and kept.
         bool fired = false;
@@ -414,7 +416,10 @@ TEST_CASE("MB-right: belly-up rest slow-rights after the delay") {
             "(clamp %.3f), final cosPhiTheta %.3f\n",
             fire_tick, max_righting_roll, kCp.inverted_rate, cpt_final);
         CHECK(fired);
-        CHECK(fire_tick <= 72);  // ~<=0.6 s past the delay boundary
+        // The ARM-EDGE pin (mutation: any re-welded dwell — e.g. `inv_rest >=
+        // 0.5` — pushes this to ~60+ ticks and FAILS). 6 ticks = the fixture's
+        // own rest-condition settle, measured; not a timer.
+        CHECK(fire_tick <= 6);
         // + the curvature-feedforward crumb (|ff| ~ V/R ~ 0.01) — the clamp
         // applies to the pointing roll, ff is added after by design.
         CHECK(max_righting_roll <= kCp.inverted_rate + 0.02);
@@ -453,37 +458,39 @@ TEST_CASE("MB-right: belly-up rest slow-rights after the delay") {
         bool any_righting = false;
         for (int i = 0; i < delay_ticks + 240; ++i) {
             const control::Output o =
-                control::step(sk, in, internal, kAp, kCp, kAp.sim_dt);
+                control::step(sk, in, internal, kAp, kCp, nullptr, kAp.sim_dt);
             internal = o.internal;
             any_righting = any_righting || o.telem.righting;
         }
         CHECK_FALSE(any_righting);
     }
 
-    SECTION("a real mouse deflection cancels it; the timer restarts") {
+    SECTION("a real mouse deflection cancels it; rest re-arms immediately") {
         harness::ClosedLoop cl(s0, glm::dvec3{0.0, 0.0, -1.0});
         cl.aim_nose();
         cl.tick(0.7, kAp, kCp, /*grounded=*/true);
-        // Arm: rest past the delay until it fires.
+        // Arm: rest until it fires (immediate, modulo the rest settle).
         bool fired = false;
         for (int i = 0; i < delay_ticks + 120 && !fired; ++i) {
             fired = cl.tick(0.7, kAp, kCp).righting;
         }
         REQUIRE(fired);
-        // Deflect the aim well past blend_hi (15 deg lateral) -> disarm.
+        // Deflect the aim well past blend_hi (15 deg lateral) -> disarm. The
+        // pilot owns the wings again the instant he commands them.
         const glm::dvec3 nose = cl.state.orientation * glm::dvec3{0, 0, -1};
         const glm::dvec3 up_b = cl.state.orientation * glm::dvec3{0, 1, 0};
         cl.aim = glm::normalize(glm::angleAxis(-rad(15.0), up_b) * nose);
         const control::Telemetry t1 = cl.tick(0.7, kAp, kCp);
         CHECK_FALSE(t1.righting);
-        // Back to rest: the timer must restart — no re-fire inside half the
-        // delay window.
+        // Back to rest: under the ruling the righting RE-ARMS immediately —
+        // there is no timer to restart (this is the reversed leg: it used to
+        // pin "no re-fire inside half the delay window").
         cl.aim_nose();
         bool refired = false;
-        for (int i = 0; i < delay_ticks / 2; ++i) {
+        for (int i = 0; i < 6; ++i) {
             refired = refired || cl.tick(0.7, kAp, kCp).righting;
         }
-        CHECK_FALSE(refired);
+        CHECK(refired);
     }
 
     SECTION("knob-off: inverted_rate = 0 stays inverted (old ruling)") {
@@ -521,7 +528,7 @@ TEST_CASE("cascade: FINE wings-hold rolls a banked airframe toward level") {
     in.target_dir_world = glm::angleAxis(rad(2.0), right) * nose;  // 2 deg up
     in.throttle = 0.7;
     const control::Output o =
-        control::step(s, in, control::reset(), kAp, kCp, kAp.sim_dt);
+        control::step(s, in, control::reset(), kAp, kCp, nullptr, kAp.sim_dt);
     CHECK(o.telem.extracted.phi == Catch::Approx(rad(20.0)).margin(1e-6));
     CHECK_FALSE(o.telem.deadzoned);
     CHECK(o.inputs.roll > 0.0f);  // roll LEFT toward level
@@ -864,8 +871,8 @@ TEST_CASE("MB-lean: FINE held_bank leans toward the lateral aim") {
 
             double early_roll = 0.0;
             for (int i = 0; i < 600; ++i) {
-                const control::Output o =
-                    control::step(s, in, internal, kAp, kCp, kAp.sim_dt);
+                const control::Output o = control::step(
+                    s, in, internal, kAp, kCp, nullptr, kAp.sim_dt);
                 internal = o.internal;
                 if (i == 10) {
                     // Early: the setpoint walks POSITIVE (right wing down)
@@ -908,7 +915,7 @@ TEST_CASE("MB-lean: FINE held_bank leans toward the lateral aim") {
         double b = rad(20.0);
         for (int i = 0; i < 200; ++i) {
             const control::Output o =
-                control::step(s, in, internal, kAp, cp2, kAp.sim_dt);
+                control::step(s, in, internal, kAp, cp2, nullptr, kAp.sim_dt);
             internal = o.internal;
             b -= 1.0 * cp2.auto_level_rate * kAp.sim_dt * b;
             REQUIRE(internal.held_bank == b);  // EXACT — no tolerance
@@ -973,7 +980,7 @@ TEST_CASE("MB-lean: FINE held_bank leans toward the lateral aim") {
             static_cast<int>(kCp.inverted_delay / kAp.sim_dt + 0.5);
         for (int i = 0; i < delay_ticks - 12; ++i) {
             const control::Output o =
-                control::step(s, in, internal, kAp, kCp, kAp.sim_dt);
+                control::step(s, in, internal, kAp, kCp, nullptr, kAp.sim_dt);
             internal = o.internal;
             REQUIRE_FALSE(o.telem.righting);
             REQUIRE(internal.held_bank == b0);  // BIT-frozen (gate == 0)
@@ -1003,7 +1010,7 @@ TEST_CASE("MB-lean: FINE held_bank leans toward the lateral aim") {
         internal.held_bank = rad(60.0);
         for (int i = 0; i < 600; ++i) {
             const control::Output o =
-                control::step(s, in, internal, kAp, kCp, kAp.sim_dt);
+                control::step(s, in, internal, kAp, kCp, nullptr, kAp.sim_dt);
             internal = o.internal;
         }
         // Decayed to ~level (60 deg * 0.975^600 ~ 1e-7), NOT to the phantom
@@ -1052,7 +1059,7 @@ TEST_CASE("MB-lean: FINE held_bank leans toward the lateral aim") {
         internal.held_bank = control::unfold_bank(e0.phi, e0.cos_phi_theta);
         for (int i = 0; i < 600; ++i) {
             const control::Output o =
-                control::step(s, in, internal, kAp, kCp, kAp.sim_dt);
+                control::step(s, in, internal, kAp, kCp, nullptr, kAp.sim_dt);
             internal = o.internal;
         }
         CHECK(std::abs(internal.held_bank) < rad(1.5));
@@ -1474,8 +1481,8 @@ TEST_CASE("S-yaw-magnet: coordination fades near center, full far from it") {
         in.target_dir_world =
             glm::normalize(glm::angleAxis(-rad(aim_off), up_b) * nose);
         in.throttle = 0.7;
-        const control::Output o =
-            control::step(s, in, control::reset(), kAp, cp, kAp.sim_dt);
+        const control::Output o = control::step(s, in, control::reset(), kAp,
+                                                cp, nullptr, kAp.sim_dt);
         return o.telem.omega_des.y;
     };
 
@@ -1631,7 +1638,7 @@ TEST_CASE("cascade: aiming astern does not fire the bank_error assert") {
     in.target_dir_world = -nose;  // directly behind
     in.throttle = 0.7;
     const control::Output o =
-        control::step(s0, in, control::reset(), kAp, kCp, kAp.sim_dt);
+        control::step(s0, in, control::reset(), kAp, kCp, nullptr, kAp.sim_dt);
     CHECK(std::isfinite(o.telem.omega_des.x));
     CHECK(o.telem.e == Catch::Approx(kPi).margin(1e-9));
     CHECK(o.inputs.pitch > 0.0f);  // pull-through UP (the +X tie-break)
@@ -1674,7 +1681,7 @@ TEST_CASE("cascade: near-astern elevator-sign latch overrides the raw demand") {
     auto run = [&](double latch) {
         control::Internal internal = control::reset();
         internal.elev_latch = latch;
-        return control::step(s0, in, internal, kAp, kCp, kAp.sim_dt);
+        return control::step(s0, in, internal, kAp, kCp, nullptr, kAp.sim_dt);
     };
 
     // Premise: err really is in the latch band, and the RAW (unlatched)
@@ -1706,7 +1713,7 @@ TEST_CASE("AT-17: BALLISTIC gates off yaw coordination") {
     in.target_dir_world = s.orientation * glm::dvec3{0.0, 0.0, -1.0};  // nose
     in.throttle = 0.0;
     const control::Output o =
-        control::step(s, in, control::reset(), kAp, kCp, kAp.sim_dt);
+        control::step(s, in, control::reset(), kAp, kCp, nullptr, kAp.sim_dt);
     REQUIRE(o.telem.ballistic);
     REQUIRE(o.telem.extracted.beta == Catch::Approx(rad(20.0)).margin(1e-6));
     // Coordination OFF: yaw is attitude-hold (~0), not -K_coord*beta (~-0.7).
@@ -1733,14 +1740,14 @@ TEST_CASE("cascade: step is pure - internal argument never mutated") {
     in.throttle = 0.6;
 
     const control::Output a =
-        control::step(s, in, internal, kAp, kCp, kAp.sim_dt);
+        control::step(s, in, internal, kAp, kCp, nullptr, kAp.sim_dt);
     // The argument is byte-for-byte unchanged (no aliasing into caller state).
     CHECK(before.integ == internal.integ);
     CHECK(before.held_bank == internal.held_bank);
     CHECK(before.regime == internal.regime);
     // Deterministic: the same call again gives the same Inputs.
     const control::Output b =
-        control::step(s, in, internal, kAp, kCp, kAp.sim_dt);
+        control::step(s, in, internal, kAp, kCp, nullptr, kAp.sim_dt);
     CHECK(a.inputs.pitch == b.inputs.pitch);
     CHECK(a.inputs.yaw == b.inputs.yaw);
     CHECK(a.inputs.roll == b.inputs.roll);
@@ -1777,7 +1784,7 @@ TEST_CASE(
     internal.integ.x = 0.5;
 
     const control::Output o =
-        control::step(s, in, internal, kAp, kCp, kAp.sim_dt);
+        control::step(s, in, internal, kAp, kCp, nullptr, kAp.sim_dt);
     // Premise: the pitch Input really is saturated (integral-dominated) while
     // the rate error opposes it (omega_des ~ 0 < the +0.02 rate) — so this tick
     // exercises the saturated branch, not the trivial |Input| < 1 one.
@@ -1829,7 +1836,8 @@ TEST_CASE(
         const glm::dvec3 tb = glm::normalize(
             glm::dvec3{0.0, -std::sin(rad(deg)), -std::cos(rad(deg))});
         in.target_dir_world = s0.orientation * tb;
-        return control::step(s0, in, control::reset(), kAp, kCp, kAp.sim_dt);
+        return control::step(s0, in, control::reset(), kAp, kCp, nullptr,
+                             kAp.sim_dt);
     };
 
     // S7-push (geometry gate): a below-nose aim NOSES DOWN (push, negative-G
@@ -1883,7 +1891,7 @@ TEST_CASE(
         glm::dvec3{0.0, -std::sin(rad(25.0)), -std::cos(rad(25.0))});
     in.target_dir_world = s0.orientation * tb;
     const control::Output o =
-        control::step(s0, in, control::reset(), kAp, kCp, kAp.sim_dt);
+        control::step(s0, in, control::reset(), kAp, kCp, nullptr, kAp.sim_dt);
     CHECK(o.telem.push_mode);
     CHECK(o.telem.omega_des.x < 0.0);  // nose down, pure pitch
 }
@@ -1918,7 +1926,7 @@ TEST_CASE(
         std::sin(c) * std::sin(a), std::sin(c) * std::cos(a), -std::cos(c)});
     in.target_dir_world = s0.orientation * tb;
     const control::Output o =
-        control::step(s0, in, control::reset(), kAp, kCp, kAp.sim_dt);
+        control::step(s0, in, control::reset(), kAp, kCp, nullptr, kAp.sim_dt);
     CHECK_FALSE(o.telem.push_mode);
 }
 
@@ -1959,7 +1967,7 @@ TEST_CASE(
         const glm::dvec3 tb = glm::normalize(glm::dvec3{side, elev, z});
         in.target_dir_world = s0.orientation * tb;
         const control::Output o =
-            control::step(s0, in, internal, kAp, kCp, kAp.sim_dt);
+            control::step(s0, in, internal, kAp, kCp, nullptr, kAp.sim_dt);
         internal = o.internal;
         if (o.telem.push_mode != prev) ++switches;
         prev = o.telem.push_mode;
@@ -1990,7 +1998,7 @@ TEST_CASE("cascade: AoA protection clamps on the FILTERED AoA, not the raw") {
     internal.aoa_filtered = rad(40.0);  // >> aoa_max (14 deg): "we are stalled"
 
     const control::Output o =
-        control::step(s0, in, internal, kAp, kCp, kAp.sim_dt);
+        control::step(s0, in, internal, kAp, kCp, nullptr, kAp.sim_dt);
     // Sanity: the RAW alpha really is ~0 (level, no sideslip) — a raw-alpha
     // consumer would NOT clamp and would let the pull through.
     REQUIRE(std::abs(o.telem.extracted.alpha) < rad(3.0));
@@ -2046,10 +2054,10 @@ TEST_CASE("cascade: S-dampff one-tick composition + q_eff sourcing") {
         control::Input in;
         in.target_dir_world = glm::angleAxis(rad(2.0), right) * nose;
         in.throttle = 0.7;
-        const control::Output o =
-            control::step(s0, in, control::reset(), kAp, on, kAp.sim_dt);
-        const control::Output o0 =
-            control::step(s0, in, control::reset(), kAp, off, kAp.sim_dt);
+        const control::Output o = control::step(s0, in, control::reset(), kAp,
+                                                on, nullptr, kAp.sim_dt);
+        const control::Output o0 = control::step(s0, in, control::reset(), kAp,
+                                                 off, nullptr, kAp.sim_dt);
         // Premises: a real demand, and an unsaturated emitted input.
         REQUIRE(std::abs(o.telem.omega_des.x) > 0.01);
         REQUIRE(std::abs(o.inputs.pitch) < 1.0f);
@@ -2079,16 +2087,16 @@ TEST_CASE("cascade: S-dampff one-tick composition + q_eff sourcing") {
         in.target_dir_world = glm::angleAxis(rad(3.0), right) * nose;
         in.throttle = 0.7;
         // Probe pass: read the demand this state produces...
-        const control::Output probe =
-            control::step(s0, in, control::reset(), kAp, on, kAp.sim_dt);
+        const control::Output probe = control::step(
+            s0, in, control::reset(), kAp, on, nullptr, kAp.sim_dt);
         REQUIRE(probe.telem.ballistic);
         REQUIRE(std::abs(probe.telem.omega_des.x) > 0.01);
         // ...then preset omega to it: eo == 0 bitwise (the demand is a pure
         // function of orientation/aim/velocity, none of which change), so
         // K_w contributes exactly 0 and the emitted Input IS the ff term.
         s0.angular_vel.x = probe.telem.omega_des.x;
-        const control::Output o =
-            control::step(s0, in, control::reset(), kAp, on, kAp.sim_dt);
+        const control::Output o = control::step(s0, in, control::reset(), kAp,
+                                                on, nullptr, kAp.sim_dt);
         REQUIRE(o.telem.ballistic);
         REQUIRE(o.telem.omega_des.x == probe.telem.omega_des.x);
         REQUIRE(std::abs(o.inputs.pitch) < 1.0f);
@@ -2126,13 +2134,13 @@ TEST_CASE("cascade: S-dampff one-tick composition + q_eff sourcing") {
         control::Input in;
         in.target_dir_world = glm::angleAxis(-rad(3.0), up_b) * nose;  // right
         in.throttle = 0.7;
-        const control::Output probe =
-            control::step(s0, in, control::reset(), kAp, yawed, kAp.sim_dt);
+        const control::Output probe = control::step(
+            s0, in, control::reset(), kAp, yawed, nullptr, kAp.sim_dt);
         REQUIRE(probe.telem.ballistic);
         REQUIRE(std::abs(probe.telem.omega_des.y) > 0.01);
         s0.angular_vel.y = probe.telem.omega_des.y;
-        const control::Output o =
-            control::step(s0, in, control::reset(), kAp, yawed, kAp.sim_dt);
+        const control::Output o = control::step(s0, in, control::reset(), kAp,
+                                                yawed, nullptr, kAp.sim_dt);
         REQUIRE(o.telem.omega_des.y == probe.telem.omega_des.y);
         REQUIRE(std::abs(o.inputs.yaw) < 1.0f);
         const double alt = sim::altitude(s0.position, kAp);
@@ -2172,8 +2180,8 @@ TEST_CASE("cascade: curvature ff divides by |position|, not baked R") {
         control::Input in;
         in.target_dir_world = nose;  // exactly on the nose -> deadzoned
         in.throttle = 0.7;
-        const control::Output o =
-            control::step(s0, in, control::reset(), kAp, kCp, kAp.sim_dt);
+        const control::Output o = control::step(s0, in, control::reset(), kAp,
+                                                kCp, nullptr, kAp.sim_dt);
         REQUIRE(o.telem.deadzoned);  // premise: pointing term is zeroed
         return std::make_pair(o.telem.omega_des.x, s0);
     };
@@ -2541,7 +2549,7 @@ TEST_CASE(
         sim::SimState s = s0;
         s.angular_vel.x = wx;
         const control::Output o =
-            control::step(s, in, cur, kAp, kCp, kAp.sim_dt);
+            control::step(s, in, cur, kAp, kCp, nullptr, kAp.sim_dt);
         REQUIRE(o.telem.capture != control::CaptureState::IDLE);  // still owned
         CHECK(o.internal.cap_rim_t == ic.cap_rim_t);  // UNCHANGED, exactly
         cur = o.internal;
@@ -2690,7 +2698,7 @@ control::Output holdline_step_aim(double pitch_down_deg, double bank_deg,
     control::Input in;
     in.target_dir_world = aim;
     in.throttle = 0.7;
-    return control::step(s, in, control::reset(), kAp, cp, kAp.sim_dt);
+    return control::step(s, in, control::reset(), kAp, cp, nullptr, kAp.sim_dt);
 }
 
 control::Output holdline_step(double pitch_down_deg, double bank_deg,
@@ -2979,11 +2987,11 @@ TEST_CASE(
     control::Internal internal = control::reset();
     internal.elev_latch = -1.0;  // forces the down pull-through
     const control::Output on =
-        control::step(s0, in, internal, kAp, kCp, kAp.sim_dt);
+        control::step(s0, in, internal, kAp, kCp, nullptr, kAp.sim_dt);
     control::ControllerParams cp_off = kCp;
     cp_off.pull_floor = 0.0;
     const control::Output off =
-        control::step(s0, in, internal, kAp, cp_off, kAp.sim_dt);
+        control::step(s0, in, internal, kAp, cp_off, nullptr, kAp.sim_dt);
     REQUIRE(on.telem.e > rad(160.0));  // premise: really is the latch band
     CHECK(on.telem.omega_des.x < 0.0);
     CHECK(on.telem.omega_des.x == off.telem.omega_des.x);
@@ -3024,11 +3032,11 @@ TEST_CASE(
     control::Internal internal = control::reset();
     internal.elev_latch = +1.0;  // forces the UP pull-through (demand.x > 0)
     const control::Output on =
-        control::step(s0, in, internal, kAp, kCp, kAp.sim_dt);
+        control::step(s0, in, internal, kAp, kCp, nullptr, kAp.sim_dt);
     control::ControllerParams cp_off = kCp;
     cp_off.pull_floor = 0.0;
     const control::Output off =
-        control::step(s0, in, internal, kAp, cp_off, kAp.sim_dt);
+        control::step(s0, in, internal, kAp, cp_off, nullptr, kAp.sim_dt);
 
     // Premises (spec-required, REQUIREd explicitly):
     REQUIRE(on.telem.regime == control::Regime::MANEUVER);
@@ -3149,8 +3157,8 @@ TEST_CASE("instrument: telem.blend/held_bank mirror the cascade exactly") {
         control::Input in;
         in.target_dir_world = glm::angleAxis(-rad(d), up_b) * nose;
         in.throttle = 0.7;
-        const control::Output o =
-            control::step(s0, in, control::reset(), kAp, kCp, kAp.sim_dt);
+        const control::Output o = control::step(s0, in, control::reset(), kAp,
+                                                kCp, nullptr, kAp.sim_dt);
         // Weld: mirror == oracle, exact (identical expression trees).
         CHECK(o.telem.blend == holdline_blend(o.telem.e, kCp));
         // Sanity that the samples straddle the band (non-vacuous placement).
@@ -3170,7 +3178,7 @@ TEST_CASE("instrument: telem.blend/held_bank mirror the cascade exactly") {
     control::Internal internal = control::reset();
     control::Output o;
     for (int i = 0; i < 120; ++i) {
-        o = control::step(s0, in, internal, kAp, kCp, kAp.sim_dt);
+        o = control::step(s0, in, internal, kAp, kCp, nullptr, kAp.sim_dt);
         internal = o.internal;
     }
     REQUIRE(std::abs(o.internal.held_bank) > 1e-3);  // the lean really moved
@@ -3238,7 +3246,7 @@ TEST_CASE("roll_target_mix: on-vs-off delta equals the config oracle") {
         // (clamp(lean_gain*az) == +30 deg for every in-band lateral aim at
         // gain 8), so the frozen-anchor mutant (e_lean keyed to held_bank)
         // SEPARATES from the live-lean anchor at every sample.
-        return control::step(s, in, ni, kAp, cp, kAp.sim_dt);
+        return control::step(s, in, ni, kAp, cp, nullptr, kAp.sim_dt);
     };
 
     SECTION("level state: in-band delta == oracle; below-band exact ==") {
@@ -3380,9 +3388,9 @@ TEST_CASE("roll_target_mix: blend == 1 is bit-untouched (flicks keep v10)") {
             control::Internal ni = control::reset();
             ni.held_bank = rad(30.0);
             const control::Output on =
-                control::step(s, in, ni, kAp, cp_on, kAp.sim_dt);
+                control::step(s, in, ni, kAp, cp_on, nullptr, kAp.sim_dt);
             const control::Output off =
-                control::step(s, in, ni, kAp, cp_off, kAp.sim_dt);
+                control::step(s, in, ni, kAp, cp_off, nullptr, kAp.sim_dt);
             REQUIRE(on.telem.blend == 1.0);  // premise: at/above blend_hi
             CHECK(on.telem.omega_des == off.telem.omega_des);
             CHECK(on.inputs.pitch == off.inputs.pitch);
@@ -3427,7 +3435,7 @@ control::Output straightline_step(double pitch_down_deg, double bank_deg,
     in.throttle = 0.7;
     control::Internal ni = control::reset();
     if (aoa_seed_rad >= 0.0) ni.aoa_filtered = aoa_seed_rad;
-    return control::step(s, in, ni, kAp, cp, kAp.sim_dt);
+    return control::step(s, in, ni, kAp, cp, nullptr, kAp.sim_dt);
 }
 
 glm::dvec3 straightline_aim(double az_deg) {
@@ -3522,8 +3530,7 @@ TEST_CASE("S-straightline: FINE / astern / inverted are exact zeros") {
     SECTION("astern: fwd_gate == 0 past the D4 edge") {
         // ~165 deg behind: target_body.z > 0.95 (the TC5 geometry class).
         const control::Output on = straightline_step(0.0, 40.0, 165.0, kCp);
-        const control::Output off =
-            straightline_step(0.0, 40.0, 165.0, cp_off);
+        const control::Output off = straightline_step(0.0, 40.0, 165.0, cp_off);
         const glm::dvec3 up{1.0, 0.0, 0.0}, heading{0.0, 0.0, -1.0};
         const sim::SimState fixture = holdline_fixture(0.0, 40.0, up, heading);
         REQUIRE(holdline_target_body(fixture, straightline_aim(165.0)).z >
@@ -3532,8 +3539,7 @@ TEST_CASE("S-straightline: FINE / astern / inverted are exact zeros") {
     }
     SECTION("inverted: cos_phi_theta < 0") {
         const control::Output on = straightline_step(0.0, 120.0, 30.0, kCp);
-        const control::Output off =
-            straightline_step(0.0, 120.0, 30.0, cp_off);
+        const control::Output off = straightline_step(0.0, 120.0, 30.0, cp_off);
         REQUIRE(on.telem.extracted.cos_phi_theta < 0.0);
         CHECK(on.telem.omega_des.x == off.telem.omega_des.x);
     }
@@ -3585,8 +3591,7 @@ TEST_CASE("S-straightline: the AoA pushback bounds the FF") {
         straightline_ff_oracle(on, fixture, straightline_aim(-45.0), kAp, kCp);
     REQUIRE(off.telem.omega_des.x - ff_bx + oracle > clamp_x + 0.05);
     // The emitted pitch (minus the post-clamp curvature ff) pins the clamp.
-    CHECK(on.telem.omega_des.x - ff_bx ==
-          Catch::Approx(clamp_x).margin(1e-9));
+    CHECK(on.telem.omega_des.x - ff_bx == Catch::Approx(clamp_x).margin(1e-9));
 }
 
 // The composition rule, leg (i) (the gate-fate ruling's condition): in
@@ -3594,7 +3599,8 @@ TEST_CASE("S-straightline: the AoA pushback bounds the FF") {
 // live: the pull_floor on/off twins are bit-identical at shipped
 // line_hold_ff, and the FF's own on/off delta is nonzero at the same state.
 // (Leg (ii), developed sag, is the ADDITIVITY leg below.)
-TEST_CASE("S-straightline: zero sag means servo silent, FF live (no double-pay)") {
+TEST_CASE(
+    "S-straightline: zero sag means servo silent, FF live (no double-pay)") {
     // holdline_step's aim (elevation 0) with pitch_down = 0: the nose sits
     // at/above the aim's elevation line — the zero-sag equilibrium shape.
     const glm::dvec3 up{1.0, 0.0, 0.0}, heading{0.0, 0.0, -1.0};
@@ -3652,9 +3658,9 @@ TEST_CASE("S-straightline: developed sag composes additively (no double-pay)") {
     // the parasitic law zeroes the FF (the elevated-aim pin: the v2
     // all-component cancel drove exactly this class into the -G floor).
     CHECK(B.telem.omega_des.x == D.telem.omega_des.x);
-    CHECK(A.telem.omega_des.x - B.telem.omega_des.x ==
-          Catch::Approx(C.telem.omega_des.x - D.telem.omega_des.x)
-              .margin(1e-12));
+    CHECK(
+        A.telem.omega_des.x - B.telem.omega_des.x ==
+        Catch::Approx(C.telem.omega_des.x - D.telem.omega_des.x).margin(1e-12));
 }
 
 // The parasitic discriminator's own legs: (a) digging away from an
@@ -3673,8 +3679,7 @@ TEST_CASE("S-straightline: parasitic discriminator (dig vs climb)") {
         const control::Output on = straightline_step(10.0, 40.0, -20.0, kCp);
         const control::Output off =
             straightline_step(10.0, 40.0, -20.0, cp_off);
-        const sim::SimState fixture =
-            holdline_fixture(10.0, 40.0, up, heading);
+        const sim::SimState fixture = holdline_fixture(10.0, 40.0, up, heading);
         const double delta = on.telem.omega_des.x - off.telem.omega_des.x;
         const double oracle = straightline_ff_oracle(
             on, fixture, straightline_aim(-20.0), kAp, kCp);
@@ -3683,10 +3688,8 @@ TEST_CASE("S-straightline: parasitic discriminator (dig vs climb)") {
     }
     SECTION("w_up band interior: climbing yaw, aim slightly above the line") {
         const control::Output on = straightline_step(2.5, 40.0, 30.0, kCp);
-        const control::Output off =
-            straightline_step(2.5, 40.0, 30.0, cp_off);
-        const sim::SimState fixture =
-            holdline_fixture(2.5, 40.0, up, heading);
+        const control::Output off = straightline_step(2.5, 40.0, 30.0, cp_off);
+        const sim::SimState fixture = holdline_fixture(2.5, 40.0, up, heading);
         // Premise: sag strictly inside (0, band) — w_up strictly interior.
         const glm::dvec3 nose =
             fixture.orientation * glm::dvec3{0.0, 0.0, -1.0};
@@ -3701,4 +3704,3 @@ TEST_CASE("S-straightline: parasitic discriminator (dig vs climb)") {
         CHECK(delta == Catch::Approx(oracle).margin(1e-9));
     }
 }
-

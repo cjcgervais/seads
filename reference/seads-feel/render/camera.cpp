@@ -45,7 +45,7 @@ glm::dvec3 clamp_eye_above_surface(const glm::dvec3& target,
 
 CameraPose chase_camera(const sim::SimState& state,
                         const sim::AircraftParams& params,
-                        const ChaseParams& chase) {
+                        const ChaseParams& chase, bool underground) {
     // Recomputed from position every call (SPEC §6): the sole up source.
     const glm::dvec3 up = sim::local_up(state.position);
     const glm::dvec3 nose = state.orientation * glm::dvec3{0.0, 0.0, -1.0};
@@ -54,14 +54,20 @@ CameraPose chase_camera(const sim::SimState& state,
     CameraPose pose;
     pose.target = state.position;
     pose.eye = state.position - nose * chase.distance + up * chase.height;
-    pose.eye = clamp_eye_above_surface(pose.target, pose.eye,
-                                       params.R + chase.min_eye_altitude);
+    // T9a CAVECAM: underground the eye is legally below R+2 (the tunnel net),
+    // so the surface clamp would hoist it to bare radius (the zoomed-out egg
+    // view). Skip the clamp AND the degenerate reseat; the eye is the raw
+    // offset, so the camera stays on the plane inside the cavern.
+    if (!underground)
+        pose.eye = clamp_eye_above_surface(pose.target, pose.eye,
+                                           params.R + chase.min_eye_altitude);
 
     // Surface clamp can collapse the offset (aircraft below the margin, one
     // frame before crash-reset): re-seat the eye straight up so the pose
-    // stays finite for that frame.
+    // stays finite for that frame. (Never underground — the offset is the raw
+    // full chase offset there, never collapsed.)
     glm::dvec3 offset = pose.eye - pose.target;
-    if (glm::dot(offset, offset) < 1e-12) {
+    if (!underground && glm::dot(offset, offset) < 1e-12) {
         // |target + up*h| == |target| + h (up is the target's own radial
         // direction), so lift by whatever the margin still needs if a
         // config ever sets min_eye_altitude >= height.
@@ -176,7 +182,7 @@ CameraPose aim_chase_camera(const sim::SimState& state,
                             const glm::dvec3& forward, const glm::dvec3& aim_up,
                             const sim::AircraftParams& params,
                             const ChaseParams& chase,
-                            const CameraOrbit& orbit) {
+                            const CameraOrbit& orbit, bool underground) {
     const glm::dvec3 fwd = glm::normalize(forward);
     glm::dvec3 up = glm::normalize(aim_up);
     // The decoupled S7-cam forward can be (near-)parallel to the carried aim_up
@@ -208,11 +214,18 @@ CameraPose aim_chase_camera(const sim::SimState& state,
         offset = glm::angleAxis(orbit.yaw, up) *
                  (glm::angleAxis(orbit.pitch, right) * offset);
     }
-    pose.eye = clamp_eye_above_surface(pose.target, pose.target + offset,
-                                       params.R + chase.min_eye_altitude);
+    // T9a CAVECAM: underground the eye is legally below R+2, so the surface
+    // clamp would hoist it to bare radius (the zoomed-out egg view, plane
+    // invisible on a nose-up pose). Skip the clamp AND the degenerate reseat;
+    // the eye is the raw aim offset so the camera stays on the plane inside the
+    // lit egg. Default false => surface flight is bit-identical.
+    pose.eye = underground
+                   ? pose.target + offset
+                   : clamp_eye_above_surface(pose.target, pose.target + offset,
+                                             params.R + chase.min_eye_altitude);
 
     glm::dvec3 seated = pose.eye - pose.target;
-    if (glm::dot(seated, seated) < 1e-12) {
+    if (!underground && glm::dot(seated, seated) < 1e-12) {
         const glm::dvec3 radial = sim::local_up(pose.target);
         const double lift_needed =
             params.R + chase.min_eye_altitude - glm::length(pose.target);
@@ -269,6 +282,37 @@ double lens_shift_ndc(double height, double distance, double fovy_rad) {
     // NDC-y is tan(atan(h/d)) / tan(fovy/2) = (h/d) / tan(fovy/2); shifting the
     // image down by exactly that value lands the reticle at screen center.
     return (height / distance) / std::tan(0.5 * fovy_rad);
+}
+
+void frustum_corner_rays(double fovy_rad, double aspect, double shift_ndc,
+                         const glm::dvec3& forward, const glm::dvec3& up,
+                         glm::dvec3 out_corners[4]) {
+    // Same basis project_dir builds: right ⟂ forward, then true-up = right x
+    // forward (Gram-Schmidt). The degenerate up ∥ forward falls back to any ⟂
+    // seed (a sky ray basis, roll is irrelevant there), mirroring project_dir.
+    const glm::dvec3 F = glm::normalize(forward);
+    glm::dvec3 R = glm::cross(F, glm::normalize(up));
+    if (glm::length(R) < 1e-9) {
+        const glm::dvec3 seed =
+            std::abs(F.x) < 0.9 ? glm::dvec3{1, 0, 0} : glm::dvec3{0, 1, 0};
+        R = glm::cross(F, seed);
+    }
+    R = glm::normalize(R);
+    const glm::dvec3 U = glm::cross(R, F);
+    // Corner directions at NDC (u,v): V(u,v) = u*tw*R + (shift+v)*th*U + F,
+    // which is LINEAR in (u,v) — so the quad's screen-linear interpolation of
+    // these four reproduces V exactly, and the FS normalize gives the true ray.
+    // The shift is folded into the vertical extents (matching
+    // off_center_frustum), so the sky tracks the lens-shifted scene. near
+    // cancels under normalize (set to 1).
+    const double th = std::tan(0.5 * fovy_rad);
+    const double tw = th * aspect;
+    const double yb = th * (shift_ndc - 1.0);  // bottom (v=-1)
+    const double yt = th * (shift_ndc + 1.0);  // top    (v=+1)
+    out_corners[0] = -tw * R + yb * U + F;     // BL (-1,-1)
+    out_corners[1] = tw * R + yb * U + F;      // BR (+1,-1)
+    out_corners[2] = tw * R + yt * U + F;      // TR (+1,+1)
+    out_corners[3] = -tw * R + yt * U + F;     // TL (-1,+1)
 }
 
 FrustumBounds off_center_frustum(double fovy_rad, double aspect, double nearZ,

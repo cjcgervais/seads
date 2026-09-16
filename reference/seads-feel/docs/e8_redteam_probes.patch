@@ -1,0 +1,78 @@
+diff --git a/test/unit/test_killchain_probe.cpp b/test/unit/test_killchain_probe.cpp
+index 9804e353f..c8b4c1f3d 100644
+--- a/test/unit/test_killchain_probe.cpp
++++ b/test/unit/test_killchain_probe.cpp
+@@ -824,6 +824,73 @@ TEST_CASE("probe P-A: the RUNG E7 decision table") {
+ // never a raw sum. n=64 resolves a genuine 2x effect and CANNOT resolve 20% --
+ // no acceptance here may be written as "better by X%".
+ // ===========================================================================
++TEST_CASE("RT: E7.4 stack on TODAYs table", "[.rtstack]") {
++    const drone::DroneParams shipped = kScen.drone;
++    constexpr int kN = 64;
++    struct A { const char* name; drone::DroneParams dp; };
++    drone::DroneParams a1 = shipped;
++    drone::DroneParams a2 = shipped; a2.pursue_track_pitch_gain = 1.4;
++    drone::DroneParams a3 = shipped; a3.slash_doctrine = true;
++    drone::DroneParams a4 = a3;      a4.pursue_track_pitch_gain = 1.4;
++    drone::DroneParams a5 = shipped; a5.bfm.fight_speed_mps = 0.0;
++    drone::DroneParams a6 = a5;      a6.pursue_track_pitch_gain = 1.4;
++    const A arms[6] = {{"TODAY (slash off, fight 120)", a1},
++                       {"TODAY + E7.4 1.4", a2},
++                       {"E7.J SHIPPED (slash ON)", a3},
++                       {"E7.J SHIPPED + E7.4 (bad cell)", a4},
++                       {"TODAY fight 0", a5},
++                       {"TODAY fight 0 + E7.4 1.4", a6}};
++    std::string table = "\nRT E7.4 STACK TABLE (P-A, n=64 x 10 min, RATES PER ENGAGEMENT)";
++    for (const A& arm : arms) {
++        ArmResult sum;
++        for (int v = 0; v < kN; ++v) {
++            const ArmResult r = fly_arm(arm.dp, 10.0, v, kN);
++            sum.rounds_at_player += r.rounds_at_player;
++            sum.player_hits += r.player_hits;
++            sum.in_band_ticks += r.in_band_ticks;
++            sum.wants_fire_ticks += r.wants_fire_ticks;
++            sum.player_foe_minutes += r.player_foe_minutes;
++            sum.crashes += r.crashes;
++        }
++        const double n = kN;
++        table += std::string("\n  ") + arm.name +
++                 "\n    rounds/eng=" + std::to_string(sum.rounds_at_player / n) +
++                 "  hits/eng=" + std::to_string(sum.player_hits / n) +
++                 "  wants_fire/eng=" + std::to_string(sum.wants_fire_ticks / n) +
++                 "  in_band/eng=" + std::to_string(sum.in_band_ticks / n) +
++                 "  foe_min/eng=" + std::to_string(sum.player_foe_minutes / n) +
++                 "  crashes/eng=" + std::to_string(sum.crashes / n);
++    }
++    WARN(table);
++    SUCCEED("rt stack table");
++}
++
++TEST_CASE("RT: n=64 noise floor for in_band and foe_min", "[.rtfloor]") {
++    const drone::DroneParams shipped = kScen.drone;
++    constexpr int kN = 64;
++    std::string table = "\nRT NOISE FLOOR AT n=64 (arms that cannot differ)";
++    for (double cap_deg : {72.0, 72.5, 73.0, 71.5}) {
++        drone::DroneParams dp = shipped;
++        dp.ace_bank_cap = cap_deg / 57.2957795;
++        ArmResult sum;
++        for (int v = 0; v < kN; ++v) {
++            const ArmResult r = fly_arm(dp, 10.0, v, kN);
++            sum.rounds_at_player += r.rounds_at_player;
++            sum.player_hits += r.player_hits;
++            sum.in_band_ticks += r.in_band_ticks;
++            sum.player_foe_minutes += r.player_foe_minutes;
++        }
++        const double n = kN;
++        table += std::string("\n  ace_bank_cap=") + std::to_string(cap_deg) +
++                 "  rounds/eng=" + std::to_string(sum.rounds_at_player / n) +
++                 "  hits/eng=" + std::to_string(sum.player_hits / n) +
++                 "  in_band/eng=" + std::to_string(sum.in_band_ticks / n) +
++                 "  foe_min/eng=" + std::to_string(sum.player_foe_minutes / n);
++    }
++    WARN(table);
++    SUCCEED("rt floor table");
++}
++
+ TEST_CASE("probe P-A sweep: the engaged fight speed", "[.e8sweep]") {
+     const drone::DroneParams shipped = kScen.drone;
+     // n=64: the ensemble at which spec E7.I's convergence study says the

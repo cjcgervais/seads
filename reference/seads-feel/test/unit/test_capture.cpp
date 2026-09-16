@@ -150,12 +150,14 @@ struct Tick {
 std::vector<Tick> flick_run(double step_deg, double V,
                             const control::ControllerParams& cp, int ticks,
                             harness::ClosedLoop* out_cl = nullptr,
-                            int stop_at_state = -1) {
+                            int stop_at_state = -1,
+                            const sim::Environment* env = nullptr) {
     const glm::dvec3 up{1.0, 0.0, 0.0}, heading{0.0, 0.0, -1.0};
     double thr = 0.0;
     const sim::SimState s0 =
         harness::level_trim_state(kAp, V, 3000.0, up, heading, &thr);
     harness::ClosedLoop cl(s0, glm::dvec3{0.0, 0.0, -1.0});
+    cl.env = env;  // v4xR6: fly the capture in the LIVE atmosphere (null = today)
     cl.aim_nose();
     cl.tick(thr, kAp, cp, /*grounded=*/true);
     for (int i = 0; i < 120; ++i) cl.tick(thr, kAp, cp);
@@ -575,10 +577,10 @@ TEST_CASE("capture: re-flick hands back that tick; plain motion does not") {
         in.throttle = 0.7;
         in.aim_moved = true;
         const control::Output ev =
-            control::step(sc, in, ic, kAp, kCp, kAp.sim_dt);
+            control::step(sc, in, ic, kAp, kCp, nullptr, kAp.sim_dt);
         REQUIRE(ev.telem.capture != control::CaptureState::IDLE);
         const control::Output nl =
-            control::step(sc, in, idle, kAp, kCp, kAp.sim_dt);
+            control::step(sc, in, idle, kAp, kCp, nullptr, kAp.sim_dt);
         REQUIRE(ev.telem.omega_des.x != nl.telem.omega_des.x);
     }
     // (b) the RE-FLICK: the aim yanked far past the hand-back band
@@ -598,10 +600,10 @@ TEST_CASE("capture: re-flick hands back that tick; plain motion does not") {
         in.throttle = 0.7;
         in.aim_moved = true;
         const control::Output ev =
-            control::step(sc, in, ic, kAp, kCp, kAp.sim_dt);
+            control::step(sc, in, ic, kAp, kCp, nullptr, kAp.sim_dt);
         control::Input in2 = in;
         const control::Output nl =
-            control::step(sc, in2, idle, kAp, kCp, kAp.sim_dt);
+            control::step(sc, in2, idle, kAp, kCp, nullptr, kAp.sim_dt);
         CHECK(ev.telem.capture == control::CaptureState::IDLE);
         CHECK(exact_eq(ev.telem.omega_des, nl.telem.omega_des));
         CHECK(ev.inputs.pitch == nl.inputs.pitch);
@@ -619,9 +621,9 @@ TEST_CASE("capture: re-flick hands back that tick; plain motion does not") {
         in.override_mask[0] = true;
         in.override_sign[0] = +1.0;
         const control::Output ev =
-            control::step(sc, in, ic, kAp, kCp, kAp.sim_dt);
+            control::step(sc, in, ic, kAp, kCp, nullptr, kAp.sim_dt);
         const control::Output nl =
-            control::step(sc, in, idle, kAp, kCp, kAp.sim_dt);
+            control::step(sc, in, idle, kAp, kCp, nullptr, kAp.sim_dt);
         CHECK(ev.telem.capture == control::CaptureState::IDLE);
         CHECK(exact_eq(ev.telem.omega_des, nl.telem.omega_des));
         CHECK(ev.inputs.pitch == nl.inputs.pitch);
@@ -634,7 +636,7 @@ TEST_CASE("capture: re-flick hands back that tick; plain motion does not") {
         in.target_dir_world = aim;
         in.throttle = 0.7;
         const control::Output ev =
-            control::step(sb, in, ic, kAp, kCp, kAp.sim_dt);
+            control::step(sb, in, ic, kAp, kCp, nullptr, kAp.sim_dt);
         REQUIRE(ev.telem.ballistic);  // premise: the fixture IS ballistic
         CHECK(ev.telem.capture == control::CaptureState::IDLE);
     }
@@ -864,7 +866,7 @@ TEST_CASE("capture: engage bands pinned open-loop") {
         control::Input in;
         in.target_dir_world = pitch_target(err_deg);
         in.throttle = 0.7;
-        return control::step(s, in, it, kAp, kCp, kAp.sim_dt);
+        return control::step(s, in, it, kAp, kCp, nullptr, kAp.sim_dt);
     };
 
     // Premises: 2 deg is taper-bound, 30 deg is plateau/brake-bound (pitch).
@@ -939,7 +941,7 @@ TEST_CASE("capture: engage bands pinned open-loop") {
                            (glm::angleAxis(-rad(20.0), up_b) * nose));
         in.throttle = 0.7;
         const control::Output o =
-            control::step(s, in, control::reset(), kAp, kCp, kAp.sim_dt);
+            control::step(s, in, control::reset(), kAp, kCp, nullptr, kAp.sim_dt);
         REQUIRE(o.telem.capture == control::CaptureState::IDLE);
     }
     // (vi) hand-back band, open-loop: a live pre-crossing CARRY holds inside
@@ -1120,7 +1122,7 @@ TEST_CASE("capture: the predictive brake surface fires by stopping plan") {
         in.target_dir_world =
             glm::normalize(glm::angleAxis(-past_center, right) * nose);
         in.throttle = 0.7;
-        return control::step(s, in, ic, kAp, kCp, kAp.sim_dt);
+        return control::step(s, in, ic, kAp, kCp, nullptr, kAp.sim_dt);
     };
     // A: remaining-to-rim just INSIDE the stopping plan -> fires.
     const control::Output a = probe(rim - lead + margin);
@@ -1395,7 +1397,7 @@ TEST_CASE("capture: crabbed engage stays rate-continuous (yaw_coord netted)") {
     const double sy = dem.y >= 0.0 ? 1.0 : -1.0;
     s.angular_vel.y = sy * 0.5 + cff.y;
     const control::Output o =
-        control::step(s, in, control::reset(), kAp, kCp, kAp.sim_dt);
+        control::step(s, in, control::reset(), kAp, kCp, nullptr, kAp.sim_dt);
     REQUIRE(o.telem.capture == control::CaptureState::CARRY);
     // Premise: the coordination term is genuinely live (the mutant target).
     REQUIRE(std::abs(o.telem.extracted.beta) > rad(5.0));
@@ -1447,7 +1449,7 @@ TEST_CASE("capture: engage is rate-continuous (emission == measured omega)") {
         glm::normalize(glm::angleAxis(rad(2.0), right) * nose);
     in.throttle = 0.7;
     in.aim_rate_world = r_aim * right;  // keeps the filter state at r_aim
-    const control::Output o = control::step(s, in, ic, kAp, kCp, kAp.sim_dt);
+    const control::Output o = control::step(s, in, ic, kAp, kCp, nullptr, kAp.sim_dt);
     REQUIRE(o.telem.capture == control::CaptureState::CARRY);
     // Premise (A2): this engage EARNS the wall — cap_rim_t at the full rim
     // means s = 1, the clamp is inert, and the exact equality below tests
@@ -1460,7 +1462,7 @@ TEST_CASE("capture: engage is rate-continuous (emission == measured omega)") {
     // emission.
     control::ControllerParams cp0 = kCp;
     cp0.aim_ff_gain = 0.0;
-    const control::Output o0 = control::step(s, in, ic, kAp, cp0, kAp.sim_dt);
+    const control::Output o0 = control::step(s, in, ic, kAp, cp0, nullptr, kAp.sim_dt);
     REQUIRE(o0.telem.capture == control::CaptureState::CARRY);
     CHECK(o0.telem.omega_des.x == Catch::Approx(s.angular_vel.x).margin(1e-9));
 }
@@ -1494,7 +1496,7 @@ TEST_CASE("capture: RETURN chases the live center (per-tick axis refresh)") {
     in.target_dir_world = glm::normalize(glm::angleAxis(-d, right) *
                                          (glm::angleAxis(d, up_b) * nose));
     in.throttle = 0.7;
-    const control::Output o = control::step(s0, in, ic, kAp, kCp, kAp.sim_dt);
+    const control::Output o = control::step(s0, in, ic, kAp, kCp, nullptr, kAp.sim_dt);
     REQUIRE(o.telem.capture == control::CaptureState::RETURN);  // held
     // The emitted event demand (net of ff and coordination — beta = 0 at
     // level_state so yaw_coord = 0) must have BOTH components with near-equal
@@ -1553,7 +1555,7 @@ TEST_CASE("capture: the dead-blow release surface reads the net rate") {
     // Aim ABOVE the nose along +pitch: demand.x = +d, closing = pitch-up.
     in.target_dir_world = glm::normalize(glm::angleAxis(d, right) * nose);
     in.throttle = 0.7;
-    const control::Output o = control::step(s, in, ic, kAp, kCp, kAp.sim_dt);
+    const control::Output o = control::step(s, in, ic, kAp, kCp, nullptr, kAp.sim_dt);
     // NET surface: coast bound exceeded => HOLD. The raw mutant releases
     // (IDLE) and dumps the hot coast.
     CHECK(o.telem.capture == control::CaptureState::RETURN);
@@ -1699,7 +1701,7 @@ TEST_CASE(
             glm::normalize(glm::angleAxis(-d_rad, right) * nose);
         in.throttle = 0.7;
         const control::Output o =
-            control::step(s0, in, ic, kAp, cp, kAp.sim_dt);
+            control::step(s0, in, ic, kAp, cp, nullptr, kAp.sim_dt);
         REQUIRE(o.telem.capture == control::CaptureState::RETURN);  // held
         return o.telem.omega_des.x - cff_x;  // the raw event demand
     };
@@ -1802,12 +1804,69 @@ TEST_CASE("capture: parked-aim owned tick identical with aim_ff on or off") {
     REQUIRE(kCp.aim_ff_gain > 0.0);  // premise: the shipped table flies FF
     control::ControllerParams cp_off = kCp;
     cp_off.aim_ff_gain = 0.0;
-    const control::Output a = control::step(s0, in, ic, kAp, kCp, kAp.sim_dt);
+    const control::Output a = control::step(s0, in, ic, kAp, kCp, nullptr, kAp.sim_dt);
     const control::Output b =
-        control::step(s0, in, ic, kAp, cp_off, kAp.sim_dt);
+        control::step(s0, in, ic, kAp, cp_off, nullptr, kAp.sim_dt);
     REQUIRE(a.telem.capture == control::CaptureState::CARRY);  // still owned
     CHECK(exact_eq(a.telem.omega_des, b.telem.omega_des));
     CHECK(a.inputs.pitch == b.inputs.pitch);
     CHECK(a.inputs.yaw == b.inputs.yaw);
     CHECK(a.inputs.roll == b.inputs.roll);
+}
+
+// ---------------------------------------------------------------------------
+// v4xR6 MERGE tripwire (after-merge audit P1): the capture event's density
+// reads were migrated onto R6's spatial (position, env) seam. At null env
+// every event site is bit-identical to sea air, so the whole null-env grid is
+// STRUCTURALLY BLIND to a regression there (a reverted site ships the 653-gate
+// green). This leg flies the capture inside a BUBBLE whose ceiling sits below
+// the 3 km spawn, so the event plans + arrests in genuinely THINNED air -- an
+// altitude-only survivor plans the rim stop against sea air the plant does not
+// locally have, and the arrest degrades (audit: exit rate 0.3 -> 8.7 deg/s).
+// ---------------------------------------------------------------------------
+TEST_CASE("capture: in a bubble the event plans + arrests at the LOCAL air") {
+    REQUIRE(kCp.capture_carry > 0.0);  // premise: the file-scope SELF-ARM
+                                       // holds (shipped table = RETIRED 0.0)
+
+    // A test bubble centered on the +X-pole spawn (horizontal u == 1 there),
+    // ceiling below the 3 km spawn so the plane flies the capture at u ~ 0.7.
+    sim::AtmosphereField af;
+    af.deck_agl_m = 120.0;
+    af.deck_soft_m = 200.0;
+    af.bubbles.push_back(sim::AtmosphereField::Bubble{
+        glm::dvec3{1.0, 0.0, 0.0}, 6000.0, 2600.0, 1200.0, 1200.0});
+    sim::Environment env;
+    env.atm = &af;
+
+    // Anti-no-op: the air at the spawn is genuinely thinned (isolates the
+    // spatial term) yet still flyable (the event can close).
+    const glm::dvec3 spawn = glm::dvec3{1.0, 0.0, 0.0} * (kAp.R + 3000.0);
+    const double u =
+        sim::atm_frac_at(spawn, &env, kAp) / sim::atm_frac(3000.0, kAp);
+    REQUIRE(u < 0.9);
+    REQUIRE(u > 0.4);
+
+    const std::vector<Tick> tr =
+        flick_run(45.0, 140.0, kCp, 900, nullptr, -1, &env);
+
+    // The event still fires ONCE and lands the rim at the LOCAL authority (the
+    // self-correcting brake + the spatial density compose): the full traverse
+    // contract holds in thinned air.
+    REQUIRE(count_engages(tr) == 1);
+    require_traverse(tr);
+
+    // The arrest lands TIGHT -- the explicit mutation catcher. A stale
+    // altitude density over-plans the brake against sea air and the exit rate
+    // blows up; correct spatial reads keep it near zero (< 3 deg/s vs the ~8.7
+    // the reverted read produced in the audit probe).
+    const int i_ret = first_state(tr, control::CaptureState::RETURN);
+    REQUIRE(i_ret >= 0);
+    int i_exit = -1;
+    for (size_t i = i_ret; i < tr.size(); ++i)
+        if (tr[i].cap == control::CaptureState::IDLE) {
+            i_exit = static_cast<int>(i);
+            break;
+        }
+    REQUIRE(i_exit > i_ret);
+    CHECK(std::abs(tr[i_exit].w) < rad(3.0));
 }

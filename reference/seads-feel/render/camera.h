@@ -35,7 +35,7 @@ namespace render {
 constexpr double kChaseFovyDeg = 60.0;
 
 // RMB-hold gunsight zoom (2026-07-07). While the right mouse button is held the
-// vertical FOV eases from kChaseFovyDeg to kZoomFovyDeg (~2x magnification)
+// vertical FOV eases from kChaseFovyDeg to kZoomFovyDeg (2.8x magnification)
 // over ~kZoomEaseTime, and — in mouse-aim mode only — the camera re-points onto
 // the aim/pipper so the magnified detail sits under the reticle (freelook zooms
 // the center-screen view in place). Entirely DOWNSTREAM of the aim (RA9): the
@@ -43,10 +43,27 @@ constexpr double kChaseFovyDeg = 60.0;
 // update. Code constants (Chad's ruling — the zoom amount lives with the other
 // camera-framing numbers here, not the TOML), tuned for feel by the pilot
 // flying it.
-constexpr double kZoomFovyDeg = 15.0;  // [deg] zoomed FOV (4x from 60)
+constexpr double kZoomFovyDeg = 21.43;  // [deg] zoomed FOV (2.8x from 60)
 constexpr double kZoomEaseTime = 0.5;  // [s] fov ease time-constant — a
                                        // deliberate zoom-in (~95% settled by
                                        // 3*tau ~ 1.5 s)
+
+// Freelook mousewheel dolly-out (2026-07-10, Chad). While freelook (Space) is
+// held the wheel pulls the eye straight back along the chase offset toward a
+// "behold the little planet" wide view (dolly_t in [0,1]). The level RESETS to 0
+// on every freelook ENTRY, so each press starts at the default chase (identical
+// to the mouse-aim view) and you scroll out fresh; it applies ONLY in freelook
+// (releasing Space returns to the normal mouse-aim chase). Zoom-OUT only (the
+// RMB gunsight owns zoom-in). DOWNSTREAM of the aim by construction: freelook
+// drives the camera orbit, not mouse->aim (the aim is held), so nothing here
+// touches the mouse->aim loop (RA9). Code constants (same ruling as the zoom
+// amount — camera framing lives here, not the TOML), tuned for feel by the
+// pilot. The effective chase distance = distance*(kDollyMaxDistance/distance)^
+// dolly_t (GEOMETRIC, so each notch is a fixed percentage — fine near the plane,
+// coarse far out); the surface clamp (camera.cpp) keeps the eye above ground at
+// any distance, so kDollyMaxDistance is a free tuning knob.
+constexpr double kDollyMaxDistance = 3500.0;  // [m] eye distance at full wheel-out
+constexpr double kDollyWheelStep = 0.03;      // dolly fraction per wheel notch (slow)
 
 // Angular margin the freelook overhead-pitch cap keeps between the orbit and
 // the camera-up degeneracy cone (freelook_overhead_pitch_cap below). Shared by
@@ -54,8 +71,12 @@ constexpr double kZoomEaseTime = 0.5;  // [s] fov ease time-constant — a
 constexpr double kFreelookPoleMargin = 0.05;  // [rad] ~2.9 deg
 
 struct ChaseParams {
-    double distance = 34.0;         // [m] eye offset behind the nose
-    double height = 9.0;            // [m] eye offset toward local_up
+    // ★ 2026-09-10 Chad: "brought slightly closer to the airplane in chase
+    // cam ... a quarter of the way there" -- 45/9 -> 33.75/6.75, BOTH scaled
+    // by 0.75 so the eye's angle on the plane (and the lens_shift that hangs
+    // off height/distance) is unchanged; only the distance is.
+    double distance = 33.75;        // [m] eye offset behind the nose
+    double height = 6.75;           // [m] eye offset toward local_up
     double min_eye_altitude = 2.0;  // [m] the §9.2 never-enter-the-planet
                                     // margin (bulge occlusion is by design)
     // |dot(view, up)| above this = LookAt basis about to degenerate ->
@@ -69,9 +90,19 @@ struct CameraPose {
     glm::dvec3 up{0.0};  // unit; the LookAt up hint
 };
 
+// `underground` (T9a CAVECAM): inside the tunnel net (the pilot flew below the
+// bare-sphere surface, which is legal in the tunnel — the crash predicate
+// yields there). The eye is always below R+2 underground, so the SPEC §9.2
+// surface clamp would drag it UP to the bare sphere on a nose-up pose (the
+// chase eye behind is radially LOWER than the plane, f0<0 returns the higher
+// endpoint, then the degenerate reseat lifts ~2 km to bare radius) — a
+// zoomed-out exterior view that loses the plane. When underground, SKIP both
+// the surface clamp AND the degenerate reseat: the eye is the raw offset so
+// the camera stays ON the plane inside the cavern. Default false => every
+// existing surface-flight call site is bit-identical.
 CameraPose chase_camera(const sim::SimState& state,
                         const sim::AircraftParams& params,
-                        const ChaseParams& chase);
+                        const ChaseParams& chase, bool underground = false);
 
 // Freelook orbit offset (SPEC §9.2): mouse-driven camera orbit about the
 // aircraft, composed ON TOP of the aim-carried pose and eased to zero on
@@ -376,11 +407,18 @@ glm::dvec3 reticle_smooth(const glm::dvec3& s, const glm::dvec3& target,
 // holonomy + zenith-avoidance of the carried frame survive the decoupled
 // forward (AT-14). eye sits behind `forward`, lifted along up, clamped above
 // the surface. Freelook orbit is composed on the eye only. PURE / raylib-free.
+// `underground` (T9a CAVECAM): see chase_camera above — inside the tunnel net
+// the eye is always below R+2, so the surface clamp + degenerate reseat would
+// hoist it to bare radius (a zoomed-out exterior egg view, plane invisible) on
+// a nose-up pose. When underground, SKIP both so the eye is the raw aim offset
+// and the camera stays on the plane inside the lit egg. Default false =>
+// surface flight is bit-identical.
 CameraPose aim_chase_camera(const sim::SimState& state,
                             const glm::dvec3& forward, const glm::dvec3& aim_up,
                             const sim::AircraftParams& params,
                             const ChaseParams& chase,
-                            const CameraOrbit& orbit = {});
+                            const CameraOrbit& orbit = {},
+                            bool underground = false);
 
 // Projection of a world-space DIRECTION into normalized device coords for the
 // reticle/nose-marker pair (SPEC §9.2). Reticle = projection of the aim; nose
@@ -466,6 +504,22 @@ struct FrustumBounds {
 };
 FrustumBounds off_center_frustum(double fovy_rad, double aspect, double nearZ,
                                  double shift_ndc);
+
+// The 4 world-space frustum CORNER ray vectors for the fullscreen sky pass, in
+// screen-NDC corner order [0]=BL(-1,-1) [1]=BR(+1,-1) [2]=TR(+1,+1)
+// [3]=TL(-1,+1). Built from the SAME fovy + off-center lens `shift_ndc` the 3D
+// scene uses, so a fullscreen sky quad whose vertex positions are these corners
+// interpolates to the SAME per-pixel view ray the world is rendered with
+// (SPEC/plan P0: frustum-exact under lens-shift AND zoom). Returned
+// UNNORMALIZED and screen-LINEAR: the quad interpolates them linearly across
+// the screen and the sky FS normalizes per-pixel — normalizing BEFORE
+// interpolation bends the interior rays (the horizon would swim mid-screen
+// while the corners still match exactly). `forward`/`up` are the camera look/up
+// (the SAME basis project_dir builds: right = normalize(cross(forward, up)),
+// true-up = cross(right, forward)).
+void frustum_corner_rays(double fovy_rad, double aspect, double shift_ndc,
+                         const glm::dvec3& forward, const glm::dvec3& up,
+                         glm::dvec3 out_corners[4]);
 
 // Max |orbit.pitch| on the OVERHEAD side (eye above the plane, view rotating
 // toward straight-down) before the camera-up degeneracy guard fires and flips

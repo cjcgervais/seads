@@ -95,10 +95,21 @@ app::LoopState run(const sim::SimState& s0, seads_replay::Recorder* rec) {
         in.aim_dy = pending_dy;
         in.frame_ticks = 1;
         pending_dx = pending_dy = 0.0;
-        const app::TickResult res = app::tick(st, in, kAp, kCp);
+        // null env/worlds: firewalled; v2 taps the tick's telemetry.
+        const app::TickResult res = app::tick(st, in, kAp, kCp, nullptr);
         if (rec) rec->on_tick(in, st, res.telem);  // READ-ONLY tap
     }
     return st;
+}
+
+// F9 RECORD (v5 kernel-v5-reconcile): the app::step_frame hook seam the
+// felt-flight recorder actually taps through (main.cpp never calls
+// Recorder::on_tick directly — it wires this hook). A free function, since
+// app::TickHook is a raw function pointer + void* ctx (not std::function),
+// matching seads_replay::Recorder::on_tick's signature.
+void hook_thunk(const app::TickInput& in, const app::LoopState& st,
+                const control::Telemetry& telem, void* ctx) {
+    static_cast<seads_replay::Recorder*>(ctx)->on_tick(in, st, telem);
 }
 
 }  // namespace
@@ -158,7 +169,7 @@ TEST_CASE("recorder round-trip: the captured stream replays bit-identical") {
     app::LoopState st = flying(s0);
     for (const auto& r : recs) {
         const app::TickInput in = seads_replay::to_tick_input(r);
-        app::tick(st, in, kAp, kCp);
+        app::tick(st, in, kAp, kCp, nullptr);  // null env/worlds: firewalled
         CHECK(st.curr.position.x == r.pin_position[0]);
         CHECK(st.curr.position.y == r.pin_position[1]);
         CHECK(st.curr.position.z == r.pin_position[2]);
@@ -167,6 +178,61 @@ TEST_CASE("recorder round-trip: the captured stream replays bit-identical") {
         CHECK(st.curr.angular_vel.x == r.pin_angular_vel[0]);
         CHECK(st.curr.throttle == r.pin_throttle);
     }
+}
+
+// F9 RECORD: app::step_frame's new OPTIONAL tick_hook parameter is a new
+// seam layer (the "moved-consumer trap," recurred 5+ times per lessons.md) —
+// it needs its OWN leg, not just app::tick's. Two claims: (1) wiring the
+// hook is a strict superset — the SAME frame schedule with the hook wired
+// vs nullptr flies the BIT-IDENTICAL LoopState (the hook is a read-only tap,
+// exactly like Recorder::on_tick itself); (2) the hook fires EXACTLY once
+// per tick actually stepped (summed across frames, including 0-tick and
+// multi-tick frames from an irregular frame_dt schedule), never more, never
+// less.
+TEST_CASE(
+    "step_frame: the optional tick_hook fires once per tick and stays "
+    "bit-identical") {
+    const glm::dvec3 up{1.0, 0.0, 0.0}, heading{0.0, 0.0, -1.0};
+    double thr = 0.7;
+    const sim::SimState s0 =
+        harness::level_trim_state(kAp, 150.0, 4000.0, up, heading, &thr);
+
+    // An irregular frame_dt schedule (varies 0.5x..2.5x sim_dt) so some
+    // frames step 0 ticks and some step multiple — exercising both edges of
+    // the "once per tick actually stepped" claim.
+    auto frame_dt_at = [&](int f) {
+        const double mult = 0.5 + 2.0 * (0.5 + 0.5 * std::sin(f * 0.7));
+        return mult * kAp.sim_dt;
+    };
+    constexpr int kFrames = 200;
+
+    auto run_frames = [&](seads_replay::Recorder* rec, long* hook_calls) {
+        app::LoopState st = flying(s0);
+        app::Accumulator accum(kAp.sim_dt);
+        double pending_dx = 0.0, pending_dy = 0.0;
+        app::FrameInput fin;
+        fin.throttle = thr;
+        long total_ticks = 0;
+        for (int f = 0; f < kFrames; ++f) {
+            const app::FrameResult fr = app::step_frame(
+                st, accum, frame_dt_at(f), fin, pending_dx, pending_dy, kAp,
+                kCp, nullptr, nullptr, nullptr, nullptr, nullptr,
+                rec ? hook_thunk : nullptr,
+                rec ? static_cast<void*>(rec) : nullptr);
+            total_ticks += fr.ticks;
+        }
+        if (hook_calls) *hook_calls = total_ticks;
+        return st;
+    };
+
+    seads_replay::Recorder rec;
+    long expected_ticks = 0;
+    const app::LoopState with_hook = run_frames(&rec, &expected_ticks);
+    const app::LoopState no_hook = run_frames(nullptr, nullptr);
+
+    REQUIRE(expected_ticks > 0);  // premise: the schedule actually ticks
+    CHECK(rec.records().size() == static_cast<size_t>(expected_ticks));
+    CHECK(loopstate_eq(with_hook, no_hook));
 }
 
 // ---------------------------------------------------------------------------

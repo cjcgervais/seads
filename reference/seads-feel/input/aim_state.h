@@ -135,6 +135,8 @@ struct Freelook {
 struct HorizonRecovery {
     double remaining = 0.0;  // [rad] captured angle left to roll; 0 = inactive
     double sign = 0.0;       // +/-1 while active
+    double w = 0.0;          // [rad/s] current ramped roll speed (ease-in state;
+                             //   climbs from 0 each capture, see step())
 
     // Terminal snap threshold [rad]: a degeneracy/termination guard (code, not
     // tune data — the exponential D3 tail never reaches 0 on its own).
@@ -155,13 +157,22 @@ struct HorizonRecovery {
         }
         remaining = a;
         sign = signed_angle > 0.0 ? 1.0 : -1.0;
+        w = 0.0;  // fresh event ramps in from rest (ease-in, v13g)
     }
 
     // One tick of the D3 profile; returns the signed roll delta to apply this
     // tick (0.0 exactly while inactive — the caller skips the frame math).
-    double step(double dt, double rate, double settle) {
+    // `accel` (v13g, pilot ruling 2026-08-06: "the motion should ease in and
+    // out rather than being jarring"): the roll speed RAMPS from 0 at this
+    // rate [rad/s^2] instead of launching at the full `rate` on the capture
+    // tick. The ceiling min(rate, settle*remaining) is unchanged and the min
+    // tracks it DOWN exactly, so the settle ease-out tail is bit-identical
+    // once ramped. accel = 0 (the default) = the legacy instant launch —
+    // existing callers/tests are untouched (strict-superset off-switch).
+    double step(double dt, double rate, double settle, double accel = 0.0) {
         if (!(remaining > 0.0)) return 0.0;
-        const double w = std::min(rate, settle * remaining);
+        const double w_cap = std::min(rate, settle * remaining);
+        w = (accel > 0.0) ? std::min(w + accel * dt, w_cap) : w_cap;
         double d = w * dt;
         if (remaining - d <= kFinishEps) d = remaining;  // terminal snap
         remaining -= d;

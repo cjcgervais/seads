@@ -114,7 +114,7 @@ int run_fly(const sim::AircraftParams& p, int ticks,
     sim::SimState s = harness::golden_start(p);
     csv.write(0.0, s, p);
     for (int i = 1; i <= ticks; ++i) {
-        s = sim::step(s, harness::golden_input(i - 1), p, p.sim_dt);
+        s = sim::step(s, harness::golden_input(i - 1), p, nullptr, p.sim_dt);
         csv.write(i * p.sim_dt, s, p);
         if (sim::altitude(s.position, p) <= 0.0) {
             std::fprintf(stderr, "CRASH at tick %d (altitude <= 0)\n", i);
@@ -147,7 +147,7 @@ int run_alpha(const sim::AircraftParams& p) {
     for (const auto& ax : axes) {
         for (double V : {15.0, 150.0}) {
             const double measured =
-                harness::measure_ang_accel_max(p, V, ax.axis, 2000.0);
+                harness::measure_ang_accel_max(p, V, ax.axis, 2000.0, nullptr);
             const double derived =
                 sim::ang_accel_max_derived(ax.c, ax.I, V, 2000.0, p);
             std::printf("%-6s %8.1f %14.9f %14.9f %10.2e\n", ax.name, V,
@@ -162,7 +162,7 @@ int run_golden(const sim::AircraftParams& p) {
     std::printf("// paste into test/golden/golden_flight.h kFlight[]\n");
     sim::SimState s = harness::golden_start(p);
     for (int tick = 1; tick <= harness::kGoldenTicks; ++tick) {
-        s = sim::step(s, harness::golden_input(tick - 1), p, p.sim_dt);
+        s = sim::step(s, harness::golden_input(tick - 1), p, nullptr, p.sim_dt);
         if (tick % harness::kGoldenCheckpointEvery != 0) continue;
         std::printf("    {%d,\n", tick);
         std::printf("     %.17g, %.17g, %.17g,\n", s.position.x, s.position.y,
@@ -902,7 +902,7 @@ int run_mouseloop(const sim::AircraftParams& p, const std::string& dir,
         in.aim_dy = (i <= push_ticks) ? dy_tick : 0.0;
         in.cam_fwd = cam.cam_fwd;  // previous tick's basis (one-tick lag)
         in.cam_up = cam.cam_up;
-        const app::TickResult r = app::tick(st, in, p, cp);
+        const app::TickResult r = app::tick(st, in, p, cp, nullptr);
         cam.advance(st.curr, st.aim.forward(), st.aim.up(), cp, p.sim_dt);
 
         const glm::dvec3 lu = sim::local_up(st.curr.position);

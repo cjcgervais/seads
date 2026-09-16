@@ -189,17 +189,17 @@ TEST_CASE(
     app::TickInput fire = instr_in(0.7);
     fire.orient_cmd = true;
     fire.freelook_held = true;  // the second tap is DOWN on the fire tick
-    const app::TickResult r = app::tick(st, fire, kAp, kCp);
+    const app::TickResult r = app::tick(st, fire, kAp, kCp, nullptr, nullptr);
     CHECK(r.orient_fired);
 
     // The aim landed on the NOSE (within a tick of transport), NOT velocity.
-    const double aim_nose_deg = deg(
-        std::acos(std::clamp(glm::dot(st.aim.forward(), nose), -1.0, 1.0)));
+    const double aim_nose_deg =
+        deg(std::acos(std::clamp(glm::dot(st.aim.forward(), nose), -1.0, 1.0)));
     std::printf("[S-orient e2e] pre_debt=%.1f  aim_vs_nose=%.3f deg\n",
                 pre_debt, aim_nose_deg);
     CHECK(aim_nose_deg < 1.0);  // aim := NOSE (v9)
-    CHECK(deg(std::acos(std::clamp(glm::dot(st.aim.forward(), vhat), -1.0,
-                                   1.0))) > 2.0);
+    CHECK(deg(std::acos(
+              std::clamp(glm::dot(st.aim.forward(), vhat), -1.0, 1.0))) > 2.0);
 
     // The debt is still on the frame right after the fire (the orient did NOT
     // itself retire it — the righting rides the release edge below).
@@ -210,15 +210,16 @@ TEST_CASE(
     // debt in that same tick — no open-loop drain, no latch.
     app::TickInput hold_fl = instr_in(0.7);
     hold_fl.freelook_held = true;
-    for (int tk = 0; tk < 2; ++tk) app::tick(st, hold_fl, kAp, kCp);
+    for (int tk = 0; tk < 2; ++tk)
+        app::tick(st, hold_fl, kAp, kCp, nullptr, nullptr);
 
     const app::TickInput release = instr_in(0.7);  // freelook up, no override
-    app::tick(st, release, kAp, kCp);
+    app::tick(st, release, kAp, kCp, nullptr);
     CHECK(st.recov.remaining == 0.0);  // no latch — righted NOW
     CHECK(debt_deg(st) < 5.0);         // up-debt retired ON the release tick
 
     // And stays retired (transport preserves it on an open leg).
-    for (int tk = 0; tk < 120; ++tk) app::tick(st, release, kAp, kCp);
+    for (int tk = 0; tk < 120; ++tk) app::tick(st, release, kAp, kCp, nullptr);
     CHECK(debt_deg(st) < 5.0);
     CHECK(st.recov.remaining == 0.0);
 }
@@ -234,11 +235,11 @@ TEST_CASE(
 // ===========================================================================
 TEST_CASE("S-orient: the fire survives a 0-tick frame (caller pending latch)") {
     const glm::dvec3 up{1.0, 0.0, 0.0}, heading{0.0, 0.0, -1.0};
-    const sim::SimState s =
-        harness::flight_state(kAp, 180.0, 4000.0, up, heading, rad(40.0),
-                              rad(8.0), rad(6.0));
+    const sim::SimState s = harness::flight_state(
+        kAp, 180.0, 4000.0, up, heading, rad(40.0), rad(8.0), rad(6.0));
     app::LoopState st = flying(s);
-    st.aim.roll_about_forward(rad(60.0));  // carry real debt (no-op-trap killer)
+    st.aim.roll_about_forward(
+        rad(60.0));  // carry real debt (no-op-trap killer)
     const double pre_debt = debt_deg(st);
     REQUIRE(pre_debt > 20.0);
 
@@ -252,17 +253,18 @@ TEST_CASE("S-orient: the fire survives a 0-tick frame (caller pending latch)") {
     app::FrameInput fin;
     fin.throttle = 0.7;
     fin.orient_cmd = pending_orient;
-    app::FrameResult fr =
-        app::step_frame(st, accum, 0.5 * kAp.sim_dt, fin, pdx, pdy, kAp, kCp);
+    app::FrameResult fr = app::step_frame(st, accum, 0.5 * kAp.sim_dt, fin, pdx,
+                                          pdy, kAp, kCp, nullptr, nullptr);
     CHECK(fr.ticks == 0);
     CHECK_FALSE(fr.orient_fired);  // nothing delivered on a 0-tick frame
     if (fr.ticks > 0) pending_orient = false;  // the caller's clear rule
     CHECK(pending_orient);  // the fire is still pending (carried), not lost
 
-    // Frame 2: another half sim_dt completes one whole tick. The re-offered fire
-    // now lands.
+    // Frame 2: another half sim_dt completes one whole tick. The re-offered
+    // fire now lands.
     fin.orient_cmd = pending_orient;
-    fr = app::step_frame(st, accum, 0.5 * kAp.sim_dt, fin, pdx, pdy, kAp, kCp);
+    fr = app::step_frame(st, accum, 0.5 * kAp.sim_dt, fin, pdx, pdy, kAp, kCp,
+                         nullptr, nullptr);
     CHECK(fr.ticks == 1);
     CHECK(fr.orient_fired);  // the carried fire delivered on the tick-bearing
                              // frame — NOT lost to the 0-tick frame
@@ -275,11 +277,11 @@ TEST_CASE("S-orient: the fire survives a 0-tick frame (caller pending latch)") {
     // pinned in the end-to-end leg above — not this delivery test.)
     const glm::dvec3 nose = st.curr.orientation * glm::dvec3{0.0, 0.0, -1.0};
     const glm::dvec3 vhat = glm::normalize(st.curr.velocity);
-    const double aim_nose_deg = deg(
-        std::acos(std::clamp(glm::dot(st.aim.forward(), nose), -1.0, 1.0)));
+    const double aim_nose_deg =
+        deg(std::acos(std::clamp(glm::dot(st.aim.forward(), nose), -1.0, 1.0)));
     REQUIRE(deg(std::acos(std::clamp(glm::dot(vhat, nose), -1.0, 1.0))) >
-            3.0);                   // nose != velocity (the snap is observable)
-    CHECK(aim_nose_deg < 1.0);      // aim landed on the NOSE
+            3.0);               // nose != velocity (the snap is observable)
+    CHECK(aim_nose_deg < 1.0);  // aim landed on the NOSE
     CHECK(deg(std::acos(std::clamp(glm::dot(st.aim.forward(), vhat), -1.0,
                                    1.0))) > 2.0);  // NOT the old velocity
 }
@@ -303,7 +305,7 @@ TEST_CASE("S-orient: below ballistic speed the aim lands on the NOSE") {
 
     app::TickInput fire = instr_in(0.7);
     fire.orient_cmd = true;
-    const app::TickResult r = app::tick(st, fire, kAp, kCp);
+    const app::TickResult r = app::tick(st, fire, kAp, kCp, nullptr, nullptr);
     CHECK(r.orient_fired);
 
     const glm::dvec3 nose_now =
@@ -339,7 +341,7 @@ TEST_CASE("S-orient: unfired detector is bit-identical over 600 ticks") {
     bool prev_fl = false;
 
     for (int i = 0; i < 600; ++i) {
-        app::tick(base, instr_in(thr), kAp, kCp);
+        app::tick(base, instr_in(thr), kAp, kCp, nullptr, nullptr);
 
         // The candidate runs the live detector: a lone freelook press every
         // ~50 ticks (a SINGLE tap, never paired within the window), so the
@@ -347,12 +349,16 @@ TEST_CASE("S-orient: unfired detector is bit-identical over 600 ticks") {
         // orient_cmd.
         const bool fl = (i % 50 == 0);
         app::TickInput in = instr_in(thr);
-        in.orient_cmd =
-            tap.step(fl && !prev_fl, kAp.sim_dt, kCp.orient_double_tap_s);
+        // The shipped window is the RETIRED 0 (pilot ruling 2026-08-06 - the
+        // double-tap is redundant now that every release fires the verb), and
+        // 0 short-circuits the detector before it touches any state. Pin a
+        // live window here so the detector really CHURNS across this firewall
+        // (reading the shipped dial would make the leg vacuous).
+        in.orient_cmd = tap.step(fl && !prev_fl, kAp.sim_dt, 0.30);
         prev_fl = fl;
         in.freelook_held = false;      // keep the aim path identical to base
         REQUIRE_FALSE(in.orient_cmd);  // it must never have fired
-        app::tick(cand, in, kAp, kCp);
+        app::tick(cand, in, kAp, kCp, nullptr, nullptr);
     }
     const double pos_err = glm::length(base.curr.position - cand.curr.position);
     const glm::dquat& qb = base.curr.orientation;
@@ -362,10 +368,11 @@ TEST_CASE("S-orient: unfired detector is bit-identical over 600 ticks") {
         pos_err, qb.w - qc.w, qb.x - qc.x, qb.y - qc.y, qb.z - qc.z);
     // pos_err == 0 is the bit-identical trajectory (the strict-superset proof):
     // an unfired detector perturbs the tick by NOTHING. P2a red-team fix: pin
-    // the orientation COMPONENT-WISE exact, not a loose dot bound. base and cand
-    // run the IDENTICAL shared app::tick with orient_cmd always false, so there
-    // is no separately-compiled call site here (unlike the mirror-equivalence
-    // test's TWO composers) — the trajectory is truly bit-identical and exact
+    // the orientation COMPONENT-WISE exact, not a loose dot bound. base and
+    // cand run the IDENTICAL shared app::tick with orient_cmd always false, so
+    // there is no separately-compiled call site here (unlike the
+    // mirror-equivalence test's TWO composers) — the trajectory is truly
+    // bit-identical and exact
     // `==` is the honest firewall (a loose |dot|>1-1e-12 would tolerate a real
     // per-tick perturbation the detector's presence could introduce).
     CHECK(pos_err == 0.0);
@@ -389,7 +396,7 @@ TEST_CASE("S-orient: a grounded tick never fires") {
 
     app::TickInput fire = instr_in(0.7);
     fire.orient_cmd = true;
-    const app::TickResult r = app::tick(st, fire, kAp, kCp);
+    const app::TickResult r = app::tick(st, fire, kAp, kCp, nullptr, nullptr);
     CHECK_FALSE(r.orient_fired);  // suppressed on the grounded tick
     CHECK(st.recov.remaining == 0.0);
 }
@@ -403,7 +410,7 @@ TEST_CASE("S-orient: raw mode never fires (the event is instructor-only)") {
     app::TickInput fire = instr_in(0.7);
     fire.raw_mode = true;
     fire.orient_cmd = true;
-    const app::TickResult r = app::tick(st, fire, kAp, kCp);
+    const app::TickResult r = app::tick(st, fire, kAp, kCp, nullptr, nullptr);
     CHECK_FALSE(
         r.orient_fired);  // the orient block lives in the instructor arm
 }
@@ -432,7 +439,7 @@ TEST_CASE("S-orient: an override held on the orient tick suppresses the fire") {
     fire.orient_cmd = true;
     fire.override_mask[2] = true;  // roll-axis keyboard jink held
     fire.override_sign[2] = 1.0;
-    const app::TickResult r = app::tick(st, fire, kAp, cp_v6);
+    const app::TickResult r = app::tick(st, fire, kAp, cp_v6, nullptr, nullptr);
     CHECK_FALSE(r.orient_fired);       // suppressed while any override is held
     CHECK(st.recov.remaining == 0.0);  // no capture either
 }

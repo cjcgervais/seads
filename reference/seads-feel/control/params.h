@@ -197,6 +197,50 @@ struct ControllerParams {
     // at rest unchanged). lean_gain = 0 is the bit-identical knob-off arm.
     double lean_gain = 0.0;  // [rad bank per rad lateral error] 0 = off
     double lean_max = 0.0;   // [rad] lean cap (Chad ruling ~30 deg)
+    // S-leanlead (feel/yaw-bank-balance 2026-09-10, Chad: the turn entry
+    // should be "a near even balance of yaw and bank" from the first
+    // mouse deflection -- measured: the FINE bank arrives through TWO
+    // series lags (held_bank chases the lean at auto_level_rate, then
+    // K_phi chases held_bank) while the rudder pointing is one lag, so the
+    // nose crabs first and the bank trails). The wings-hold roll limb
+    // chases held_bank + lean_lead*d, d = the live lean's SAME-SIGN excess
+    // over held_bank (continuous, no threshold; controller.cpp) -- the
+    // first lag is bypassed on the way IN only. The release
+    // (lean_target -> 0), the rest auto-level, the banked-spawn capture
+    // (AT-13) and the MB-right righting all see lean_target*d <= 0 and
+    // keep the flown decay bit-identically. 0 = structurally OFF (the
+    // bit-identical legacy tree); 1 = the roll limb targets the live lean.
+    double lean_lead = 0.0;  // [0..1] 0 = off
+    // S-leanlead-lateral (2026-09-12, the walk-back's structural fix). The
+    // lead above reads lean_target = lean_gain * az_lat, and az_lat is the
+    // aim's offset along the HORIZON's right axis while the mouse deflects in
+    // the CARRIED (screen) frame. For an aim offset of eps purely along body
+    // up -- a pure PITCH input -- the de-roll numerator collapses to
+    // sin(eps)*sin(phi), i.e. az_lat ~= eps*sin(phi): nonzero whenever the
+    // wings are off level, SAME sign as phi nose-up (a divergent feedback --
+    // wings-level is unstable for eps > 1/lean_gain) and OPPOSITE nose-down
+    // (a ringing over-corrector). Chad flew v14 and reported exactly that
+    // pair -- "nosing down often makes my wings bank when unwanted... pulling
+    // a straight loop my wings are completely unwantedly banking over 180
+    // degrees". The contamination is MB-lean's own and PRE-DATES the lead;
+    // what lean_lead did was bypass the auto_level_rate lag that had been
+    // low-passing it, raising that path's loop gain from ~0 (two-pole
+    // rolloff) to K_phi*lean_lead*lean_gain.
+    //
+    // The fix scales the LEAD (never lean_target itself -- the flown MB-lean
+    // magnet is untouched) by the aim offset's HORIZON-LATERAL SHARE:
+    //     g = smoothstep(lat_lo, lat_hi, |az_lat| / err)
+    // share == |sin(phi)| for a pure-pitch aim (bank-dependent, small at the
+    // shallow banks where the runaway seeds) and == 1 for a genuinely
+    // sideways aim at ANY bank -- so it discriminates the turn entry the dial
+    // was built for from the loop/dive contamination. |az_lat| ALONE does not
+    // discriminate: it is nonzero for pure pitch too, which is the bug.
+    // lean_lead_lateral = false is the structural OFF arm (the landed v14
+    // expression tree, bit-identical); lean_lead = 0 is bit-identical
+    // regardless of either edge.
+    bool lean_lead_lateral = false;     // false = landed-v14 ungated lead
+    double lean_lead_lat_lo = 0.0;      // [0..1] share where the lead starts
+    double lean_lead_lat_hi = 1.0;      // [0..1] share where it is full
 
     // Regime blend/latch (SPEC §9.3), hysteretic. blend is smoothstep(lo,hi,e).
     double blend_lo = 0.0;  // [rad] FINE entry / blend start
@@ -215,10 +259,54 @@ struct ControllerParams {
     // servo demand: 1.0 = the full K_theta line-hold, 0.0 = the bit-
     // identical OFF arm (the fly fallback).
     double pull_floor = 0.0;  // [frac of the sag-servo demand], 0 = off
+    // S-righthand (feel/lean-lead-walkback, 2026-09-12) -- MB-right must not
+    // right the aeroplane while the pilot's hand is still flying it.
+    //
+    // MEASURED FROM CHAD'S OWN TAPE (10134 ticks; his loop apex at t=18.02):
+    // the nose passes vertical, cos_phi_theta crosses zero, and MB-right arms
+    // -- its "at rest" test is err < blend_lo and his tracking err there is
+    // 4.6 deg, inside the circle. inverted_delay is 0.0 (ruled 2026-08-06), so
+    // it arms on the FIRST such tick and commands EXACTLY inverted_rate: the
+    // tape shows wdz = -180.0 deg/s held through the apex. He is not resting
+    // inverted; he is mid-loop, nose 86 deg up, mouse still moving.
+    //
+    // Chad, verbatim: "the loop is sustained by me sustaining the motion, if I
+    // change the motion it should change the behavior." So the righting
+    // AUTHORITY is scaled by a HAND-REST ramp: zero while the hand is moving
+    // the aim, rising to full over right_hand_rest seconds of rest.
+    // CONTINUOUS (a smoothstep of a time integral), not a veto latch -- no new
+    // threshold to chatter, and a hand that pauses mid-loop gets a
+    // proportional amount of righting rather than a step.
+    //
+    // The 2026-08-06 ruling ("inverted righting carries NO added delay -- as
+    // soon as the rest condition is met") is PRESERVED: hands off at the apex
+    // still rights, after this short hand-rest; inverted_delay and
+    // inverted_rate are UNTOUCHED. The rest signal is the same CQ2-gated
+    // aim_moved the deadzone latch uses, so freelook (mouse on the camera)
+    // correctly reads as hand-off-the-aim.
+    //
+    // Chad, flying it: "I can do the vertical loops and immelmans without a
+    // hitch." 0.0 = the STRUCTURAL OFF arm (bit-identical legacy tree).
+    // DEBT, measured, deferred (red-team P2 -- the TREMOR case, same class as
+    // the P3-a note above). "The hand is live" is any nonzero aim motion, so a
+    // +/-1-count-per-frame mouse tremor while belly-up keeps resetting the
+    // clock and caps the gate: integrated righting 1.76 deg against 117.75
+    // with a still hand. That is the 2026-08-06 resting case with a drifting
+    // hand, and it reads as "it will not right me". The cure is a WINDOWED NET
+    // aim displacement (a tremor nets to ~0, a real sweep does not) rather
+    // than an any-motion test -- a mechanism change, not a dial, so it is
+    // deferred rather than bodged with a deadband here.
+    double right_hand_rest = 0.0;  // [s] hand-at-rest before MB-right has
+                                   //     full authority; 0 = off
+
     // Wings-leveling fade band (S7-loop-invert): the wings-leveling roll fades
     // over smoothstep(-band, +band, cos_phi_theta) — 1 upright (bit-identical
     // golden), 0 inverted, smooth across the ~90 deg knife-edge (no chatter).
     double wings_level_band = 0.0;  // [cos units]
+    // S-lapguard 2026-09-12: aim-laps-the-nose guard, measured inert on both of Chad's tapes (0 ticks), cost 272 m on a 300 deg/s lateral sweep; removed like S-aimclamp/S-retclamp.
+    // (The loop-rollover defect it targeted is real; the CURE was wrong --
+    // it never fired on his hand. The apex roll he actually felt is
+    // right-hand dial below.)
     // Blend-band roll TARGET continuity (the 5-10 deg roll slam, 2026-07-30 —
     // coverage-completion of MB-lean): inside the blend band the MANEUVER
     // roll limb chases the mixed bank target blend*phi_commit +
@@ -237,10 +325,11 @@ struct ControllerParams {
     // w_axis = -(w_dn*min(yv,0) + w_up*max(yv,0))/cosPhiTheta with
     // yv = emitted_yaw*sin(e.phi) (the MB-lean frame-true pair) and one-
     // sided sag-band fades w_dn/w_up — gated blend * fwd_gate * knife_fade,
-    // keyed on the EMITTED yaw (never a faded/blended-away demand). The sag servo above stays as the
-    // residual-error backstop (feedback-plus-feedforward). Scales the FF:
-    // 1.0 = the exact kinematic complement, 0.0 = STRUCTURAL OFF
-    // (bit-identical v11 tree — the fly kill-switch and golden baseline arm).
+    // keyed on the EMITTED yaw (never a faded/blended-away demand). The sag
+    // servo above stays as the residual-error backstop
+    // (feedback-plus-feedforward). Scales the FF: 1.0 = the exact kinematic
+    // complement, 0.0 = STRUCTURAL OFF (bit-identical v11 tree — the fly
+    // kill-switch and golden baseline arm).
     double line_hold_ff = 0.0;  // [frac of the axis correction], 0 = off
 
     // Push-vs-roll gate (SPEC §9.3, S7-push), every leg hysteretic. Decided on
@@ -384,6 +473,51 @@ struct ControllerParams {
     // strict-superset proof).
     double horizon_recovery_rate = 0.0;    // [rad/s] uniform roll rate; 0 = off
     double horizon_recovery_settle = 0.0;  // [1/s] terminal ease capture rate
+    // v13g ease-in (pilot ruling 2026-08-06: "the motion should ease in and
+    // out rather than being jarring"): the REST-EDGE roll's speed ramps from
+    // 0 at this acceleration instead of launching at the full rate on the
+    // capture tick; the settle ease-out is unchanged. The freelook-RELEASE
+    // roll stays instant (whole-debt in the release tick, Chad's v9 ruling).
+    // 0 = legacy instant launch.
+    double horizon_recovery_ease_in = 0.0;  // [rad/s^2] rest-edge ramp-in accel
+
+    // v13 REST-EDGE camera horizon recovery (pilot ruling 2026-08-06: "after a
+    // maneuver ending inverted the CAMERA also rights itself at rest — horizon
+    // level, planet below — without a freelook release"). The hand-at-rest
+    // dwell the caller requires before it CAPTURES the standing up-debt once
+    // (edge-triggered) and rolls it out at horizon_recovery_rate/settle. Keyed
+    // ONLY on aim motion (the same ci.aim_moved seam the deadzone's rest_dwell
+    // uses) — never on key state, never on body attitude: the camera reads the
+    // mouse and the flight path, nothing of the aircraft's functions. 0 = the
+    // recovery arms on the first still tick; the mechanism itself is disabled
+    // by horizon_recovery_rate = 0 with everything else it gates.
+    double horizon_recovery_rest_dwell = 0.0;  // [s] hand-at-rest arm dwell
+
+    // v13c arm gates (pilot fly-ruling 2026-08-06: "the rotation occurs too
+    // easily — even a little off angle of the horizon and I get camera
+    // movement... affecting the relative position of my mouse aim on the
+    // screen"). The roll rotates the whole picture about the view axis, so an
+    // off-center reticle MUST sweep with it — the honest fix is to arm only
+    // when the roll cannot disturb the pilot: (1) the debt is inversion-class
+    // (>= arm_min — micro-tilts stay the pilot's, retired on freelook release
+    // as always), and (2) the aim is resolved on the FLIGHT PATH (angle
+    // aim-vs-velocity <= path_band — the reticle sits ~centered so the roll
+    // displaces it imperceptibly; a held-off carve structurally cannot fire).
+    // Velocity is the legal camera read (the flight path); body attitude and
+    // key state stay unread. Sub-1 m/s (undefined path) never arms.
+    double horizon_recovery_arm_min = 0.0;    // [rad] min debt to capture
+    double horizon_recovery_path_band = 0.0;  // [rad] max aim-vs-path angle
+
+    // v13d (Chad fly-3 2026-08-06: "engage more often but wait until I fly
+    // straight... the condition of mouse and nose are resolved"): the capture
+    // additionally requires the flight path to be STRAIGHT — the velocity
+    // direction's own rotation rate at or below this. Level great-circle
+    // flight curves at V/R (~0.6 deg/s at 150 m/s) by construction, so the
+    // dial must sit above that; any real turn or loop (>= ~15 deg/s) blocks.
+    // With the path straight, the nose rides the path to within AoA — so the
+    // path_band resolution check IS the mouse-and-nose-resolved condition
+    // through legal reads only (the path, never the body attitude).
+    double horizon_recovery_straight_max = 0.0;  // [rad/s] max path turn rate
 
     // Mouse sensitivities (SPEC §9.1/§9.2 UI boundary): radians of aim (or
     // camera-orbit) rotation per unit mouse delta. Caller-side, like

@@ -3,13 +3,18 @@
 #include <algorithm>
 
 #include "sim/aero.h"
+#include "sim/fields.h"
+#include "sim/ground.h"
 #include "sim/invariants.h"
 #include "sim/world.h"
 
 namespace sim {
 
 SimState step(const SimState& state, const Inputs& inputs,
-              const AircraftParams& p, double dt) {
+              const AircraftParams& p, const Environment* env, double dt) {
+    // R3/R4: env is the nullable world (ground/atm/grav/tunnels). All-null =>
+    // the v3 kernel bit-for-bit; R4 activates `ground` (terrain contact,
+    // below); the atm/grav fields are Phase 2.
     assert_state_valid(state);
 
     SimState next = state;
@@ -38,9 +43,21 @@ SimState step(const SimState& state, const Inputs& inputs,
 
     // ---- Forces, world frame (SPEC §7) --------------------------------
     // Gravity: from the center, recomputed this tick (SPEC §6.1: no fixed
-    // down axis, world-space integration only).
-    const glm::dvec3 grav_accel = p.g * gravity_dir(state.position);
-    assert_gravity_radial(state.position, grav_accel);
+    // down axis, world-space integration only). Magnitude via the nullable
+    // GravityField (R5, MASTER_PLAN §3.B — the Escape Ceiling): grav null
+    // => g_at returns the literal p.g, the identical arithmetic bit-for-bit
+    // (hoisting alt for the atm_frac call below is a pure-function reorder).
+    const double alt = altitude(state.position, p);
+    // Tripwire relaxation scoped to where zero magnitude is LEGITIMATE
+    // (adversarial-review P2): below/at the knee g_at == p.g > 0 provably
+    // (g_at's own first branch — a data comparison, not a re-derivation), so
+    // an ACTIVE field keeps the full-strength magnitude asserts through the
+    // whole fight band; only the taper region relaxes.
+    const bool grav_tapered =
+        env != nullptr && env->grav != nullptr && alt > env->grav->h_g0_m;
+    const glm::dvec3 grav_accel =
+        g_at(alt, env, p) * gravity_dir(state.position);
+    assert_gravity_radial(state.position, grav_accel, grav_tapered);
 
     const double speed = glm::length(state.velocity);
     // Plant-side v-hat guard: hold last valid direction below v_dir_eps —
@@ -54,8 +71,10 @@ SimState step(const SimState& state, const Inputs& inputs,
 
     // Atmosphere taper (MB-atm, SPEC §0): ONE fraction thins density AND
     // thrust above atm_taper_alt — the soft service ceiling (T*f == D_min at
-    // ~8 km on the shipped table). Exactly 1 through the fight band.
-    const double f_atm = atm_frac(altitude(state.position, p), p);
+    // ~8 km on the shipped table). Exactly 1 through the fight band. R6: now
+    // SPATIAL (atm_frac_at) — null atm => the identical altitude taper, so the
+    // ONE hoist migrates BOTH thrust and q together (no thrust-vs-q fork).
+    const double f_atm = atm_frac_at(state.position, env, p);
 
     // Thrust along body -Z, lapsing with the atmosphere (prop-like, T ∝ f).
     const double thrust_mag = p.T_max * f_atm * next.throttle;
@@ -155,7 +174,48 @@ SimState step(const SimState& state, const Inputs& inputs,
     // physics says it must hold.
     if (p.S == 0.0 && thrust_mag == 0.0) {
         assert_applied_impulse_radial(state.position, state.velocity,
-                                      next.velocity);
+                                      next.velocity, grav_tapered);
+    }
+
+    // R4 solid ground (env.ground live only; null => the block never runs and
+    // the path above is bit-identical v3): terrain-crash + touch-and-stick
+    // GROUNDED contact, resolved AFTER the airborne translation integration so
+    // the regime constrains what the physics proposed. Placed after the
+    // radial-impulse tripwire — the assert grades the INTEGRATOR's impulse,
+    // never the constraint's. Mechanism: sim/ground.h.
+    if (env != nullptr && env->ground != nullptr) {
+        // T1 — the crash-predicate yield: INSIDE the tunnel net there IS no
+        // ground surface (flying 2000 m below terrain is the whole point). The
+        // walls become consequence-real in T3 (spline-space collision); until
+        // then the tube/egg/chamber volume simply suspends terrain + building
+        // contact. next.position is the same position ground_contact grades.
+        const bool in_tunnel =
+            env->tunnels != nullptr && env->tunnels->contains(next.position);
+        if (!in_tunnel) {
+            ground_contact(state, next, *env->ground, env->ground_params, p,
+                           static_cast<double>(inputs.wheel_brake), dt);
+            // R4f: building prisms share the crash verdict (and the height
+            // field for their base) — one crash surface, resolved right after
+            // terrain.
+            if (env->obstacles != nullptr) {
+                obstacle_contact(next, *env->obstacles, *env->ground,
+                                 env->ground_params);
+            }
+        } else {
+            // T1 fold (red-team P0-1): the net has no floor — entering it
+            // grounded (taxi/land at a mouth within ~70 m of the surface)
+            // must LIFT OFF, exactly as ground_contact's liftoff branch would,
+            // or the grounded regime (raw-q authority, ground_dynamics) latches
+            // forever with no ground constraint under it.
+            next.on_ground = false;
+            // Transient consequence events (R4-FLY-5): ground_contact clears
+            // these at the top of every non-tunnel tick. In the tunnel the
+            // contact block is skipped, so clear them here to prevent a stale
+            // strike from a prior tick carrying into the net.
+            next.crashed = false;
+            next.wing_strike = 0;
+            next.prop_strike = false;
+        }
     }
 
     // ---- Torques, body frame (SPEC §7 — the sim owns the ENTIRE
@@ -163,7 +223,13 @@ SimState step(const SimState& state, const Inputs& inputs,
     //   tau = c * max(q, q_att_floor) * delta_max_eff(V) * Input
     // plus light per-axis angular damping on the same floored pressure
     // (so ballistic-mode attitude-hold still has damping at v ~ 0).
-    const double Q = q_eff(q, p);
+    // R4-FLY-5 (Chad: "rudder should not be operable when I am at a stop —
+    // controls only with airspeed"): while GROUNDED the q_att_floor (the
+    // §9.6 prop-wash fib, there for BALLISTIC attitude-hold) is dropped and
+    // authority scales with TRUE dynamic pressure — dead stick at a stop,
+    // growing with the takeoff roll. on_ground is only ever true with
+    // env.ground live, so the null path keeps q_eff bit-identically.
+    const double Q = state.on_ground ? q : q_eff(q, p);
     const double delta = delta_max_eff(speed, p);
     const auto deflect = [](float in) {
         return std::clamp(static_cast<double>(in), -1.0, 1.0);
@@ -187,6 +253,17 @@ SimState step(const SimState& state, const Inputs& inputs,
                            next.angular_vel.z};
     next.orientation = glm::normalize(state.orientation +
                                       0.5 * dt * (state.orientation * omega));
+
+    // R4-FLY-5 grounded post-rotation dynamics (tire rotational friction,
+    // brake nose-over + prop strike, wingtip strike; the roll alignment is
+    // dormant — Chad reverted it). MUST live after the rotation integration
+    // above (ground_contact runs pre-rotation; an orientation/omega edit there
+    // is overwritten the same tick — Fable design review P0). Gated on the
+    // regime the contact block just resolved; null env is bit-identical.
+    if (env != nullptr && env->ground != nullptr && next.on_ground) {
+        ground_dynamics(next, *env->ground, env->ground_params,
+                        static_cast<double>(inputs.wheel_brake), dt);
+    }
 
     assert_state_valid(next);
     return next;

@@ -1,161 +1,83 @@
 # reference/seads-feel/ — PRIMARY reference: the active kernel
 
-These files are **copies**, re-snapshotted **2026-07-30 (late night)**, from
-`D:\flight_sim2\seads-feel`, branch **`feel/kernel-v5`**, seal commit **`e362df289`** — the
-**`flight-kernel-v12-2026-07-30`** seal (tag verified local + ls-remote; NOTE: v12 is a
-LIGHTWEIGHT tag, a deviation from the annotated-tag convention v6–v11 followed — pushed
-and permanent, noted rather than hidden). No purity exceptions — every file is from the
-seal commit exactly.
+These files are **copies**, re-snapshotted **2026-09-15**, from `D:\flight_sim2\seads-feel`'s
+shared repository (`D:\flight_sim2\seads`, remote `github.com/cjcgervais/seads_sandbox1`) at
+**`b697d24a5`** = **`origin/main`** = tag **`kernel-v15-righthand-signed`** (annotated,
+`d7f46d865`, tagger cjcgervais 2026-09-13, verified local). This is the kernel Chad flies on
+both `main` and the `seads-recon` fly tree (`sandbox/r4a-phase0` @ `29e3b53de` carries it;
+`build-play/seads.exe` stamped 2026-09-13 10:39).
 
-**New since the v11 snapshot — the sealed v12 content (S-straightline):** the
-axis-correction pitch feedforward `[regime] line_hold_ff = 1.0` (0.0 = bit-identical
-v11) — cancels ONLY the crab's parasitic vertical component (motion away from the aim's
-elevation line), keyed on the EMITTED yaw, four-gate continuous, envelope-bounded; the
-attribution was flipped by the commit-1 instrument (crab, not gravity — 2–4% measured
-gravity closure) and the parasitic-only split was forced by a test leg's premise sweep
-(the v2 all-cancel bunted elevated aims into the −G floor). Closures 2.23/5.05/8.31° →
-0.92/1.08/4.50° (60° residual = the honest G envelope). Gate 404/404. Chad's verdict:
-"This is now the baseline for a quality flight kernel." Grafted to recon `2116f6ea3`
-(914/914; the nullable sim::Environment* seam adapt documented in the graft commit);
-build-play re-stamped. Known limits ledgered: endgame droop ~1.3°, >75° top-rudder
-window, push-branch kink, aim_ff clamp-corner asymmetry. **Scope note (deliberate, stated
-at the v11 re-snapshot):** this snapshot is the COMPLETE tracked tree of the eight
-directories (`app config control docs input render sim test`) via `git archive` at the
-seal commit; previous snapshots were partial subsets. In particular the live tree's own
-`docs/` (its flight-log, DECISIONS byte-copy, vessel briefs, thread stubs) is now
-mirrored here — those are SNAPSHOT copies for reference; the authoritative versions of
-this repo's ledgers remain `D:\mandalark-kernel\docs\`, and the live tree remains ground
-truth for its own. This is a **FLOWN state**: Chad
-flew S-rollmix on the card build and approved it ("it definately feels smooth… buttery…
-there isnt rebounding") before ruling the seal.
+**Snapshot method:** `git archive b697d24a5 app config control docs input render sim test`.
+**Purity exceptions, stated (all reproducible from the tag, none touch the kernel):**
 
-**New since the v10 snapshot — the sealed v11 content (the S-rollmix session):**
+- `render/*.gen.h` — the 26 MB generated Sudbury GIS header, omitted.
+- `test/golden/sled/`, `test/golden/conquest/` — sled and AI tapes (~30 MB), not flight-kernel
+  goldens, omitted. `test/golden/felt/` and `test/golden/controller_golden.h` are KEPT.
+- `docs/road_repair/` — 28 MB of road census TSVs and PNGs from a world lane, omitted.
+- PNGs over 200 KB anywhere in `docs/`, omitted.
 
-- **S-ROLLMIX** (flown, APPROVED — the 5–10° blend-boundary roll slam CLOSED): in the
-  blend band the MANEUVER roll limb chases `blend·commit + (1−blend)·live-lean-target`
-  (`control/controller.cpp`, the `roll_target_mix` block) — coverage-completion of
-  MB-lean; pitch/yaw already carried the same continuity treatment. Dial:
-  `[regime] roll_target_mix = 1.0`; **0.0 = bit-identical v10** (kill-switch AND the
-  Golden-#4 baseline arm for any horizon-gate recurrence A/B).
-- **THE INSTRUMENT** (jitter_attribution §6.5 pin #2, landed first by ruling):
-  `telem.blend` / `telem.held_bank` in `control/controller.h` Telemetry; recorder v2
-  trailing columns (`test/harness/recorder.h`) with v1 back-compat — all four canonical
-  sealed goldens in this repo sig-verify under the new reader (`seads_harness recverify`).
-- **SPEC First Principle 5 — P-helm** (`docs/`, the mouse-helm comfort doctrine, Chad
-  verbatim: "unpredictable to them, not myself"). Mirrored in this repo's DECISIONS.md
-  STANDING INTENT entry and KERNEL_COMS.md COMS-1.
-- **`docs/straightline_thread.md`** — the S-straightline stub (the flick dip, RULED A
-  FLAW: pull arrives WITH the bank, simultaneous arrival; measured baseline 2.2–8.3° sag;
-  COMS-1 stake pinned). The next mechanism thread; consult pending.
-- Controller golden deliberately re-recorded under the pre-stated procedure (knob-off arm
-  proved bit-identical first; first divergent tick 289, blend 0.9899).
+Everything else is byte-for-byte the tagged tree. The previous snapshot (v12, `e362df289`)
+was the complete eight-directory tree; the omissions above are the only difference in scope.
 
-Gate at the v11 seal: **395/395** (count reconciliation on the fly card). Grafted to
-recon `01b28231a` same night (gate 905/905; recorder v2 ported through the TickHook seam,
-so recon F9 tapes now carry blend/held_bank natively); build-play re-stamped on sealed v11.
+## What changed in the kernel, v12 → v15 (the chain of signed seals)
 
-**Previous snapshot (v10, `f86ee7b9f`) content — retained below for lineage (its one
-purity exception, `docs/v10_fly_cards.md` from docs tip `2be93007c`, is now moot — the
-v11 snapshot carries the whole docs tree at its own seal):**
+Naming changed on the live tree: seals are now `kernel-vN-<name>-signed` annotated tags at
+the pushed `main` tip, landed through the SENTINEL protocol (full gate on the exact tip,
+fresh red-team folded, Chad's verbatim in the `LANES.toml` kernel block, `CLAUDE.md` kernel
+line + `docs/flight-log.md` row in the same landing). See this repo's `docs/DECISIONS.md`
+2026-09-15 entry and `docs/VERSIONS.md`.
 
-- **Rung 1** (flown, partial, KEPT): `lean_gain` 6.0 → 8.0 — earlier bank on turn entry.
-- **Rung F backport** (lineage heal): `side_cone_enter/exit` 27.5/32.5 → 37.5/42.5 — the
-  snapshot now reads the table Chad actually flies; the read-the-flown-table rule stands.
-- **POOL-BALL RETIREMENT** (Chad's ruling, verbatim in the seads-feel ledger): `[capture]
-  carry` 1.0 → 0.0 — the rigid cue-ball capture machine is **parked, not deleted** (28
-  self-armed test legs pin the machinery for the walk-back; a silent re-arm fails the
-  loader pin loud — see `config/load_controller.cpp`). Re-entry condition: closing ability
-  against a diverging gun solution degrading. This retired the small-deflection
-  rudder/elevator flapping and won the buttery feel Chad approved.
-- **Parked rulings carried in the ledger, not this snapshot:** `lean_max` 30→40 (refuted
-  shelf hypothesis — parked); side cone 45/50 (superseded by the horizon-gate attribution:
-  the inversions are unreachable by any cone and need a nose-referenced arm — a queued
-  mechanism thread, with the 5–10° blend-boundary roll slam ahead of it).
+- **v13 (`kernel-v13`, `7ed1629e0`, 2026-08-06) — the automatic-comfort round.** Four pilot
+  rulings, one theme: no cognitive load for orientation housekeeping. Freelook easeback
+  RETIRED (`easeback_time` 0.30 → 0); double-tap orient RETIRED (`orient_double_tap_s` 0);
+  inverted righting with NO added delay (`inverted_delay` 0.5 → 0.0); NEW rest-edge camera
+  horizon recovery (`[horizon_recovery] rest_dwell` 0.15 s, 150 °/s roll about the aim's
+  forward, any hand motion cancels). Gate 955/955.
+- **v13g (`kernel-v13g-signed`, fly-7 2026-08-06, "that flew well").** `rest_dwell` 0.10 →
+  0.05 s, `straight_max` 6 → 9 °/s, `path_band` 10 → 15°, NEW `ease_in` 500 °/s² (the
+  rest-edge roll ramps from 0 instead of launching at 150 °/s; the freelook-RELEASE roll stays
+  instant per the v9 ruling). Gate 958/958. (`kernel-v13f-signed` is the ai-primary-data
+  handoff tag, not a kernel change.)
+- **v14 (`kernel-v14-leanlead-signed`, `85896a73a`, 2026-09-10/11) — S-leanlead.** ONE dial
+  `[auto_level] lean_lead` 0 → 0.3: the FINE wings-hold roll limb targets the live lean on the
+  way IN, so the bank arrives WITH the rudder crab on a fine turn entry (Chad: "better than
+  main, more intuitive"). Red-team P0 folded (continuous same-sign-excess clamp); controller
+  golden re-recorded. Instrument `test/unit/test_yawbank_balance.cpp`. Gate 6/2015 == the
+  baseline six by name.
+- **v15 (`kernel-v15-righthand-signed`, `b697d24a5`, 2026-09-13) — S-righthand.** ONE dial
+  `[auto_level] right_hand_rest` 0 → 0.25 s: a HAND-MOTION VETO on the inverted auto-righting
+  limb (MB-right). It armed on `err < blend_lo` mid-loop and commanded the full
+  `inverted_rate` 180 °/s into a hand still pulling, so a held loop rolled out at the apex
+  where `unfold_bank` flips ±180° as `cosΦθ` crosses zero (the NOSE passing vertical, not the
+  aeroplane being inverted). Measured at his apex: roll_right 180.0 → 0.0 °/s, gate 1.00 →
+  0.00; on his tape the veto suppressed 2178 of 2344 MB-right ticks, wings level at all six
+  apices (max |φ| 9.4°). Chad: "I can do the vertical loops and immelmans without a hitch",
+  land word "yes land the loop fix on main". Frame-rate-invariant clock (red-team P1). Also
+  carried, declared: `[auto_level] lean_lead_lateral` (`3be3e8282`) — v14's lead gated on
+  the aim's horizon-lateral share (`lat_lo` 0.50 / `lat_hi` 0.85), bit-identical on a
+  pure-pitch pull. Instrument `test/unit/test_loop_rollover.cpp` (drives the real
+  `app::tick`). Gate on `4b59e9753`: 6 of 2060 == the baseline six by name. 0 = the v14 tree
+  bit-identically, hash-pinned.
 
-Gate at the v10 seal: **391/391**. The recon graft (replacing the logged flip with the
-committed sealed state) was in flight at snapshot time — Golden Felt Flight #4 waits for
-its green word so the tape records the committed kernel.
+**Also in this snapshot, NOT kernel:** the feel-tape v5 instrument (`app/feel_tape.h`,
+`app/feel_tape_columns.h`, `test/harness/feel_tape.h`, `test/unit/test_tape_roundtrip.cpp`)
+— per-tick complete-state seeding so a recorded flight can be replayed through the real
+controller; the writer and reader both derive from one column list after the "void battery"
+defect (a reader that defaulted a missing column to 0.0 graded a dial against a non-dive for
+a night). `app/rest_horizon.h` (extracted from `instructor_tick.h` by the cam-smooth lane).
 
-**Previous snapshot (v9, `29787debc`) content — retained below for lineage:**
+## What is NOT here — the v16 candidate (ON HOLD for Chad)
 
-- **v8 S-keyprec** (flown, KEPT): override keys are camera-inert. S-keychase is retired —
-  `render::ease_chase_forward`'s call stays branch-free on key state (a standing review bar;
-  no ctest can catch a violation there).
-- **v9 S-nosesnap** (flown, APPROVED — the close of the four-round camera arc):
-  - Freelook **welds aim := nose unconditionally** (entry, keys or not); the no-keys
-    "parked carve" is retired by Chad's ruling. `orient_snap_dir` returns the **nose**, so
-    the release is a no-op on the aim by construction.
-  - Release is **one instant snap**: camera behind the plane, **upright to the horizon**,
-    aim and nose in view — the whole S7-hrz up-debt retired in the release tick, no eased
-    roll-in. Chad's ruling of record: "Snap to view upon release of freelook, no eased
-    anything."
-  - The **CQ2 0.30 s easeback window is KEPT by ruling** with a new cockpit rationale
-    ("I need that .4s to observe / orient myself") — it is not dead-rationale debt; do not
-    flip it in a cleanup.
-- **New in `docs/`:** `v9_fly_cards.md` (Chad's approval conditions), and the measured
-  evidence grids `v9_comfort_baseline_v8.txt` / `v9_comfort_after.txt` — the v8→v9
-  before/after for the pre-registered decision rule (headline: `nose_at_fire` 18.552→0.578,
-  `updebt_after_release` 44.904→0.003, no-keys drift 75.5°→1.46°). The rulings ledger is
-  `D:\mandalark-kernel\docs\DECISIONS.md` (four 2026-07-29 entries + the flown verdict);
-  the live tree carries a byte-copy in its own `docs/DECISIONS.md`.
+The lateral nose-down fix (TARGET 2, "S-lateral": `[coordination] yaw_vert_budget` 1.0 and
+`unload_below_horizon` 1.0) lives on branch **`feel/lateral-yawbudget`** @ `40325f297`
+(fixes at `b4864512c`), flown and liked by Chad but **not landed** — the red-team's
+LAND-WITH-FIX finding changes what he signed (the unload arms in the back half of a pure
+vertical loop). Grounded in this repo at `docs/cascade/lateral-nose-down-unload.md`, which
+cites that branch explicitly rather than this snapshot. The launch document for the next
+kernel agent is the live tree's `docs/SESSION_HANDOFF_20260913_loop_lateral.md` (the
+lane-branch version, 206 lines newer than the copy in this snapshot).
 
-Gate at the seal: **388/388**, zero moved goldens. Grafted to seads-recon
-`sandbox/kernel-v5-reconcile` @ `6058329d3` the same day (recon gate 901/901, comfort
-numbers reproduce bit-identically) — the play build flies v9.
+## Lineage note
 
-Previous snapshots: `51eb5b9e3` (2026-07-29, v7 seal), `cfe1bd7fe` (2026-07-28, v6 seal),
-`89447aba5` (2026-07-23, pre-seal). The v7 snapshot's note about `render/camera.h` /
-`test/harness/comfort.h` carrying post-seal docs-only corrections (`7650dc6d0`) is
-obsolete: this snapshot takes every file from the seal commit itself, and the v9 red-team
-sweep (`a307a8a69`) folded the corrected framing into the sealed docs.
-
-**This is the kernel Chad is actually flying.** It supersedes both other reference
-directories in this repo as the primary source of truth for current flight-feel work:
-
-- `reference/evc2026/` (Roblox/Luau) — a prior-generation **testbed**. The same ideas
-  (world-anchored mouse aim, camera-independent control) appear there first, but the actual
-  mechanism Chad is tuning now is this one.
-- `reference/seads/` (`D:\SEADS_2026`) — a different, separate C++ kernel: the pure
-  spherical-earth navigation/combat physics (great-circle math, `R=15000` sphere). Still
-  useful for the non-euclidean-geometry cascade entry; not where the feel-tuning rung ladder
-  lives.
-
-## What's here
-
-- `docs/v5_kernel_handoff.md` — **the crown jewel.** Full BEFORE/AFTER measured metric grids
-  for every rung (A, A2, C, D, E) tied to Chad's felt verdicts and rulings, quoted verbatim.
-  Read this before touching any dial.
-- `test/harness/{harness_main.cpp, telemetry.h, instructor.h, comfort.h, injector.h,
-  scenarios.h, recorder.h}` — the flight-test harness (deterministic scripted maneuvers:
-  `track`, `nudge`, `lathold`, reversal probes) used to produce every measured grid in the
-  handoff doc, plus the felt-flight recorder (the `.seadsrec` format behind `goldens/`).
-- `control/{controller.h, controller.cpp, params.h, transport.h, extract.h}` — the instructor
-  cascade itself: the push-gate state machine, the capture/arrival servo (rungs A/A2), the
-  hold-the-line AoA servo (rung C), and every dial the handoff doc references.
-- `sim/{params.h, state.h, step.h, step.cpp, world.h, aero.h, invariants.h}` — the flight
-  plant: aerodynamics (`k_induced`, `T_max`, `n_max` — rung D), integration, world state.
-- `input/{aim_state.h, aim_curve.h, aim_frame.h}` — the world-anchored aim direction and
-  freelook state machine (the C++ analogue of EvC2026's `aimTargetDir`/free-look).
-- `render/{camera.h, camera.cpp, orient_cues.h, orient_cues.cpp, draw.h, draw.cpp}` — the
-  camera and the rung-E off-screen red aim arrow (`draw.cpp`, search "OFF-SCREEN AIM ARROW").
-- `app/instructor_tick.h` — where the pieces above wire together for the live app loop
-  (the per-TICK half: freelook rules, the orient verbs, the S7-hrz capture).
-- `app/main.cpp` — the per-FRAME caller: device polling, the freelook-orbit camera and its
-  release decay, the `orient_fired` hard cut (as of v9: forward AND up, one instant snap),
-  the `ease_chase_forward` call site (branch-free on key state — standing review bar),
-  focus loss, and the accumulator loop.
-  **Read this whenever a camera question isn't answered by `instructor_tick.h`** — the
-  orbit and `cam_fwd` glue is here, not there.
-- `config/{controller.toml, aircraft.toml, load_controller.h/.cpp, load_aircraft.h/.cpp}` —
-  the actual shipped dial values (this is where `push_horizon_enter = 45.0`, `K_aoa = 10.0`,
-  `k_induced = 0.015`, etc. actually live, with Chad's rulings quoted inline as comments).
-
-## Constraints
-
-**`D:\flight_sim2\seads-feel` is READ-ONLY from this repo** — no writes, no git commands
-there (read-only `git log`/`git status` for research is fine; nothing that touches the
-working tree). It is the authoritative live tree; a live session may move past rung E at any
-time. Re-snapshot before trusting anything here as still-current — check the live branch
-tip against the HEAD named at the top of this file (see the live-branch watch-item in
-`docs/DECISIONS.md` and `CLAUDE.md`). New feel work lands on `feel/kernel-v5` before it
-reaches the game trees' `main` — baselining on `main` alone lags the feel thread.
+Previous snapshot headers (v10, v11, v12 content summaries) are retired from this file; that
+history is in this repo's `docs/VERSIONS.md` seal table and in `git log -- reference/seads-feel`.

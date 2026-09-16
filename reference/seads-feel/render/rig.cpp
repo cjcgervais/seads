@@ -255,6 +255,12 @@ uniform vec3  u_planeColor;    // this plane's saturated chroma (the only color)
 uniform vec3  u_sunDir;        // world light-travel dir (sun -> scene)
 uniform float u_fresnelPower;  // rim exponent (higher = tighter edge blaze)
 uniform float u_reflectivity;  // env-reflection strength over the body [0,1]
+uniform float u_bodyFloor;     // ambient brightness floor of the body chroma
+uniform float u_emissive;      // self-glow strength added to the body
+uniform float u_whiteMix;      // how white the emissive term is [0,1]
+uniform float u_rimGain;       // ADDITIVE Fresnel-rim strength (silhouette blaze)
+uniform float u_rimWhite;      // rim color: plane chroma -> white [0,1] (outline)
+uniform float u_desat;         // desaturate the body toward white [0,1]
 out vec4 finalColor;
 void main() {
     vec3 V = normalize(fragPosition);          // eye -> fragment
@@ -263,17 +269,24 @@ void main() {
     vec3 envCol = texture(env, R).rgb;         // grayscale world reflection
     // Fresnel rim: ~0 head-on, ~1 at grazing so the silhouette edge blazes.
     float fres = pow(1.0 - max(dot(-V, N), 0.0), u_fresnelPower);
-    // Lambert shade of the plane's own chroma. The 0.35/0.65 split is FORM, not
-    // a felt knob (cf. the planet FS bare 0.38); the mirror knobs are config.
+    // Lambert shade of the plane's own chroma. u_bodyFloor drives the ambient
+    // floor; at u_bodyFloor=0.35 this is exactly the old 0.35+0.65*ndl form.
     float ndl = max(dot(N, -normalize(u_sunDir)), 0.0);
-    vec3 body = u_planeColor * (0.35 + 0.65 * ndl);
+    // Body chroma, optionally desaturated toward white (Searchlight blow-out).
+    // At u_desat=0 base == u_planeColor, so Mirror is bit-identical to before.
+    vec3 base = mix(u_planeColor, vec3(1.0), u_desat);
+    vec3 body = base * (u_bodyFloor + (1.0 - u_bodyFloor) * ndl);
     // Grayscale reflection over the body; the Fresnel rim pushes back to pure
     // chroma so the edge is the color accent (the only saturation in-world).
     vec3 col = mix(body, envCol, u_reflectivity * (1.0 - fres));
-    col = mix(col, u_planeColor, fres);
+    col = mix(col, base, fres);
     // Tight sun glint (Blinn-Phong, high exponent).
     vec3 H = normalize(-normalize(u_sunDir) - V);
     col += vec3(pow(max(dot(N, H), 0.0), 64.0)) * ndl;
+    // ADDITIVE rim: whitened per u_rimWhite for a hot white silhouette outline.
+    col += mix(base, vec3(1.0), u_rimWhite) * fres * u_rimGain;
+    // Self-glow: lerps between the body chroma and white per u_whiteMix.
+    col += mix(base, vec3(1.0), u_whiteMix) * u_emissive;
     finalColor = vec4(col, 1.0);
 }
 )";

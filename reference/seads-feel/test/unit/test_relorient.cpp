@@ -123,8 +123,8 @@ app::TickResult tap_release(app::LoopState& st,
                             int hold_ticks = 3) {
     app::TickInput hold = instr_in(0.7);
     hold.freelook_held = true;
-    for (int i = 0; i < hold_ticks; ++i) app::tick(st, hold, kAp, cp);
-    return app::tick(st, instr_in(0.7), kAp, cp);
+    for (int i = 0; i < hold_ticks; ++i) app::tick(st, hold, kAp, cp, nullptr);
+    return app::tick(st, instr_in(0.7), kAp, cp, nullptr);
 }
 
 }  // namespace
@@ -169,7 +169,7 @@ TEST_CASE("S-relorient: mouse-only release lands aim on the NOSE + cam cut") {
     // killing the ease-in. Mutation this kills (verified): gate on
     // `fs.released || st.fl.easeback > 0.0` — re-fires the very next tick.
     for (int t = 0; t < 5; ++t) {
-        const app::TickResult r2 = app::tick(st, instr_in(0.7), kAp, cp);
+        const app::TickResult r2 = app::tick(st, instr_in(0.7), kAp, cp, nullptr);
         CHECK_FALSE(r2.orient_fired);
     }
 }
@@ -215,14 +215,14 @@ TEST_CASE("S-relorient: knob OFF leaves the mouse-only release untouched") {
     // The welded aim direction just before the release tick.
     app::TickInput hold = instr_in(0.7);
     hold.freelook_held = true;
-    for (int i = 0; i < 3; ++i) app::tick(st, hold, kAp, cp);
+    for (int i = 0; i < 3; ++i) app::tick(st, hold, kAp, cp, nullptr);
     const glm::dvec3 held_fwd = st.aim.forward();
     // The weld put it on the nose during the hold (unconditional, knob-off
     // included — a knob-gated weld would be a second camera law).
     CHECK(aim_to_deg(st, st.curr.orientation * glm::dvec3{0.0, 0.0, -1.0}) <
           1.5);
 
-    const app::TickResult r = app::tick(st, instr_in(0.7), kAp, cp);
+    const app::TickResult r = app::tick(st, instr_in(0.7), kAp, cp, nullptr);
     CHECK_FALSE(r.orient_fired);
     // One tick of parallel transport moves the carried aim by ~V*dt/R
     // (~1e-4 rad) — the release itself SNAPPED nothing.
@@ -248,12 +248,12 @@ TEST_CASE("S-relorient: override held at release = legacy, no camera cut") {
     hold_both.freelook_held = true;
     hold_both.override_mask[0] = true;
     hold_both.override_sign[0] = 1.0;
-    for (int i = 0; i < 5; ++i) app::tick(st, hold_both, kAp, cp);
+    for (int i = 0; i < 5; ++i) app::tick(st, hold_both, kAp, cp, nullptr);
 
     app::TickInput key_only = instr_in(0.7);  // Space up, key still down
     key_only.override_mask[0] = true;
     key_only.override_sign[0] = 1.0;
-    const app::TickResult r = app::tick(st, key_only, kAp, cp);
+    const app::TickResult r = app::tick(st, key_only, kAp, cp, nullptr);
     CHECK_FALSE(r.orient_fired);  // no cut while the pilot holds a key
 }
 
@@ -271,11 +271,11 @@ TEST_CASE("S-relorient: override-used release keeps the snap AND gains cut") {
     app::TickInput hold_key = hold;
     hold_key.override_mask[0] = true;
     hold_key.override_sign[0] = 1.0;
-    for (int i = 0; i < 3; ++i) app::tick(st, hold, kAp, cp);
-    for (int i = 0; i < 30; ++i) app::tick(st, hold_key, kAp, cp);
-    for (int i = 0; i < 3; ++i) app::tick(st, hold, kAp, cp);  // keys up
+    for (int i = 0; i < 3; ++i) app::tick(st, hold, kAp, cp, nullptr);
+    for (int i = 0; i < 30; ++i) app::tick(st, hold_key, kAp, cp, nullptr);
+    for (int i = 0; i < 3; ++i) app::tick(st, hold, kAp, cp, nullptr);  // keys up
 
-    const app::TickResult r = app::tick(st, instr_in(0.7), kAp, cp);
+    const app::TickResult r = app::tick(st, instr_in(0.7), kAp, cp, nullptr);
     CHECK(r.orient_fired);  // the knob adds the cut to rule-3's own snap
 
     // v9 (b4c0751): the snap target is the NOSE at every speed — no guard
@@ -328,9 +328,9 @@ TEST_CASE("S-relorient: a grounded release never fires") {
 
     app::TickInput hold = instr_in(0.7);
     hold.freelook_held = true;
-    app::tick(st, hold, kAp, cp);
+    app::tick(st, hold, kAp, cp, nullptr);
     st.grounded = true;  // the release lands on a spawn/reset tick
-    const app::TickResult r = app::tick(st, instr_in(0.7), kAp, cp);
+    const app::TickResult r = app::tick(st, instr_in(0.7), kAp, cp, nullptr);
     CHECK_FALSE(r.orient_fired);
 }
 
@@ -355,9 +355,12 @@ app::TickResult release_with_key_held(app::LoopState& st,
                                       const control::ControllerParams& cp) {
     app::TickInput hold = instr_in(0.7);
     hold.freelook_held = true;
-    for (int i = 0; i < 3; ++i) app::tick(st, hold, kAp, cp);       // freelook
-    for (int i = 0; i < 5; ++i) app::tick(st, with_key(hold), kAp, cp);  // +key
-    return app::tick(st, with_key(instr_in(0.7)), kAp, cp);  // Space up, key down
+    for (int i = 0; i < 3; ++i)  // freelook
+        app::tick(st, hold, kAp, cp, nullptr);
+    for (int i = 0; i < 5; ++i)  // + an override key mid-hold
+        app::tick(st, with_key(hold), kAp, cp, nullptr);
+    // Space up, key STILL down — the release tick Chad reported.
+    return app::tick(st, with_key(instr_in(0.7)), kAp, cp, nullptr);
 }
 
 }  // namespace
@@ -416,7 +419,7 @@ TEST_CASE("S-relorient addendum: the horizon rights with the key still down") {
     // (aim.reseed() zeroes the misalignment). Watch the per-tick flag.
     const app::TickInput key = with_key(instr_in(0.7));
     for (int t = 0; t < 2 * 120; ++t) {
-        REQUIRE_FALSE(app::tick(st, key, kAp, cp).respawned);
+        REQUIRE_FALSE(app::tick(st, key, kAp, cp, nullptr).respawned);
     }
     CHECK(st.recov.remaining == 0.0);
 }
@@ -472,7 +475,7 @@ TEST_CASE("S-relorient addendum: a post-release key leaves the frame righted") {
     // Jab the key immediately and keep flying on it.
     const app::TickInput key = with_key(instr_in(0.7));
     for (int t = 0; t < 2 * 120; ++t) {  // respawn guard: see case 9 (P2-1)
-        REQUIRE_FALSE(app::tick(st, key, kAp, cp).respawned);
+        REQUIRE_FALSE(app::tick(st, key, kAp, cp, nullptr).respawned);
         CHECK(st.recov.remaining == 0.0);
     }
     // The keyboard flew the PLANE; the carried frame stayed righted (the
@@ -493,10 +496,10 @@ TEST_CASE("S-relorient addendum: no re-fire when the keys are released later") {
 
     const app::TickInput key = with_key(instr_in(0.7));
     for (int t = 0; t < 5; ++t) {
-        CHECK_FALSE(app::tick(st, key, kAp, cp).orient_fired);  // key still down
+        CHECK_FALSE(app::tick(st, key, kAp, cp, nullptr).orient_fired);  // key still down
     }
     for (int t = 0; t < 5; ++t) {
-        CHECK_FALSE(app::tick(st, instr_in(0.7), kAp, cp).orient_fired);  // key up
+        CHECK_FALSE(app::tick(st, instr_in(0.7), kAp, cp, nullptr).orient_fired);  // key up
     }
 }
 
@@ -518,8 +521,8 @@ TEST_CASE("S-relorient addendum: the double-tap fires with a key held") {
     tap.orient_cmd = true;
 
     app::LoopState st_v6 = st;  // same start, both arms
-    CHECK_FALSE(app::tick(st_v6, tap, kAp, cp_on()).orient_fired);  // sealed v6
-    CHECK(app::tick(st, tap, kAp, cp_keys()).orient_fired);         // addendum
+    CHECK_FALSE(app::tick(st_v6, tap, kAp, cp_on(), nullptr).orient_fired);  // sealed v6
+    CHECK(app::tick(st, tap, kAp, cp_keys(), nullptr).orient_fired);         // addendum
 
     // The aim landed on the NOSE on the fire tick (the flag alone would pass
     // under a mutant that fires but snaps nowhere), and NOT on the velocity
@@ -536,7 +539,7 @@ TEST_CASE("S-relorient addendum: the double-tap fires with a key held") {
     // the verb agree now — the one-tick-dwell caveat is gone).
     app::TickInput held = with_key(instr_in(0.7));
     held.freelook_held = true;  // still in freelook, no second command
-    app::tick(st, held, kAp, cp_keys());
+    app::tick(st, held, kAp, cp_keys(), nullptr);
     CHECK(aim_to_deg(st, st.curr.orientation * glm::dvec3{0.0, 0.0, -1.0}) <
           1.0);
 }
@@ -613,7 +616,7 @@ TEST_CASE("S-keyprec: a hard key in mouse-aim leaves the camera on the aim") {
         }
         in.cam_fwd = cam.cam_fwd;
         in.cam_up = cam.cam_up;
-        const app::TickResult r = app::tick(st, in, kAp, kCpToml);
+        const app::TickResult r = app::tick(st, in, kAp, kCpToml, nullptr);
         REQUIRE_FALSE(r.respawned);  // the measurement window must stay alive
         if (r.orient_fired) cam.orient_cut(st.aim.forward());
         cam.advance(st.curr, st.aim.forward(), st.aim.up(), kCpToml,

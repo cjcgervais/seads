@@ -153,7 +153,7 @@ TEST_CASE("thrust acts along body -Z, scaled by throttle, from any attitude") {
     sim::Inputs in{};
     in.throttle = 1.0f;
     const double dt = kP.sim_dt;
-    const sim::SimState s1 = sim::step(s, in, kP, dt);
+    const sim::SimState s1 = sim::step(s, in, kP, nullptr, dt);
 
     const glm::dvec3 up = glm::normalize(s.position);
     const glm::dvec3 nose = q0 * glm::dvec3{0.0, 0.0, -1.0};
@@ -164,7 +164,7 @@ TEST_CASE("thrust acts along body -Z, scaled by throttle, from any attitude") {
     // Half throttle -> half thrust impulse.
     s.throttle = 0.5;
     in.throttle = 0.5f;
-    const sim::SimState s_half = sim::step(s, in, kP, dt);
+    const sim::SimState s_half = sim::step(s, in, kP, nullptr, dt);
     const glm::dvec3 expected_half =
         dt * (kP.g * (-up) + (0.5 * kP.T_max / kP.mass) * nose);
     CHECK(glm::length(s_half.velocity - expected_half) < 1e-12);
@@ -181,12 +181,12 @@ TEST_CASE("throttle slews toward the command in the plant (SPEC 9.8)") {
     in.throttle = 1.0f;
     const double per_tick = kP.throttle_slew_rate * kP.sim_dt;
 
-    sim::SimState cur = sim::step(s, in, kP, kP.sim_dt);
+    sim::SimState cur = sim::step(s, in, kP, nullptr, kP.sim_dt);
     CHECK(cur.throttle == Catch::Approx(per_tick).epsilon(1e-12));
 
     double prev = cur.throttle;
     for (int i = 0; i < 240; ++i) {  // 2 s >> full sweep time
-        cur = sim::step(cur, in, kP, kP.sim_dt);
+        cur = sim::step(cur, in, kP, nullptr, kP.sim_dt);
         CHECK(cur.throttle >= prev);  // monotone toward target
         CHECK(cur.throttle <= 1.0);   // never overshoots
         prev = cur.throttle;
@@ -195,7 +195,7 @@ TEST_CASE("throttle slews toward the command in the plant (SPEC 9.8)") {
 
     // And back down: command 0 from full.
     in.throttle = 0.0f;
-    cur = sim::step(cur, in, kP, kP.sim_dt);
+    cur = sim::step(cur, in, kP, nullptr, kP.sim_dt);
     CHECK(cur.throttle == Catch::Approx(1.0 - per_tick).epsilon(1e-12));
 }
 
@@ -208,7 +208,7 @@ TEST_CASE(
     sim::SimState s = level_state_over_x(2000.0, 150.0);
     sim::Inputs in{};
     in.pitch = 1.0f;
-    const sim::SimState s1 = sim::step(s, in, kP, kP.sim_dt);
+    const sim::SimState s1 = sim::step(s, in, kP, nullptr, kP.sim_dt);
 
     const double tau = kP.c_pitch * sim::q_eff(sim::q_dyn(kP.rho, 150.0), kP) *
                        sim::delta_max_eff(150.0, kP);
@@ -232,7 +232,7 @@ TEST_CASE("drag opposes velocity and scales as v^2 (alpha = 0 isolates Cd0)") {
     // velocity change is pure parasitic drag.
     auto tangential_dv = [&](double V) {
         const sim::SimState s = level_state_over_x(2000.0, V);
-        const sim::SimState s1 = sim::step(s, {}, kP, kP.sim_dt);
+        const sim::SimState s1 = sim::step(s, {}, kP, nullptr, kP.sim_dt);
         return (s1.velocity - s.velocity)
             .z;  // drag pushes +Z (opposes -Z motion)
     };
@@ -259,7 +259,7 @@ TEST_CASE(
     s.velocity = V * glm::dvec3{0.0, -std::sin(a), -std::cos(a)};
     s.last_vhat = glm::normalize(s.velocity);
 
-    const sim::SimState s1 = sim::step(s, {}, kP, kP.sim_dt);
+    const sim::SimState s1 = sim::step(s, {}, kP, nullptr, kP.sim_dt);
 
     const glm::dvec3 vhat = glm::normalize(s.velocity);
     const double q = 0.5 * kP.rho * V * V;
@@ -319,8 +319,8 @@ TEST_CASE("S-wvane: sideslip side-force - sign, rate, shape, worklessness") {
     // isolates the gated term exactly (the MB-lean differential proof shape).
     auto dv_of = [&](const sim::SimState& s, const sim::AircraftParams& a,
                      const sim::AircraftParams& b) {
-        return sim::step(s, {}, a, a.sim_dt).velocity -
-               sim::step(s, {}, b, b.sim_dt).velocity;
+        return sim::step(s, {}, a, nullptr, a.sim_dt).velocity -
+               sim::step(s, {}, b, nullptr, b.sim_dt).velocity;
     };
     sim::AircraftParams p_noCy = kP;
     p_noCy.Cy_beta = 0.0;  // isolates the SIDE FORCE (Cd_beta stays live)
@@ -415,7 +415,7 @@ TEST_CASE("S-wvane: sideslip side-force - sign, rate, shape, worklessness") {
         p_off.Cy_beta = 0.0;
         p_off.Cd_beta = 0.0;
         const sim::SimState s = crabbed(9.0);
-        const sim::SimState s1 = sim::step(s, {}, p_off, p_off.sim_dt);
+        const sim::SimState s1 = sim::step(s, {}, p_off, nullptr, p_off.sim_dt);
         const glm::dvec3 vhat = glm::normalize(s.velocity);
         const glm::dvec3 expect_dv =
             p_off.sim_dt * (p_off.g * glm::dvec3{-1.0, 0.0, 0.0} -
@@ -434,7 +434,7 @@ TEST_CASE("S-wvane: sideslip side-force - sign, rate, shape, worklessness") {
         auto beta_after = [&](const sim::AircraftParams& p) {
             sim::SimState s = crabbed(9.0);
             for (int i = 0; i < kBleedTicks; ++i)
-                s = sim::step(s, {}, p, p.sim_dt);
+                s = sim::step(s, {}, p, nullptr, p.sim_dt);
             return sim::beta_of(
                 sim::body_dir_of(s.orientation, glm::normalize(s.velocity)));
         };
@@ -459,7 +459,7 @@ TEST_CASE("velocity along body X (pure sideslip) produces zero lift, no NaN") {
     s.velocity = 60.0 * glm::dvec3{1.0, 0.0, 0.0};  // along body +X exactly
     s.last_vhat = {1.0, 0.0, 0.0};
 
-    const sim::SimState s1 = sim::step(s, {}, kP, kP.sim_dt);
+    const sim::SimState s1 = sim::step(s, {}, kP, nullptr, kP.sim_dt);
     CHECK(sim::is_finite(s1.velocity));
     // No lift: the only tangential-X force is drag, opposing +X motion.
     CHECK((s1.velocity - s.velocity).x < 0.0);
@@ -471,12 +471,12 @@ TEST_CASE("v-hat guard: held below v_dir_eps, updated above (SPEC 7)") {
     sim::SimState s;
     s.position = {kP.R + 2000.0, 0.0, 0.0};
     s.velocity = {0.4, 0.0, 0.0};  // below v_dir_eps = 1
-    const sim::SimState s1 = sim::step(s, {}, kP, kP.sim_dt);
+    const sim::SimState s1 = sim::step(s, {}, kP, nullptr, kP.sim_dt);
     CHECK(glm::length(s1.last_vhat - glm::dvec3{0.0, 0.0, -1.0}) < 1e-15);
 
     sim::SimState s2 = s1;
     s2.velocity = {5.0, 0.0, 0.0};  // above eps: guard must track
-    const sim::SimState s3 = sim::step(s2, {}, kP, kP.sim_dt);
+    const sim::SimState s3 = sim::step(s2, {}, kP, nullptr, kP.sim_dt);
     CHECK(glm::length(s3.last_vhat - glm::dvec3{1.0, 0.0, 0.0}) < 1e-15);
 }
 
@@ -491,7 +491,7 @@ TEST_CASE("below stall speed the aircraft sinks, full back-stick or not") {
     in.pitch = 1.0f;  // haul back as hard as raw mode allows
     double vr_1s = 0.0;
     for (int i = 0; i < 240; ++i) {  // 2 s
-        s = sim::step(s, in, kP, kP.sim_dt);
+        s = sim::step(s, in, kP, nullptr, kP.sim_dt);
         if (i == 119) vr_1s = glm::dot(s.velocity, glm::normalize(s.position));
     }
     CHECK(vr_1s < -1.0);  // sinking at 1 s despite full pitch-up
@@ -516,7 +516,7 @@ TEST_CASE(
     for (int i = 0; i < 600; ++i) {  // 5 s
         sim::Inputs in{};
         if (i < 300) in.pitch = 0.5f;
-        s = sim::step(s, in, kP, kP.sim_dt);
+        s = sim::step(s, in, kP, nullptr, kP.sim_dt);
         const double e = energy(s);
         max_gain_per_tick = std::max(max_gain_per_tick, e - e_prev);
         e_prev = e;
@@ -630,7 +630,7 @@ TEST_CASE("MB-atm: the plant thins lift AND thrust above the taper") {
         s.throttle = 1.0;  // engine already spooled
         sim::Inputs in{};
         in.throttle = 1.0f;
-        const sim::SimState n = sim::step(s, in, kP, kP.sim_dt);
+        const sim::SimState n = sim::step(s, in, kP, nullptr, kP.sim_dt);
         return (n.velocity - s.velocity) / kP.sim_dt -
                kP.g * sim::gravity_dir(s.position);  // net aero+thrust accel
     };
@@ -660,7 +660,7 @@ TEST_CASE("MB-atm: angular damping thins with the atmosphere") {
         s.orientation = glm::dquat{1.0, 0.0, 0.0, 0.0};
         s.angular_vel = {0.5, 0.4, 0.6};
         sim::Inputs in{};  // zero deflection, zero throttle: damping only
-        const sim::SimState n = sim::step(s, in, kP, kP.sim_dt);
+        const sim::SimState n = sim::step(s, in, kP, nullptr, kP.sim_dt);
         return n.angular_vel - s.angular_vel;
     };
     const double f7 = sim::atm_frac(7000.0, kP);

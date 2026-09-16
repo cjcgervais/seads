@@ -1,3 +1,5 @@
+> **PARTIALLY SUPERSEDED (2026-07-08).** The celestial/sky half PIVOTED to `docs/little_planet_plan.md` (the live plan), executed via `/orchestrate` — the live resume point is `docs/orchestrate_handoff.md`, NOT this file's "READ FIRST" section (a frozen 2026-07-07 snapshot). The ground/town art vision below remains valid.
+
 # SEADS — World Build Plan: executing the legible little world
 
 *The **HOW** for the world/art layer. Companion to `docs/world_art_direction.md` (the **WHY** — the
@@ -7,6 +9,65 @@ the view without touching the raw-mouse control basis — the `horizon_recovery_
 flew clean), and (b) two fresh-context Fable 5 consults: an architecture pass, then a red-team of this
 plan (its P0/P1 findings are folded in below). This slims the rejected "Gemini map build" package down to
 its sound process spine and retargets it at Chad's actual vision.*
+
+---
+
+## Status & resume point (2026-07-07) — READ FIRST after a /clear
+
+**Branch `sandbox/world-sudbury`** (off `flight-tuning-2`). Gate **220/220**. Landed, committed, Fable-audited:
+- `f13578f` — config spine: `config/world.toml` + strict `cfg::load_world` (the single source; **R stays
+  sim-owned**, not mirrored).
+- `432fe09` — pure `render/sphere_param.{h,cpp}` (glm, in `seads_render_core`): `face_basis`, `warp`/
+  `unwarp`, `face_dir`↔`dir_to_face`, `equirect_uv`, the persistent `HeightField` (post-blur; ONE source
+  for mesh + future props + future airstrip contact — the H1 anti-fork), and pure `fill_face`. `planet.cpp`
+  adapted (thin `upload_face`); the dead `relief_scale` mirror killed (draw.cpp constexprs → `world.toml`,
+  fed via `render::set_planet_build_params` from `main.cpp`).
+- `9499da2` — test/robustness hardening (post-impl Fable audit): the flat-planet/`u_offset` pin (a
+  `radius_at→R` mutant used to pass the gate), winding pin, real edge tie-break, `warp(±1)`, N-clamp,
+  `sample01` empty-field assert, designated inits.
+
+**DONE — the GL CUBEMAP BAKE** (against the existing Earth albedo, as planned): the equirect albedo is
+resampled at load into a **GL cubemap sampled by `fragDir`** and the runtime `(u,v)` graticule is **deleted**
+— "no runtime lat/lon" is now literally true (§1/§2). New pure primitives in `render/sphere_param.{h,cpp}`
+(`seads_render_core`, headlessly pinned): `gl_cube_dir(face,sc,tc)` (the inverse of GL's OWN major-axis
+selection — NOT `face_basis`) + `bake_equirect_cubemap` (its own RGB bilinear). `planet.cpp` bakes → uploads
+via `rlLoadTextureCubemap` and binds through `MATERIAL_MAP_CUBEMAP`; shader FS is now
+`texture(cubemap, fragDir)` (no seam, pole-free). Config knob `[planet] cubemap_size` (1024) threaded
+through `load_world`→`PlanetBuildParams`→`load_planet`. Gate **220/220**; three new legs mutation-verified
+(gl_cube_dir vs the spec forward selection; the bake wiring; the cubemap_size cap). Smoke-confirmed: cubemap
+uploads, no GL errors, graticule gone. A **box-filter mip chain** was added (`7dd21b2`) via one raw-GL
+`glGenerateMipmap(GL_TEXTURE_CUBE_MAP)` (rlgl doesn't expose cubemap mip-gen; glad decls only, impl in
+raylib) so the far horizon doesn't minification-alias — trilinear-across-mips min filter. **Chad still flies
+the A/B** (crispness parity vs the old equirect path).
+
+**NEXT STEPS (ordered — Chad ruled this sequence 2026-07-07):**
+
+1. ~~**RED-TEAM THE CUBEMAP BAKE**~~ **DONE** (`a8e5c31`). Fresh-context Fable 5 pass on `279a05d`+`7dd21b2`:
+   **clean bill on the two cores** — `gl_cube_dir` matches GL spec Table 8.19 axis/sign on all six faces
+   (hand-derived, not via the test's own helper), and the content-identical/orientation claim is **sound
+   by construction** (bake inverts GL's exact selection equations; worked example confirmed; the GPU sample
+   is the one thing no ctest covers, so this rests on the derivation — verified). **No P0.** Fixes landed:
+   P1-1 a real test hole (face +X was pinned only at the degenerate `sc==tc` corner, so a case-0 transpose
+   passed the green gate — added an asymmetric +X dir, mutation-verified); P2-2 `glPixelStorei(UNPACK,1)`
+   before the RGB8 upload (a legal non-÷4 `cubemap_size` would have row-sheared); P2-3 a false `!ok`
+   comment. Accepted no-action: P2-1 resolution softening (the `cubemap_size` knob's job — don't
+   misattribute A/B blur to the sampler mechanism); P2-4 per-face mip edge seams (revisit only if the A/B
+   shows faint far-horizon edge banding).
+
+2. **← YOU ARE HERE. THE FELT P1 LADDER** (Chad flies each, ONE knob/flight, §3 P1; log in `docs/flight-log.md`):
+   **step 1** Mercury-silver sky + minimal 2-stop gradient (`draw.cpp` ClearBackground → the `[sky]` config
+   already exists; SINGLE-SOURCE the gradient fn so water can reuse it, §2 water-trap-1) → **step 2**
+   noon-eased sun (`sun_dir = -normalize(player_pos)`, a TIME-CONSTANT ease not a per-frame lerp — the
+   S7-mouselevel frame-rate lesson) → **step 3** Sudbury sources → cubemap + lake-flatten, drop Earth
+   (behind the `ground.use_procedural` toggle that already loads). The bake is the sampler rail for step 3.
+
+3. **Objective-autonomous, do anytime it unblocks a Legibility sortie:** fix the **`SEADS_SPAWN_ALT`→
+   `--smoke` quirk** (framing stayed 2000 m — the probe rig and any ground-facing screenshot need it) and
+   build the **§4 target-visibility probe**. Autonomous-safe (deterministic oracle).
+
+**Consult packets** (durable): earlier phases were shaped by fresh-context Fable 5 audits in
+`D:/flight_sim2/Gemini_map_art/consult_fable5_*.md`. **Discipline:** author ≠ red-teamer across models —
+the main agent builds, a fresh-context Fable 5 red-teams (step 1 above IS this for the bake).
 
 ---
 

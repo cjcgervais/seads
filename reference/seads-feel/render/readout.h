@@ -43,14 +43,20 @@ inline const char* flap_mode_label(int mode) {
     return mode == 1 ? "COMBAT" : mode == 2 ? "LANDING" : "CLEAN";
 }
 
+// R6: the env-aware form — the displayed n reads the SAME spatial density the
+// plant flies (sim::load_factor position+env overload), so the HUD G-meter
+// can never disagree with the controller telemetry at a bubble edge (a stale
+// altitude n over-reads by 1/u exactly on the surface a pilot judges the wall
+// against). Null env => the altitude n, bit-identical.
 inline FlightReadout flight_readout(const sim::SimState& s,
+                                    const sim::Environment* env,
                                     const sim::AircraftParams& p) {
     const control::Extracted e = control::extract(s, s.last_vhat, p.v_dir_eps);
     FlightReadout r;
     r.speed = e.speed;
     r.altitude = sim::altitude(s.position, p);
     r.aoa = e.alpha;
-    r.load_factor = sim::load_factor(e.alpha, e.speed, r.altitude, s.flap, p);
+    r.load_factor = sim::load_factor(e.alpha, e.speed, s.position, env, s.flap, p);
     r.bank = e.phi;
     // Attitude pitch: angle of the NOSE above the local horizon plane —
     // velocity-independent (a vhat here would read flight-path angle gamma,
@@ -67,6 +73,13 @@ inline FlightReadout flight_readout(const sim::SimState& s,
     r.bank_full =
         std::atan2(-glm::dot(e.body_right, e.local_up), e.cos_phi_theta);
     return r;
+}
+
+// Null-path / test overload — no field present (the harness + test_hud run
+// null env). Bit-identical to the pre-R6 read.
+inline FlightReadout flight_readout(const sim::SimState& s,
+                                    const sim::AircraftParams& p) {
+    return flight_readout(s, nullptr, p);
 }
 
 }  // namespace render

@@ -40,6 +40,19 @@ const control::ControllerParams kCp =
 constexpr double kPi = 3.14159265358979323846;
 double rad(double d) { return d * kPi / 180.0; }
 
+// The CQ2 ease-back window is RETIRED at the FLOWN value (pilot ruling
+// 2026-08-06: `[freelook] easeback_time = 0` — the release is instant, so no
+// easing basis is ever near the aim). The MECHANISM stays, so every leg that
+// tests the window pins its OWN nonzero window here rather than reading the
+// shipped table's 0 (which would make them silently vacuous — the
+// fixture-no-op class). The tick count then comes from kEase/sim_dt.
+constexpr double kEase = 0.30;  // [s] the window these legs fly
+control::ControllerParams ease_cp() {
+    control::ControllerParams c = kCp;
+    c.freelook_easeback_time = kEase;
+    return c;
+}
+
 constexpr int kPitch = 0, kRoll = 2;
 
 bool finite_state(const sim::SimState& s) {
@@ -144,7 +157,7 @@ TEST_CASE(
 // ---------------------------------------------------------------------------
 TEST_CASE(
     "AT-8: mouse->aim suspended across the ease-back window, then resumes") {
-    const double dt = kAp.sim_dt, E = kCp.freelook_easeback_time;
+    const double dt = kAp.sim_dt, E = kEase;
     const int window = static_cast<int>(std::ceil(E / dt));
 
     input::Freelook fl;
@@ -216,6 +229,30 @@ TEST_CASE("AT-8: the ease-back window length is exact (no off-by-one)") {
 }
 
 // ---------------------------------------------------------------------------
+// The RETIRED window (pilot ruling 2026-08-06): easeback_time = 0 — the FLOWN
+// value — means mouse->aim is live on the RELEASE TICK ITSELF, with no dead
+// frames at all. The decrement-after-arming order makes this a real boundary
+// (arm 0, then `easeback > 0.0` is false immediately), so it is pinned rather
+// than assumed: a mutant that arms the window with a floor, or that suspends
+// unconditionally on the release edge, eats the pilot's first tick back.
+// ---------------------------------------------------------------------------
+TEST_CASE("CQ2 retired: easeback_time = 0 is live on the release tick") {
+    input::Freelook fl;
+    const double dt = kAp.sim_dt;
+    for (int i = 0; i < 5; ++i)
+        REQUIRE_FALSE(fl.step(true, false, dt, 0.0).mouse_aim_live);
+    const input::Freelook::Step rel = fl.step(false, false, dt, 0.0);
+    CHECK(rel.released);        // it really was the release edge
+    CHECK(rel.mouse_aim_live);  // ...and the mouse is already live
+    CHECK(fl.easeback == 0.0);  // nothing armed to count down
+    for (int i = 0; i < 5; ++i)
+        CHECK(fl.step(false, false, dt, 0.0).mouse_aim_live);
+    // The shipped table really does fly the retired value (so the leg above
+    // describes the live game, not a hypothetical).
+    CHECK(kCp.freelook_easeback_time == 0.0);
+}
+
+// ---------------------------------------------------------------------------
 // Focus loss / crash-reset (SPEC §9.5 robustness): reset() drops every latch so
 // an alt-tab mid-freelook can't resume a stale hold and a respawn never
 // inherits the previous life's freelook state.
@@ -244,6 +281,9 @@ TEST_CASE("4d freelook: reset drops all latches") {
 // life's stale off-nose aim and its still-running ease-back window.
 // ---------------------------------------------------------------------------
 TEST_CASE("4d: a grounded reset tick resets the caller freelook and aim") {
+    // Flies its OWN ease-back window (the shipped value is the retired 0 —
+    // pilot ruling 2026-08-06); the pairing under test is unchanged by it.
+    const control::ControllerParams kCp = ease_cp();
     const glm::dvec3 up{1.0, 0.0, 0.0}, heading{0.0, 0.0, -1.0};
     double thr = 0.7;
     const sim::SimState s0 =
@@ -425,6 +465,9 @@ TEST_CASE(
 // mouse on the way back.
 // ---------------------------------------------------------------------------
 TEST_CASE("AT-8: freelook release without override keeps the held aim") {
+    // Own ease-back window (shipped = the retired 0, pilot ruling 2026-08-06):
+    // the CQ2 suspension pin at the tail is the reason this leg needs one.
+    const control::ControllerParams kCp = ease_cp();
     const glm::dvec3 up{1.0, 0.0, 0.0}, heading{0.0, 0.0, -1.0};
     double thr = 0.7;
     const sim::SimState s0 =
@@ -537,6 +580,8 @@ TEST_CASE("AT-8: full freelook+override arc shows no inverted transient") {
 // ---------------------------------------------------------------------------
 TEST_CASE(
     "AT-8: an override held through the freelook release composes cleanly") {
+    // Own ease-back window (shipped = the retired 0, pilot ruling 2026-08-06).
+    const control::ControllerParams kCp = ease_cp();
     const glm::dvec3 up{1.0, 0.0, 0.0}, heading{0.0, 0.0, -1.0};
     double thr = 0.7;
     const sim::SimState s0 =

@@ -4,6 +4,56 @@ Standing decisions for the flight kernel. Each entry: date, decision, why, statu
 
 ---
 
+## 2026-09-15 — ⭐ KERNEL v15 IS THE FLOWN KERNEL; THE SENTINEL ROLE MOVES HERE; v16 (the lateral nose-down) IS ON HOLD FOR CHAD
+
+**Dated observation, re-derived this session from the live tree (read-only `git fetch` +
+`for-each-ref` in `D:\flight_sim2\seads`, remote `seads_sandbox1`). Re-derive before citing.**
+
+- **`origin/main` = `b697d24a5` = tag `kernel-v15-righthand-signed`** (annotated `d7f46d865`,
+  2026-09-13). Chain since this repo last looked: v12 `e362df289` → v13 `7ed1629e0` (automatic
+  comfort, 2026-08-06) → v13g (fly-7 signed, rest-edge ease-in) → v14 `85896a73a` (S-leanlead,
+  `[auto_level] lean_lead` 0.3, 2026-09-10) → **v15 `b697d24a5` (S-righthand, `[auto_level]
+  right_hand_rest` 0.25 s, Chad: "yes land the loop fix on main")**. `feel/kernel-v5` is no
+  longer the feel branch; it stopped at `15571a5f4` (2026-08-06). Feel work now lands on
+  short-lived `feel/<name>` lanes through the sentinel protocol. The fly tree `seads-recon`
+  (`sandbox/r4a-phase0` @ `29e3b53de`) carries `b697d24a5`; exe 2026-09-13 10:39.
+  `reference/seads-feel/` re-snapshotted at `b697d24a5` with four stated purity exceptions
+  (its README). `docs/cascade/lateral-nose-down-unload.md` written.
+- **This repo's own remote is GONE:** `git fetch origin` → *"Repository not found"* for
+  `github.com/cjcgervais/mandalark-kernel.git`. Every commit here since `c103c64` (2026-08-04)
+  is local-only. The nightly Drive backup (bundle + mirror) is the only off-site copy until
+  Chad recreates or re-points the remote. **Open question for Chad.**
+- **The sentinel.** Chad: *"I need to have a sentinel for any pushes that are going into
+  flight sim2 ... SEADS."* This agent holds the role from today, read-only in the live trees.
+  The SOP, the ledger and the queue are in `docs/SENTINEL_LEDGER.md`. First act: the push
+  packet to the atmosphere-snow lane (Chad: *"I also have an agent in the atmosphere folder in
+  seads sandboxes who has been given approval to push to main and seads recon... please send
+  them a packet for proper SOPs for pushing"*), which caught (a) an old-base merge that would
+  have deleted the v15 kernel files as "take ours", and (b) a LANES red-team claim with no
+  record behind it — the lane retracted it and ran the red-team. Order ruled: atmosphere →
+  kernel v16 → road-repair.
+- **v16 candidate, ON HOLD.** Chad: *"I was working on further improvements to the kernel that
+  should be in the seads-feel sandbox handoff for the last of the improvements to correct the
+  nose down issue when making large lateral mouse deflections."* Verified: that work IS in the
+  live handoff `docs/SESSION_HANDOFF_20260913_loop_lateral.md` on `feel/lateral-yawbudget` @
+  `40325f297` — two `[coordination]` dials (`yaw_vert_budget` 1.0, `unload_below_horizon` 1.0),
+  flown twice, liked ("I like it now, we can commit and push to main and seads"), red-team
+  LAND-WITH-FIX folded at `b4864512c`, **not on main** because one finding changes what he
+  signed: the unload arms on the back half of a pure vertical loop (25.9% of a scripted loop,
+  +57.6 m vs the red-team's −232 m, unreconciled). **His question, unanswered: land anyway,
+  narrow the arm so it cannot fire in a loop, or drop the unload and keep only the yaw
+  budget?** Plus a deliberate split-S with the aim held up, uncleared. The v16 agent he is
+  starting reads that handoff; it lands AFTER atmosphere-snow, by this sentinel's order.
+- **Nightly backup reinstated and widened.** `tools/backup_to_gdrive.ps1` never stopped (ran
+  every night through 2026-09-14, exit 0) but covered this repo only. New
+  `tools/backup_drive_to_gdrive.ps1` + task "Mandalark Drive Sentinel Backup" (22:30) mirrors
+  the whole external drive `D:` to `gdrive-tesg:Mandalark_Backups/D_drive` with stated
+  excludes, bundles the six repos that matter, and writes the sentinel's nightly
+  origin/main observation. ⚠ rclone's shared Google client_id retires during 2026 — Chad
+  must make his own (rclone.org/drive, "making your own client id") before it does.
+
+---
+
 ## 2026-08-04 — ⛔ `V026`: THE RATIO IS WRONG. Do the mathematics; the harness only organises.
 
 **⚠ SECOND-HAND. This agent did NOT witness this ruling.** It was given in the

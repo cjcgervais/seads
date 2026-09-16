@@ -27,6 +27,12 @@ struct Inputs {
     // a clean airframe, bit-identically (strict superset).
     float flap_cmd = 0.0f;  // [0, 1] commanded flap deflection fraction
     float gear_cmd = 0.0f;  // [0, 1] commanded gear extension
+    // R4g wheel brakes (Chad's fly ask, 2026-07-15): held-key pilot input,
+    // passthrough like throttle (the instructor never manages it); consumed
+    // ONLY by the GROUNDED rolling-friction term in sim/ground.h. Defaulted
+    // 0 => every pre-brake Inputs (goldens, drones, tests) rolls brake-free,
+    // bit-identically (strict superset).
+    float wheel_brake = 0.0f;  // [0, 1] held wheel-brake fraction
 };
 
 // SPEC §7 state, world Cartesian, planet center at origin (never
@@ -51,6 +57,27 @@ struct SimState {
     // torque/authority model never reads them (AT-18 untouched).
     double flap = 0.0;  // [0, 1] flap deflection fraction
     double gear = 0.0;  // [0, 1] gear extension fraction
+    // R4 solid ground (sim/ground.h; set ONLY when env.ground is live).
+    // on_ground = the kernel GROUNDED touch-and-stick regime (position
+    // constrained to the terrain surface, rolling friction, released by net
+    // outward acceleration — the honest takeoff). crashed = the terrain
+    // contact fired OUTSIDE the landing limits THIS tick (transient, re-derived
+    // each tick); the CALLER owns what death means (app::tick respawns) — the
+    // kernel never respawns. Both stay false forever on the env==null path
+    // (all-null bit-identity: defaults never move a golden).
+    bool on_ground = false;
+    bool crashed = false;
+    // R4-FLY-5 ground CONSEQUENCE events (Chad's ruling: "there have to be
+    // consequences for bad taxiing and landings that would damage wings, not
+    // force them not to bank"). TRANSIENT like `crashed` (re-derived every
+    // tick); set ONLY by the grounded dynamics when env.ground is live — the
+    // null path never touches them (all-null bit-identity). The KERNEL only
+    // DETECTS (geometry); the CALLER maps events to the damage model — the
+    // kernel never owns what a broken wing means.
+    int wing_strike = 0;       // -1 left / +1 right wingtip swept below the
+                               // terrain this tick (0 = none)
+    bool prop_strike = false;  // nose-over: the nose pitched below the prop
+                               // clearance angle while grounded this tick
 };
 
 }  // namespace sim

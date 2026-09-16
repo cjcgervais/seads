@@ -181,7 +181,7 @@ TEST_CASE("AT-11: positive over-stall pushback is clamped by the n_min floor") {
         rad(40.0);  // >> aoa_max: pushback commands hard DOWN
 
     const control::Output o =
-        control::step(s0, in, internal, kAp, kCp, kAp.sim_dt);
+        control::step(s0, in, internal, kAp, kCp, nullptr, kAp.sim_dt);
     const double cpt = o.telem.extracted.cos_phi_theta;
     const double w_min = (kCp.n_min - cpt) * kAp.g / std::max(V, kCp.v_min);
     const double pointing = o.telem.omega_des.x - ff_pitch(s0);
@@ -221,7 +221,7 @@ TEST_CASE(
     internal.aoa_filtered = -rad(40.0);  // inverted stall: pushback commands UP
 
     const control::Output o =
-        control::step(s0, in, internal, kAp, kCp, kAp.sim_dt);
+        control::step(s0, in, internal, kAp, kCp, nullptr, kAp.sim_dt);
     const double cpt = o.telem.extracted.cos_phi_theta;
     const double w_max = (kCp.n_max - cpt) * kAp.g / std::max(V, kCp.v_min);
     const double pointing = o.telem.omega_des.x - ff_pitch(s0);
@@ -505,7 +505,7 @@ At6Probe at6_pull(double V, double offset) {
         control::reset();  // trim AoA; pushback dormant
 
     const control::Output o =
-        control::step(s0, in, internal, kAp, kCp, kAp.sim_dt);
+        control::step(s0, in, internal, kAp, kCp, nullptr, kAp.sim_dt);
 
     // elev == demand.x for a pure pitch offset (the AT-0 primitive the cascade
     // itself uses); rebuild seek_law's own branches from config -- deriving,
@@ -868,7 +868,7 @@ TEST_CASE("AT-16: FINE<->MANEUVER latch does not chatter at the boundary") {
         in.target_dir_world = glm::angleAxis(off, right) * nose;  // pure pitch
         in.throttle = 0.7;
         const control::Output o =
-            control::step(s0, in, internal, kAp, kCp, kAp.sim_dt);
+            control::step(s0, in, internal, kAp, kCp, nullptr, kAp.sim_dt);
         internal = o.internal;  // carry the regime latch across ticks
         REQUIRE(o.telem.e == Catch::Approx(off).margin(1e-9));  // err == offset
         if (o.telem.regime != prev) ++switches;
@@ -1086,7 +1086,7 @@ TEST_CASE("AT-13: the crash predicate is altitude <= 0") {
     s.last_vhat = -up;
     bool crossed = false;
     for (int i = 0; i < 20 && !crossed; ++i) {
-        s = sim::step(s, sim::Inputs{}, kAp, kAp.sim_dt);
+        s = sim::step(s, sim::Inputs{}, kAp, nullptr, kAp.sim_dt);
         REQUIRE(finite_state(s));
         if (sim::altitude(s.position, kAp) <= 0.0) crossed = true;
     }
@@ -1363,7 +1363,7 @@ TEST_CASE("AT-15: mid-push geometry exit hands off to roll") {
         in.throttle = thr;
         in.target_dir_world = (below == 0.0) ? nose : aim_below(below);
         const control::Output o =
-            control::step(s0, in, internal, kAp, kCp, kAp.sim_dt);
+            control::step(s0, in, internal, kAp, kCp, nullptr, kAp.sim_dt);
         internal = o.internal;
         if (o.telem.push_mode != prev) ++edges;
         prev = o.telem.push_mode;
@@ -1419,7 +1419,7 @@ TEST_CASE("AT-15: push gate does not dither at the boundary (hysteresis)") {
         in.target_dir_world =
             glm::normalize(glm::angleAxis(-rad(below), right) * nose);
         const control::Output o =
-            control::step(s0, in, internal, kAp, kCp, kAp.sim_dt);
+            control::step(s0, in, internal, kAp, kCp, nullptr, kAp.sim_dt);
         internal = o.internal;
         if (o.telem.push_mode != prev) ++switches;
         prev = o.telem.push_mode;
@@ -1466,7 +1466,7 @@ TEST_CASE(
         in.throttle = thr;
         in.target_dir_world = s0.orientation * tb;
         const control::Output o =
-            control::step(s0, in, control::reset(), kAp, kCp, kAp.sim_dt);
+            control::step(s0, in, control::reset(), kAp, kCp, nullptr, kAp.sim_dt);
         const double cpt = o.telem.extracted.cos_phi_theta;
         const double w_min = (kCp.n_min - cpt) * kAp.g /
                              std::max(o.telem.extracted.speed, kCp.v_min);
@@ -1643,7 +1643,7 @@ TEST_CASE("AT-15: push releases on the bank-side exit clause") {
         in.throttle = thr;
         in.target_dir_world = s0.orientation * glm::normalize(tb);
         const control::Output o =
-            control::step(s0, in, io, kAp, kCp, kAp.sim_dt);
+            control::step(s0, in, io, kAp, kCp, nullptr, kAp.sim_dt);
         io = o.internal;
         return o.telem;
     };
@@ -1748,7 +1748,7 @@ TEST_CASE("AT-15: push gate bank band does not dither (hysteresis)") {
         in.throttle = thr;
         in.target_dir_world = s0.orientation * glm::normalize(tb);
         const control::Output o =
-            control::step(s0, in, internal, kAp, kCp, kAp.sim_dt);
+            control::step(s0, in, internal, kAp, kCp, nullptr, kAp.sim_dt);
         internal = o.internal;
         if (o.telem.push_mode != prev) ++switches;
         prev = o.telem.push_mode;

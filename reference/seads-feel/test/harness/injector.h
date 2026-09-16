@@ -73,8 +73,12 @@ enum class Axis { pitch, yaw, roll };
 // term contributes exactly zero, so this reads the pure authority model —
 // any mismatch with the analytic c*max(q,floor)*delta(V)/I means dynamic
 // pressure was applied twice or the params forked (H1 / AT-18a).
+// `env` (R4, the R3-review P1): no default — the instrument must probe the
+// SAME world the plant flies or the measurement forks from the sim (null =
+// the v3 plant, which is what the AT-18a authority checks grade today).
 inline double measure_ang_accel_max(const sim::AircraftParams& p, double V,
-                                    Axis axis, double alt) {
+                                    Axis axis, double alt,
+                                    const sim::Environment* env) {
     sim::SimState s;
     s.position = {p.R + alt, 0.0, 0.0};  // local up = +X, at altitude (MB-atm)
     s.velocity = V * glm::dvec3{0.0, 0.0, -1.0};  // along the identity nose
@@ -93,7 +97,7 @@ inline double measure_ang_accel_max(const sim::AircraftParams& p, double V,
             break;
     }
 
-    const sim::SimState s1 = sim::step(s, in, p, p.sim_dt);
+    const sim::SimState s1 = sim::step(s, in, p, env, p.sim_dt);
     const double omega = axis == Axis::pitch ? s1.angular_vel.x
                          : axis == Axis::yaw ? s1.angular_vel.y
                                              : s1.angular_vel.z;

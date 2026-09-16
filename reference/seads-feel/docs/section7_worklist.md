@@ -1,3 +1,5 @@
+> **HISTORICAL (superseded 2026-07-08).** Every item below is CLOSED — landed or ruled: items 1-2 via S7-mouseloop/S7-cam3 (+ the S7-push gate rework), item 3 more-yaw via S7-yaw2 then MB-4/MB-rud, item 4 aim clamp DEFERRED/moot by Chad's ruling. The live feel loop is `docs/flight-log.md` + `docs/mission_b_instructor_plan.md`; the current thread map is CLAUDE.md `## Threads`.
+
 # Section 7 — feel worklist (do one at a time, fresh context each)
 
 > **FRESH AGENT (2026-07-07): the OPEN problem is the mouse-aim + camera FEEL through loops/split-S. Read

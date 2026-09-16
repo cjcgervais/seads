@@ -1,3 +1,5 @@
+> **SUPERSEDED (2026-07-07) — do NOT work this brief.** The problem was the CAMERA, solved by S7-cam3 (camera-up = the carried aim-frame up; SPEC §0). The lesson that unlocked it: `docs/milestone_feel_bug_attribution.md`. Kept only as the dead-end ledger (don't restack the fixes it lists).
+
 # HANDOFF — fresh audit: mouse-aim + camera FEEL through vertical maneuvers (loops / split-S)
 
 **Written 2026-07-07 for a FRESH agent, after a long session of STACKING FIXES that kept trading one

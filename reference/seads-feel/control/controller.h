@@ -9,6 +9,7 @@
 #include "control/extract.h"
 #include "control/params.h"
 #include "sim/aero.h"
+#include "sim/environment.h"
 #include "sim/params.h"
 #include "sim/state.h"
 
@@ -191,6 +192,9 @@ struct Internal {
     // Direction latches (§9.3): 0 = unlatched, else the held sign (+1/-1).
     double roll_latch = 0.0;
     double elev_latch = 0.0;
+    // S-righthand: seconds the pilot's hand has been OFF the aim. Feeds the
+    // MB-right authority ramp; reset by any aim-moved tick.
+    double hand_rest = 0.0;
     // Keyboard override (§9.5). ovr_ramp per body axis [pitch,yaw,roll], in
     // [0,1]: climbs by dt/ovr_ramp_time while the axis is held, reset to 0 the
     // tick it releases (the release transient is caught by the cascade
@@ -281,6 +285,10 @@ struct Input {
     // 4b golden reproduces bit-identically).
     double flap_cmd = 0.0;  // [0,1] commanded flap deflection fraction
     double gear_cmd = 0.0;  // [0,1] commanded gear extension
+    // R4g wheel brakes: passthrough EXACTLY like throttle (the instructor
+    // never manages energy); the GROUNDED plant regime is the only consumer.
+    // Defaulted 0 => every pre-brake caller/golden rolls brake-free.
+    double wheel_brake = 0.0;  // [0,1] held brake fraction
     bool grounded = false;  // GROUNDED enforcement in-core (§9.5)
     // Aim-motion gate (SPEC §9.3 as amended 2026-07-10): TRUE iff raw device
     // deltas were applied to the AIM this tick (the caller's apply_mouse site
@@ -329,6 +337,22 @@ struct Telemetry {
     // mirrors — no consumer of behavior reads them (the moved-consumer rule).
     double blend = 0.0;      // smoothstep(blend_lo, blend_hi, e)
     double held_bank = 0.0;  // ns.held_bank after this tick's captures/lean
+    // S-righthand instrument (2026-09-12): the ROLL CHANNEL, limb by limb, so
+    // an attribution never has to be inferred from a clamp value again (the
+    // MB-right -180.0 signature in Chad's tape was read off the clamp, not
+    // off the limb). Pure REPORT fields -- nothing in the kernel reads them.
+    //
+    // READ THEM AS "WHAT THIS TICK'S BRANCH EMITTED", NOT "the current value
+    // of that limb" (red-team P2): each is written INSIDE the branch that
+    // computes it, so on a tick that took another branch the field keeps its
+    // DEFAULT, not a stale one -- safe only because Output (and therefore
+    // Telemetry) is constructed fresh per control::step call. In particular
+    // hand_gate reads 1.0 on every tick where the MB-right branch did not
+    // run, which means "not applicable", not "full authority".
+    double roll_hold = 0.0;      // the FINE wings-hold limb's emission
+    double roll_maneuver = 0.0;  // the MANEUVER bank-to-turn limb's emission
+    double roll_right = 0.0;     // the MB-right inverted-righting emission
+    double hand_gate = 1.0;      // S-righthand's hand-rest authority ramp
     // S-rimshot (v4 rung 2): the event machine's state, mirrored for the
     // instrument and the tests. A state mirror alone is blind (the
     // moved-consumer trap) — every test pairs this probe with BEHAVIOR
@@ -348,9 +372,12 @@ inline Internal reset() { return Internal{}; }
 // The pure controller (SPEC §9.7). Extraction happens inside (through the ONE
 // shared control::extract) so a caller can never forget it or pass a stale
 // frame; the filtered AoA and held v-hat live in `internal`.
+// `env` all-null => bit-identical to v3. No default argument (Fable red-team):
+// the compiler enumerates every call site so none silently passes null when the
+// gravity/atmosphere fields go live in Phase 2.
 Output step(const sim::SimState& s, const Input& in, const Internal& internal,
             const sim::AircraftParams& ap, const ControllerParams& cp,
-            double dt);
+            const sim::Environment* env, double dt);
 
 // Inner-loop plant inversion (SPEC §9.4 / §7): the sim's EXACT torque model
 // with the sim's EXACT params (config/aircraft.toml — single source), clamped
@@ -360,16 +387,35 @@ Output step(const sim::SimState& s, const Input& in, const Internal& internal,
 // is > 0 always — c > 0 and q_att_floor > 0 are enforced at load
 // (config/load_aircraft.cpp), q_eff >= q_att_floor > 0, delta_max_eff > 0 —
 // so there is no divide-by-zero at v -> 0.
+// Density-agnostic core: the inversion DENOMINATOR lives here ONCE — the
+// altitude body and the R6 position+env overload both feed it their density,
+// so the spatial migration can never fork the inversion from the altitude
+// path (the exact fork AT-18b's spatial leg detects).
+inline double plant_invert_at_rho(double tau_cmd, double c_axis, double speed,
+                                  double rho, const sim::AircraftParams& ap) {
+    // MB-atm: the inversion sees the SAME thinned density the plant applies
+    // (H1: inverting the sea-level q at altitude would under-deflect by
+    // 1/atm_frac). q_eff's floor keeps the denominator > 0 at any density.
+    const double denom = c_axis *
+                         sim::q_eff(sim::q_dyn(rho, speed), ap) *
+                         sim::delta_max_eff(speed, ap);
+    return std::clamp(tau_cmd / denom, -1.0, 1.0);
+}
+// Altitude body — the null-atm / test path (no bubbles present).
 inline double plant_invert(double tau_cmd, double c_axis, double speed,
                            double altitude, const sim::AircraftParams& ap) {
-    // MB-atm: the inversion sees the SAME thinned density the plant applies
-    // (sim::rho_at — H1: inverting the sea-level q at altitude would
-    // under-deflect by 1/atm_frac). q_eff's floor keeps the denominator > 0
-    // at any altitude.
-    const double denom =
-        c_axis * sim::q_eff(sim::q_dyn(sim::rho_at(altitude, ap), speed), ap) *
-        sim::delta_max_eff(speed, ap);
-    return std::clamp(tau_cmd / denom, -1.0, 1.0);
+    return plant_invert_at_rho(tau_cmd, c_axis, speed,
+                               sim::rho_at(altitude, ap), ap);
+}
+// R6 SPATIAL overload — the LIVE inversion. The plant applies spatial density
+// (sim::step -> atm_frac_at); the inversion MUST sample the SAME density at
+// the SAME position, or a bubble edge under/over-deflects by 1/u (AT-18b).
+inline double plant_invert(double tau_cmd, double c_axis, double speed,
+                           const glm::dvec3& position,
+                           const sim::Environment* env,
+                           const sim::AircraftParams& ap) {
+    return plant_invert_at_rho(tau_cmd, c_axis, speed,
+                               sim::rho_at(position, env, ap), ap);
 }
 
 }  // namespace control

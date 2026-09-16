@@ -25,14 +25,25 @@ inline bool is_finite(const glm::dquat& q) {
 // here independently of how the caller obtained it. Tautological against
 // today's step() by construction — it exists as the tripwire for any future
 // code that sneaks in a fixed down axis.
+// R5: an ACTIVE GravityField legitimately reaches exact 0.0 in the clipped
+// far tail (sim/fields.h kGravTailCutX) — direction is meaningless there, so
+// the caller passes tapered_field and the direction leg is guarded on a
+// nonzero magnitude. The caller scopes the flag to alt > h_g0 (step.cpp):
+// with env.grav null OR in the fight band the magnitude is always p.g > 0,
+// so the relaxed branches are UNREACHABLE there — the tripwire keeps its
+// Section-1 strength everywhere except the taper region itself.
 inline void assert_gravity_radial(const glm::dvec3& position,
-                                  const glm::dvec3& gravity_used) {
+                                  const glm::dvec3& gravity_used,
+                                  bool tapered_field = false) {
     (void)position;
     (void)gravity_used;
+    (void)tapered_field;
     assert(glm::length(position) > 0.0);
-    assert(glm::length(gravity_used) > 0.0);
-    assert(glm::dot(glm::normalize(gravity_used), -glm::normalize(position)) >
-           1.0 - 1e-12);
+    assert(tapered_field || glm::length(gravity_used) > 0.0);
+    if (glm::length(gravity_used) > 0.0) {
+        assert(glm::dot(glm::normalize(gravity_used),
+                        -glm::normalize(position)) > 1.0 - 1e-12);
+    }
 }
 
 // The velocity change the integrator ACTUALLY applied must be radial — this
@@ -41,16 +52,24 @@ inline void assert_gravity_radial(const glm::dvec3& position,
 // the handed-in vector). Since Section 2 this fires only on the pure-ballistic
 // path (no wing, no thrust) — step() gates it on S == 0 && thrust == 0 — so
 // ballistic runs keep the full-strength tripwire.
+// R5: same taper guard as assert_gravity_radial — the ballistic path
+// (S == 0 && thrust == 0) is exactly where an escaped plane drifts through
+// the clipped tail, so dv = g*dt*dir reaches exact zero there too. Null
+// path unreachable-relaxed for the same reason.
 inline void assert_applied_impulse_radial(const glm::dvec3& position,
                                           const glm::dvec3& vel_before,
-                                          const glm::dvec3& vel_after) {
+                                          const glm::dvec3& vel_after,
+                                          bool tapered_field = false) {
     (void)position;
     (void)vel_before;
     (void)vel_after;
+    (void)tapered_field;
     const glm::dvec3 dv = vel_after - vel_before;
-    assert(glm::length(dv) > 0.0);
-    assert(glm::dot(glm::normalize(dv), -glm::normalize(position)) >
-           1.0 - 1e-12);
+    assert(tapered_field || glm::length(dv) > 0.0);
+    if (glm::length(dv) > 0.0) {
+        assert(glm::dot(glm::normalize(dv), -glm::normalize(position)) >
+               1.0 - 1e-12);
+    }
 }
 
 // No NaN in any state field; orientation renormalized (unit) every tick;

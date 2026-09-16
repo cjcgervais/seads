@@ -106,7 +106,7 @@ TEST_CASE(
     // 6.8e-4 m drop is below float ulp at 17 km.)
     const glm::dvec3 p0{kWorld.R + 2000.0, 0.0, 0.0};
     const sim::SimState s1 =
-        sim::step(make_state(p0, {0, 0, 0}), {}, kWorld, kDt);
+        sim::step(make_state(p0, {0, 0, 0}), {}, kWorld, nullptr, kDt);
 
     const double expected_drop = kWorld.g * kDt * kDt;
     // margin, not a tight epsilon: the drop is a catastrophically cancelled
@@ -130,7 +130,7 @@ TEST_CASE("a point at rest falls radially, from any position (no fixed down)") {
         sim::SimState s = make_state(dir * (kWorld.R + 2000.0), {0, 0, 0});
         const glm::dvec3 start = s.position;
         const int ticks = 120;  // 1 s
-        for (int i = 0; i < ticks; ++i) s = sim::step(s, {}, kWorld, kDt);
+        for (int i = 0; i < ticks; ++i) s = sim::step(s, {}, kWorld, nullptr, kDt);
 
         const glm::dvec3 disp = s.position - start;
         const double dropped = glm::length(disp);
@@ -170,7 +170,7 @@ TEST_CASE(
     double max_radius_err = 0.0;
     double max_plane_err = 0.0;
     for (int i = 0; i < ticks; ++i) {
-        s = sim::step(s, {}, kWorld, kDt);
+        s = sim::step(s, {}, kWorld, nullptr, kDt);
         max_radius_err =
             std::max(max_radius_err, std::abs(glm::length(s.position) - r));
         max_plane_err = std::max(max_plane_err,
@@ -194,7 +194,7 @@ TEST_CASE("sub-orbital tangential launch falls; super-orbital climbs") {
 
     auto run = [&](double speed_factor) {
         sim::SimState s = make_state(p0, {speed_factor * v_orbit, 0.0, 0.0});
-        for (int i = 0; i < 120 * 30; ++i) s = sim::step(s, {}, kWorld, kDt);
+        for (int i = 0; i < 120 * 30; ++i) s = sim::step(s, {}, kWorld, nullptr, kDt);
         return glm::length(s.position);
     };
 
@@ -217,7 +217,7 @@ TEST_CASE("quaternion integration is body-frame Hamilton order, correct sign") {
     s.angular_vel = {w, 0, 0};
 
     const int ticks = 120;  // 1 s
-    for (int i = 0; i < ticks; ++i) s = sim::step(s, {}, kWorld, kDt);
+    for (int i = 0; i < ticks; ++i) s = sim::step(s, {}, kWorld, nullptr, kDt);
 
     const double t = ticks * kDt;
     const glm::dquat q_expected =
@@ -271,7 +271,7 @@ TEST_CASE(
     in.yaw = -0.5f;
     in.roll = 0.4f;
 
-    const sim::SimState s1 = sim::step(s, in, p, kDt);
+    const sim::SimState s1 = sim::step(s, in, p, nullptr, kDt);
 
     // Oracle: replicate step.cpp's torque + omega update (this is the omega
     // COMPUTATION, which the M07 mutant does not touch), then build the
@@ -318,7 +318,7 @@ TEST_CASE("orientation stays unit-norm over many ticks of tumbling") {
     s.angular_vel = {0.5, -0.3, 0.2};  // rad/s tumble, all three axes
     const glm::dquat q0 = s.orientation;
     for (int i = 0; i < 120 * 60; ++i) {
-        s = sim::step(s, {}, kWorld, kDt);
+        s = sim::step(s, {}, kWorld, nullptr, kDt);
         REQUIRE(std::abs(glm::length(s.orientation) - 1.0) < 1e-12);
     }
     REQUIRE(sim::is_finite(s.orientation));

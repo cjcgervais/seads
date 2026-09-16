@@ -7,8 +7,10 @@
 # A FLEET scattered over the world ("it's a big place"): drone 0 spawns ahead of
 # the player (the immediate target), the rest scatter evenly over the sphere.
 count = 10   # number of bandits
-size  = 4.0  # draw scale (cosmetic visibility — the plant is a point). Bigger
-             #   = readable from further; raise if they're still too small.
+size  = 1.0  # draw scale — TRUE SCALE (Task C, iter-8). The model's real span
+             #   is ~9.925 m; size=4 rendered bandits ~40 m wide, defeating range
+             #   perception. Now drawn at real dimensions; identifiability restored
+             #   by BANDIT labels (Task D).
 # The flight PROGRAM (Chad 2026-07-07): a patrol, mostly LINEAR with periodic
 # course changes — fly a straight great-circle leg for `straight_time`, then hold
 # a gentle bank for `turn_time` (direction alternates so it weaves, not spirals),
@@ -21,7 +23,7 @@ turn_time     = 4.0    # [s] turn-leg duration (0 = never turn)
 # 140 m/s). Any bank works now (no bistability). Raise for a tighter turn.
 turn_bank_deg = 25.0   # [deg] bank angle held during a turn leg
 throttle      = 1.0    # [0,1] cruise power (holds speed / altitude)
-speed         = 140.0  # [m/s] spawn speed (player-class cruise)
+speed         = 85.0   # [m/s] bandit cruise. Lowered 140->115->95->85 (Chad fly 2026-07-14 "a couple flew away and would take long to catch — slow them a little more"): player cruises ~167 / redlines 245, so 85 gives ~82 m/s cruise closure (much more in a dive) — a fleeing/patrolling bandit is now clearly catchable. Also turns TIGHTER (turn rate = g*tan(bank)/V rises as V drops), so slower = a better dogfighter too. Raise toward 140 for a harder chase.
 # Spawn placement, relative to the player spawn (ahead along its nose, beside
 # along its right wing, at the same altitude) so the bandit is visible on the
 # first flight.
@@ -32,13 +34,252 @@ spread_m    = 3000.0   # [m] the rest of the fleet scatters within this arc-
                        #   radius of the spawn AREA -> a VISIBLE cluster you fly
                        #   into. Raise for a wider patrol (up to ~47000 = the far
                        #   side); lower for a tight furball.
+hp = 100.0         # [HP] health points (> 0); ~4 point-blank cannon hits kill (more at range under KE falloff)
+hit_radius_m = 9.0   # [m] swept-sphere collision radius (> 0). Re-derived for
+                     #   TRUE scale (Task C, iter-8): old 15 m was sized for size=4
+                     #   (40 m wingspan); at true scale the half-span ≈ 4.96 m.
+                     #   9 m = true half-span (~5 m) + arcade margin (~4 m) so
+                     #   "if the tracers look on the plane, they hit".
+
+[maverick]
+# THE MAVERICK SQUADRON (drone/maverick.h): the 10 patrol bandits become named
+# tunnel-running adversaries — they dive into the Errington pit, thread the
+# underground bore to Murray (-2000 m), pop out and reverse, staggered so you
+# regularly witness (and can chase) a run. enabled=false makes the fleet
+# BIT-IDENTICAL to the docile patrol (the maverick brain is never called).
+# NOTHING here touches the flight kernel: the brain reads the tunnel geometry
+# and emits bank/gamma/gain/speed setpoints for the SAME bank-hold autopilot.
+# The per-pilot flavour (callsigns, speed_scale, aggression, run period,
+# daredevil) is a constexpr TRAIT TABLE in drone/maverick.h.
+enabled = true
+
+# Speeds [m/s]. base_speed is the reference cruise the per-pilot speed_scale
+# (1.15..1.55) multiplies; tunnel_speed_max is the HARD ceiling inside the bore
+# (the honest speed cap the closed-loop run threads); transit_speed_scale paces
+# the dash out to the mouth. All validated within [1.3*V_stall, v_redline].
+base_speed          = 130.0
+tunnel_speed_max    = 135.0   # the honest bore-speed ceiling: fast enough for a
+                              #   thrilling run, slow enough that the bank-hold
+                              #   autopilot threads the -2000 m dip (a higher cap
+                              #   loses the descent curve; see docs/maverick_squadron.md)
+transit_speed_scale = 1.0
+
+# Pure-pursuit lookahead [m]. lookahead_m is the centreline chase distance in the
+# bore (scaled by speed); dive_lookahead_m is the tighter aim into the pit throat.
+# FIX-F4 (docs/ai_phase2_fix_spec.md, Opus probe attribution
+# D:\seads_sandboxes\ai-probes\f4\ATTRIBUTION.md): 220 -> 500. The probe traced
+# 69% of net entries dying (24/25 on the Errington bore ramp): DIVE_IN crosses
+# the mouth ~30 deg nose-low at 173-183 m/s, the roll command saturates at
+# bank_cap for 2.5 s because lookahead_m 220 (~334 m effective at speed) is
+# only 0.21x the achievable turn radius (1574 m at 182 m/s / 65 deg bank), so
+# the cross-track runs out to exactly tube_width_m and the plane exits
+# contains() 580-720 m in. The pursuit lead must be sized to the turn radius
+# actually achievable at the speed actually flown, not to the bore's own
+# width. Measured: fleet in-net deaths 69% -> 21% over 60 min, the lateral
+# bore-wall death mode eliminated (what survives is an unrelated pit-crown
+# clip at the mouth, a separate defect). Dial — flagged for Chad's stick.
+lookahead_m      = 500.0
+# FIX-F4b — the residual "pit-crown" class (Opus probe,
+# D:\seads_sandboxes\ai-probes\f4\PITCROWN_ATTRIBUTION.md + the repo copy in
+# docs/ai_phase2_records/): 150 -> 250. The prior doc's label was wrong — the
+# strike is the Errington PIT FLOOR, not a crown: BOREAL crosses the pit lip
+# 132 m off-axis in the saturated 55-deg plunge, contains() fires via the
+# trench at grade, RUN's altitude reference lands at the mouth node 220 m
+# below (crater bottom), and track_gain*alt_err commands a further full-cap
+# -44 deg dive; pull-out needs 1.4-1.9 s, it has 0.35 s. One byte-identical
+# event = 19/25 in-net deaths over 150 min. The longer dive lead moves the
+# aim ALONG the bore — a bearing change the roll channel can act on before
+# saturation: lip state goes 132 m radius/+52 m cross-track/-65 deg pinned
+# -> 88.9 m/-18 m/+19.2 deg unsaturated, and the pit radius then converges.
+# Measured: pit class 19/51 Errington entries -> 0/40 over 150 min (total
+# in-net 32% -> 8%); 350 measures the same (not a knife edge). Aim-sinking,
+# crater widening, and a projected-contact guard all measured USELESS (both
+# channels saturated; the fatal axis is vertical, the guard's actuator is
+# lateral). Dial — flagged for Chad's stick.
+dive_lookahead_m = 250.0
+# Cross-track (centreline) correction gain. Pure pursuit alone cuts the inside of
+# the bore's vertical dip curves; this restoring pull keeps the nose on centre.
+# Tuned high — the run needs tight tracking through the dip.
+# FIX-F4: 2.0 -> 1.0, paired with the lookahead_m raise above. At the old gain
+# the cross-track term dominated the (now longer) lead vector into the same
+# k_az saturation the lookahead raise was meant to relieve; halving it keeps
+# the restoring pull from re-saturating the roll command. Measured together
+# with lookahead_m=500: 69% -> 21% over 60 min (matching lookahead alone; what
+# remains is the pit-crown clip, not the lateral bore-wall mode). Dial —
+# flagged for Chad's stick.
+centerline_gain = 1.0
+
+# PATH-SLOPE FEEDFORWARD (the curvature-ff bore autopilot rung). The bore's steep
+# exit ascent defeats an error-only pursuit gamma (a violent pitch PIO), so the
+# run commands the PATH's own climb angle directly and lets the residual PD
+# correct only the leftover altitude error. gamma_lookahead_m samples the slope
+# this far AHEAD so the dip->climb knee is anticipated; track_gain [rad/m] is the
+# gentle residual altitude-error gain.
+gamma_lookahead_m = 300.0
+slope_ff_gain     = 1.0     # 1 = full path-slope inversion; 0 reverts to the
+                            #   error-only pursuit gamma (the pre-fix ascent PIO)
+track_gain        = 0.0045
+# THROTTLE FEEDFORWARD. A sustained climb needs ~sin(gamma) more thrust; feed it
+# forward (climb_throttle_gain * sin(gamma_cmd)) so speed doesn't have to sag
+# first to summon it. climb_speed_min is the sustainable climb speed the run
+# bleeds toward on the ramp (instead of chasing the flat-run speed up a 21 deg
+# slope), validated above stall like every other maverick speed.
+climb_throttle_gain = 1.3
+climb_speed_min     = 118.0
+
+# Wall guard (hysteretic). Engage the centreline-recover when nearer than
+# wall_margin_m to a bore wall; release only when wall_margin_release_m deep back
+# inside (the anti-chatter gap). wall_margin_floor_m is the hard floor the
+# daredevil trait cannot shrink past. Margins must stay below the bore semi-axis.
+wall_margin_m         = 34.0
+wall_margin_release_m = 60.0
+wall_margin_floor_m   = 14.0
+
+# Attitude caps [deg]. dive is the steep pit plunge (dive mode only); run is the
+# in-bore tracking cap (the steep Murray ascent needs it); transit the cruise to
+# the mouth; bank the roll ceiling. aoa_protect is always on in the bore.
+dive_gamma_cap_deg    = 55.0
+run_gamma_cap_deg     = 44.0
+transit_gamma_cap_deg = 30.0
+bank_cap_deg          = 65.0
+
+# ---------------------------------------------------------------------------
+# RUNG E17 — THE ARENA SPIRAL (Chad's tape 10, 2026-08-24: "they died in the
+# tunnel run") — plus the RUN's own bail underneath it.
+# ---------------------------------------------------------------------------
+# THREE of his four AI tunnel runs ended in a wreck, all three at the SAME
+# radius (11240 / 11224 / 11239 m) at lateral points kilometres apart, while
+# the fourth threaded the bore cleanly and Chad himself flew 440 m DEEPER than
+# any of them and lived. Decoded in test/unit/test_tunnel_track_probe.cpp
+# (tag [.e17track]) against the shipped net and the real DEM:
+#
+#   the bore bottoms at R=13305 (1800 m below terrain); the SURVIVOR bottomed
+#   at 13302 with sd in a tight -65..-290 m band and arc rising 0 -> 1.000.
+#   The three that died opened identically, then at arc 0.46-0.55 — where the
+#   bore crosses the ARENA — the walls fell away (sd -1000, -2000, -2400 m).
+#
+# ★ AND THE VERTICAL CHANNEL WAS COMMANDING A FULL +44.1 deg CLIMB, PINNED AT
+#   THE CAP, THE ENTIRE WAY DOWN (alt_err +755 -> +1719 m below the centreline
+#   on track 7A; +1018 -> +2063 on 2A). They were told to climb, at maximum,
+#   and sank two kilometres. That is a SPIRAL: 1-2 km off the centreline
+#   saturates the BANK too, and a pinned bank plus a pinned climb demand does
+#   not climb — it tightens the spiral into the room's floor.
+#
+# run_recover_alt_m: past this much vertical error, start handing the lift back
+#   to the VERTICAL by shrinking the bank cap (blended out to 2x this). 300 m
+#   is well outside the +/-80 m band a healthy run holds (measured above) and
+#   well inside the 755 m the first wrecked sample was already at.
+# run_recover_bank_cap_deg: the cap under full recovery demand. 25 deg still
+#   tracks the bore axis; the rest of the lift goes up. Loader-checked <= the
+#   normal cap so a "recovery" can never become a bank repeal.
+# run_stall_s / run_stall_arc_m: the FLOOR, not the cure. RUN is the only
+#   tunnel mode with no bail — TRANSIT has a budget, DIVE_IN 25 s, CLIMB_OUT
+#   40 s — and both its exits are functions of the arc estimate alone, so a
+#   lost centreline makes RUN permanent. A run that has not made 150 m of arc
+#   in 8 s has lost the bore: break off UP instead of pressing a dead run.
+# All four are 0-OFF (0.0 on the two _m/_s dials) = the pre-E17 machine,
+# bit-for-bit. ⚠ FLIGHT-BEHAVIOUR CHANGE HE HAS NOT FLOWN.
+run_recover_alt_m        = 300.0
+run_recover_bank_cap_deg = 25.0
+run_stall_s              = 8.0
+run_stall_arc_m          = 150.0
+
+# Autopilot gains (snappy, combat-class) + the pursuit steering gains.
+bank_p = 0.5    # roll P-gain (reach the commanded bank fast)
+pitch_p = 2.2   # pitch P-gain
+k_az = 3.5      # bank command per rad of horizontal bearing error to the route
+k_el = 3.0      # gamma command per rad of elevation error to the route
+
+# exit_frac: the fraction of the bore the RUN threads before handing to CLIMB_OUT.
+# CLIMB_OUT continues the SAME wall-guarded slope-feedforward law (with the
+# virtual centreline extension out of the mouth), so it threads the steep exit
+# ascent and breaks CLEAN out to the surface — the run hands off late.
+exit_frac = 0.95
+
+# period_scale stretches every pilot's between-run gap (bigger = rarer runs).
+# engage_aggression_min: a maverick loitering in PATROL still hunts the player if
+# its trait aggression is >= this (a committed run always ignores engagement).
+period_scale         = 1.0
+engage_aggression_min = 0.55
+
+# RUNG E2.1 FIX — THE FINAL-LEG GRACE [s]. The TRANSIT give-up budget
+# (transit_timeout_s, 150 s) is ONE clock spanning both stages of the
+# two-waypoint approach, and it was MEASURED too small for the pattern: in the
+# game-loop certificate Stage A (the dash to the FIX, 6.85 km behind the mouth)
+# cost 105-135 s of the 150, and the fleet then died ON THE LINE, aligned
+# (cross-track 42-320 m, align 0.97-0.99), 0.5-4 km short of the arm gate. 11
+# of 12 give-ups in a 10-minute window were that shape; ONE pilot in the whole
+# fleet ever crossed the arm point. Reaching the FIX now buys this much more
+# clock, ONCE per transit (a go-around does not re-buy it), so the total stays
+# hard-bounded at 150 + this and the anti-livelock guarantee is unchanged.
+# 90 s is the MEASURED value: the final leg is transit_fix_back_m 6000 m at
+# climb_speed_min 118 m/s = 51 s, plus the fix U-turn and the line capture.
+# 0 = off, bit-identical to the pre-fix machine.
+transit_fix_grace_s  = 90.0
+#
+# ★★★ RUNG E15 — STAGE A'S BUDGET SCALES WITH THE DISTANCE IT HAS TO FLY.
+# CHAD'S FLY REPORT ON TAPE 9 (2026-08-24): "they didnt attack underground
+# however, are there any being allocated to the underground??"
+#
+# THEY WERE. The enemy launched TEN runs and arrived ONCE. Eight died in
+# TRANSIT, and three of those ended at EXACTLY 150.0-150.2 s — the raw
+# transit_timeout_s — meaning they never captured the FIX and never earned the
+# 90 s grace above. A Stage A failure. They launched 9.5-22.0 km from their
+# approach point (the FIX sits a further 6 km + approach_back_m behind it), and
+# the MEASURED effective closure in transit is 91.5 m/s for the enemy and
+# 102.3 for the allies — not the 143 m/s airspeed, because of the FIX dogleg.
+# So a 16 km launch needs ~175 s of Stage A and a 22 km launch ~240 s, and a
+# FIXED 150 s IS A RANGE LIMIT WEARING A TIMEOUT'S CLOTHES: anything ordered
+# past ~15 km is dead on launch and nothing checks it.
+#
+# ★ THE ASYMMETRY THAT LOOKED LIKE A MAP PROBLEM ISN'T ONE: the enemy's
+# approach point sits 12.4 km from its dome centre against the ally's 15.1 km
+# — the geometry FAVOURS the enemy. His allies simply launched closer, and
+# converted 38-50% against the enemy's 0-11%.
+#
+# 11.0 = 1000 / 91.5 m/s, the SLOWER of the two measured closures, so the
+# budget is sized on the arm that was failing. Anti-livelock survives by
+# construction: the distance is measured once at entry and is bounded by the
+# planet, so the budget is finite for every reachable geometry.
+# 0 = OFF = the flat timeout, bit-identical.
+#
+# ★★★ IT SHIPS OFF, AND THE MEASUREMENT IS WHY. The mechanism above is correct
+# and tested — a fixed 150 s IS a hidden range limit — but it cannot be paid
+# for at today's crash rate. Probe P-H, same replay, only this dial moving:
+#
+#   s_per_km   his pumps        first lost   ENEMY CRASHES/min (he signed 0.94)
+#      0.0     surface 0, deep 18%   16.5 min        1.65
+#      3.0     BOTH down              7.2 min        4.60
+#      6.0     BOTH down              7.2 min        4.60
+#     11.0     BOTH down              7.2 min        4.60
+#
+# ★ 3.0, 6.0 and 11.0 are IDENTICAL to the digit: past ~3 s/km no transit ends
+# on the timeout any more, so more rope is inert. The whole effect is the first
+# step — and that step nearly TRIPLES the crash count.
+# ★ THE REASON IS A DEFECT THIS RUNG DOES NOT FIX. TRANSIT is leash-EXEMPT, so
+# a striker crossing to the mouth is outside its own dome, in thin air, where
+# lift lapses (rho * atm_frac, unfloored) and is not floored the way torque is.
+# Tape 8's forensics put 14 of 22 AI crashes outside the dome. More rope for the
+# tunnel is, mechanically, more time in the place they die.
+# ★★★ SO THE LADDER RE-ORDERED: THE BUBBLE-EXIT / VACUUM CRASH DEFECT BLOCKED
+# THE TUNNEL RUNG. ★ RUNG E16 PAID IT (game.toml deck_terrain_relative): the
+# corridor now has a breathable lane, so the rope no longer buys wrecks. Probe
+# P-H, same replay, this dial at 11.0:
+#     old sphere deck   103 crashes  (4.60/min)   <- the wall this rung hit
+#     terrain deck       20 crashes  (0.89/min)   <- under Chad's signed 0.94
+# THIS IS THE ONE EDIT THE PREVIOUS SESSION LEFT READY. Walk-back: 0.0.
+transit_reach_s_per_km = 11.0
 
 [gunsight]
 # Lead-angle pipper (Chad: "calculate the lead angle for a hit"). A READ-ONLY
 # deflection solution — no shot is fired. The pipper marks where to point the
 # nose to hit the nearest bandit ahead; it turns green when the nose is on the
 # solution AND the bandit is within range.
-muzzle_speed  = 850.0  # [m/s] notional projectile speed (WWII cannon-class)
+muzzle_speed  = 805.0  # [m/s] hub cannon (MG151/20 M-Geschoss) muzzle speed — the aiming reference
+# drag_k is NOT in this file. It is single-sourced from world.toml [guns]
+# cannon_drag_k_per_m and threaded into GunsightParams by load_scenario_toml
+# (FIX 5, Fable: eliminates the silent-fork risk of two independent copies
+# that can drift). See config/load_scenario.h for the contract.
 hit_cone_deg  = 2.0    # [deg] nose-on-solution cone that counts as "on target"
 max_range     = 500.0  # [m] effective gun range (green only inside this)
 track_range   = 2000.0 # [m] engagement range: pipper shows + TOT% runs inside
@@ -47,3 +288,1855 @@ track_range   = 2000.0 # [m] engagement range: pipper shows + TOT% runs inside
 track_cone_deg = 45.0  # [deg] engagement half-angle off the nose: a bandit
                        #   further off boresight than this is not "engaged" (no
                        #   pipper, no denominator) — it's not a shot you can take.
+
+[combat]
+# Bandit COMBAT AI (docs/bandit_combat_plan.md): the patrol drones become
+# ATTACKERS — they seek the player out in a merge and shoot back, and the player
+# can be shot down. "Good but not that good", all tuneable here (no recompile).
+# NOTHING here touches the flight kernel (the firewall): bandit AI reads the
+# player read-only; enemy rounds + player HP live in world/combat state; player
+# death reuses the crash-respawn path.
+
+# The MASTER knob. An int level 1..5 -> how many bandits hunt at once, how fast
+# they shoot, and how hard each round bites (combat::difficulty_params). Raise
+# for a harder fight. 1 = one slow, soft attacker; 3 = a fair fight (~6-7 solid
+# hits to down you); 5 = several fast, hard bandits (a real furball).
+difficulty = 4   # 3->4 (Chad fly 2026-07-14 "the others took off and I couldn't
+                 #   catch them"): at 3 only 2 of the fleet hunt at once, so 8/10
+                 #   just patrol straight away. 4 -> 3 attackers (busier merge),
+                 #   with a harder burst/damage to match. Pair with the wider
+                 #   engage_range below so distant bandits actually wheel in.
+
+# Player stakes.
+player_hp           = 100.0  # [HP] player health (> 0)
+player_hit_radius_m = 9.0    # [m] swept-sphere radius enemy rounds test against
+                             #   the player (true-scale, matches the drone radius)
+respawn_invuln_time = 2.0    # [s] post-respawn invulnerability (anti spawn-camp)
+
+# Bandit gun (a single forward 20 mm at the CG — enough threat for v1). rof + per-
+# hit damage come from `difficulty` (the level owns the threat scaling); only the
+# ballistics live here.
+bandit_muzzle_speed = 600.0    # [m/s] slower than the player cannon (805) — the
+                               #   bandit is deliberately a lesser shot
+bandit_drag_k       = 0.0008   # [1/m] quadratic drag (matches the cannon proxy)
+bandit_convergence  = 250.0    # [m] gun harmonisation range (>= 50 m floor)
+
+# Engagement selection (which bandits become attackers). Hysteretic: a bandit
+# starts hunting inside engage_range and keeps hunting until it exceeds
+# disengage_range (the gap stops the attacker set chattering at the boundary).
+engage_range    = 6000.0  # [m] a bandit within this can be flagged an attacker.
+                          #   3200->6000 (Chad fly 2026-07-14 "couldn't catch
+                          #   them"): at 3.2 km a patroller pointed away is a long
+                          #   stern chase (~82 m/s closure); 6 km lets bandits
+                          #   notice and wheel toward you sooner — a merge, not a
+                          #   tail chase.
+disengage_range = 7000.0  # [m] an attacker keeps hunting until it exceeds this
+                          #   (must be > engage_range; tracks engage_range up)
+
+# Pursuit steering (how aggressively an attacker fights for a firing solution).
+# These steer the SAME PD autopilot, which now has a SOFT AoA LIMITER (drone.h
+# autopilot, aoa_protect): the pursuit can pull HARD for a tight reversal, but the
+# limiter fades the into-stall pitch so the bandit can no longer depart into the
+# porpoising fall Chad saw 2026-07-14 ("one fell on its own"). So the aggressive
+# gains below stay (they give the fast nose-swing that brings guns to bear — the
+# "they just fly away" fix); the limiter is the safety net, not a speed brake.
+# Probe: 2.2 + 20 deg WITHOUT the limiter porpoised through ~72 deg AoA; WITH it,
+# AoA is capped ~25 deg and altitude holds. Raise gains/pull for a nastier
+# dogfighter; lower to relax (the limiter keeps any setting stall-safe).
+pursue_k_az          = 5.0   # bank command per rad of horizontal bearing error.
+                             #   3.0->5.0 (furball repro fix, 2026-07-26): at
+                             #   real 20-30 km spawn range against a genuinely
+                             #   maneuvering (turning) player, 3.0 let a subset
+                             #   of the fleet settle into a matched-rotation
+                             #   orbit (bearing-off angle oscillating 55-146
+                             #   deg for the whole 120 s engagement, never
+                             #   closing) instead of cutting the corner onto an
+                             #   intercept — a harder bank-to-turn command
+                             #   breaks that limit cycle (measured: every
+                             #   fleet member's CLOSEST approach over 120 s
+                             #   drops well below its spawn range, vs 2/10
+                             #   stuck orbiting at range before).
+pursue_k_el          = 2.5   # climb/dive command per rad of elevation error
+pursue_max_bank_deg  = 55.0  # [deg] steepest pursuit bank. REVERTED 65->55
+                             #   (2026-07-26 gate fix): 55 deg is the
+                             #   documented stall-safety ceiling (the drone
+                             #   autopilot has no G-protection; above ~55 deg
+                             #   at pursuit q it risks departure) and the
+                             #   loader enforces it. More bank does not even
+                             #   help pointing at high V (turn rate = g*tan
+                             #   (bank)/V — V dominates); the pointing fix
+                             #   lives in pursue_pull_deg (the nose-swing pull,
+                             #   below) within this safety ceiling.
+pursue_max_gamma_deg = 30.0  # [deg] steepest climb/dive / pull toward the player
+pursue_bank_gain     = 0.45  # combat ROLL gain (patrol is 0.15): reach bank ~2 s
+                             #   without the over-gained hunt that spoils a solution
+pursue_pitch_gain    = 2.2   # combat PITCH gain (patrol is 1.6)
+# RUNG E7.4 — THE ENGAGED-TRACKING PITCH GAIN (0 = off = pursue_pitch_gain
+# everywhere, bit-for-bit). MEASURED (docs/ENEMY_AI_E1_E2_SPEC.md "E7.E"): at
+# 2.2 the pitch channel LIMIT-CYCLES while tracking. In a steady 55-deg turn
+# with a level gamma command the airframe swings its flight path 14 deg
+# peak-to-peak and pulls n = 5.5 to hold a turn needing 1.74 — about 4 G going
+# into pitch thrash instead of turn. The cycle collapses between 1.8 and 1.4;
+# past it the net turn rate is HIGHER (2.84 vs 2.39 deg/s) on the same bank and
+# the aeroplane keeps 4 m/s more speed. A nose thrashing 14 deg vertically is
+# what a gun solution cannot survive, and is also what Chad saw as "elevator
+# dipping up and down".
+# ★ SCOPE: consumed at the two ENGAGED pursue/BFM seams only. The
+# terrain-avoidance PULL-UP and the raid/defend/leash errands keep
+# pursue_pitch_gain — lowering their gain would slow every pull-up (CFIT).
+# Proven bit-for-bit, three ways, by "E7.4: the tracking gain never touches the
+# errand or pull-up paths" (mutation-verified: leaking the dial into either the
+# avoid branch or the raid errand turns that leg red).
+# ★★ THE VALUE (rung E7.4, 2026-08-22; the fine sweep is spec §E9.1). The
+# cliff is between 1.7 and 1.4 and the ruler is THE GUN'S OWN CONE: the limit
+# cycle must not eat more than half of fire_cone_deg (14) before any tracking
+# error, lead error or LOS rate is spent. Peak-to-peak flight-path swing at
+# 30 deg bearing: 2.2 -> 14.07, 1.7 -> 10.61, 1.6 -> 7.38 (still over the 7.0
+# bar), 1.5 -> 4.20, 1.4 -> 2.86. 1.5 is the first value inside the bar, and it
+# is ALSO the peak of net turn rate on the nose (2.87 deg/s against 2.21 at
+# 2.2) and of retained speed — the porpoise was EATING the turn it was
+# supposedly buying. The named cost is OFF the nose, where there is no cycle to
+# cure and the over-pull was doing real turning work: abeam (90 deg) the base
+# tier loses 22.0 -> 18.0 deg/s and keeps ~2 m/s more speed, and the ace tier
+# loses 27.8 -> 26.2 while no longer DIVING 290 m to get it. Chad's stick rules
+# that trade. Walk-back is one line: 0.0.
+pursue_track_pitch_gain = 1.5
+pursue_pull_deg      = 45.0  # [deg] extra nose-up PULL blended in when hard-banked
+                             #   FAR off the nose — tightens the reversal, then eases
+                             #   to 0 inside ~30 deg so it settles its guns onto you.
+                             #   20->45 (2026-07-26 gate fix, "close AND point"):
+                             #   at pursuit speed (85+bump, at/near player cruise)
+                             #   and the 55 deg bank ceiling, a pure bank-to-turn
+                             #   is too shallow to reverse onto a target fleeing
+                             #   dead astern within a real engagement window (a
+                             #   check-six reversal is a combined roll+pull
+                             #   maneuver, not a flat turn) — more pull swings the
+                             #   nose through the reversal without touching bank
+                             #   or speed. Verified: the fleeing-player nose-on
+                             #   test now swings from -0.98 to +0.65 in 20 s
+                             #   (was capped at +0.18, never crossing the +0.3
+                             #   "guns can bear" bar) with the same speed/bank.
+
+# Deflection LEAD: an attacker aims where you WILL be (range / this speed ahead)
+# so a boresight burst connects on a crossing target instead of trailing it. Set
+# ~= bandit_muzzle_speed. LOWER it to make them miss more (worse shots); 0 = pure
+# boresight (they'll almost never hit a maneuvering player).
+pursue_lead_speed = 600.0  # [m/s] reference round speed for the lead solution
+
+# Lead-time cap (furball repro fix, 2026-07-26): pursue()'s STEERING reuses the
+# gunnery lead point at ANY range — at a real furball's 20-30 km spawn
+# distance the uncapped lead extrapolates the player's (turning) velocity 30+
+# seconds ahead, sending several bandits chasing a phantom position instead of
+# the real one ("meanders from 25 km"). Capping keeps the FIRING solution
+# exact (fire_range_max is always well under the cap) while bounding the
+# long-range steering lead to a sane gunnery-scale extrapolation.
+pursue_lead_max_s = 8.5  # [s] cap on t_lead = range / pursue_lead_speed
+
+# Return fire gate (when an attacker actually shoots). It fires only when its
+# (leading) aim is inside this nose-on cone AND the player is in the range band.
+# game-AI-R4 (Chad's order 2026-08-05: "I ordered for ai that can kill me"):
+# 5.0 -> 14.0. The 5-deg sniper cone was nearly unholdable against a
+# maneuvering human — the bandits merged and never got rounds off (his fly
+# report). 14 deg turns a rough saddle into a real BURST with spray; KE
+# falloff + ballistics still make most rounds miss, so it reads as pressure,
+# not an aimbot. Chad's dial — walk back toward 8-10 if it feels unfair.
+fire_cone_deg  = 14.0   # [deg] nose-on cone the bandit fires within
+fire_range_min = 60.0   # [m] no shot closer than this (keeps rounds off a merge)
+# RUNG E1.2 (docs/ENEMY_AI_E1_E2_SPEC.md): 600 -> 900. Measured over tapes
+# 83-88 (~81 min): 22 enemy rounds TOTAL, 9 aimed at the player, 2 hits. The
+# fire band [60, 600] intersected with the 1200 m merge handover and the 2 s
+# dwell latch left guns_hot-AND-in-band at 0.63 s per 90 s of fight. 900 is
+# still inside the bandit gun's useful KE envelope and is the same ceiling the
+# snapshot band uses, so no round can ever be spawned beyond it (pinned by the
+# P-A probe as a REQUIREMENT, not a hope).
+fire_range_max = 900.0  # [m] no shot beyond this (KE falloff makes it pointless)
+
+# ---- RUNG E1: the kill chain (docs/ENEMY_AI_E1_E2_SPEC.md) ------------------
+# Chad's order: "a truly formidable opponent that will attack and kill me."
+# Every dial here has an OFF value that reproduces the pre-E1 fleet bit-for-bit
+# (pinned by the knob-off differential legs in test_enemy_ai_e1.cpp).
+
+# E1.2 THE SNAPSHOT GATE. Guns were hot ONLY in BFM Offensive, so the head-ons
+# and crossing merges an ace actually grants went unshot because the machine
+# happened to be in Intercept/Yoyo/Extend at that instant. The snapshot gate
+# runs the SAME fire discipline (ballistic solution in the 14-deg cone,
+# coordinated, in band) independent of BFM mode. It fires at DRONE foes too, so
+# AI-vs-AI round volume rises. 0 = off.
+snapshot_range_m = 900.0  # [m] snapshot band ceiling (== fire_range_max)
+
+# E1.1 AUTOTHROTTLE DEFICIT FEEDFORWARD (spec P0-2 fold). The bare P
+# autothrottle (0.40 + 0.02*err) only reaches full power at a 30 m/s error, so
+# a commanded 265 settles ~235-240 — below the player's 259 mean, i.e. the
+# COMMANDED ceiling was never the ACHIEVED speed. This adds throttle per m/s of
+# DEFICIT only (identically zero at/above the setpoint, so it can never
+# overshoot the command). 0.08 saturates the throttle within ~6 m/s of the
+# setpoint instead of 30. 0 = off.
+throttle_ff = 0.08  # [throttle per m/s of speed deficit]
+
+# E1.4 GRACE — the bank-rate slew. pursue_k_az 5.0 saturates the 55-deg bank
+# cap at 11 deg of bearing error, so the roll command has always been bang-bang
+# (there is no bank-rate limit anywhere in the fleet) and a gun solution never
+# settles. Applied at ONE final seam in drone::tick, AFTER the terrain-avoid
+# clamp, so pursue/BFM/maverick/raid/defend/strike all inherit it. 0 = off.
+#
+# ! 240, NOT the spec's suggested ~90 — MEASURED (probe P-A, 80-minute
+#   ensembles). A command rate limit must stay FASTER than the plant's own roll
+#   response or it becomes the dominant lag instead of smoothing the command:
+#   the autopilot reaches a commanded bank in ~1-2 s at pursue_bank_gain 0.45,
+#   and 90 deg/s spends 1.2 s just crossing the +/-55 deg envelope — the same
+#   order. Measured at 90: ZERO hits on the player across every blend length
+#   tried (4 of 4 arms). At 240 a full +/-55 deg reversal is commanded in
+#   0.46 s — still a real rate limit on the bang-bang command, comfortably
+#   inside the roll loop's own response — and the probe scored 39 rounds /
+#   18 hits over the same 80 minutes. Chad's dial.
+bank_slew_dps = 240.0  # [deg/s] max commanded-bank rate
+
+# Pursuit speed bump (Chad's "MAKE THEM GOOD", 2026-07-26): added to `speed`
+# above as the autothrottle setpoint ONLY while actively pursuing (patrol
+# cruise is untouched) so a chasing bandit can actually close/threaten in a
+# merge, not just win on a lucky turn. Kept modest — speed + this stays well
+# under the player's own redline (245), so a straight-line run still escapes
+# (the fight stays beatable).
+# 25.0->90.0 (furball repro fix, 2026-07-26, "make them hunt me" / "spread out
+# looking for me"): 85+25=110 m/s is SLOWER than the player's own cruise
+# (~167) — a pursuer can never close a tail chase at all if it is slower than
+# the target it is chasing, no matter how good the steering is (measured at
+# the real 20-30 km furball spawn distance: mean fleet range barely moved in
+# 120 s at the old bump). 85+90=175 clears cruise with margin while staying
+# well under the player's redline (245) — the player can still out-run a
+# chase at full throttle, "the fight stays beatable" holds.
+pursue_speed_bump = 90.0  # [m/s]
+
+# Pursuit climb-throttle feedforward (furball repro fix, 2026-07-26): without
+# this, a sustained pursuit pull/climb (target_gamma > 0) has no energy
+# management — the plain cruise autothrottle is blind to gamma, so a hard-
+# chasing bandit quietly BLEEDS altitude over the engagement and repeatedly
+# trips its own terrain-avoidance latch (the forced pull-up then steals the
+# pursuit bank/gamma for its duration) — measured as the dominant reason a
+# furball fleet reads as "wandering"/"stuck outside the bubble" rather than
+# closing. Same shape as the maverick brain's climb_throttle_gain
+# (drone/maverick.h): throttle_ff += this * sin(target_gamma). 0 = the old
+# no-op behavior.
+pursue_climb_throttle_gain = 1.3  # throttle ff weight on sin(target_gamma)
+
+# AI self-preservation (Chad's "MAKE THEM GOOD": no flying off sky-high to
+# mush in thin air, no augering into the terrain maneuvering low). Both
+# guards run for every non-tunnel disposition (patrol, pursuit, raid); a
+# committed maverick tunnel run is exempt (its own wall-guard/climb-out law
+# owns collision there).
+# Hard-deck / terrain avoidance: hysteretic (release strictly above enter).
+avoid_agl_enter_m   = 250.0  # [m] AGL: engage the forced pull-up below this
+avoid_agl_release_m = 400.0  # [m] AGL: release only above this
+avoid_lookahead_s   = 3.0    # [s] sink-rate look-ahead: a steep dive engages
+                             #   the pull-up before it is already below the floor
+# ★★★ RUNG E11 -- THE AIR-SEEK DIVE FADES WITH THE RUNWAY (0 = off).
+# Chad's tape 6: 21 AI terrain crashes in 14 min, and the rate 2.5x-ed the
+# moment the bubbles shrank (0.98/min before the first pump death, 2.50/min
+# after). The air-seek dive drives a starved drone DOWN to find breathable air;
+# it dives to redline, control authority compresses to min_frac 0.4 there, and
+# the pull-up -- measured ARMED on 100% of wrecks -- cannot rotate in the
+# runway left. The seek's own comment claimed the downstream terrain-avoid
+# "overrides everything, so seeking air can never fly anyone into the ground".
+# The override fires; the recovery does not. There is no air below the ground.
+# ⚠ HONESTY: this value is NOT confirmed by the harness. P-A never kills a
+# pump, so its bubbles never shrink, so the air-seek never fires there -- the
+# only fixture available is structurally blind to this defect (it read
+# 3/4/3/3 crashes across the whole sweep). It ships because E11's OWN bubble
+# collapse creates the starved condition deliberately, and because the geometry
+# is not a guess: the seek must be gone by the altitude the pull-up releases at.
+# Confirming it needs a conquest fixture that actually kills pumps. Walk-back: 0.
+avoid_air_dive_agl_m = 1500.0  # [m] AGL: full seek above, zero at the release
+avoid_gamma_deg     = 26.0   # [deg] forced climb angle while engaged; overrides
+                             #   pursuit/raid/leash entirely
+avoid_bank_cap_deg  = 45.0   # [deg] bank clamp while engaged (near-level wings
+                             #   so the pull-up is mostly vertical). 20->45
+                             #   (2026-07-26 gate fix): at the REAL 20-30 km
+                             #   furball spawn range a chasing bandit can need
+                             #   a genuinely steep sustained dive (the
+                             #   straight-line chord to a target 90+ deg around
+                             #   this small planet's own curvature dips well
+                             #   below the local horizon even at matched
+                             #   altitude) that saturates pursue_max_gamma and
+                             #   repeatedly trips this hysteretic guard over
+                             #   flat ground; a 20 deg bank clamp during each
+                             #   pull-up killed ~40% of its turn authority and
+                             #   one fleet member never closed at all (stuck
+                             #   oscillating). 45 deg keeps the pull-up mostly
+                             #   vertical (still << pursue_max_bank) while
+                             #   letting the bandit keep TURNING toward the
+                             #   target through the pull-up instead of
+                             #   stalling its intercept.
+
+# ★★★ RUNG S1-DECK — DECK COMPETENCE. Chad, 2026-08-26: "they need to fly low
+# on the deck and not crash in the low air zones. And we need to fix this
+# persistent problem I have brought up over and over again to no avail."
+#
+# THE DEFECT, IN FOUR SHIPPED NUMBERS. Outside the domes the ONLY breathable
+# air is the global deck: FULL air below game.toml deck_agl_m = 120 m AGL,
+# faded to ZERO by deck_agl_m + deck_soft_m = 320 m (sim/aero.h:88-92). The
+# terrain-avoid latch above engages below 250 m and RELEASES only above 400 m.
+# THE TWO BANDS ARE DISJOINT: every altitude the pull-up will let go at is dead
+# air. Deck flight outside a dome is therefore a forced limit cycle -- climb
+# (guns muted) into vacuum, mush, sink, re-latch -- and it eventually loses the
+# cycle into a ridge. Across tapes 7-11, 68 of 104 deaths (65%) were terrain,
+# and TRANSIT -- ordinary cross-country deck flight -- was the single biggest
+# mode at 27.
+#
+# THE BAND. 60 / 110 m. The release MUST sit at or below game.toml deck_agl_m
+# (120) so the forced climb COMPLETES in full air -- that is the whole defect,
+# and a gate leg loads BOTH configs and asserts it so it is structurally
+# unrepresentable from now on. 60 leaves a 50 m hysteresis gap (the house rule)
+# and 60 m of runway under the 100 m hold altitude.
+deck_avoid_agl_enter_m   = 60.0   # [m] AGL: engage, in deck scope. ★ 0 = THE
+                                  #   WHOLE-FEATURE WALK-BACK, bit-for-bit.
+deck_avoid_agl_release_m = 110.0  # [m] AGL: release, in deck scope
+# WHICH BAND AM I IN? Probe the air at the SHIPPED release altitude (400 m)
+# over my own ground point: "the 400 m release has no air HERE" is not a proxy
+# for the defect, it IS the defect. Hysteretic: enter below avoid_air_frac_full
+# minus this, release above avoid_air_frac_full. Inside a dome the probe reads
+# full air, so deck scope is FALSE and the in-bubble 250/400 band -- and the
+# signed 412 m raid floor that rests on it -- do not move.
+deck_scope_hyst_frac = 0.1
+# THE TRACK LAW. bore_track's shape (unity feed-forward on the path the terrain
+# ahead demands + a small altitude residual), carried from the bore to the
+# surface. It replaces maverick::aim_at's saturated chord-dive on ERRAND legs
+# only (transit / defend / raid / patrol); an ENGAGED tick is never overridden
+# -- Chad ruled pursuit unlimited, "chase you anywhere", and BFM owns the nose.
+# ⚠ RUNG DF-1 NARROWED THAT RULING ON 2026-08-31: BFM still owns the nose in the
+# HORIZONTAL on an engaged deck tick, but no longer in the VERTICAL. See
+# deck_fight_climb_cap_deg below.
+# 100 m sits inside [release 110, the 120 m full-air lid]; the gain is
+# bore_track's own proven track_gain.
+deck_track_agl_m      = 100.0   # [m] AGL to hold on the deck
+deck_track_gain       = 0.0045  # [rad/m] altitude residual
+deck_track_dive_cap_deg = 12.0  # [deg] descent cap on the track law (the climb
+                                #   side reuses avoid_gamma_deg)
+deck_lookahead_s      = 12.0    # [s] forward terrain window; the samples are
+                                #   FRACTIONS of it, so their METRES scale with
+                                #   airspeed with no second dial
+
+# ★★★ RUNG DF-1 — THE DECK FIGHT [deg]. CHAD'S RULING 2026-08-31, off tape 17:
+# "their habit of pulling up when I'm near sets them into the no air spin zone,
+# when fighting on the deck they should only be performing low altitude bank
+# turning without a climb vector because it sends them flying out of the fight."
+# His last two kills of that match were snap shots on aeroplanes already out of
+# control from exactly this.
+#
+# 0.0 IS HIS WORDS LITERALLY: no climb vector. It is a REAL cap, not an off
+# value -- NEGATIVE is off (and bit-identical), because a 0-valued dial that
+# also meant "disabled" would make the shipped setting unrepresentable.
+#
+# ⚠ IT CAPS THE ELEVATION CHANNEL ONLY. Bank is not read at this seam, so the
+# turn is exactly as hard as it is today -- this is the difference between a
+# flat turning fight and a vertical one, not between fighting and not.
+# ⚠ DESCENT IS NEVER RESTRICTED (a MIN), and the terrain-avoid pull-up runs
+# AFTER it and overrides everything: pulling up still always wins, so rising
+# terrain is answered by the safety law rather than by the pursuit.
+#
+# MEASURED (tape 17, enemy, deck scope + engaged, n=6,340): climb > 2.9 deg on
+# 11.4% of ticks, 15.8% with the PLAYER as foe, peak command +30 deg; only 18.4%
+# of those were terrain-avoid, 81.6% were BFM. Air fraction p10 = 0.00 -- the
+# climb ENDS in vacuum. 12 excursions above 500 m against a ~120 m lane.
+#
+# ★ WHY avoid_air_frac_full BELOW CANNOT DO THIS: it fades climb by the air
+# fraction where the drone ALREADY IS. In the deck lane that is full air, so the
+# fade is 1.0 and the climb passes unopposed; it bites only once the aeroplane is
+# in the thin air. Reactive where this must be predictive.
+deck_fight_climb_cap_deg = 0.0
+
+# ---- ENV-2: THE AIR-ENVELOPE GOVERNOR -------------------------------------
+# Chad's 2026-08-28 ruling: "go low around the edges of the bubble in case
+# theirs shrinks ... if they are deep in bubble they can climb and get an energy
+# advantage ... Safe flying on deck, energy fighting in the safe atmospheric
+# zone, with an applied buffer for them to fight lower on the fringes."
+#
+# The altitude allowance A(d) as a function of E1's signed depth d into the
+# nearest LIVE dome's air (drone/drone.h, env_allowance_m):
+#
+#   A(d) = max( min( env_edge_alt_m + env_slope*d,
+#                    env_plateau_m  + env_slope*max(0, d - d_knee) ),
+#              deck_track_agl_m )
+#   d_knee = env_shrink_radius_frac * r_eff_BASE(bearing)
+#
+# It is a CLAMP: it only lowers a commanded climb. It never steers, never
+# touches bank, never breaks off a chase. "Chase you anywhere" is untouched.
+# env_edge_alt_m = 0.0 turns the whole governor off, bit-identical.
+env_edge_alt_m        = 600.0   # [m AGL] ceiling AT the air edge (d = 0).
+                                #   ★ CHAD RULED THE LOOSE PAIR 2026-08-29.
+                                #   The tight pair (300 / tan 12 deg) matches
+                                #   his own fringe flying, but at the measured
+                                #   post-shrink portal geometry it leaves
+                                #   253-317 m of cross error against
+                                #   transit_line_tol_m = 300 -- i.e. it makes
+                                #   the TUNNEL RAID ARMING marginal-to-dead,
+                                #   and he praised those tunnel runs. The
+                                #   fringe-feel question is still open on his
+                                #   fly; the arming constraint is not.
+env_slope             = 0.364   # [m/m] fringe ramp = tan(20 deg)
+env_plateau_m         = 1650.0  # [m AGL] the shrink-survivable plateau.
+                                #   Measured: survivable crossings run
+                                #   +430..+920 and certain death flown level
+                                #   starts about +1670, so this sits just under
+                                #   the cliff ON PURPOSE and the arm stresses
+                                #   exactly that seed.
+env_desc_cap_deg      = 20.0    # [deg] descent authority once ABOVE A(d).
+                                #   The shipped 12 deg track cap sheds ~850 m
+                                #   in the ~24 s an airframe survives vacuum;
+                                #   ally i=9 needed ~1800 and died WITH the
+                                #   track law active. The player's own drill
+                                #   is 18-25 deg sustained.
+env_desc_fade_band_m  = 400.0   # [m] the cap opens 12 -> 20 deg linearly over
+                                #   this band above the ceiling
+env_fade_band_m       = 150.0   # [m] anti-porpoise: fade the allowed CLIMB out
+                                #   over the last this-many metres below A(d)
+env_shrink_radius_frac = 0.5    # ⚠ MIRRORS game.toml [conquest]
+                                #   shrink_radius_frac. The plateau's whole
+                                #   justification is "reach as far in as ONE
+                                #   shrink can move the edge" (measured: 8,700 m
+                                #   on the SUDBURY major axis, in a single
+                                #   tick, stranding five aeroplanes at once).
+                                #   ★ CHAD RULED THE KNEE CONSTANT 2026-08-29:
+                                #   half the BASE radius whatever the dome's
+                                #   current size. Declared cost, loudly: the
+                                #   free energy core is 36% of the dome at
+                                #   scale 1.25, 11% at 0.75, NONE at 0.5.
+                                #   An E2 arm pins this equal to game.toml's.
+
+# ---- ENV-3: THE DEFENCE SCRAMBLE --------------------------------------------
+# Chad, 2026-08-28: "when triggered to defend may climb and then use the dive
+# (parabolic) to get to enemy me faster if I am attacking their pump or they
+# mine." Ruled 2026-08-29: DIVE-IF-HIGH / SPRINT-IF-LOW -- the literal
+# climb-then-dive from low costs ~13 s (55 s vs 42 s at 9 km) and is not taken.
+# MEASURED PROBLEM: time-to-first-defender-within-900-m of the dying surface
+# pump on tape 13 was INFINITE; the closest any SUDBURY drone came while pump 1
+# died was 3,679 m. The scramble had been inheriting raid_speed_target = 123,
+# an ORBIT dial nobody chose for a 9 km emergency.
+# 0 = OFF = the inherited orbit speed, bit-identical.
+defend_sprint_speed   = 245.0   # [m/s] scramble transit speed.
+                                #   ⚠ This IS v_redline (aircraft.toml). Past
+                                #   it the compression ramp strips control
+                                #   authority -- hence the release below.
+defend_release_m      = 2500.0  # [m] release to the orbit speed for the merge;
+                                #   the turn radius at redline cannot close the
+                                #   on-station envelope (C1's lesson)
+# ★★★ CHAD'S DOCTRINE, RULED 2026-08-30 -- THE PARABOLA IS A ONE-SHOT.
+# His words, and this is the SPEC for the manoeuvre, not a one-time setting:
+# the dive ARMS ONCE (high AND far), is RIDDEN, and EXITS on a gate (speed
+# reached, or range to target) INTO THE MERGE. ⚠⚠ IT IS NEVER A PER-TICK FLOOR.
+# ★ WHY THE DOCTRINE EXISTS. The first build was a sustained floor -- at least
+# 18 deg down on EVERY tick a defender was high and far, ending only at pump
+# altitude with its energy spent and no merge in reach. RE-MEASURED AT HEAD
+# 2026-08-30 (post-perch, post-merge) at 18 deg: the SIGNED game-loop
+# certificate's clause B (AI-vs-AI attrition, test_maverick.cpp) read
+# `ai_damage` EXACTLY 0, on 106,226 defend orders and 69,606 enemy-on-player
+# samples. The air war did not degrade, it STOPPED. His ruling was never the
+# defect; the build was. A parabola is a one-shot.
+# ★ The player's own sustained stranding-recovery angle is 18 deg; his ruled
+# defensive parabola was flown at -30/-35 deg.
+defend_dive_gamma_deg = 18.0    # [deg] the far leg of the ride
+defend_dive_close_gamma_deg = 30.0  # [deg] steepened inside the close range
+defend_dive_close_range_m   = 4000.0  # [m] where it steepens
+defend_dive_arm_alt_m  = 400.0  # [m] height advantage over the defended pump
+                                #   required to ARM. This is the "high" half of
+                                #   "high AND far" -- below it a defender is not
+                                #   trading altitude for anything and the
+                                #   measurement says the manoeuvre costs it 13 s.
+                                #   0 = arm on any advantage at all.
+defend_dive_exit_speed = 150.0    # [m/s] EXIT the ride once the dive has bought
+                                #   this much speed -- that IS the manoeuvre's
+                                #   purpose, and the point of the exit is that
+                                #   what follows is the MERGE, not more diving.
+                                #   ⚠ 245 is v_redline (aircraft.toml): past it
+                                #   the compression ramp strips control
+                                #   authority, so buying more speed than this
+                                #   buys nothing a defender can spend.
+                                #   0 = no speed gate, range gate only.
+
+# ---- ENV-3.4: THE PERCH -----------------------------------------------------
+# Chad, 2026-08-28: "if they are deep in bubble they can climb and get an energy
+# advantage to be more effective defenders and attackers, MAKE SURE THAT ABILITY
+# PERSISTS." ENV-2 gives PERMISSION to be high deep inside; nothing made them
+# TAKE it, because the allowance is a ceiling and never a target. This is the
+# separate, explicit thing that converts permission into posture.
+# MEASURED on Chad's signed fly (tape 14): median altitude by depth band was
+# outside 347 m / fringe 904 / plateau 1,547 / free core 1,783, p90 2,004,
+# max 2,236 -- so in the core they stop a few hundred metres below what the
+# envelope already allows. That headroom is what this takes.
+# ⚠ Gamma only -- bank is never touched, so a patrol keeps its geometry and the
+# wing does not converge on a point. It fires ONLY in the order-free,
+# non-engaged, non-tunnel arm of the errand chain.
+# 0 = OFF = bit-identical.
+guard_alt_lo_m        = 1500.0  # [m AGL] floor of the perch band
+guard_alt_hi_m        = 2500.0  # [m AGL] ceiling of the perch band
+guard_margin_m        = 300.0   # [m] stay this far UNDER the ENV-2 allowance,
+                                #   so the perch is never the thing the
+                                #   governor has to clamp (that would chatter)
+guard_climb_gain      = 0.0008  # [rad/m] gentle proportional climb; fades to
+                                #   zero AT the perch, which is what removes the
+                                #   need for a latch
+guard_gamma_cap_deg   = 7.0     # [deg] cap on the perch climb -- a posture, not
+                                #   a zoom
+# THE FORWARD EYES' CAPABILITY MODEL. The shipped avoid_lookahead_s subtracts
+# SINK RATE from the AGL and is structurally blind to a ridge FACE ahead of a
+# LEVEL aeroplane -- which is why raising it 3 -> 9 s moved the crash count
+# 3/3/4/3. This is the net perpendicular g used to derive the flight-path
+# rotation TIME from the live speed and flight-path angle. 0 = the forward
+# arming is OFF (the band and the track law still ship).
+#
+# ★ 3.0 IS MEASURED, NOT ASSUMED. Probe [.deckx] instruments the ACTUAL net
+# perpendicular g of a latched pull-up, V*(dgamma/dt)/9.81 across consecutive
+# latched ticks, over a whole 22-minute conquest match on the real DEM:
+#     shipped-before arm  p10 0.84  p50 5.00  p90 11.68  max 25.77 (n=76750)
+#     deck-band arm       p10 1.53  p50 6.53  p90 12.70  max 19.49 (n=42568)
+# 3.0 sits BELOW both medians on purpose: the model under-claims what the
+# airframe demonstrably does, so the predicate arms EARLIER than strictly
+# necessary. The design's proposed 1.0 was refused by the red team and by this
+# arithmetic: at 1 g the rotation term alone is 85*0.45/9.81*85 = 331 m against
+# a 127 m near sample, so ANY obstacle ahead latches, guns muted, permanently.
+# At 3.0 the rotation term is 110 m and level deck flight never arms.
+avoid_pull_net_g = 3.0
+# Flyable-air ceiling: fades out further COMMANDED CLIMB as the local air
+# thins (sim::atm_frac_at), so a pursuit can't keep climbing into vacuum
+# above a bubble ceiling / off the global deck and mush. Full climb allowed
+# at/above avoid_air_frac_full, zero further climb at/below avoid_air_frac_hard
+# (descent is never restricted).
+avoid_air_frac_full = 0.7
+avoid_air_frac_hard = 0.25
+
+# ---- BFM rung R1 (docs/bandit_bfm_r1_spec.md) -------------------------------
+# The dwell-latched dogfight state machine (drone/bfm.h). With bfm_enabled=false
+# an engaged bandit flies bare pure pursuit exactly as before (bit-identical --
+# every dial below is DEAD while disabled). Turn it on and the bandit gets four
+# committed modes instead: Intercept (run in), Offensive (pure->LAG pursuit
+# blend, the only mode with guns hot), Yoyo (trade excess closure for altitude
+# instead of overshooting), Extend (unload and rebuild energy when losing).
+# Nothing here touches the flight kernel -- it only decides where the nose
+# points; the SAME autopilot / autothrottle / soft AoA limiter fly the result.
+# LIVE = true (the R1 fly ships armed -- the R5 fly-1 lesson: a fly that needs
+# a config edit first is a fly that happens with the feature off). The STRUCT
+# default stays false (bit-identical off-arm, pinned by test_bfm); false here
+# is the kill-switch.
+bfm_enabled = true
+
+# Intercept <-> Offensive handover. attack_release_frac MUST be > 1: a single
+# threshold would chatter every time the range rippled across it.
+# FIX-F1 note (docs/ai_phase2_fix_spec.md): KEPT AT 1200. Opus's probe
+# originally recommended 750 to land the guns-hot dwell inside the fire band
+# (fire_range_max = 600), but with bfm_extend_energy_m fixed the Offensive
+# spell is frustration-length (~8 s) and covers the closure into the band
+# anyway — the probe re-run confirmed wants_fire opens at 1200, and 750
+# broke the game-loop certificate's slow-target kill chain for no measured
+# gain. Dial — Chad's stick if the felt merge range wants tuning.
+# RUNG E1.2: 1200 -> 2200. The measured G2 phase gap — Offensive (the only
+# guns-hot mode) armed at 1200 m, and with the 2 s dwell latch plus the [60,
+# 600] fire band the machine held guns_hot IN BAND for 0.63 s per 90 s of
+# fight. Arming the merge at 2200 m means the run-in COMPLETES inside Offensive
+# and the closure into the (now 900 m) band happens with guns already hot.
+bfm_attack_range_m      = 2200.0   # [m] inside this, the merge is on
+bfm_attack_release_frac = 1.4     # release back to Intercept at range * this
+
+# Offensive lag-pursuit blend: pure pursuit when nose-on (shoot him), sliding to
+# LAG pursuit (aim BEHIND him) as the angle off grows -- that is what stops the
+# bandit flying out in front and handing the player the reversal.
+bfm_lag_dist_m     = 220.0  # [m] the lag point sits this far behind the player
+bfm_lag_off_lo_deg = 20.0   # [deg] below this: pure pursuit
+bfm_lag_off_hi_deg = 60.0   # [deg] above this: full lag
+
+# High yo-yo: an overshoot PREDICTOR (too much closure at too big an angle off,
+# held for arm_s so one noisy tick can't trigger it), then a committed climb at
+# a deliberately UNLOADED bank -- the excess closure goes into altitude.
+bfm_yoyo_closure_mps      = 40.0  # [m/s] closure that says "you'll overshoot"
+bfm_yoyo_angle_deg        = 45.0  # [deg] ...at this much angle off
+bfm_yoyo_arm_s            = 0.5   # [s] both must hold this long to arm (> 0)
+bfm_yoyo_gamma_deg        = 30.0  # [deg] commanded climb (0, 80], and <=
+                                 #   pursue_max_gamma_deg (30) -- the loader
+                                 #   rejects a value that would escape the
+                                 #   pursuit envelope (FIX-3)
+bfm_yoyo_bank_frac        = 0.5   # fraction of pursue_max_bank kept climbing
+bfm_yoyo_time_s           = 3.5   # [s] hard ceiling on the climb (> min_dwell_s)
+bfm_yoyo_exit_closure_mps = 10.0  # [m/s] closure killed -> back to Offensive
+bfm_yoyo_cooldown_s       = 2.0   # [s] the guns-hot spell length guaranteed
+                                 #   between yo-yos (FIX-D duty-cycle dial,
+                                 #   independent of bfm_min_dwell_s below)
+
+# FIX-A (air-abort hysteresis band, replaces the round-2 bare climb_ok bool).
+# The bandit's Yoyo air logic has TWO sides, each keyed to the downstream term
+# it mirrors. ARMING is structural, not a dial: a fresh yo-yo may arm only
+# where the flyable-air ceiling's air-seek dive is OFF (atm_frac >=
+# avoid_air_frac_full) -- anywhere the seek is live, min(faded climb, seek) is
+# a DESCENT, so "climb maneuver" would be a lie there (a measured guns-cold
+# inversion loop). The ABORT side reads the ceiling's fade ramp (t in [0,1]):
+# an ACTIVE yo-yo aborts only once t drops below climb_abort_t, deep in the
+# fade -- the wide gap between the structural arm boundary (t == 1.0 exactly)
+# and this floor is the hysteresis that lets a yo-yo whose own climb crosses
+# the boundary COMPLETE on its normal exits instead of flapping (a measured
+# 1-tick flap loop when arm and abort shared one threshold).
+bfm_climb_abort_t = 0.25  # an ACTIVE Yoyo aborts only when climb_t < this
+
+# Energy extend: specific energy is "how high could I be if I traded all my
+# speed for altitude". Down by extend_energy_m (or grinding Offensive for
+# frustration_s), unload into a shallow dive, rebuild, re-enter.
+# FIX-F1 (docs/ai_phase2_fix_spec.md, Opus probe attribution): 600 -> 3000 —
+# at 600 the bail tripped on 100% of foe==player ticks (Chad flies ~259 m/s
+# vs the bandit's ~110, a permanent ~2800 m deficit), so every fight against
+# the player left the ONLY guns-hot mode exactly min_dwell after entering it
+# and never came back (the recovery threshold was unreachable). Scaled so a
+# player-speed mismatch alone is not an auto-loss; frustration_s = 8.0
+# becomes Offensive's governing exit, matching the healthy AI-vs-AI energy-
+# matched behavior. Dial — flagged for Chad's stick.
+# RUNG E1.3: 3000 -> 6000. e_delta reached -3985 m at the tape's player peaks,
+# so even the FIX-F1 value still tripped the bail on a pure speed mismatch —
+# and Extend is guns-cold. 6000 means "bail only on true energy death", not on
+# the player being faster.
+bfm_extend_energy_m  = 6000.0 # [m] specific-energy deficit that breaks it off
+bfm_extend_gamma_deg = -10.0  # [deg] shallow unloaded dive [-45, 0)
+bfm_extend_min_s     = 8.0    # [s] commit floor (> 0). game-AI-R5: 4 -> 8 —
+                              #   the knife fight at 100-120 m/s has turn
+                              #   radius ~= fight range (the measured endless
+                              #   pure-pursuit spiral, killchain_handoff.md);
+                              #   a LONG extend re-enters from 2.5-3 km so the
+                              #   run-in aligns fully before gun range.
+bfm_extend_max_s     = 16.0   # [s] commit ceiling -- never vanish (> min);
+                              #   R5: 10 -> 16 to fund the longer extend.
+# ★★ RUNG E6.3 PROPOSED 16 -> 8 HERE (and 8 -> 4 above, and frustration 12 ->
+#    16 below) FOR CHAD'S "mostly they run". IT IS REFUSED ON MEASUREMENT, and
+#    the numbers are written here so it is never silently retried:
+#      P-A, 8 ensemble x 10 min per arm, rounds ON THE ACE / hits
+#        shipped R5 table (8 / 16 / 12) ............ 39 rounds, 18 hits
+#        the E6.3 proposal (4 / 8 / 12) ............ 31 rounds, 12 hits
+#        frustration alone (8 / 16 / 16) ........... 24 rounds,  9 hits
+#    R5's long extend is LOAD-BEARING for the kill chain, exactly for the
+#    reason R5 gave: a short extend re-enters badly aligned and the run-in
+#    never converges into the fire band. Shortening it buys "they run less"
+#    with half the rounds on the ace — the one metric Chad's whole E-ladder
+#    exists to raise, and the one the E6 acceptance says must not regress.
+#    Raising frustration is worse still: it holds a pilot in an UNRESOLVED
+#    Offensive instead of re-merging, and costs 38% of the rounds.
+#    ALSO MEASURED, and worth knowing: bfm_extend_energy_m is a DEAD exit at
+#    the shipped table (raising it 6000 -> 12000 changes nothing, 39/18 either
+#    way) — frustration_s is the ONLY route into Extend that ever fires.
+#    E6.3 therefore ships as the AGGRESSION POSTURE alone (aggression_range_m,
+#    below): Extend is suppressed where Chad's complaint actually lives — while
+#    the pilot's own objective is hot — instead of being shortened everywhere.
+# RUNG E1.3: 200 -> 3000, RE-DERIVED REACHABLE. 200 was an absolute-deficit
+# test a bandit structurally slower than the player could never satisfy (the
+# tape's steady-state deficit is ~2800 m), so EVERY extend ran the full
+# bfm_extend_max_s guns-cold and the recovery branch was dead code. 3000 sits
+# just past that steady state — reachable the moment the extend has actually
+# rebuilt anything — and still strictly below bfm_extend_energy_m (loader).
+bfm_reenter_energy_m = 3000.0 # [m] the residual E DEFICIT that counts as
+                              #   RECOVERED (FIX-7): re-arms once e_delta
+                              #   climbs back above -this, not once it turns
+                              #   into an outright surplus; must stay strictly
+                              #   below bfm_extend_energy_m
+# RUNG E1.3, the CLOSURE-SIGN exit. The absolute-deficit test above is the
+# wrong instrument against a faster aircraft; the honest "I am ready to
+# re-enter" signal is that the extend has turned back into a CLOSING geometry.
+# Gated by the same bfm_extend_min_s commit floor, so it can never cut an
+# extend short. 0 = off (the legacy recovery-or-timeout pair, bit-identical).
+bfm_reenter_closure_mps = 25.0  # [m/s] closing rate that re-enters the fight
+
+# Global pacing. Offensive/Yoyo reuse pursue_speed_bump above (this fleet's own
+# in-fight speed dial) -- no second copy; Intercept/Extend get their own bump
+# so the run-in/energy-rebuild legs tune independently of the in-fight speed.
+# RUNG E1.3: 8 -> 12. With the energy bail no longer firing on a speed
+# mismatch, frustration is Offensive's governing exit — 8 s ended a guns-hot
+# spell before the closure into the fire band completed.
+bfm_frustration_s        = 12.0  # [s] Offensive this long unresolved -> extend.
+                                 #   RUNG E6.3 proposed 12 -> 16 and it is
+                                 #   REFUSED on measurement — see the P-A table
+                                 #   at bfm_extend_min_s above (24 rounds vs
+                                 #   39). This is the ONLY exit into Extend
+                                 #   that ever fires at this table.
+bfm_intercept_speed_bump = 25.0  # [m/s] over cruise while closing / extending
+# RUNG E1.2: 2.0 -> 0.5. The dwell latch is anti-chatter, but at 2 s it also
+# pinned the machine in whatever mode it happened to be in through the exact
+# seconds an ace grants a shot. The felt side of the faster machine is carried
+# by bfm_mode_blend_s below (the C1 command blend), and the P-A probe pins a
+# BFM transitions-per-minute bound so this cannot degenerate into chatter.
+bfm_min_dwell_s          = 0.5   # [s] MINIMUM commitment to any mode (> 0) --
+                                 #   without it the machine chatters and the
+                                 #   bandit twitches instead of committing
+
+# RUNG E1.1 THE CHASE CEILING. The measured G1 gate: the legacy Intercept /
+# Extend ceiling is max(speed + bfm_intercept_speed_bump, speed +
+# pursue_speed_bump*align^2) = 175 m/s nose-on and 110 m/s in any turn, against
+# a player measured at 259 m/s mean / 362 peak — the bandit could NEVER close
+# any non-head-on geometry. 265 raises the STRAIGHT-LINE chase ceiling to the
+# player's own class; the align^2 fade is kept verbatim, so "chase fast, turn
+# slow" (the ruled R4 corner-speed law) is untouched and an off-nose intercept
+# still slows to turn. Armed only OUTSIDE bfm_attack_range_m — the merge itself
+# keeps corner speed.
+#
+# ! NAMED RULED-PROPERTY REPEAL (spec P1-3), FOR CHAD'S FLY CHECKLIST: the
+#   pursue_speed_bump note above ("stays well under the player's redline (245),
+#   so a straight-line run still escapes — the fight stays beatable",
+#   2026-07-26) is REPEALED by this dial. A level straight-line run no longer
+#   outruns Intercept/Extend. Chad's "kill me" order is the authority; this is
+#   his dial to walk back.
+# 0 = OFF, and off means the LEGACY ALIGN-DEPENDENT expression runs
+# bit-for-bit — there is no numeric "175-equivalent" that reproduces it.
+# RUNG E8.2 — THE ENGAGED FIGHT SPEED. Chad, 2026-08-21 (49-min tape 100):
+# "Need to give enemies more energy fighting abilities as that is how I am able
+# to beat them." His tape measures it: over 581 s of enemies holding him as foe
+# they were inside 900 m for 200 s (they CLOSE fine), but their median speed in
+# there was 124 m/s against his 202, with the nose a median 149 deg off him.
+# Every engaged fight mode commanded off `speed` = 85, the PATROL cruise -- a
+# number ruled for a fleeing bandit's catchability (2026-07-14), never for a
+# dogfight. That ruling still stands: patrol/maverick/raid never come through
+# bfm_step, so a bandit running away is as catchable as he ruled it.
+# 0 = the patrol cruise, i.e. pre-E8 bit-for-bit. The align^2 bumps still sit
+# on top unchanged, so the ruled corner-speed law is untouched.
+# ★ WHAT THE INSTRUMENT ACTUALLY SAYS (probe P-A sweep, n=64 x 10 min per arm,
+# rates per engagement). THE EFFECT DOES NOT SURVIVE CONVERGENCE:
+#     fight_speed    0     120     150     180     210
+#     rounds/eng   1.47    1.80    1.52    1.67    1.55
+#     hits/eng     0.39    0.47    0.25    0.42    0.36
+#     in_band/eng  1258    1223    1334    1440    1463
+#     foe_min/eng  9.63    9.79    9.91    9.87   10.05
+# The whole spread on rounds/hits is ~1.2x with no monotone shape -- inside the
+# band spec E7.I forbids ruling on (n=64 resolves 2x, NOT 20%). An n=32 pass
+# showed a clean interior optimum at 120-150 (rounds 2.66, hits 0.59); it was
+# NOISE and did not reproduce. No acceptance here may claim an improvement.
+#
+# ★★ CORRECTED (rung E9, on the E8 red team's P0-6 -- spec §E9.6). This block
+# said "THE TWO STABLE COLUMNS DO MOVE, MONOTONICALLY: in_band +16% and
+# foe_min +4%". BOTH HALVES ARE WRONG ON THE TABLE PRINTED DIRECTLY ABOVE:
+# in_band goes 1258 -> 1223 at the SHIPPED arm (a DECREASE, and the shipped
+# value is the LOWEST of the five), and foe_min dips at 180. Neither column is
+# monotone. Worse, an n=64 NULL FLOOR measured afterwards on arms that cannot
+# fight differently (ace_bank_cap 71.5/72/72.5/73) spans in_band +8.9% and
+# foe_min +1.7% -- so over half the "+16% that survived" is reproducible by
+# half a degree of bank cap, and the +4% carries nothing at all. The two are
+# also ONE observable, not two: in_band is a range-band subset of the same
+# foe-gated ticks foe_min sums.
+# WHAT SURVIVES: nothing on this sweep is resolvable. The "wall is POINTING"
+# conclusion still stands, but on E8.1 and on Chad's tape -- not on this table.
+#
+# SHIPPED AT 120 FOR CHAD'S STICK, NOT ON THE NUMBERS. Its crash rate is
+# unchanged (0.063 vs 0.063 off; 210 raises it to 0.156).
+# ★ AND THE OTHER HALF OF THAT SENTENCE IS WITHDRAWN (rung E9, red team P1-10):
+# "the top arm on the hits column at BOTH ensembles" is a selection over a
+# column the paragraph above just called unresolvable, taken on two ensembles
+# that are NOT independent (n=32 and n=64 share all 32 turn/altitude phase
+# pairs), and a behaviourally INERT null arm (ace_bank_cap 71.5) reads
+# hits 0.547 against this arm's 0.469. It is a tie-break, not corroboration. His ruling is "give enemies more energy
+# fighting abilities"; the harness cannot resolve feel and never outranks the
+# stick (CLAUDE.md). If it does not read as more dangerous, walk back to 0.
+bfm_fight_speed_mps = 120.0  # [m/s] base speed for Offensive/Yoyo/Extend/break
+bfm_intercept_speed_mps = 265.0  # [m/s] straight-line chase ceiling
+
+# ★★★ RUNG S3-GUNS — THE UN-FADE. CHAD, 2026-08-26: "attack me ... stop nerfing
+# them in secret", and, asked what to give back for it, "Nothing - leave it at
+# full strength." SHIPS TRUE. Set false for the pre-S3 command, BIT-FOR-BIT.
+#
+# THE MEASUREMENT, all 12 tapes. An enemy holding a player slot spends 86.7-89.8%
+# of that time BEYOND fire_range_max (900 m) and NEVER CLOSES: Intercept's median
+# closure is -1 to -7 m/s over 269-334 s per tape. Cause is arithmetic, not
+# steering -- the 265 above is faded by align^2 before use, giving
+#     85 + 180*align^2,  align^2 p50 0.15-0.37
+# = 143/144/180 m/s p10/p50/p90 (n=1671 out-of-band Intercept samples, tape 12)
+# against Chad's own median 262 m/s. 144 IS THE CAP, to the metre. The plant is
+# not what binds: the autothrottle note in drone/drone.h records ~235-240 m/s
+# achieved under a 265 command at throttle_ff 0.08.
+#
+# So the NAMED RULED-PROPERTY REPEAL recorded 60 lines above -- "a level
+# straight-line run no longer outruns Intercept" -- HAS NEVER ONCE BEEN FLOWN.
+# The fade quietly put the escape property back. This key repeals it for real.
+#
+# ★ SCOPE. ONLY the Intercept consumer moves (drone/bfm.h, its own
+#   intercept_ceiling lambda):
+#     - EXTEND (the FLEE mode) keeps the faded ceiling verbatim. Chad's ruled
+#       ASYMMETRY: pursuit may go anywhere, EVADE STAYS CONTAINED. Rewriting the
+#       shared chase_ceiling would have raised the flee command ~145 -> 265
+#       beyond bfm_attack_range_m. It does not; a gate leg pins that.
+#     - Slash / Perch / Yoyo keep energy_ceiling faded: the merge corner-speed
+#       law, "chase fast, turn slow", is untouched.
+#     - Inside bfm_attack_range_m nothing changes at any alignment.
+#
+# ★★★ AND THEN IT WAS MEASURED, AND IT IS WORSE. THIS IS WHY IT SHIPS false.
+# Probe P-A ("the ace gets shot at", test/unit/test_killchain_probe.cpp), the
+# ONLY instrument in the tree that counts rounds actually aimed at the player.
+# Same 8-arm ensemble, 80 simulated minutes per arm, ONE key flipped:
+#
+#     bfm_intercept_chase_unfaded      false          true
+#     rounds at the player               54            23     -57%
+#     HITS on the player                 16             2     -87%
+#     wants_fire ticks                  556           234     -58%
+#     ticks in the fire band          11639         10321     -11%
+#     closest approach [m]            16.96        110.58     it can no longer
+#                                                             get to guns range
+#     best cone cos                0.999983      0.997715
+#     max fire range [m]              898.4         753.3
+#     enemy crashes                       1             7
+#     BFM transitions                   244           288
+#     settled chase speed [m/s]         255           260
+#
+# THE MECHANISM IS LEGIBLE: the faster command DOES arrive -- but it arrives
+# with more energy than the turn can spend, blows through the merge, and never
+# converts the closure into a firing solution. Closing was never the last gate;
+# HOLDING THE NOSE ONCE THERE is. Speeding up the approach makes that worse.
+#
+# NOISE FLOOR MEASURED FIRST (the law): +/-1e-9 on pursue_speed_bump and on
+# bfm_intercept_speed_mps leaves rounds_at_player, hits and max_fire_range
+# BIT-IDENTICAL at 23 / 2 / 753.252. Floor = 0, so -31 rounds is not noise.
+#
+# ⚠ AND THE GATE WOULD NOT HAVE CAUGHT IT. P-A's own clause is
+#   post.rounds_at_player >= max(10, 10 * pre_rate) = 20. Both arms pass. The
+#   57% loss is invisible to every green light in this repo.
+#
+# ⚠ IT IS ALSO A REAL RISK ON THE DECK, unmeasured: a 265 m/s pursuit that
+#   follows Chad DOWN sinks 1.84x faster per look-ahead second, so the
+#   terrain-avoid latch (which sets wants_fire = false, drone/drone.h) can arm
+#   MORE of the time than any tape has sampled. The tape's `ta` byte is the
+#   instrument -- census it if this is ever turned on.
+#
+# ★ THE MECHANISM IS BUILT, SHIPPED OFF, AND THIS IS THE OPPOSITE OF A SECRET:
+#   flip this ONE word to `true` and the un-fade is live, scoped to Intercept,
+#   with the gate leg in test/unit/test_bfm.cpp pinning that Extend does not
+#   move. It is Chad's ruling, not mine -- I refuse to ship a change that
+#   MEASURES as -57% on the exact thing he asked for ("attack me") while
+#   calling it full strength.
+bfm_intercept_chase_unfaded = false
+
+# RUNG E1.4 GRACE — the C1 mode-change blend. Every BFM transition is a STEP
+# input today (Extend snaps bank to 0, the speed command steps 175<->110), and
+# with bfm_min_dwell_s at 0.5 the machine changes mode more often. This slides
+# the commanded speed/bank out of the previous tick's pair over 0.7 s
+# (smoothstep), so a transition reads as a slew, not a twitch. 0 = off.
+bfm_mode_blend_s = 0.7  # [s] C1 blend on a mode-change speed/bank command
+
+# ---- RUNG E2 — THE BLACK STOPE OFFENSIVE -----------------------------------
+# Chad's order: "smooth graceful killers... who will underground strafe and be
+# capable of victory by pump destruction. They must actively and successfully
+# enter the tunnel, fly into the black stope and attack our allied pumps."
+#
+# THE MEASURED LOCKS (tapes 83-88): the StrikeOrder was armed 100% of every
+# tape and on_station read 0.0 s in 5 of 6 (closest approach 4.9-18.5 km); no
+# combat has EVER occurred underground. Three separate gates, one dial group
+# each. Every OFF value below reproduces the pre-E2 fleet bit-for-bit (pinned
+# by test_enemy_ai_e2.cpp).
+
+# E2.1 ON-ORDER RUNS (lock L1: the strike order had NO TRANSIT VERB — its only
+# consumer was a parasitic divert that required a run to already be passing the
+# stope, and run scheduling is a trait-period countdown that knows nothing
+# about the order). A live order now COLLAPSES the countdown.
+#
+# ! FOR CHAD'S FLY CHECKLIST: this is SYMMETRIC — BOTH factions' strike tempo
+#   rises, so a match can now be decided by pump destruction with or without
+#   him. Enemy-only is available (it would be a faction test at the arming
+#   site) and is his call; symmetric ships, because the fair-war shape is what
+#   the rest of the conquest loop already has.
+#
+# The collapse is ONE-SHOT per loaded countdown and NEVER overrides the merge
+# hold (a foe inside raid_fight_yield_m still freezes the schedule — overriding
+# it re-creates the measured R4 bug where a committed TRANSIT marched a fighter
+# away mid-merge, a free kill for an ace). false = today.
+strike_on_order  = true
+# [s] per-index stagger of the collapsed countdown: pilot i waits
+# strike_stagger_s * (1 + i). Entries stay one-at-a-time, and the (1 + i) shape
+# gives pilot 0 a real floor — a bare i*stagger would chain his runs
+# back-to-back with no patrol between them. 10 s spreads the 10-pilot roster
+# over 100 s, comfortably inside the shortest trait period (75 s).
+strike_stagger_s = 10.0
+
+# E2.2 A DIVERT THAT REACHES (lock L2). These were welded into
+# drone::StrikeOrder's struct defaults where no config could reach them.
+# 6500 -> 9000 m. The engage sphere has to cover the whole flyable chamber, not
+# a fraction of it: the arena's horizontal semi-axis alone is 7.35 km at the
+# test table, so a striker that entered by the FAR mouth (the ruled entry
+# direction, E2.1) was still outside 6500 m of its target for the first third
+# of the crossing and flew the spine straight past it. in_arena still gates the
+# divert, so a wider radius can never fire it outside the stope.
+strike_engage_m       = 9000.0  # [m] divert radius around the deep pump
+strike_k_az           = 3.5     # bank gain toward the pump
+strike_k_el           = 3.0     # gamma gain toward the pump
+strike_bank_cap_deg   = 65.0    # [deg] (== the maverick bore bank cap)
+# 35 -> 50 deg. MEASURED: the deep pump sits ~kDeepPumpFrac (0.6) of the
+# arena's horizontal semi-axis toward its OWN mouth, i.e. on the FAR side from
+# the striker's entry mouth, and the arena center is ~4.1 km underground — the
+# required descent is ~42 deg, which the old 35 deg cap could not fly, so the
+# divert never arrived (on_station 0.0 s). 50 clears it with margin. The bound
+# is deliberate at BOTH ends and the loader enforces both against config, not
+# against a number: above maverick run_gamma_cap (44 deg, the steep bore ascent
+# this same autopilot already flies) and below dive_gamma_cap (55 deg, the pit
+# plunge — the steepest angle it is ruled to fly anywhere). The floor/ceiling
+# safety case at 50 deg is aim_at's error-nulling (it levels out AT pump
+# altitude, and the pump sits ~2 km above the arena floor) PLUS the
+# arena-shell wall guard below, which applies to the divert as well as to the
+# E2.4 fight interrupt.
+strike_gamma_cap_deg  = 50.0
+# 90 -> 150 s. The budget has to fund the there-and-back detour off the spine
+# at run speed across an arena whose horizontal semi-axis alone is 7.35 km.
+strike_bail_s         = 150.0
+# 600 -> 2000 m. SIZED TO THE MACHINE, and measured. A striker carries ~180 m/s
+# out of its descent into the stope (the autothrottle command is the bore's
+# 135, but a 50-deg dive is flown by gravity and the throttle is already at 0),
+# so its turn radius under the 65-deg bank cap is ~1.5 km and its pursuit loop
+# around a POINT target is ~3 km across: at the inherited 600 m a striker could
+# only ever cross the window in instants. 15 sim-minutes of probe P-B credited
+# 9.9 s of on-station time and the pump never fell. This is the SAME argument
+# and the SAME fix as the game-AI-R3 surface retune, which moved the raid
+# envelope 800 -> 1000 m because "brief strafe instants at cruise turn radius"
+# made a pump take the better part of an hour; the stope striker simply flies
+# faster, so its loop is bigger. Measured at the shipped table: 600 -> 9.9 s,
+# 1000 -> 15.9 s, 1500 -> 23.7 s, 2000 -> 30.0 s and pumps[2] destroyed at 6:53
+# of the 15-minute window.
+#
+# ! FOR CHAD: THIS IS THE PUMP-KILL-RATE DIAL. It is an ABSTRACTED DPS envelope
+#   (combat::raider_on_station), not a hit test - no round has to connect - so
+#   widening it makes deep pumps fall faster for BOTH factions. The TRACERS are
+#   deliberately NOT widened with it: rounds still leave only inside the gun's
+#   own band (see strike_strafe).
+strike_station_range_m = 2000.0 # [m] on-station envelope (the strafing window)
+strike_station_cos     = 0.35   # cos of the on-station cone (~70 deg)
+# ---------------------------------------------------------------------------
+# RUNG E18 — THE DIVE THAT ARRIVES (Chad flew tapes 10 AND 11; "it looks like
+# one of them may have crashed the tunnel")
+# ---------------------------------------------------------------------------
+# EVERY in-net wreck across both tapes -- seven of them -- dies 33-54 m BELOW
+# the deep pumps' own radius (the pumps sit at |pos| 11289.9). It is the STRIKE
+# DIVERT, not the bore: all three of tape 10's runs arm the divert at the MOUTH
+# (R ~15020, slant ~8990 m == strike_engage_m 9000) and are dead ~63 s later,
+# still 2.3-3.6 km SHORT of the pump.
+#
+# THE ARITHMETIC: the pump is ~3750 m below over ~8160 m of ground track -- a
+# 24.7 deg glide. strike_k_el 3.0 x that is 74 deg, so the command SATURATES at
+# strike_gamma_cap (50 deg) and holds. At 50 deg over 8160 m you spend 9715 m
+# of altitude when only 3750 m exists: a 2.6x overspend, so the striker meets
+# the arena floor kilometres before it meets the pump.
+#
+# ★ THIS IS E17's RAID DEFECT UNDERGROUND -- a saturated pure-pursuit at a
+# POINT TARGET WITH A FLOOR RIGHT UNDER IT. Same law: THE FIX FOR A SATURATED
+# PURSUIT IS GEOMETRY, NOT GAIN.
+#
+# strike_attack_alt_m: aim this far ABOVE the pump (which itself stands only
+#   ~35 m off the arena floor, so aiming AT it aims at the floor). The DAMAGE
+#   envelope is untouched -- it stays keyed on the pump -- this moves the
+#   AEROPLANE only. 300 m is well inside the 2000 m on-station window
+#   (loader-checked) so the striker is never steered out of the strafing band.
+# strike_glide_limit: never dive steeper than the straight glide to the aim
+#   point. Measured to get the striker to the pump (closest 79/64 m) but NOT to
+#   keep it alive on its own, so it ships FALSE -- built, measured, off.
+#
+# ★ MEASURED, [.e18dive] (closed-loop, shipped net + real DEM, seeded from the
+# exact ticks tape 10 recorded each divert arming), closest approach i=7/i=9:
+#     OFF               1463 m / 420 m   both CRASHED at -50/-69 m vs the pump
+#     attack_alt 300     337 m / 443 m   both SURVIVED
+#     glide only          79 m /  64 m   arrived, still crashed
+#     attack_alt 500     506 m / 512 m   arrived, still crashed
+#
+# ⚠ CRASH-VS-SURVIVE IS NOT MONOTONE HERE (300 survived; 150, 500 and
+# alt+glide did not) -- a binary outcome of a chaotic 90 s flight, i.e. the
+# probe noise-floor law. SO THIS RUNG DOES NOT CLAIM TO HAVE STOPPED THE WRECK.
+# It claims what the numbers support monotonically: the strikers now REACH the
+# deep pump instead of burying themselves kilometres short, and no arm dies
+# deeper than OFF. The residue is a PULL-OUT problem -- the divert closes to
+# 64-500 m on a pump 35 m off the floor when the on-station envelope is 2000 m,
+# a pure pursuit with nothing telling it to stop. That is the next rung.
+#
+# ★★★ AND SO IT SHIPS **OFF** (0.0), BUILT AND MEASURED -- the E15/E17
+# precedent -- FOR ONE REASON THAT IS NOT ABOUT THE FIX'S MERIT: turning it on
+# perturbs probe P-B's OWN CONTROL ARM. P-B asserts REQUIRE_FALSE(pre.
+# pump_dead[2]) -- "without the divert the stope pump survives" -- and with
+# this dial on, the PRE arm kills it. A change that moves the control of the
+# probe that grades it cannot be graded by that probe, and a gate is not
+# something to bend to green. What the dial DOES buy, measured on P-B's POST
+# arm, is real and worth his ruling:
+#     run_crashes    10 -> 0
+#     total crashes  32 -> 19..23
+#     the deep pump  NEVER DIED -> DIES (dead2=1, kill_t2 ~307-367 s)
+# The cost is the strafing READ: closest approach 300 -> 695..834 m, so the
+# gun's own cone stops closing and strafe_rounds goes to 0 -- the pump falls
+# on the app-side DPS with no tracers to watch. A fade (full offset beyond the
+# on-station envelope, blended to zero by half of it) was built to keep the
+# last of the pass nose-on; it is in drone/drone.h and dormant at 0.0.
+# To turn it on: strike_attack_alt_m = 300.0.
+strike_attack_alt_m    = 0.0
+strike_glide_limit     = false
+# While the divert owns the run, defer the RUN's exit_frac flip to CLIMB_OUT —
+# else a run that reaches exit_frac mid-strafe climbs out with the pump still
+# alive. Belt-and-braces: s_est stagnates off-spine anyway. false = today.
+strike_defer_exit = true
+# E2.3 THE UNDERGROUND STRAFE (lock L3, and the visible half of it): while
+# on-station, spawn REAL rounds at the pump. They already fly in the net (T10)
+# and the stope has full air. The DAMAGE stays on the existing app-side
+# damage_pump DPS path — there is no enemy-round-vs-pump hit test, so no double
+# count and no balance derivation moves; the rounds are the tracer read and the
+# audible warning next to the existing raided_pump HUD ring. false = today (the
+# strike is silent DPS with no tracers at all).
+#
+# The TRACER band is the GUN's own [fire_range_min, fire_range_max], NOT the
+# wider on-station DPS envelope above - spawning rounds out at 2 km would
+# re-create exactly the long-range lobbing E1.2's snapshot band exists to
+# forbid. Pinned by P-B: max spawn range 898 m against fire_range_max 900.
+strike_strafe = true
+
+# E2.4 THE CHAMBER FIGHT (the other half of lock L3: every underground mode is
+# maverick_committed, so pursue()/BFM are bypassed and wants_fire is forced
+# false — the player defending his own deep pump has never been shot at). A
+# committed runner/striker that meets an enemy inside the stope takes a
+# BUDGETED fight interrupt; a non-committed pursuer that follows him down is
+# exempted from the terrain-avoid pull-up (which underground means "climb into
+# the ceiling"). 0 = the whole block off.
+arena_fight_range_m = 3000.0  # [m] foe range inside the arena that interrupts
+arena_fight_s       = 25.0    # [s] interrupt budget per encounter; after it
+                              #   the divert/run resumes (the interrupt borrows
+                              #   the run, it never ends it)
+# [deg] gamma clamp while the interrupt owns the tick, applied at the FINAL
+# command so pursue's k_el+pull and bfm's yo-yo climb are both clamped at one
+# seam. Tighter than pursue_max_gamma (30) by construction — the arena is
+# ~2.6 km of vertical semi-axis against ~4.2 km horizontal, so a sustained
+# 30-deg climb runs out of chamber long before it runs out of authority.
+arena_gamma_cap_deg = 25.0
+# The arena-shell WALL GUARD: the bore wall guard itself
+# (maverick::update_wall_guard), reused against the chamber shell. It is the
+# fallback steering for the divert, for the E2.4 fight interrupt, and for the
+# whole time a striker is in the chamber - all of which fly with the terrain
+# net disarmed. 0 = off.
+#
+# THREE THINGS WERE MEASURED HERE, each after a wrong version of this guard put
+# strikers into the rock in probe P-B:
+#  1. THE UNITS ARE METRES. A normalized-radius form (0.85 of the ellipsoid
+#     radius) engages FAR too late on the oblate short axis - the stope is
+#     2.6 km of vertical semi-axis against 7.35 km horizontal, so the same
+#     FRACTION is a third of the distance going down. Every diverting striker
+#     hit the shell at a normalized radius of 0.9999 with the guard latched.
+#  2. IT STEERS THE INWARD NORMAL, NOT THE ARENA CENTRE. On a flank the nearest
+#     wall is mostly BELOW, so the normal is mostly a CLIMB - a pitch change
+#     made in a few hundred metres - while the centre lies ~90 deg off a
+#     tangential heading and asks for a full turn radius (1.5 km at the
+#     ~180 m/s a striker carries out of its descent). Centre-steering could not
+#     be funded by any margin this chamber has room for.
+#  3. IT OWNS THE WHOLE TIME A STRIKER IS IN THE CHAMBER, not only the ticks
+#     the divert steers: a striker whose bail budget expires mid-chamber is
+#     handed back to bore_track, which sees the spine 4 km away and 2 km up
+#     (the bore threads the stope near its ceiling) and commands a saturated
+#     climb - it flew into the CEILING at +44 deg with the guard released.
+# With all three, in-arena crashes went 14 -> 0 per 15 minutes. The margin is
+# loader-CHECKED against the pull-out arithmetic at the airframe redline rather
+# than trusted as a number; 1100 m is that bound (1019 m) plus a little.
+arena_guard_margin_m  = 1100.0
+arena_guard_release_m = 1600.0
+
+# ---------------------------------------------------------------------------
+# RUNG E3 — THE FELT PASS (docs/ENEMY_AI_E1_E2_SPEC.md, from Chad's fly tape
+# build-play/conquest_tape_1). His verdict on the E2 build: "they behaved the
+# same as always, didn't engage."
+#
+# TAPE ATTRIBUTION (13:41, signature verified, the E1/E2 dials PROVEN live —
+# Offensive 9-10%, allied strafe tracers in the net, both enemy pumps destroyed
+# by the allies): E2.1's on-order collapse put the three non-raid ENEMY
+# strikers into committed TRANSIT for 53-80% of their lives, toward a pump
+# 20+ km away. A committed TRANSIT ignores the player, so they flew straight
+# lines past an ace and were executed — every enemy strike window in the tape
+# ends "drone killed by fire" at 15-706 m, and all three were dead by 3:34
+# (permanent, in conquest). E2.1 made the SURFACE felt problem WORSE.
+#
+# E3.1 TRANSIT FIGHT-YIELD. [m] a foe this close makes a committed TRANSIT give
+# the errand up (through the EXISTING give-up path, so the countdown reload and
+# the E2.1 one-shot/stagger/merge-hold contract keep their single meaning) and
+# turn to fight. The standing order re-collapses the reloaded countdown, the
+# merge hold freezes it while the foe is close, and the run RE-LAUNCHES the
+# tick the merge ends — the errand is delayed, never abandoned.
+# 2500 == raid_fight_yield_m: one felt scale for "a live merge", the same
+# distance at which the surface raid errand already yields. ONLY TRANSIT
+# yields; DIVE_IN/RUN/CLIMB_OUT stay committed (that ruling stands — a pilot
+# threading the bore cannot break off without flying into rock, and E2.4's
+# chamber fight is the in-net answer instead). 0 = off, bit-identical.
+transit_fight_yield_m = 2500.0
+# E3.2 THE CONCURRENT-STRIKER CAP: at most this many pilots PER FACTION may
+# hold a collapse-TRIGGERED run at once (TRANSIT through CLIMB_OUT). The others
+# keep their standing order with the countdown COLLAPSED-PENDING — the one-shot
+# is not burned, so a held pilot launches the tick a slot frees. Natural
+# trait-period runs are NOT capped (the old flavour stands). This is what keeps
+# the wing on PATROL, where RUNG E1 makes them dangerous, instead of all-in-
+# transit from match start. 0 = uncapped = the E2 tempo.
+strike_concurrent_max = 1
+
+# ---------------------------------------------------------------------------
+# RUNG E6 — THE RELENTLESS PASS (Chad's fly verdict on conquest_tape_2,
+# 2026-08-20 midday). "Mostly they run"; "they should relentlessly attack it
+# and fight me at the same time, not fly away to safety and then fight me. We
+# are literally fighting for air here."
+# ---------------------------------------------------------------------------
+#
+# E6.2 THE FLEE LEASH. ATTRIBUTION FIRST, and it came out the other way round
+# from the felt report: the drone plant and the player plant are the SAME
+# sim::step with the SAME environment, so thrust and dynamic pressure lapse
+# with atm_frac IDENTICALLY for both — there is no plant-side vacuum discount
+# for the AI to give back. What DOES let a bandit "use" the vacuum is a
+# BEHAVIOUR: the containment leash is switched off wholesale for any ENGAGED
+# drone, and BFM Extend is engaged-but-running-away, so an extend can carry a
+# bandit clean out of his own dome into air he cannot fly in. true keeps the
+# leash live through an Extend only; the other three BFM modes keep the R4
+# fight exemption verbatim. false = today, bit-identical.
+extend_leash = true
+# E6.3 THE AGGRESSION POSTURE — and, after measurement, the WHOLE of E6.3.
+# While this pilot is scrambled to a pump under attack, or on a live raid whose
+# target pump is inside this radius, Extend is SUPPRESSED: the guns stay in the
+# fight instead of trading the objective for energy. This is the part of
+# "mostly they run" that can be fixed without paying for it in rounds — the
+# blanket extend retune E6.3 also proposed is refused on measurement (the P-A
+# table at bfm_extend_min_s). Sized to the raid errand's own working scale, and
+# loader-bounded at engage_range so a "posture" can never become a permanent
+# Extend repeal. Neutral in P-A by construction (that fixture arms no raid or
+# defend order, so the posture never arms there): 39 rounds / 18 hits with it
+# on, the same as without. 0 = off, bit-identical.
+aggression_range_m = 3000.0
+# E6.5 THE RELENTLESS RAIDER (Chad's ruling OVERRIDES the Phase-2 raid pause,
+# whose app-side half is [conquest] raid_no_pause in game.toml): a raider in a
+# live merge keeps its attack run ON THE PUMP and takes the gun shots the
+# geometry offers, instead of handing itself wholesale to the dogfight. The
+# guns it takes ARE the E1.2 snapshot gate (loader-checked), so it cannot lob.
+# It breaks off only for terrain / wall safety — those blocks still override
+# it, and they are the ONLY thing that may. false = today, bit-identical.
+raid_fight_in_place = true
+
+# ---------------------------------------------------------------------------
+# RUNG E17 — THE ATTACK PATTERN (Chad's ruling 2026-08-24 on tape 10: "they
+# need to try to keep killing the pump, not shoot it and fly away")
+# ---------------------------------------------------------------------------
+# THE MEASURED DEFECT (test/unit/test_raid_persist_probe.cpp, tag [.e17raid],
+# and drone i=0's own 652.8 s raid window on tape 10). The raid steer was a
+# bare pure-pursuit at a point ON THE GROUND, and BOTH its channels sat pinned
+# at their caps for the whole sortie: bank 64.7 deg (of 64.7) and gamma -29.8
+# deg (of -29.8). AGL fell 900 -> 430 m in fifteen seconds and stayed there, so
+# from then on the pull that turns the aeroplane was being spent not hitting
+# the dirt. Measured in the probe: a raider 993 m from its pump was 6517 m away
+# eighty seconds later, still commanding a hard turn. On his tape that is one
+# 335 m pass, ten kilometres of departure, and the next pass three minutes on —
+# 15.8 s of on-station bought with 652.8 s of orders.
+#
+# raid_attack_alt_m: aim this far ABOVE the pump instead of at it, so the
+#   elevation channel stops saturating and the raider arrives level with its
+#   pull intact. 400 m sits above the 335-374 m passes his raiders actually
+#   flew and well inside the 1000 m damage envelope (combat/raid.h owns that
+#   envelope; this dial moves the AEROPLANE, never what counts as a hit).
+# raid_reattack_m: once opening past this, fly a LEVEL turn back onto the pump
+#   instead of chasing the point. 1800 m is a little over one turn radius at
+#   raid speed (~1150 m at 65 deg and 155 m/s), so the reattack arms as soon as
+#   the overshoot is real and releases at 900 m, back inside the envelope.
+# ★★★ BUILT, MEASURED, AND SHIPPED **OFF** — AWAITING CHAD'S RULING. This is
+# the E15 precedent from 2026-08-23 (build it, measure it, ship it off when it
+# cannot be paid for), and here is the price:
+#
+#   THE RAID BRANCH MUTES GUNS EXCEPT AT THE PLAYER (E6.5's red-teamed
+#   PLAYER-FOE-ONLY fold, three lines below in drone/drone.h). Making raiders
+#   PERSIST on the pump therefore keeps them in the errand branch instead of
+#   dropping into pursuit/BFM — and the AI-vs-AI air war goes quiet. Measured
+#   on the signed certificate clause B ("real AI-vs-AI fighting with real
+#   attrition", floor ai_damage > 50):
+#
+#     OFF (0 / 0)          clause B GREEN
+#     400 / 1800           ai_damage 0.0     clause B RED
+#     400 / 0              ai_damage 16.4    clause B RED
+#     0 / 1800             GREEN
+#     400 / 4000           GREEN
+#
+#   ⚠ The last two disagree with the first two in a way a 6-minute whole-match
+#   sim near a threshold is entitled to (the probe noise-floor law) — so this
+#   is NOT tuned to green. The dials are OFF and the TRADE goes to Chad:
+#   pump pressure bought with AI-vs-AI attrition. Turning them on is one line.
+#
+# ★ WHAT IT BUYS: RUN THE PROBE (test_raid_persist_probe.cpp, tag [.e17raid]).
+#   No table is recorded here any more, deliberately — see the obituary in
+#   drone/drone.h's E18 block for why a recorded number is a liability.
+#
+#   ⚠ HISTORY, NOT A REPRODUCING MEASUREMENT. The closest-approach table that
+#   stood here (2026-08-24: 400 m start OFF 993 / ON 749; 1500 m start OFF
+#   1813 / ON 410; 4000 m start OFF 3980 / ON 393) was measured on a probe
+#   that flew DroneParams{} struct defaults — a 115 m/s cruise, not this
+#   file's 85. Turn radius goes as V^2, so it described an aeroplane turning
+#   1.83x wider than the game's. The probe was repaired 2026-08-26 (audit
+#   finding 1) and the OFF column moved 993/1813/3980 -> 456/478/549 m: at the
+#   SHIPPED airframe the raider re-enters the 1 km envelope from all three
+#   start states with both dials OFF. Whatever the pre-E17 raid defect is, the
+#   part of it this probe was reading was largely the 115 m/s airframe.
+raid_attack_alt_m = 0.0
+raid_reattack_m = 0.0
+
+# ---------------------------------------------------------------------------
+# ★★★ S2-TUNNEL — THE RAID ROUTER (Chad's ruling 2026-08-26, verbatim)
+# ---------------------------------------------------------------------------
+# "if they are leaving for a raid on a pump, the surface one, they should
+#  actually use the tunnel, that is what it is there for, no more crossing over
+#  the thin air zone ... although I can still and do cross the zones on deck as
+#  its not always easily accessible ... also a few designated runs crossing the
+#  deck to make a run on the pump is okay, but I would prefer actually if the ai
+#  were more conservative than say a player might be and that they would choose
+#  to cross via the tunnel."
+#
+# THE BLOCKER THIS OPENS, and it was one line: drone::tick froze the maverick
+# run scheduler whenever a RaidOrder was armed (`hold_runs`), so a designated
+# raider could NEVER enter the bore. The raid and the tunnel machine were
+# mutually exclusive BY CONSTRUCTION — which is why Chad's 2026-07-26 standing
+# mission (Murray -> the stope -> Errington -> the VALLEY surface pump) has
+# never once been flown by the raid code.
+#
+# THE VERDICT is measured app-side every tick from the DRONE'S OWN POSITION and
+# compares two arcs of thin air (outside BOTH domes, read off the same
+# world::ellipse_r_eff the containment leash and the plant read):
+#   direct  = drone -> pump
+#   tunnel  = drone -> own mouth, plus far mouth -> pump  (the bore holds full
+#             air unconditionally and the crash predicate is suspended inside
+#             the net, so the bore leg contributes ZERO)
+# Route by the tunnel iff direct > raid_route_gap_max_m AND tunnel < direct.
+# The comparison (not "tunnel always") is the MID-MATCH FALLBACK: a faction
+# that loses a pump halves its dome, and on tape 12 at k=55853 BOTH mouths sat
+# outside their own domes — tunnel-always would then march raiders into worse
+# vacuum than the direct crossing.
+raid_route_via_tunnel = true
+# How many of a faction's top-ranked live raiders keep the DIRECT deck run —
+# Chad's "a few designated runs crossing the deck ... is okay", his own number.
+# Ranked by combat::faction_raider's OWN aggression order (one ranking
+# authority, deterministic, no rng). 0 = strictly tunnel for everyone.
+raid_deck_run_slots = 1
+# [m] thin-air arc on the direct track that is still tolerable. Below this the
+# direct route is simply flown — the router never fires for an in-dome pump.
+raid_route_gap_max_m = 500.0
+# [s] per-index stagger on the raid's bore entry, the strike_stagger_s shape,
+# so entries are one-at-a-time instead of a synchronised swarm.
+raid_route_stagger_s = 10.0
+# C1 — THE ERRAND SPEED [m/s]. Neither the raid nor the defend branch ever set
+# a speed_target, so both inherited the PURSUIT bump and loitered at a measured
+# 156 m/s, where the minimum turn radius at the 64.7 deg cap is 1173 m against
+# combat/raid.h's raid_range_m = 1000 m: the raider structurally could not hold
+# the envelope it is graded on. At 123 m/s the radius is 729 m. 0 = OFF =
+# inherit the bump, bit-identical.
+raid_speed_target = 123.0
+
+# ---------------------------------------------------------------------------
+# ★★★ D2 — THE REPOSITION (stage 0) AND THE RETURN (stage 1)
+# Chad's ruling 2026-08-27, verbatim: "you could reduce crashes in the no air
+# zone by implementing the behaviour that if they are near the outer one third
+# near the boundary and their own pump is getting attacked maybe they go down
+# and move closer to the inside of their bubble, then climb gaining speed for a
+# deck run to the larger bubble to attack them" and "they should go back to
+# whatever bubble if they have one left, climb to a decent altitude and then
+# parabolic dive to the deck".
+#
+# ! HONEST FRAMING, because he asked for it as a crash fix: AT HEAD IT IS NOT
+#   ONE. The [.bdeck] differential (commit 77085cc32) measured all 10 enemy
+#   wrecks in the control arm dying BELOW 60 m AGL, median wreck AGL -2603 m
+#   (underground), ZERO in thin air, 7 of 10 carrying a TUNNEL disposition.
+#   The "leave the dome at 1700-1900 m and mush down at 124 m/s" death that
+#   this manoeuvre answers is the PRE-S1-DECK population and no longer exists.
+#   What ships here is the SEQUENCE he asked to see, and the mount for stages
+#   2-4 (the parabolic dive). It is not sold as a crash fix.
+# ---------------------------------------------------------------------------
+# HIS "OUTER ONE THIRD", as a fraction of MY OWN dome's r_eff at MY OWN
+# bearing -- the identical arc/r_eff the containment leash flies (one shared
+# drone::ellipse_frac, so the trigger cannot fork the geometry).
+# ★ 0 = THE WHOLE-FEATURE WALK-BACK, and it is an EXPLICIT dead switch in the
+#   app, not an empty interval -- "(0, lip]" would arm everywhere.
+regroup_frac_arm     = 0.667
+# ...and at or below this.
+# ⚠ CORRECTED 2026-08-27 (rescue pass). The authoring comment here read "all
+# four tape-12 enemy surface crashes died at frac 1.166-1.263" and THAT IS NOT
+# WHAT THE TAPE SAYS. Re-measured from build-play/conquest_tape_12.jsonl `dc`
+# rows, own-faction ellipse scaled by the live `rs`, spawn_index -> faction by
+# combat::maverick_faction: the four SUDBURY SURFACE wrecks are at frac
+#   1.202 (k 12600, i 3)   1.166 (k 34860, i 6)
+#   1.683 (k 66193, i 4)   1.607 (k 69546, i 2)
+# plus one in-net wreck at 2.867. So the range is 1.166-1.683 and THIS LIP
+# COVERS TWO OF THE FOUR, not all of them. The lip is therefore NOT justified
+# as "it reaches where they die" -- it is justified as THE BOUND ON THE STAGE-1
+# COST: past 1.35 r_eff a deck runner is committed and keeps the direct
+# S1-DECK route rather than being turned around from halfway across. Raising it
+# to reach 1.683 would turn committed crossers around, which is a bigger
+# offense cost than the two wrecks are worth.
+regroup_frac_lip     = 1.35
+# Release (episode complete) below this. The leash's own release deadband is
+# 0.42 (drone.h BubbleLeash::release_frac -- leash fracs have NO toml key, the
+# header IS that table, the documented RaidOrder-style exception).
+regroup_frac_release = 0.45
+# Where the aim point sits, along the drone's OWN bearing from the dome
+# centre. MUST be strictly inside the release or no episode can ever complete
+# (loader-checked). Chad: "move closer to the inside of their bubble".
+regroup_pull_frac    = 0.40
+# [m] AGL of the aim point. MUST clear avoid_agl_release_m = 400 (loader-
+# checked) or the manoeuvre flies into the in-dome pull-up band. 500 also sits
+# well under the dome ceiling, so this is full-air flying the whole way.
+regroup_agl_m        = 500.0
+# [s] episode timeout, clocked FROM EPISODE START. ~3.3 km at 0.667->0.45 of a
+# 15 km r_eff is ~27 s at the 123 m/s errand speed; 60 funds the turn-in.
+# ★ It is deliberately NOT clocked off the attack window: a window-zero
+#   timeout fires ~5 s into every episode on the dwell-alone arm below, and
+#   5 s = ~615 m against ~3.3 km -- that arm could never complete one.
+regroup_max_s        = 60.0
+# [s] how long "my own pump is being attacked" stays true after the last HP
+# tick. Spans the measured 2-3 s damage bursts.
+regroup_attack_window_s = 10.0
+# ★ CHAD'S LITERAL TRIGGER: outer third AND my own pump under attack.
+#   false = arm on outer-third DWELL ALONE, nobody attacking. His ruling, one
+#   word, in the open -- see the report's single question.
+#
+# ★★★ MEASURED 2026-08-27 (rescue pass), AND IT IS THE FINDING OF THIS RUNG:
+#   ON THIS REPLAY THE TRIGGER FIRES ZERO TIMES, AND NOT BECAUSE IT IS RARE.
+#   [.regroup] arm S, 244,043 enemy non-tunnel samples (2,034 s):
+#
+#     own pump-attack window OPEN (geometry ignored)      2398 = 0.98%
+#     BAND (0.667, 1.35] AND window open = THE EXACT
+#       ARMING CONJUNCTION                                1123 = 0.46%
+#     ... AND fully eligible (the ticks that CAN arm)        0
+#     ... shadowed by ENGAGED                             1123 = ALL OF THEM
+#     ... shadowed by DEFEND                                 0
+#
+#   Every single tick on which Chad's two conditions are both true, the pilot
+#   is ENGAGED -- and his OTHER standing ruling ("pursuit is unlimited, chase
+#   you anywhere") forbids dragging an engaged pilot home. The two rulings
+#   collide, and the pursuit one wins 100% of the time.
+#
+#   THIS IS NOT A BUG AND IT IS NOT NOISE, IT IS CAUSAL: the only thing that
+#   damages a SUDBURY pump on this replay is the PLAYER attacking it, and when
+#   the player is over the pump the pilots near it are in a fight with him. The
+#   conjunction and the exclusion are the same event seen twice.
+#
+#   The machinery underneath is NOT dead -- arm D (this key false) arms 13
+#   episodes with the identical geometry, arming and steering code. So the
+#   whole of stage 0 flies; only this conjunction starves it.
+#
+#   ⚠ THE ONE QUESTION FOR CHAD, and it is his to rule, not mine to pick:
+#   stage 0 as literally specified is unreachable while pursuit is unlimited.
+#   The three ways out are (a) leave it exactly as ruled and accept it fires
+#   only when someone else's guns damage the pump, (b) drop the pump-attack
+#   condition (arm D: pressure 0.0392 -> 0.0255, a 35% OFFENSE CUT -- refused
+#   here as an unrequested difficulty walk-back), or (c) let a regroup preempt
+#   an ENGAGED tick, which directly contradicts "chase you anywhere".
+#   NOTHING WAS QUIETLY PICKED: the literal ruling ships.
+regroup_require_pump_attack = true
+# Stage 1. The designated deck runner (raid_deck_run_slots) outside its own
+# LIVE dome flies the same point home before the climb. A dome-less faction
+# has home_alive = false, so it is NEVER ordered to a bubble that does not
+# exist -- his "if they have one left".
+#
+# ★★★ SHIPS OFF, AND HERE IS THE NUMBER (rescue pass, 2026-08-27). It was
+# authored ON. Stage 1 is the RETURN half of "go back to your bubble, climb,
+# then parabolic dive" -- and THE CLIMB AND THE DIVE DO NOT EXIST YET
+# (BallisticPhase::CLIMB has no body; that is the next agent's chunk). So with
+# it on, the designated deck runner flies all the way home and then straight
+# back out the way it came, having gained nothing. Measured on [.regroup],
+# arm S (shipped) vs arm F (this key forced true), one replay, 22.4 min:
+#
+#   enemy pressure (on-station rate)  0.0392 -> 0.0367   = -6.4% OFFENSE
+#   crashes/min                       0.45   -> 0.45     (no change)
+#   deck survival                     0.526  -> 0.550
+#   stage-1 returns armed             0      -> 1        (94 s under the order)
+#
+# That is a DIFFICULTY WALK-BACK bought for nothing, against the standing
+# ruling "get out of easy mode and increase its ability to destroy pumps". It
+# is one word from live and arm F measures it every gate run, so flipping it
+# true in the SAME commit as the parabolic dive costs nothing.
+#
+# ★★★ RUNG D3 FLIPPED IT TRUE, in exactly that commit, AND IT COSTS EXACTLY
+# ZERO -- measured, not argued. [.regroup] arm F (this key forced back OFF) is
+# now BIT-IDENTICAL to the shipped arm: 0x2ec5baddc8346cfe on both, pressure
+# 0.0417 -> 0.0417, and stage-1 returns armed 0 on BOTH arms.
+#
+# WHY, and it is a real finding rather than an absence: THE RETURN IS SHADOWED
+# BY THE CLIMB. Stage 1 needs `ballistic == NONE` AND `own_frac > 1.0` (I am
+# outside my own dome). D3's already-home arming fires at `own_frac <= 1.0` and
+# latches CLIMB. On this replay the rank-0 deck runner's raid order always arms
+# while it is still INSIDE its dome, so the CLIMB wins the race every time and
+# the RETURN never has a NONE phase left to arm from. That is Chad's own
+# sentence resolving itself -- "go back to whatever bubble IF THEY HAVE ONE":
+# it has one, and it is already in it.
+#
+# ⚠ SO THE D2 PRICE IS GONE, AND NOT BECAUSE THE DIVE PAID IT OFF. The -6.4%
+# pressure D2 measured was a machine where CLIMB could not arm. Stage 1's own
+# flight is consequently NOT exercised at this head, and that is stated here
+# rather than left for a green light to imply.
+#
+# It is ALSO gated on raid_ballistic_climb_agl_m > 0 in both the app and the
+# fixture mirror, so the master dead switch below really does restore the
+# pre-D3 machine bit-for-bit (arm O reproduces 0x12dd30472363fcf5) rather than
+# leaving a lone return flying, which WOULD be a different machine.
+regroup_return_deck_run = true
+
+# ---------------------------------------------------------------------------
+# ★★★ RUNG D3 — THE PARABOLIC DIVE / THE BALLISTIC DECK RUN (stages 2-5)
+# ---------------------------------------------------------------------------
+# CHAD, 2026-08-27, verbatim:
+#   "they should go back to whatever bubble if they have one left, climb to a
+#    decent altitude and then parabolic dive to the deck to cross the no air
+#    zone to the enemy bubble to attack"
+#   "It would be cool in general to see them climb up then perform a parabolic
+#    dive toward the other bubble to hit the deck and cross at maximum speed,
+#    even if they are pointed upward a bit they will sail to the other bubble"
+#
+# ★★★ THE HONEST HEADLINE, FROM THE INSTRUMENT THAT LANDED BEFORE THE FEATURE
+# ([.bdeck], commit 77085cc32, control arm at HEAD):
+#   * THERE IS ALMOST NO GAP TO BALLISTICALLY CROSS. Outside a dome the air is
+#     FULL below game.toml deck_agl_m (120 m AGL) and zero only by +deck_soft_m
+#     (320 m). The dead band is purely VERTICAL. The median crossing already
+#     spends 0.0 s in dead air (mean 7.2, p90 18.3).
+#   * ZERO of the 10 enemy wrecks die in thin air. All 10 die below 60 m AGL,
+#     7 of 10 with a TUNNEL disposition (the bore grinder, the open C2 debt).
+#     The "leave the dome at 1700-1900 m and mush down at 124 m/s" population
+#     is the PRE-S1-DECK machine and no longer exists.
+# SO: THE BALLISTIC PHASE IS THE DOME-SKIRT TRANSITION, not the crossing, and
+# the crossing itself stays POWERED DECK FLIGHT under the S1-DECK law. This
+# ships as SPECTACLE + ARRIVAL ENERGY. It is NOT sold as a crash fix, and the
+# honest short-ballistic shape is the one that is built.
+#
+# ★ THE PHYSICS, and Chad's own sentence is it: sim/step.cpp scales thrust,
+# lift AND drag by ONE f_atm, so outside the air the trajectory is EXACTLY a
+# parabola and only the LAUNCH VECTOR and the ENERGY matter -- "even if they
+# are pointed upward a bit they will sail". There is no authority out there to
+# correct with, so THE RUN IS COMMITTED WHILE STILL IN AIR.
+#
+# ★ 0 = THE WHOLE-FEATURE DEAD SWITCH. It also re-gates
+# regroup_return_deck_run above, so 0 is the pre-D3 machine bit-for-bit -- and
+# that is a probe arm ([.bdeck] arm O), not a claim.
+raid_ballistic_climb_agl_m = 2000.0
+# [s] the climb timeout. It ADVANCES to the dive from whatever altitude was
+# reached -- it NEVER aborts into nothing (E15's "a range limit wearing a
+# timeout's clothes" is the failure this refuses). At the commanded 26 deg and
+# the 123 m/s errand speed the ROC is 123*sin(26) = 54 m/s, so 2,000 m takes
+# ~37 s and 60 covers it with the turn-in.
+raid_ballistic_climb_max_s = 60.0
+# [deg] THE COMMITTED DIVE ANGLE. Bounded by the pull-out inequality the loader
+# checks, and every term of that inequality is DERIVED, not welded:
+#     v^2 * (1 - cos gamma) <= n_eff * g * h_band
+#     n_eff  = 0.5 * avoid_pull_net_g      (the mean-air proxy over the fade)
+#     h_band = game.toml deck_soft_m       (the 320 -> 120 m fade the pull-out
+#                                           has air in)
+# At 245 m/s that caps gamma at 20.8 deg (1 - cos g <= 0.0654), so 18 clears
+# with margin (1 - cos 18 = 0.0489). The MEASURED pull-up net g on this replay
+# is p50 4.81 ([.bdeck] control arm, n=37682), so n_eff = 1.5 under-claims the
+# airframe by more than 3x -- deliberately, the avoid_pull_net_g precedent.
+raid_ballistic_dive_gamma_deg = 18.0
+# [m/s] the dive + sprint speed target. Chad's "cross at maximum speed".
+# ⚠ THIS IS A FREE DIAL, not a welded identity. It happens to equal
+# aircraft.toml v_redline (245.0) today -- that is where the compression knee
+# bottoms out -- but nothing here reads that table, so if v_redline moves this
+# does NOT silently follow it. Stated, not implied (the law paid for ten
+# times: a constant that describes another table stops describing it the
+# moment that table moves).
+raid_ballistic_dive_speed = 245.0
+# [-] THE COMMIT GATE: cos of the HORIZONTAL heading error to the pump.
+# ⚠ HORIZONTAL, and it is arithmetic: the climb is flown at avoid_gamma_deg =
+# 26, so a FULL-3D unit velocity dotted against a horizontal great-circle
+# bearing can never exceed cos(26) = 0.8988. A 3D gate at 0.94 -- the value
+# the maverick TRANSIT arm-gate uses, where the leg is LEVEL and the 3D form
+# is right -- could NEVER pass here. Every dive would then commit by timeout
+# from ~3,500 m, which is the E16 "domes are DOMES, higher is a WIDER gap"
+# trap, and this file's climb dial would go inert in the commit path.
+raid_ballistic_align_min = 0.94
+# [m] AGL at which the DIVE ends and the ordinary elevation laws take the
+# channel back. ⚠ IT MUST CLEAR **BOTH** PULL-UP BANDS, and the loader checks
+# both:
+#   * the DECK latch, which arms on eff_agl = agl - avoid_lookahead_s(3.0) *
+#     sink < deck_avoid_agl_enter_m(60). At -18 deg and 245 m/s the sink is
+#     245*sin(18) = 75.7 m/s, so it arms at agl ~ 287 m. Handing over below
+#     that lands the transition INSIDE a latched 26 deg panic climb with
+#     wants_fire cleared -- higher and more gun-muted than the 115 m median
+#     crossing this rung exists to reach.
+#   * the IN-DOME band's release, avoid_agl_release_m = 400. The dive STARTS
+#     inside the runner's own dome, so it crosses that band on the way down;
+#     ending at or below 400 would hand over mid-latch. 500 is the same
+#     clearance regroup_agl_m takes, for the same reason.
+raid_ballistic_run_agl_m = 500.0
+
+# ---------------------------------------------------------------------------
+# RUNG E7 — THE KILLERS (Chad's ruling, 2026-08-20 evening: "I want killers to
+# contend with. That is a rule." + BOTH doctrines approved)
+# ---------------------------------------------------------------------------
+#
+# ! NAMED RULED-PROPERTY REPEAL, FOR CHAD'S FLY CHECKLIST. The R4/R5
+#   corner-speed ruling that capped every drone at pursue_max_bank_deg = 55 is
+#   REPEALED FOR ENGAGED FIGHTERS ONLY, tiered by trait aggression. THE WALL it
+#   repeals was measured across every probe on this ladder: 55 deg of bank at
+#   fight speed is ~7 deg/s of turn, against 25-40 deg/s of LOS rate from a
+#   275 m/s player — no gun solution exists at that ratio unless he flies
+#   straight. pursue_max_bank_deg itself is UNCHANGED and still loader-bounded
+#   at 55: patrol, the tunnel brain, raid, defend, the strike divert and the
+#   containment leash all still steer on it. The repeal exists at exactly one
+#   seam, drone::engaged_bank_cap, consumed only inside the engaged pursue/BFM
+#   branch. WALK-BACK IS ONE NUMBER: ace_bank_cap_deg = 0 (or 55).
+#
+# E7.1 THE ACES TURN. Tiers come from the pilot trait table
+# (drone/maverick.h kMavericks, `aggression`):
+#   ACE  (>= ace_aggression_min 0.75): PITVIPER .95, SHAFT .85, MURRAY .80,
+#                                      GULCH .75            -> 72 deg (n=3.24)
+#   MID  (>= mid_aggression_min 0.65): NICKEL .70, STOPE .70,
+#                                      BOREAL .65           -> 65 deg (n=2.37)
+#   BASE (the rest): SLAGHEAP .60, CANARY .55, LAMPLIGHT .50 -> the ruled 55
+# The loader checks both caps against the AIRFRAME (nose-on fight speed vs
+# V_stall * sqrt(n)) and against bank_slew_dps, config-relative.
+# ★★★ RUNG E10 (Chad, 2026-08-23: "make them good"). 72 -> 83 / 65 -> 80.
+# MEASURED ON THE PLANT (spec §E10.1, saturated turn, 30 deg bearing = the
+# TRACKING regime, 144 m/s, deadband off so the cap is the only variable):
+#     cap        72     76     78     80     83
+#     turn deg/s  6.2    8.7   10.9   14.8   26.3   (30 deg bearing, 144 m/s)
+#     n           1.9    2.5    3.1    4.1    7.2
+# ★★ 78, NOT 80, AND THE REASON IS DYNAMIC not static. At 80 the plant still
+# HOLDS the bank (101-103% of command) but the flight path swings 13.9 deg
+# abeam -- half the fire cone, the very defect rung E9 was about. Worse, cap 80
+# sits ON AN INSTABILITY BOUNDARY: sweeping pursue_track_pitch_gain at cap 80,
+# bearing 50 reads clean at 1.5, CATASTROPHIC at 1.2 and 1.0 (111 and 141 deg
+# of swing), then clean again at 0.8. A value that flips on a 20% move in an
+# unrelated dial is not a value to hand a pilot. At 78 with the shipped pitch
+# gain 1.5 every bearing is clean (swing 0.25/0.93/0.44/0.83).
+# ★ AND IT PINS pursue_track_pitch_gain 1.5: at cap 78 the SAME sweep goes
+# unstable at 1.2 and 1.0 (bearing 70/90). 1.5 is on the good side of that band
+# and a future retune downward must re-take this measurement.
+# ★ 80 IS THE MEASURED EDGE, and the rung tried to go past it and was refused:
+# at 83 the plant stops FLYING the command anywhere but dead astern -- achieved
+# bank 54%/50%/46% of the 83 handed out at 50/70/90 deg bearing, with 103-120
+# deg of flight-path swing (spec §E10.4). A commanded number the aeroplane
+# mushes is not a turn. The
+# airframe's own limit is n_max = 32 (controller.toml) and the engaged path
+# flies aoa_protect ON, so 83 deg (n = 8.2 level) is nowhere near departure.
+# WHY IT MATTERS: turn rate is g*tan(phi)/V under a BANK limit and
+# g*sqrt(n^2-1)/V under a G limit. The player flies the second (his tape: median
+# 4.3 g in close, p90 16.6, max 25); the AI flew the first at n = 1.3-5.5. At
+# his speed that is 72 deg/s against 8. Walk-back: 72 / 65.
+ace_bank_cap_deg   = 78.0   # [deg] top-tier ENGAGED bank cap (0 = off = 55)
+mid_bank_cap_deg   = 76.0   # [deg] middle-tier ENGAGED bank cap (0 = off)
+ace_aggression_min = 0.75   # trait aggression for the top tier
+mid_aggression_min = 0.65   # ...and for the middle tier
+# ★ THE TRACKING DEADBAND, and it is NOT a hedge on the ruling -- the P-A
+# ensemble forced it. A FLAT 72-deg cap COSTS 39 rounds on the ace / 18 hits
+# and buys back 13 / 2. The in-band time is unchanged (10940 -> 11132
+# drone-ticks: they get just as close for just as long); what collapses is
+# wants_fire, 522 -> 162 ticks. More bank did not stop them getting there, it
+# stopped them POINTING once they were -- a 72-deg-capable tracker at k_az 3.0
+# saturates out to 24 deg of bearing instead of 18 and yanks its nose straight
+# through the solution. That is the same over-gained tracker pursue_pull_deg's
+# own 30-deg deadband was written to cure. So the raised authority arrives
+# where it WINS (the reversal, off the nose) and fades to the ruled 55 where it
+# LOSES (tracking, on the nose), through the SAME ramp the hard pull uses.
+# Set hi <= lo for the FLAT cap (the arm measured above) -- the choice is his.
+# ★★★ RUNG E10 -- THE DEADBAND IS OFF (hi <= lo is its ruled FLAT form, and
+# the paragraph above is now HISTORY, not the shipped rationale).
+# IT WAS RULED IN ON NOISE. The "39 rounds / 18 hits" it cites is the single
+# LUCKIEST cell in the whole sweep (spec §E7.I), inside a noise band of 4-39
+# rounds and 0-18 hits for arms that CANNOT fight differently. §E7.K re-took it
+# at n=64, found rounds/hits below resolution, and kept the deadband on a CRASH
+# argument alone.
+# WHAT IT COSTS, measured (spec §E10.2, plant, 144 m/s, cap 83):
+#     bearing        10 deg      20 deg      30 deg
+#     deadband OFF   5.3 deg/s   15.4 deg/s  27.0 deg/s   bank 70.8/83.2/84.3
+#     deadband ON    2.7 deg/s    2.7 deg/s   2.8 deg/s   bank 55.1/55.1/55.6
+# Inside 30 deg of his tail -- the ONLY place a gun solution exists -- it hands
+# the ruled 55 back. Raising the cap while it is on buys NOTHING.
+# ★★ AND ITS STATED MECHANISM IS CAP-DEPENDENT, which nobody had measured
+# (§E10.3, P-A n=64, cone_open/eng -- a DENSE pointing column, not a rare-event
+# count): at cap 72 flat really IS worse (23.2 -> 16.3, the overshoot is real),
+# but at cap 83 it REVERSES (24.2 -> 45.3). The deadband was protecting against
+# a MARGINAL cap. With real authority it is pure loss.
+# Walk-back: ace_bank_track_hi_deg = 90.0 restores the ramp.
+ace_bank_track_lo_deg = 30.0  # full fade-back to 55 inside this angle off
+ace_bank_track_hi_deg = 0.0   # <= lo = the FLAT cap (rung E10)
+# ★★★ RUNG E10 -- THE ALTITUDE FADE, and it is what makes the flat cap
+# SHIPPABLE. A sustained hard turn sinks by construction: at 78 deg of bank the
+# vertical lift component is n*cos(78) = 0.21n, so at the 3.1 G the plant pulls
+# there it holds 0.64 g against 1 g of weight. Measured on P-A at n=64, the
+# flat 78/76 cap took terrain crashes from 0.063 to 0.266 per engagement (4.25x)
+# and raising avoid_agl_enter_m to 400 bought back almost none of it (0.250) --
+# the problem is the RECOVERY from 78 deg of bank, not when the pull-up fires.
+# So the tier authority is faded by ALTITUDE and the two ramps multiply: a
+# bandit needs the geometry AND the air. lo is the pull-up's own release
+# altitude (below it the avoid branch owns the aeroplane); hi is measured.
+# Walk-back: ace_bank_agl_hi_m = 0.0 (hi <= lo = no fade).
+# ★★★ AND IT SHIPS OFF, BECAUSE THE MEASUREMENT REFUSED IT. The fade was built
+# on the hypothesis above and it changed NOTHING: P-A n=64 read crashes/eng
+# 0.265625 with the fade at 400/1200 and 0.265625 without it, identical to the
+# digit. A deeper fade (400/1800) traded pointing away 1:1 for a small crash
+# drop, which is just a lower cap wearing a fade's clothes.
+# ★★★ THE CRASH CENSUS THEN KILLED THE WHOLE PREMISE. Recording the state one
+# tick before every wreck: **engaged = 0 of 3**, pull-up ALREADY ARMED 3 of 3,
+# AGL 2.3 m, gamma -58 deg, V 250 m/s (redline). The engaged bank cap applies
+# ONLY to engaged drones, so it cannot be what kills them -- the crash-count
+# difference between bank arms is the same parameter-space chaos that eats
+# `rounds`, not a cost of authority. What kills them is an UNENGAGED drone in a
+# redline dive that the forced pull-up fires on and cannot save (raising
+# avoid_lookahead_s 3 -> 5 -> 7 -> 9 s moved the impact angle -58 -> -33 deg
+# and the crash COUNT not at all: 3/3/4/3). That is a real defect with a known
+# mechanism and it gets its own rung -- it is not a dial.
+# The fade stays in the code (off, bit-identical) because the mechanism is
+# sound and cheap; it is simply not this defect's cure.
+ace_bank_agl_lo_m = 400.0   # [m] AGL at/below which the ruled cap is all he gets
+ace_bank_agl_hi_m = 0.0     # [m] hi <= lo = OFF (measured: it changes nothing)
+
+# E7.2 THE SLASHERS. The tiers that did NOT get the repeal cannot win a
+# sustained turning fight against the ace, so they are given the doctrine that
+# works at a turn-rate disadvantage: PERCH/SLASH energy attacks. Climb to a
+# height advantage above and behind him, dive through at chase speed with the
+# guns hot, zoom back out, re-perch. Never sustained-turn. This flag only
+# SELECTS the doctrine per pilot; bfm_perch_height_m = 0 disables it outright,
+# so either off-value alone restores rung E6 bit-for-bit.
+# ★★ HELD OFF 2026-08-20 NIGHT — A DEFECT, NOT A PREFERENCE, AND CHAD'S RULING
+# ("BOTH doctrines approved") IS NOT BEING OVERRIDDEN, IT IS BEING BLOCKED ON A
+# BUG. THE SLASHER DOCTRINE HAS NEVER FIRED A ROUND THROUGH THE REAL FIRE
+# PIPELINE. Every E7.2 test asserts the guns_hot MODE FLAG (hot in Slash, cold
+# in Perch/Defensive) and nothing more; no test ever put a slasher through the
+# actual fire gate. `probe P-D: the transiting striker fights back` — a SIGNED
+# E3 rung — is the first fixture that did, and it reads rounds_at_player = 0
+# with the doctrine on and passes 18/18 with it off. Cause isolated to this one
+# dial, nothing else changed.
+# The converged n=64 table shows the same signature from the other side: E7.2
+# cuts rounds 2.6x (1.94 -> 0.75 per engagement) while hits hold. Read as
+# "fewer, better passes" that is a feature; read next to P-D's hard zero it is
+# more likely a fire gate the dive never satisfies (a steep slash's flight path
+# lags its nose, and `coordinated` gates on exactly that). UNDIAGNOSED — it
+# needs its own rung, and the E7.2 test file needs a leg that counts REAL
+# ROUNDS, not a mode flag. This is the "verify the artefact, not the process"
+# trap: every generator number is perfect and the aeroplane does not shoot.
+# Turn back on with `true` once a slasher is measured putting rounds downrange.
+slash_doctrine        = false
+bfm_perch_height_m    = 700.0  # [m] altitude advantage that IS a perch (0 = the
+                               #   doctrine is unavailable to everyone)
+bfm_perch_release_frac = 0.45  # spend all but this of it -> the pass is over
+                               #   (the Perch<->Slash hysteresis gap)
+# RUNG E8.1 — THE PERCH STANDOFF. The perch sits this far BEHIND him, and it is
+# its own dial because the tracking lag point (bfm_lag_dist_m = 220) put the
+# perch essentially DIRECTLY OVERHEAD: a dive from 700 m up and 220 m back needs
+# atan(700/220) = 72.6 deg against a pursue_max_gamma_deg = 30 clamp, so the
+# slasher could not point at the target it perched over. Probe P-S measured a
+# whole pass at a best cone cos of -0.106 (96 deg off the lead point) and ZERO
+# rounds -- THAT, not the `coordinated` clause spec E7.N hypothesised (measured
+# 100% OPEN), is why E7.2 was held off.
+#   * loader-bounded: atan(height/lag) <= 0.8 * pursue_max_gamma_deg
+#     => at 700 m / 30 deg the floor is 1572 m.
+#   * and the perch must still be REACHABLE: sqrt(lag^2 + height^2) must stay
+#     inside bfm_attack_range_m (2200) or `perched` never latches => ceiling
+#     ~2085 m. The usable window is [1572, 2085].
+#   * 0 = fall back to bfm_lag_dist_m, i.e. the pre-E8 (un-diveable) perch,
+#     bit-for-bit. That is the knob-off arm.
+bfm_perch_lag_m       = 1700.0 # [m] see the sweep in probe P-S
+bfm_perch_max_s       = 6.0    # [s] ANTI-DITHER: a slasher that can never
+                               #   out-climb its target still takes gun passes
+bfm_slash_min_s       = 2.0    # [s] COMMIT floor on a firing pass — a pass
+                               #   forced by bfm_perch_max_s starts with no
+                               #   height advantage, so without this floor it
+                               #   would bounce back to Perch on tick one and
+                               #   the slasher would never fire at all
+bfm_slash_time_s      = 5.0    # [s] ceiling on the pass
+bfm_slash_break_m     = 250.0  # [m] flown through him -> zoom and re-perch
+
+# E7.3 REAL EVASION (Chad: "They only tried to dodge my shots with elevator
+# dipping up and down"). ATTRIBUTION: this machine has never had a DEFENSIVE
+# branch at all — a bandit with the player on its six is still TRACKING him,
+# and with its bank capped the only command left with real amplitude is the
+# tracking gamma chasing a weaving player's altitude. That is the bob. The fix
+# is a real break: a LEVEL turn into the attacker at this pilot's full E7.1
+# bank authority, whose exits are the reversal (back into the fight mode, onto
+# the man who just overshot) and the unloaded extension (Extend, which is
+# already literally that maneuver). 0 = off.
+bfm_defensive_range_m    = 1400.0  # [m] an attacker inside this may threaten
+bfm_defensive_cone_deg   = 20.0    # [deg] how nose-on HIS nose must be to me
+bfm_defensive_release_deg = 45.0   # [deg] the break releases past this (the
+                                   #   hysteresis gap — must be WIDER than the
+                                   #   arm cone)
+bfm_defensive_arm_s      = 0.4     # [s] the threat predictor's own debounce
+# ★ "UNDER FIRE" MEANS ROUNDS HAVE ARRIVED. Arming the break on the GEOMETRY
+# alone (an attacker pointing at me) was measured on P-A to take the ensemble
+# to ZERO rounds at the player: in a furball the player's nose sweeps across
+# five bandits constantly, so every one of them breaks permanently and the wing
+# never shoots again. A damaging hit therefore opens this memory window, and
+# the geometry only decides WHO to break into.
+bfm_defensive_memory_s   = 4.0     # [s] a hit keeps a pilot under fire
+bfm_defensive_max_s      = 6.0     # [s] ceiling on one break
+bfm_defensive_cooldown_s = 3.0     # [s] guaranteed guns-live spell after a
+                                   #   break, or a bandit the player simply
+                                   #   keeps his nose on never shoots again
+
+[damage]
+# Component damage model (docs/damage_model_plan.md, Fable-vetted): enemy rounds
+# route their KE to the engine / pilot / wings / structure by impact GEOMETRY, and
+# each hurt component RESHAPES the flight via a PURE transform on the FROZEN kernel
+# params (the same "world modulates, kernel frozen" firewall the bandit AI uses).
+# Every dial below is IDENTITY at zero damage, so the gate + firewall stay
+# bit-identical; the flight only diverges once a part is hit. Tune the "hurt-plane
+# feel" here WITHOUT a recompile. These are the Fable-tuned defaults.
+
+# Severity -> effect, at FULL component damage (fraction of the base param lost /
+# gained). Higher = a hit bites harder.
+wing_cl_loss     = 0.5   # fractional Cl_max & Cl_alpha loss (stall-alpha invariant)
+wing_roll_loss   = 0.6   # fractional roll authority (c_roll) loss
+wing_drag_gain   = 0.8   # Cd0 addend as a fraction of base (a torn wing drags)
+struct_auth_loss = 0.55  # fractional pitch/yaw/roll authority loss
+struct_drag_gain = 0.5   # Cd0 addend as a fraction of base
+roll_bias_gain   = 0.5   # roll INPUT bias per unit wing asymmetry (a wing-heavy lean)
+roll_bias_n_ref  = 2.0   # load factor at which the roll bias reaches full (> 0)
+
+# Controllability FLOORS (fraction of the base param; keep the worst legal airframe
+# degraded-but-flyable — never zero-authority, never a divide-by-zero). Must be in
+# (0, 1]: a floor of 1 disables the effect, 0 would brick the plane.
+pilot_gain_floor  = 0.35  # controller gain scale at pilot = 0 (a wounded pilot wallows)
+cl_floor          = 0.5   # Cl scale never below this
+c_pitchyaw_floor  = 0.35  # pitch/yaw authority never below this
+c_roll_floor      = 0.25  # roll authority never below this
+cd0_cap_mult      = 2.0   # Cd0 never more than this * base (a shredded plane mushes,
+                          #   it does not brick); >= 1 (drag only ever rises)
+
+# How much KE a component absorbs before it is destroyed (higher = tankier). A
+# separated wing / dead pilot / dead structure is a KILL.
+component_hp = 60.0  # [HP-equivalent KE] to destroy a component from full (> 0)
+
+# Hit ROUTING region extents, as a fraction of the hit radius R (which region of
+# the body-frame the impact falls in picks the component). A long-thin fuselage vs
+# a ~9 m hit sphere means these are BANDS off the CG, not an argmax.
+route_wing_frac    = 0.35  # |body x| beyond this*R -> a wing (in (0, 1))
+route_nose_frac    = 0.25  # body z below -this*R -> engine (nose) (in [0, 1))
+route_tail_frac    = 0.25  # body z above +this*R -> structure (tail) (in [0, 1))
+route_center_pilot = 0.35  # center/cockpit hit: pilot's share (rest -> structure)
+ground_wing_ref_ms = 40.0  # R4-FLY-5 (Chad: wings DAMAGE on terrain strike): scrape
+                           # speed [m/s] at which a wing chips at the full rate
+ground_wing_rate   = 3.0   # wing health lost per second of ground contact AT the ref
+                           # speed, scaled (v/ref)^2 — a 40 m/s strike shreds a wing in
+                           # ~0.33 s of scraping, a 10 m/s tip-drag chews it slowly.
+                           # PLACEHOLDER — Chad's stick.
+
+[sled_comfort]
+# ★ RC ROLL COMFORT (Chad's §0b ruling, 2026-08-12: "arcadey to a degree so
+# that it is fun... just make it more stable... all the mechanisms available
+# for tuning"). Every dial has an OFF value so the whole rung tunes back to
+# the pre-RC kernel from this file. Provenance + measured sizing:
+# Game_loop_idea/vehicle_program/ROLL_COMFORT_CONSULT.md and
+# docs/roll_envelope_baseline.txt (the before table).
+
+# D — the rolled readout: >75 deg must HOLD this long, in ground contact this
+# recent, before ROLLED latches (and cuts throttle). A jump is not a rollover:
+# mid-air attitude NEVER latches. persist 0.0 = the old instantaneous readout.
+rolled_persist_s = 0.30
+rolled_grace_s   = 0.20
+
+# A — the stability assist ("the sway bar that doesn't exist"): saturating
+# restoring torque about the roll axis, contact-gated (zero airborne), that
+# RELEASES between release_lo..hi rad so abuse still rolls (70 deg trip entry
+# measured ROLLED; 60 caught). stiff 0.0 = OFF. Damping ships 0.0 on purpose —
+# it is the dial that kills flick/drift/backflip feel; raise only if a bump
+# leg still rolls. ref_blend: 0 = gravity-relative, 1 = surface-relative;
+# 0.5 measured best (flat identical, 20-deg side-hill drift halves, berms
+# only half-fought).
+roll_stiff_nm       = 450.0
+roll_ref_rad        = 0.14
+roll_release_lo_rad = 0.60
+roll_release_hi_rad = 1.20
+# ★ GI4: 0.0 -> 800.0 on Chad's ruling 2026-08-13, against the consult's
+# do-not list. Earned from his own 512 s tape (25->90 deg of roll in a median
+# 0.20 s, to 654 deg/s, with no roll damping anywhere in the machine) and
+# structurally unable to reach the air -- the term is multiplied by
+# w_contact, identically 0 with no ground under the patches, so air flick and
+# backflip initiation off a lip are untouched by construction. See
+# docs/gi4_ride_handoff.md §5.
+roll_damp_nms       = 800.0
+roll_ref_blend      = 0.5
+
+# B — lean is the REWARD channel: leaning INTO the demand multiplies bite
+# (full-lock radius 95 -> 75 m measured); leaning wrong gives exactly nothing,
+# never a penalty. sat_gain: committed lean extends the assist's release band
+# (carry more roll angle before it lets go). 0.0 = OFF.
+lean_bite_gain    = 0.18
+lean_sat_gain_rad = 0.15
+
+# ★ GI3 ROLLFIX (2026-08-13, from the R3 sink trace of Chad's own taped 360
+# roll — provenance in sim/sled.h at these fields and GI3_ROLLFIX_HANDOFF.md).
+# The measured hole: at 32-70 deg the patches unload onto the HULL and the
+# assist's patch-only contact gate zeroed it with the release band still at
+# 0.96 — then the ceiling (450 saturated through every pre-roll window at
+# speed) and finally the hard release let the carve go. Three dials, each
+# 0.0 = OFF bit-exactly:
+# assist_hull_frac: fraction of the hull's side load counted as contact for
+#   the assist (a machine on its running-board is not airborne).
+# roll_stiff_vgain: authority grows with ground speed — stiff * (1 + g(v) *
+#   vgain), g(v) smoothsteps over [assist_v_lo_ms, assist_v_hi_ms].
+# release_floor_frac: the release band keeps this floor at speed (never
+#   hard-abandons a live carve; the S4 oscillator fix), fading to exactly 0
+#   by release_floor_hi_rad so a downed machine still gets no push, and 0
+#   below assist_v_lo_ms so low-speed abuse still rolls.
+# --- R4a SEATED SELF-RIGHT (Chad, 2026-08-26) --------------------------------
+# "IF ON THE SEAT AFTER A ROLLOVER PRESSING THE STAND BUTTON AS IN REGULAR
+#  SEATED OPERATION WILL RIGHT THE SLEIGHT ONTO ITS SKIS ... MACHINE NEEDS TO BE
+#  TIPPING OVER ... NOT ABOVE 5KM/H ... IT CAN FAIL TO RIGHT GIVEN THE
+#  SITUATION, PROGRESSIVE HOLD"
+#
+# right_assist_nm: the roll torque a FULL stand applies while tipped and slow.
+#   Scales with how hard he stands, so a half shift does half.
+#
+#   ★ THE SCALE, DERIVED FROM THIS MACHINE -- and note where the honest number
+#   lands. A pure static weight shift is rider 87.5 kg x lean_lat_stand_m 0.35 m
+#   x g = 300 N m. Gravity's tipping torque is mass 331 kg x cg_height_m 0.564 m
+#   x g x sin(tilt) = 626 N m at 20 deg, 1295 at 45 deg, 1831 flat on its side.
+#   So a pure weight shift wins only below 9.4 deg -- BELOW the 20 deg gate --
+#   and shipped at 300 this mechanic would be DEAD: it could never right
+#   anything the gate lets it touch.
+#
+#   900 N m is 3x that shift, which is what a rider actually does: he stands on
+#   the uphill board, hauls on the bars and pushes with his legs -- he does not
+#   politely lean. At 900 the assist wins out to ~29 deg of tilt and LOSES
+#   beyond it, which is exactly the ruled behaviour: a tip you catch early comes
+#   back, one that has gone over does not, and then you press R.
+#
+#   ⚠ THIS IS A STARTING POINT FOR CHAD'S DRIVE, NOT A FLOWN VALUE. Nobody has
+#   ruled it. Raise it to catch deeper tips (1295 would win to 45 deg), lower it
+#   to make the save harder. 0.0 turns the whole mechanic off and is what every
+#   .sledtape replays with, so the corpus stays bit-exact either way.
+# ★ v2, after Chad drove v1 and it did nothing: 900 stalls at 46 deg (the
+#   resist is m*g*d about the CONTACT PIVOT, arm = hypot(0.19, 0.564) =
+#   0.595 m, peak 1932 N m) and v1's sin-shaped error was ZERO at 180 deg.
+#   1500 gives a one-press ceiling of 18.6 + asin(1500/1932) = 70 deg, so a
+#   moderate tip rights on ONE press and anything beyond is honestly in the
+#   pumping regime. Chad rules the final value on his drive.
+right_assist_nm          = 2400.0
+# His 5 km/h, in m/s. Hysteretic: releases here, re-arms at 0.8x, so a machine
+# hovering at the threshold cannot chatter the assist on and off.
+right_assist_max_ms      = 1.3888888888888888
+right_assist_rearm_frac  = 0.8
+# "MACHINE NEEDS TO BE TIPPING OVER" -- 0.35 rad = 20 deg. Below this the assist
+# does nothing, so it can never be free roll stiffness in ordinary riding. The
+# speed gate is the other half of that guard: at 20 deg of lean you are carving,
+# not tipping, and a carve is never under 5 km/h.
+right_assist_min_tilt_rad = 0.35   # kept for the loader; the RAMP below owns the gate
+# v2 rocking dials. push/rest are derived from the machine's own measured
+# rock half-period (~0.93 s about the rail pivot): one press ~ one upswing,
+# one release ~ one return. dir_eps/seed_frac are sin(10 deg): the direction
+# saturates outside a 10 deg cone about inversion, and a full LEAN counts
+# like 10 deg of attitude error -- his lean is what picks the side.
+right_charge_push_s      = 0.6
+right_charge_rest_s      = 0.7
+right_dir_eps            = 0.04
+right_seed_frac          = 0.1736
+right_tilt_lo_rad        = 0.25
+right_tilt_hi_rad        = 0.35
+# The gate reads a LOW-PASSED speed: a healthy rock sways the CG at ~1.4 m/s,
+# above the 1.389 gate, so a raw reading would disarm the assist mid-swing.
+right_speed_lp_s         = 0.5
+# The pump alignment scale: the press does full work when it goes WITH the
+# rock and ~none when it fights the return. This is what makes timing a
+# skill and what lets several pushes beat one.
+right_pump_omega_eps     = 0.35
+# Standing commands its own weight shift toward the push -- his ruling,
+# and the state the leg-push animation is posed from. 1.0 = full reach.
+right_stand_shift_frac   = 1.0
+assist_hull_frac     = 0.5
+roll_stiff_vgain     = 1.0
+release_floor_frac   = 0.3
+release_floor_hi_rad = 1.45
+assist_v_lo_ms       = 6.0
+assist_v_hi_ms       = 16.0
+
+# C — the on-side story: coarse hull contacts (tunnel edge, bar ends, ski
+# outers) so a downed machine rests ~65-75 deg instead of flopping inverted,
+# plus a righting bias that only AMPLIFIES side-slide momentum (zero below
+# vmin: stationary machines NEVER self-right). At 900, a fast side-slide
+# pops back onto the skis; slow tips stay down — momentum decides, "not every
+# time but allow it". side_k 0.0 = hull OFF (which also disables the bias —
+# no hull, nothing to pivot on); gain 0.0 = bias OFF with the hull kept.
+side_k             = 30000.0
+side_c             = 2500.0
+# ★ GI S3 (2026-08-12): 0.30 -> 0.55 (downed-machine hull friction, packet C
+# G5 -- the spin-top fix's friction half; the geometry half is the 10-point
+# hull line + the side_yaw_mu arrest channel, kernel-default dials).
+side_mu            = 0.55
+# ★ GI S3: 1400 -> 700. At 1400 the bias injected ~3.4x the tipping barrier's
+# energy and FLIPPED THE MACHINE THROUGH -- the RC1 corkscrew, measured
+# (gi_measurements.md). 700 + the kernel's rate gate rights with momentum and
+# cannot outwork the barrier.
+side_right_gain_nm = 700.0
+side_right_vmin_ms = 1.5
+side_right_vref_ms = 6.0

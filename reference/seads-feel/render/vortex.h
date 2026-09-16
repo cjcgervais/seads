@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <deque>
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <vector>
@@ -41,9 +42,15 @@ struct VortexPoint {
     double strength = 0.0;  // [0,1] at spawn; draw alpha = strength*(1-age/L)
 };
 
+// Trails are std::deque, not std::vector: at the kVortexMax ring cap the oldest
+// point is dropped every frame, and vector's erase(begin()) is an O(n) shift of
+// the whole trail per frame (up to ~240 points/tip during a sustained high-G
+// pull — the maneuver-fire stutter). deque::pop_front is O(1) with identical
+// retained-segment order/semantics; the draw path iterates in insertion order
+// and indexes by position exactly as before (operator[] and size() unchanged).
 struct VortexTrails {
-    std::vector<VortexPoint> left;
-    std::vector<VortexPoint> right;
+    std::deque<VortexPoint> left;
+    std::deque<VortexPoint> right;
 };
 
 // Intensity [0,1] from the SHARED readout quantities (velocity-relative AoA,
@@ -65,7 +72,7 @@ inline double vortex_strength(double aoa, double aoa_max, double load_factor,
 // frame's tip positions. `state` is the INTERPOLATED draw state (cosmetic).
 inline void vortex_update(VortexTrails& t, const sim::SimState& state,
                           double strength, double frame_dt) {
-    const auto tick_side = [&](std::vector<VortexPoint>& v, double side) {
+    const auto tick_side = [&](std::deque<VortexPoint>& v, double side) {
         for (VortexPoint& p : v) p.age += frame_dt;
         v.erase(std::remove_if(
                     v.begin(), v.end(),
@@ -77,7 +84,7 @@ inline void vortex_update(VortexTrails& t, const sim::SimState& state,
                 state.orientation * glm::dvec3{side * kVortexTipRight,
                                                kVortexTipUp, kVortexTipAft};
             v.push_back({tip, 0.0, strength});
-            if (v.size() > kVortexMax) v.erase(v.begin());
+            if (v.size() > kVortexMax) v.pop_front();  // O(1) ring drop
         }
     };
     tick_side(t.left, -1.0);

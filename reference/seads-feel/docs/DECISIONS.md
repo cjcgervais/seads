@@ -9,18 +9,6 @@ an earlier entry's resolution text (in particular, the v8 partial-reject entry's
 "restore the anchor / sustain" resolution paragraph is superseded by the weld + instant-snap
 rulings above it — no sustain mechanism exists in v9).
 
-**Deferred v10 candidate (Chad, 2026-07-29, after the Golden Felt Flight #3 session —
-his words):** "the only change I might make is an autolevel of the horizon after flying
-only mouse mode and doing split s and loops, the earth can take on a disorienting aspect
-(ie earth above or oblique) but the press of the spacebar cures all and keeps the
-reorientation manual and under control. It might be worth a future sandbox but I will
-defer for now." DEFERRED by his own ruling — reorientation stays MANUAL (the release
-snap is the cure). ⚠ For whoever picks this up: a continuous auto-level of the mouse
-basis is the S7-mouselevel BANNED class (three gate revisions, ended in full removal);
-v9's righting is edge-only precisely to honor that ban. Any v10 shape must be a discrete
-or gauge-legal mechanism designed backward from his felt spec, in its own sandbox, plan
-mode, one dial, Chad flies.
-
 **Deferred candidate recorded per the guard's strike (v9 plan):** with the nose as
 `orient_snap_dir`'s primary target, the ballistic/tail-slide guard inside it becomes moot —
 its removal is a FUTURE candidate only; v9 does not touch it.

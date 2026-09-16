@@ -143,12 +143,34 @@ control::ControllerParams load_controller_toml(const std::string& path,
     // rad/rad) — never rad() it; lean_max is an angle.
     c.lean_gain = require(root, "auto_level", "lean_gain");
     c.lean_max = rad(require(root, "auto_level", "lean_max"));
+    // S-leanlead: a dimensionless mix weight (never rad() it).
+    c.lean_lead = require(root, "auto_level", "lean_lead");
+    // S-leanlead-lateral: the lead's horizon-lateral-share gate. OPTIONAL
+    // (absent => OFF => the landed v14 ungated lead, bit-identical) -- the
+    // optional_bool/optional_double structural-off-switch shape, so an
+    // untouched toml keeps the flown tree. Both edges are dimensionless
+    // SHARES of the pointing error in [0,1] -- never rad() them.
+    c.lean_lead_lateral =
+        optional_bool(root, "auto_level", "lean_lead_lateral", false);
+    c.lean_lead_lat_lo =
+        optional_double(root, "auto_level", "lean_lead_lat_lo", 0.0);
+    c.lean_lead_lat_hi =
+        optional_double(root, "auto_level", "lean_lead_lat_hi", 1.0);
 
     c.blend_lo = rad(require(root, "regime", "blend_lo"));
     c.blend_hi = rad(require(root, "regime", "blend_hi"));
     c.bank_align_power = require(root, "regime", "bank_align_power");
+    // S-righthand: seconds, NOT an angle -- never rad() it. OPTIONAL
+    // (absent => 0 => the structural OFF arm, bit-identical legacy tree).
+    c.right_hand_rest =
+        optional_double(root, "auto_level", "right_hand_rest", 0.0);
     c.wings_level_band =
         require(root, "regime", "wings_level_band");  // cos units
+    // S-maninvert: the maneuver limb's inversion fade band, cos units like
+    // wings_level_band (never rad() it). OPTIONAL (absent => 0 => the
+    // structural OFF arm, bit-identical legacy tree) -- the
+    // optional_double structural-off-switch shape, so an untouched toml
+    // keeps the flown tree.
     // Kernel v5 rung C2b (S-holdline sag servo): pull_floor is a
     // DIMENSIONLESS fraction of the sag-servo demand, never rad().
     c.pull_floor = require(root, "regime", "pull_floor");
@@ -225,6 +247,16 @@ control::ControllerParams load_controller_toml(const std::string& path,
 
     c.horizon_recovery_rate = rad(require(root, "horizon_recovery", "rate"));
     c.horizon_recovery_settle = require(root, "horizon_recovery", "settle");
+    c.horizon_recovery_ease_in =
+        rad(require(root, "horizon_recovery", "ease_in"));
+    c.horizon_recovery_rest_dwell =
+        require(root, "horizon_recovery", "rest_dwell");
+    c.horizon_recovery_arm_min =
+        rad(require(root, "horizon_recovery", "arm_min"));
+    c.horizon_recovery_path_band =
+        rad(require(root, "horizon_recovery", "path_band"));
+    c.horizon_recovery_straight_max =
+        rad(require(root, "horizon_recovery", "straight_max"));
 
     c.aim_sensitivity = rad(require(root, "ui", "aim_sensitivity"));
     // MB-aim curve knobs: rates stay in device px/s (no rad conversion — they
@@ -371,10 +403,15 @@ control::ControllerParams load_controller_toml(const std::string& path,
     // window for a product bound to guard. The latch belongs solely to the
     // completion exits, whose clear scale is the stored exit err.)
     check(c.auto_level_rate >= 0.0, "auto_level_rate >= 0 (0 disables)");
-    // MB-right: delay must span at least one tick (a 0 delay would fire the
-    // righting the instant the mouse rests inverted — the S7-loop-invert
-    // "stays inverted" window would silently vanish); rate >= 0, 0 = off.
-    check(c.inverted_delay >= ap.sim_dt, "inverted_delay >= sim_dt");
+    // MB-right: delay >= 0. The old wall (>= sim_dt) existed to protect the
+    // S7-loop-invert "an inverted rest STAYS inverted" window — that window is
+    // REVERSED by the pilot ruling of 2026-08-06: inverted righting carries NO
+    // added delay, as soon as the hands rest the plane rolls level. A 0 delay
+    // therefore arms on the FIRST rest tick, deliberately; the rest condition
+    // itself (aim resolved within blend_lo, pursuit, past the knife-edge band)
+    // is the only wait left. rate >= 0, 0 = off (still the structural
+    // knob-off arm, and still the way to get the old "stays inverted" law).
+    check(c.inverted_delay >= 0.0, "inverted_delay >= 0");
     check(c.inverted_rate >= 0.0, "inverted_rate >= 0 (0 disables)");
     // MB dial tripwire (the "retune silently disarms" class): the righting
     // roll must stay the SLOW arm of the roll authority — past p_max the
@@ -388,6 +425,32 @@ control::ControllerParams load_controller_toml(const std::string& path,
     check(c.lean_gain >= 0.0, "lean_gain >= 0 (0 = decay to level)");
     check(c.lean_max >= 0.0 && c.lean_max <= rad(45.0),
           "lean_max in [0, 45] deg (a lean is a SHALLOW bank)");
+    // S-leanlead: a mix weight. Above 1 the roll limb would OVERSHOOT the
+    // live lean target (a lead past the target is a new oscillator).
+    check(c.lean_lead >= 0.0 && c.lean_lead <= 1.0,
+          "0 <= lean_lead <= 1 (0 = legacy held_bank wings-hold)");
+    // S-leanlead-lateral bounds. The edges are shares of the total pointing
+    // error carried by the horizon-lateral axis, so they live in [0,1], and
+    // the smoothstep needs a non-degenerate band (lo < hi, else its divide
+    // blows).
+    check(c.lean_lead_lat_lo >= 0.0 && c.lean_lead_lat_lo <= 1.0,
+          "0 <= lean_lead_lat_lo <= 1 (it is a share of the pointing error)");
+    check(c.lean_lead_lat_hi >= 0.0 && c.lean_lead_lat_hi <= 1.0,
+          "0 <= lean_lead_lat_hi <= 1 (it is a share of the pointing error)");
+    check(c.lean_lead_lat_lo < c.lean_lead_lat_hi,
+          "lean_lead_lat_lo < lean_lead_lat_hi (smoothstep needs a band)");
+    // Geometry tripwire (the "retune silently disarms" class -- same shape as
+    // the lean_gain crossover wall below). A pure-PITCH aim at bank phi reads
+    // share |sin(phi)|, and the deepest bank the lean itself can command is
+    // lean_max -- so unless lat_lo >= sin(lean_max) the gate is not fully
+    // closed across the whole shallow-bank band the runaway seeds in, and a
+    // later lean_max retune would silently re-open it. Shipped: sin(30 deg)
+    // = 0.5 == lat_lo exactly.
+    if (c.lean_lead_lateral) {
+        check(c.lean_lead_lat_lo >= std::sin(c.lean_max) - 1e-12,
+              "lean_lead_lat_lo >= sin(lean_max) (the gate must read 0 for a "
+              "pure-pitch aim at every bank the lean can command)");
+    }
     // Stability tripwire (MB-lean diff red-team P2-1, the "retune silently
     // disarms" class): the lean loop's crossover ~ lean_gain*g/V must stay
     // under the auto_level decay pole at the SLOWEST cascade speed (the
@@ -412,6 +475,12 @@ control::ControllerParams load_controller_toml(const std::string& path,
     // 2 for a deliberate over-coordination fly, never unbounded.
     check(c.line_hold_ff >= 0.0 && c.line_hold_ff <= 2.0,
           "0 <= line_hold_ff <= 2 (0 disarms the S-straightline pitch FF)");
+    // S-righthand: a hand-rest time. 0 is LEGAL (the OFF arm). The upper wall
+    // is the felt one: past ~2 s a hands-off inverted rest would sit belly-up
+    // long enough to read as broken, which is the 2026-08-06 ruling's point.
+    check(c.right_hand_rest >= 0.0 && c.right_hand_rest <= 2.0,
+          "0 <= right_hand_rest <= 2 (seconds of hand-rest before MB-right "
+          "has full authority; 0 = off)");
     check(c.wings_level_band > 0.0 && c.wings_level_band < 1.0,
           "0 < wings_level_band < 1 (fade band around the 90 deg knife-edge)");
     check(c.push_gate_bank > c.push_gate_bank_lo && c.push_gate_bank_lo > 0.0,
@@ -458,11 +527,14 @@ control::ControllerParams load_controller_toml(const std::string& path,
     // (dt/ramp_time >= 1 reaches full on the first held tick — the twitch the
     // ramp exists to remove, SPEC §9.5).
     check(c.ovr_ramp_time >= ap.sim_dt, "ovr_ramp_time >= sim_dt (SPEC §9.5)");
-    // Ease-back must be a real suspension window (> 0 — CQ2 mandates it) and no
-    // longer than 300 ms (CQ2's "<=300 ms"): past that the held aim would feel
-    // frozen long after the pilot came back to the stick.
-    check(c.freelook_easeback_time > 0.0 && c.freelook_easeback_time <= 0.300,
-          "0 < freelook_easeback_time <= 0.30 (SPEC §16 CQ2)");
+    // Ease-back window: 0 is now legal (pilot ruling 2026-08-06 — the 300 ms
+    // post-release mouse->aim suspension is RETIRED; since v9 the camera cut
+    // and the horizon roll are instant, so there is no easing basis left for
+    // the window to protect the aim from). The <= 300 ms cap stays: if the
+    // window is ever re-armed it must not leave the held aim feeling frozen
+    // after the pilot is back on the stick (CQ2's "<=300 ms").
+    check(c.freelook_easeback_time >= 0.0 && c.freelook_easeback_time <= 0.300,
+          "0 <= freelook_easeback_time <= 0.30 (SPEC §16 CQ2)");
     // Orient double-tap window: 0 disables the ORIENT verb structurally; when
     // enabled it must be a real, human-tappable window (a negative would be a
     // typo, an absurdly large one would fire on any two spaced taps).
@@ -485,6 +557,36 @@ control::ControllerParams load_controller_toml(const std::string& path,
           "horizon_recovery rate >= 0 (0 disables)");
     check(c.horizon_recovery_rate == 0.0 || c.horizon_recovery_settle > 0.0,
           "horizon_recovery settle > 0 when rate > 0");
+    // v13g ease-in: 0 is the legal legacy instant launch; negative is a typo.
+    check(c.horizon_recovery_ease_in >= 0.0,
+          "horizon_recovery ease_in >= 0 (0 = instant launch)");
+    // v13 rest-edge recovery (pilot ruling 2026-08-06): the hand-at-rest dwell
+    // before the standing up-debt is captured. 0 is legal (arm on the first
+    // still tick — the ruling's "as soon as the hands rest" taken literally);
+    // negative is a typo. No upper wall: a long dwell simply makes the
+    // recovery rarer, never unsafe (the debt is captured ONCE per rest edge
+    // and any aim motion cancels it).
+    check(c.horizon_recovery_rest_dwell >= 0.0,
+          "horizon_recovery rest_dwell >= 0");
+    // v13c arm gates (pilot fly-ruling 2026-08-06 fly-2): arm_min in [0, pi]
+    // (0 = every debt arms, the v13b law; > pi is unreachable and a typo);
+    // path_band > 0 when the mechanism is live — a 0 band can never observe
+    // aim==path through fp noise, which would silently disarm the whole
+    // recovery (the AT-15 silent-disarm class); path_band is structurally
+    // irrelevant when rate = 0.
+    check(c.horizon_recovery_arm_min >= 0.0 &&
+              c.horizon_recovery_arm_min <= std::acos(-1.0) + 1e-12,
+          "horizon_recovery arm_min in [0, 180] deg");
+    check(c.horizon_recovery_rate == 0.0 || c.horizon_recovery_path_band > 0.0,
+          "horizon_recovery path_band > 0 when rate > 0");
+    // v13d straightness gate: must clear the great-circle floor V/R or level
+    // cruise itself reads as "turning" and the recovery silently never fires
+    // (the AT-15 silent-disarm class). Floor derived from the airframe's
+    // redline over the world radius — config-relative, never a bare number.
+    check(c.horizon_recovery_rate == 0.0 ||
+              c.horizon_recovery_straight_max > ap.v_redline / ap.R,
+          "horizon_recovery straight_max > v_redline/R (the great-circle "
+          "floor) when rate > 0");
     check(c.aim_sensitivity > 0.0 && c.freelook_orbit_sensitivity > 0.0,
           "mouse sensitivities > 0");
     // MB-aim curve: knee < rate_hi keeps the ramp's denominator positive;

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "input/thumb_binds.h"
 #include "sim/state.h"
 
 // Raw mode (SPEC §5 / §11): device -> Inputs DIRECTLY, no instructor.
@@ -26,7 +27,8 @@ struct RawDeviceState {
 
 // Poll raylib devices once per frame (SPEC §10: sampled per frame, consumed
 // by every fixed tick inside the accumulator). frame_dt drives only the
-// held-key throttle rate.
-sim::Inputs poll_raw(RawDeviceState& device, double frame_dt);
+// held-key throttle rate. `binds` = config-sourced thumb codes (R4-FLY-7).
+sim::Inputs poll_raw(RawDeviceState& device, double frame_dt,
+                     const ThumbBinds& binds = {});
 
 }  // namespace input

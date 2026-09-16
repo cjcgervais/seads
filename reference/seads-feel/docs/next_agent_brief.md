@@ -1,3 +1,5 @@
+> **HISTORICAL (superseded 2026-07-08).** The current thread map is CLAUDE.md `## Threads` (world thread primary — SPEC §0 GOAL-1). Kept for the three-thread framing, Chad's words, and pointers.
+
 # NEXT AGENT — ultrathink brief (2026-07-07)
 
 > **UPDATE (2026-07-07, later): S8-drone LANDED.** The non-shooting AI target-drone fleet

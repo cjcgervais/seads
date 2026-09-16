@@ -1,0 +1,648 @@
+# SCARCE SKIES game-mechanic dials (Game_loop_idea/MASTER_PLAN.md; the tuning
+# contract: every felt/balance number the game mechanisms read lives HERE —
+# Chad tunes the game by editing this table and re-running, never by editing
+# logic). Grows a section per landed rung (R4 ground, Phase-2 fields, tunnel,
+# snowmachines, economy).
+
+[ground]  # R4 solid ground — touch-and-stick landing (sim/ground.h)
+enabled = true          # false = the pre-R4 bare-sphere world (A/B toggle)
+slope_limit_deg = 20.0  # Chad's stick rules it (terrain slope AND touchdown
+                        # attitude acceptance, both against the local terrain
+                        # normal). 15 clipped a normal flare's nose-up
+                        # (fly 2026-07-15); 20 clears a 10-12 deg flare.
+friction = 0.08         # PLACEHOLDER — rolling decel as a fraction of g
+                        # (must stay < T_max/(m*g) ~ 0.31 or a full-throttle
+                        # takeoff roll cannot accelerate; loader-enforced)
+max_sink_ms = 6.0       # gentle-contact sink ceiling [m/s]. 3.0 demanded a
+                        # <3.4 deg slope at a 50 m/s approach with no flare
+                        # assist — unlandable on the stick (fly 2026-07-15).
+                        # 6.0 accepts ~7 deg at 50 m/s; narrow it back down
+                        # as the touch develops.
+normal_probe_m = 60.0   # structural: terrain-normal finite-difference tangent
+                        # step [m] (~half a 118 m terrain quad)
+contact_height_m = 2.45 # CG height above the contact point [m]. GEOMETRIC
+                        # (fly 2026-07-15: "wheels one wheel height under the
+                        # road"): wheels bottom sits ON the physics terrain,
+                        # but road decks RENDER at facet+0.45 ([ribbons]
+                        # lift_m) — so 2.0 buried the tyres 0.45 in the deck.
+                        # 2.45 = wheels exactly ON the road deck, ~0.05 proud
+                        # of lake ice (deck 0.4), ~0.45 proud of bare fields
+                        # (reads as snowpack). Chad tunes on sight.
+brake_friction = 0.60   # v5 RECONCILIATION (2026-07-24): 0.35 -> 0.60 — the
+                        #   rung-D fighter engine (T_max 18000, T/W 0.612)
+                        #   OVERPOWERED the trainer-era brakes (friction sum
+                        #   0.43 < 0.612: a full-throttle brake-hold runup
+                        #   crept forward). Sum now 0.68 — brakes hold the
+                        #   arcade engine with ~11% margin; the R4g test pins
+                        #   this config-relatively. WAS (R4g, Chad's ask: "need a set of brakes
+                        # for the wheels") — EXTRA decel at full held brake (B),
+                        # fraction of g, on TOP of rolling friction. 0.35 stops
+                        # a 25 m/s rollout in ~6 s / ~75 m. Deliberately allowed
+                        # past the accelerate check: full brakes at full
+                        # throttle holding still IS the runup. Chad's stick.
+roll_align_rate_deg_s = 0.0  # OFF — Chad REVERTED the align (fly 2026-07-15):
+                        # "wings should damage on the terrain, not be forced
+                        # not to bank... there have to be consequences for bad
+                        # taxiing." 0 = the free-roll ground, bit-identical to
+                        # pre-align; the mechanism stays dormant in the kernel
+                        # if a future surface (ice?) ever wants it. The
+                        # CONSEQUENCE mechanisms replace it: wing_strike /
+                        # ground-loop / nose-over below.
+
+ground_ang_damp = 1.5   # tire/tailwheel rotational friction [1/s]. With the
+                        # q_att_floor dropped on the ground (controls need
+                        # AIRSPEED — rudder dead at a stop), this is what stops
+                        # residual rotation on a parked plane. Structural-ish.
+wing_halfspan_m = 4.95  # wingtip-strike geometry [m] (Bf 109 span 9.9). A tip
+                        # below the terrain = wing_strike event -> damage
+                        # (Chad's consequence ruling: wings bank freely and
+                        # DAMAGE on strike, never held level).
+ground_loop_lat_g = 0.55  # PLACEHOLDER — lateral-g the tires hold while
+                        # rolling; beyond it the plane ground-loops = CRASH
+                        # ('turn too fast -> rotate and crash'). Raise if
+                        # normal taxi turns kill, lower if hard turns feel
+                        # consequence-free. Chad's stick.
+brake_pitch_rate_deg_s = 30.0  # PLACEHOLDER — nose-over: braking pitches the
+                        # nose down at rate*brake*brake_friction (~10.5 deg/s
+                        # at full brake). Releasing settles the tail back.
+prop_strike_pitch_deg = 8.0  # PLACEHOLDER — prop clearance angle vs the
+                        # terrain plane; the nose below it while braking =
+                        # PROP STRIKE -> engine damage ('your propeller breaks
+                        # on the ground'). ~0.8 s of full braking at speed.
+noseover_full_speed_ms = 12.0  # PLACEHOLDER (R4-FLY-6, Chad: 'slow braking
+                        # still tips forward') — the nose-dip fades below this
+                        # ground speed (dip x min(1, speed/this)): a careful
+                        # crawl-stop cannot nose over, braking from speed
+                        # still bites. Raise if slow stops still tip; 0 = the
+                        # old unscaled dip.
+deep_penetration_m = 50.0  # T3 tunnel-wall collision (docs/tunnel_staging.md):
+                        # landing acceptance is a SURFACE law — it snaps the CG
+                        # radially up to the terrain contact radius. A state
+                        # deeper than this below that surface can only be a
+                        # tunnel-wall graze into solid rock (crossing the
+                        # tube/egg/chamber wall ~2000 m down with a level
+                        # attitude + near-zero sink), so it is a CRASH, never a
+                        # ~2 km teleport-landing. Must exceed contact_height_m
+                        # by a wide margin (unreachable by a real landing: one
+                        # tick of sink is sub-metre) and stay well under depth_m
+                        # so a deep graze always fires it. Loader-enforced in
+                        # (contact_height_m + 5, 500].
+
+[buildings]  # R4f building collision (Chad: "I go right through houses")
+collide = true          # false = buildings are ghosts (the pre-R4f world, A/B)
+inflate_m = 3.0         # PLACEHOLDER — widen every footprint radius [m]. The
+                        # baked collider radius is EQUIV-AREA (under-covers long
+                        # thin buildings) and the wingspan is not modeled; 3.0
+                        # trades a few near-miss false hits for catching most
+                        # real clips. Chad tunes on sight (0 = exact footprints).
+base_margin_m = 5.0     # prism lower-band slack [m]: a wide footprint's circle
+                        # can overhang a terrain dip its center doesn't see
+                        # (~3% shore ramps x up to 127 m radius); without slack
+                        # a rollout in that dip false-crashes. STRUCTURAL-ish;
+                        # raise only if valley taxiing near hilltop buildings
+                        # still kills.
+
+[fx]  # render-only burst dials (R4-FLY-6 touchdown feedback; no kernel reach)
+touchdown_ref_speed_ms = 40.0  # ground speed that maps to a FULL-size burst;
+                        # slower touchdowns scale down (floor 0.15 so a
+                        # feather-landing still puffs). Structural-ish.
+touchdown_intensity = 1.0  # PLACEHOLDER — overall touchdown burst scale
+                        # (particle count/size/brightness together), range
+                        # 0..2 (loader-enforced == the render's cap). 0 = no
+                        # burst; Chad tunes on sight.
+rolling_min_speed_ms = 3.0  # R4-FLY-7 (Chad: the splash "should last for the
+                        # duration of the landing until stopped"): the burst
+                        # RE-SPAWNS every ~0.6 s while rolling above this
+                        # ground speed (spray on water, dust plume on dirt),
+                        # dying out as you slow. Raise if slow taxiing kicks
+                        # too much dust; 0 never re-spawns (touchdown-only).
+
+[input]  # R4-FLY-7 — thumb-throttle raylib mouse-button codes. Windows
+                        # drivers disagree which code a physical thumb fires
+                        # (3 SIDE / 4 EXTRA / 5 FORWARD / 6 BACK). The HUD MB
+                        # readout (under the top help line) shows the code of
+                        # any held button — read it there, set these, re-run.
+                        # -1 = slot unbound.
+thumb_up_button_a = 4    # forward thumb: throttle up
+thumb_up_button_b = 5    #   (second code for split drivers)
+thumb_down_button_a = 3  # back thumb: throttle down, brake past zero
+thumb_down_button_b = -1 # default unbound — a speculative extra down-bind
+                        # can collide with a driver's forward code (the
+                        # R4-FLY-7 "won't taxi" suspect)
+
+[atmosphere]  # R6 — the AtmosphereField (MASTER_PLAN §3.C): air becomes a
+# SPATIAL quantity — a town "bubble" of breathable air you can fly OUT of.
+# 2026-07-26 CHAD ACTIVATED IT ("flip it"). The R6 fly HALT is LIFTED: the air
+# war is now PHYSICAL. Until this went true, env.atm was null, so
+# rebuild_conquest_bubbles no-op'd and sim::atm_frac_at ignored every bubble —
+# pump kills moved the map but nothing else. With it true the conquest domes,
+# the zero-sum transfer, and the T1 tunnel/black-stope full-air override are all
+# live. Set false to A/B back to the pure altitude-taper kernel.
+enabled = true          # ⚑ ACTIVATION IS CHAD'S (the R6 fly HALT): true makes
+                        # air spatial (thin ρ outside the bubble => thrust,
+                        # lift, AND control authority all starve together, so
+                        # momentum carries you out and you SAG back — the soft
+                        # wall EMERGES from the gradient, never a scripted
+                        # push); false = env.atm null, the altitude-taper
+                        # kernel bit-identically. The B key toggles it LIVE
+                        # in-app (this sets only the STARTUP state); the bezel
+                        # shows "BUBBLE" and a HUD plate reads the local air.
+                        # The single R6 TEST bubble is centered on the SPAWN
+                        # point, so you start inside and fly to the edge.
+deck_agl_m = 120.0      # full air below this height above the surface,
+                        # EVERYWHERE (the go-anywhere floor: you can still land
+                        # outside a bubble). Bare-sphere AGL in R6.
+deck_soft_m = 200.0     # deck fade width above deck_agl_m [m]
+# ★★★ RUNG E16 — WHICH SURFACE IS "THE SURFACE"? false (shipped) measures the
+# deck from the SPHERE, which is what R6 built on a bare planet and what the
+# code has done ever since; true measures it from the TERRAIN, which is what
+# the two lines above say it does and what the go-anywhere ruling needs.
+# Measured on assets/sudbury_dem.png (relief_scale 350 m): 69% of the surface
+# stands above deck_agl_m and 26% above the fade, so with false the breathable
+# floor is UNDERGROUND over most of the planet -- you cannot land outside a
+# bubble there, and an AI crossing between domes has no lane to fly (probe P-H
+# [.e16air]: the corridor is 100% breathable at 200 m and 3.1 km dead at 350).
+# ⚠ THIS IS A FLIGHT-MODEL CHANGE FOR CHAD TOO: it gives the whole planet the
+# low breathable lane the go-anywhere ruling always said it had. Measured on
+# probe P-H (a whole 22-minute match, this dial the only thing moving):
+# enemy terrain crashes 37 -> 18 (1.65 -> 0.80/min, UNDER his signed 0.94),
+# deaths in thin air 34 -> 0, raid-sortie crashes 19 -> 2, and the enemy got
+# BETTER at the same time (on-station 42.0 -> 46.2 s, both his pumps down).
+# WALK-BACK IS THIS ONE WORD: false.
+deck_terrain_relative = true
+bubble_radius_m = 6000.0    # test-bubble surface (great-circle) radius [m]
+bubble_ceiling_m = 4000.0   # dome height AMSL [m] (composes with the ~8 km
+                            # service ceiling — the lower of the two bounds)
+bubble_edge_soft_m = 1200.0  # horizontal edge fade [m]. KM-SCALE by design:
+                             # ~9 s of progressive mush at cruise. Sub-km reads
+                             # as a scripted wall (Fable-BEFORE §5). Chad's
+                             # stick tunes this at the fly (wider = mushier).
+bubble_ceil_soft_m = 600.0   # ceiling fade width [m]
+
+# S-domeround (docs/airdome_round_spec.md, Chad's 2026-08-09 ruling: "round
+# the domes in the shared field. Cylinders are not bubbles.").
+bubble_dome_exponent = 3.0   # superellipse roundness dial. 2 = true
+                             # ellipsoid dome, 3 = domed with a slight
+                             # shoulder (Chad's ship value), 8+ reads as the
+                             # old flat-topped cylinder within a tight bound.
+bubble_ceiling_volume_preserve = true  # derive the dome centre height H so
+                             # the dome holds the SAME air as the old
+                             # cylinder (H = bubble_ceiling_m / I(n), Chad's
+                             # ruling); false = bubble_ceiling_m IS the
+                             # literal centre height (a smaller-volume dome).
+
+[gravity]  # R5 — the Escape Ceiling (MASTER_PLAN §3.B): the designed g-taper
+enabled = false         # ⚑ ACTIVATION IS CHAD'S (the R5 fly HALT): true
+                        # fades gravity above h_g0_m so a redline vertical
+                        # zoom from 4 km JUST escapes (~238 vs 245 redline);
+                        # false = constant g everywhere, the frozen kernel
+                        # bit-identically. Below h_g0_m NOTHING changes
+                        # either way (full g through the fight band).
+                        # R5b: the T key toggles the field LIVE in-app (this
+                        # sets only the STARTUP state); the bezel title shows
+                        # "ESCAPE SKY" whenever the field is on.
+h_g0_m = 4000.0         # full gravity at/below this altitude [m]. Raising it
+                        # lifts the whole ceiling; loader floor 1000 keeps
+                        # the taper above all terrain. CHAD R5-FLY-2 RULING
+                        # (2026-07-15): 5000 -> 4000 ("lower the ceiling for
+                        # the escape to 4000m at like 100m/s" — the 3.B
+                        # design pair 5000/1500 needed a claw to ~8 km
+                        # before the escape took).
+sigma_g_m = 405.5       # falloff width above [m]. Together (4000, 405.5):
+                        # escape needs ~100 m/s at 4 km (Chad's number,
+                        # exact), ~222 at 2 km, ~243 at 1.5 km (a redline
+                        # zoom escapes from ~1.5 km up), ~297 from the deck
+                        # (unreachable — the deck stays safe). Wider =
+                        # mushier ceiling, narrower = sharper knife's edge.
+                        # Chad's stick tunes both at the fly.
+# R5e (Chad fly-4 RULING: "I want no return to be at 4000m at 100m/s"):
+# crossing E_spec = 0 with the field live IS the loss — app::tick severs the
+# controls that tick (dead stick, throttle-down; the fly-3 dive-recovery is
+# unrepresentable). No dial here: the threshold IS h_g0_m/sigma_g_m above.
+# Rescue: T (field off) frees the plane; a crash-respawn starts unclaimed.
+
+[tunnel]  # T1 — the Errington tunnel net (MASTER_PLAN §2.5; world/tunnel_net.h;
+# docs/tunnel_staging.md). The underground back door Errington<->Murray: full
+# air inside regardless of the bubble war, and the terrain-crash predicate
+# yields inside the volume (flying 2000 m below terrain is the point).
+enabled = true          # ⚑ ships TRUE on this branch (the tunnel is the
+                        # feature). false => env.tunnels null => bit-identical
+                        # to the frozen kernel (the R5/R6 structural-off
+                        # discipline). All dials below are FEEL dials — Chad's
+                        # stick tunes; code reads, never owns.
+# THE ELLIPTICAL BORE (T6b, Chad's fly ruling 2026-07-18 "wider and taller"): the
+# spine tube is an ELLIPTICAL cross-section — width/height are SEMI-axes, so the
+# bore is 2x these: 220 m wide x 180 m tall (was a 140 m circle). With the 20 m
+# floor that leaves ~160 m of vertical clearance. FEEL dials — Chad's stick.
+tube_width_m = 110.0    # horizontal SEMI-axis of the bore ellipse [m] (bore = 220 wide)
+tube_height_m = 90.0    # vertical SEMI-axis of the bore ellipse [m] (bore = 180 tall)
+depth_m = 1600.0        # depth below LOCAL terrain at the deepest [m] — T10/T11:
+                        # RETIRED as the plateau driver (the plateau is now the
+                        # arena APEX - breach_margin_m); kept as the pit/cover
+                        # sanity depth (mouth_sink/min_cover ride it)
+soft_m = 40.0           # atm blend band on the signed distance [m] (< min(width,height))
+ramp_frac = 0.3         # fraction of the path over which depth ramps in from
+                        # each mouth — depth is 0 exactly at both mouths, full
+                        # depth_m for the middle stretch. (0, 0.5]
+spacing_m = 150.0       # spine densification target node spacing [m]
+# THE FLOOR (T5a, Chad's ruling 2026-07-18: "I need to be able to define the
+# floor, not only the shape of the cut"): a FLAT floor raised floor_height_m
+# above the SPINE TUBE's lowest point, chord-truncating the circular cross-
+# section (perpendicular to LOCAL radial up at each station). Applies to the
+# spine tube only (ramp + corridor); the egg/chambers/connectors/bowl are
+# unchanged. 0.0 = OFF = bit-identical to no floor. At 20 m the floor chord is
+# ~98 m wide and the floor-to-crown clearance ~120 m. FEEL dial — Chad's stick.
+floor_height_m = 20.0   # flat floor raised above the tube's lowest point [m]
+# T11 — THE CORE WINDOW / T12 — THE SEALED CORE (Chad's rulings 2026-07-19,
+# superseding T10's concentric shell then the T11 core window). T11 was ONE
+# shallow ARENA ellipsoid with a CORE-WINDOW SHAFT to the glowing core. T12 (his
+# round-9 fly: "Okay lets cover up the core, the chamber seems well lit enough
+# without the core plus there are holes going to it and I can see through the
+# earth... make sure the chamber is filled over the core (we dont need to go that
+# deep, but lighting needs to be adequate").") SEALS the arena FLOOR: the
+# core-window SHAFT is GONE, the arena floor is solid rock, and the emissive core
+# render is GONE. The arena's own embers + radial core-key shading light it (no
+# visible core needed). cavern_core_m is KEPT as the buried |position| safety
+# floor (the global core intersection sd = max(sd, core_r - |p|) makes the deep
+# interior solid — the r->0 singularity guard; local_up / the S-ffrad curvature
+# ff both divide by |p|), NOT a visible light source.
+#   arena: oblate ellipsoid, horizontal semi 7350 x vertical semi 2600 (oblate =
+#     the escape ruling — no more "dive a little, climb ages"); center radius
+#     ~10975, apex ~13575 (1.5 km below mid terrain), floor ~8375 (SOLID rock
+#     below it — the sealed core cover).
+#   volume ~530 km^3 = ~80x the flown T9 egg. arena_a_m / arena_c_m are THE size
+#     dials. FEEL dials — Chad's stick.
+# T13 — CHAMBER CENTERING (Chad's spec S2: "the chamber must lie in the MIDDLE
+# between the two entrances — two proper tunnels meeting a central room").
+# AUDIT (uniform 300 m field): at arena_a_m = 7350 the wide oblate ellipsoid
+# reaches so far UP-BORE that the first arena-interior node fires only 3176 m
+# (E) / 2958 m (M) from the mouths while the breach-to-breach crossing spans
+# 5910 m — the "room" swallows most of both legs and dwarfs the tunnels. Shrink
+# the horizontal semi to 4200 m so the two bore legs and the room crossing are
+# comparable thirds (a central room fed by two proper tunnels). The vertical
+# oblate short axis (arena_c_m) and apex depth are unchanged. ONE-LINE REVERT:
+# arena_a_m = 7350.0.
+arena_a_m       = 4200.0   # arena horizontal semi-axis [m] (T13 centering; 7350.0 reverts)
+arena_c_m       = 2600.0   # arena vertical semi-axis [m] (oblate = escape ruling)
+arena_depth_m   = 1500.0   # arena APEX depth below mid-path local terrain [m]
+cavern_core_m = 2500.0     # buried |position| safety floor radius [m] (T12: the
+                           # global core intersection makes |p| < core_r SOLID —
+                           # the r->0 singularity guard; NOT a visible light
+                           # source since T12 sealed the core)
+breach_margin_m = 300.0    # the deep bore plateau sits this far BELOW the arena
+                           # APEX so the bore breaks fully through into the arena
+                           # [m] (>= tube_height + 100, loader-checked)
+# THE TWO SIDE CHAMBERS — one per faction's underground pump. T10: they RE-HANG
+# off their OWN bore (the egg is gone), a fixed offset ABOVE the breach into the
+# cavern (the game-loop pump hook preserved).
+chamber_long_m = 200.0  # side-chamber semi-axis along the bore [m]
+chamber_lat_m = 140.0   # side-chamber lateral semi-axis [m]
+chamber_vert_m = 120.0  # side-chamber vertical semi-axis [m]
+chamber_breach_offset_m = 800.0  # each chamber hangs off its bore this far
+                                 # above the breach into the cavern [m]
+connector_radius_m = 60.0  # the short connector tube bore<->chamber radius [m]
+# T13 (S1): the two pump pockets + their connectors are GATED OFF until the
+# pumps land — Chad's spec S1 wants a clear passage with no blind side-passages.
+# false => the chamber Pockets and connector Capsules are structurally absent
+# (SDF/mesh/lamps all skip them). true restores the T4-era side-chamber
+# behavior (the pump pockets return when the pump game-loop lands). FEEL/scope
+# dial — code reads, never owns.
+chambers_on = false
+# THE MURRAY BOWL (T4a): "murray mine is too narrow it should be an open egg...
+# make the opening a bowl mesh that has a nice big opening to fly into." A
+# truncated-cone open pit tapering from bowl_radius_m at the surface to the tube
+# radius at bowl_depth_m below, where the swept tube takes over.
+bowl_radius_m = 450.0   # the bowl opening radius at the surface [m]
+bowl_depth_m = 300.0    # the bowl floor depth below the Murray surface [m]
+# THE ERRINGTON ENTRY PIT (T6c, Chad's fly ruling: "the entrance looks opaque, not
+# a hole — it's a positive structure, not a recess"): the home mouth is now a
+# RECESS. The bore CENTER sinks mouth_sink_m below the local surface at the mouth,
+# and an open cut crater descends from the surface rim to the sunken bore opening
+# (the bore reads DARK in the pit wall/floor). Default ~ tube_height_m + 40 so the
+# crown (mouth_sink_m - tube_height_m below grade) sits ~40 m below grade. 0 => the
+# pit is OFF (the legacy flat-collar mouth).
+mouth_sink_m = 130.0    # bore-CENTER sink below the Errington surface [m]
+# THE MONOTONE DESCENT COVER (T6d, Chad: "it goes up... really hard to read where
+# to fly, I just die — it should be easier to go down"): the minimum rock the bore
+# CROWN keeps below local terrain along the descent (except in the mouth-pit/bowl
+# cut regions). The Errington leg NEVER gains radius (monotone by construction);
+# where terrain dips would violate cover the profile deepens locally.
+min_cover_m = 60.0      # min rock above the bore crown en route [m]
+# T13 — THE ENTRY APPROACH TRENCH (S3, Chad: "flying INTO the tunnel must be
+# fairly easy"). The Errington mouth is sunk mouth_sink_m behind the pit rim, so
+# a bore-tangent entry line clips rock BEHIND the pit before reaching the open
+# crater. A stepped open-cut trench extends UP-TANGENT from the pit (opposite the
+# underground route), entirely on the approach side and over NO tunnel (so the
+# T12 crown-see-through class cannot re-open). 0.0 => the trench is OFF
+# (structurally absent, bit-identical net). FEEL dials — Chad's stick.
+trench_len_m = 450.0    # trench reach up-tangent from the pit rim [m] (0 = OFF)
+trench_rim_m = 150.0    # trench open-cut rim radius [m]
+# T13 (B1) — THE SURFACE HEADFRAME + BULKHEAD COLLAR (Chad's round-10 call: a
+# pit-head structure over the Errington mouth "just like a real mine would"). A
+# VISUAL-ONLY steel-lattice sinking headframe (Sudbury-real Errington Mine No.3
+# silhouette: a tapering four-leg lattice tower with a sheave head house on top
+# + an inclined back-brace pair leaning over the pit) straddling the entry pit,
+# plus a low bulkhead collar ring at the pit rim (broken at the trench opening),
+# plus two red aviation beacons atop the head house (night findability). NO SDF
+# — planes fly THROUGH it (a deliberate scoped trade: the headframe is a
+# findability landmark, not a collision wall; the SDF stays the pit/trench
+# volume). headframe_on = false => the piece is structurally absent
+# (bit-identical mesh otherwise). Silhouette dials (leg spread, member section)
+# are code constants in render/tunnel_mesh.h. FEEL dials — Chad's stick.
+headframe_h_m = 80.0    # sheave head-house height above grade [m]
+headframe_on = true     # false = the headframe/collar/beacons are absent
+
+[conquest]  # the faction-bubble growth rung (world/faction_bubbles.h; Scarce
+# Skies MASTER_PLAN §4). Two ovals of breathable air, VALLEY (blue,
+# Onaping/Dowling -> Chelmsford/Azilda -> Boninville/Hanmer) and SUDBURY (red,
+# Creighton/Copper Cliff -> Sudbury -> Garson/Falconbridge), each a union of 3
+# circular sim::AtmosphereField bubbles. Destroying an enemy pump grows the
+# destroyer's OWN dome by these fractions of its baseline.
+enabled = true            # flag ACTIVATION IS CHAD'S HALT: false = growth
+                         # stays 1.0/1.0 forever (structural no-op); true lets
+                         # pump kills grow the winning faction's dome live.
+growth_radius_frac = 0.25   # ground-radius growth per enemy pump destroyed,
+                            # fraction of the baseline circle radius
+growth_ceiling_frac = 0.25  # ceiling growth per enemy pump destroyed,
+                            # fraction of the baseline atmosphere ceiling
+# 2026-07-26 CHAD RULING (the STRIKE-MISSION spec): the pilot flies VALLEY.
+# The whole maverick fleet is SUDBURY and therefore ALL hostile; their standing
+# mission is Murray tunnel -> black stope -> kill the VALLEY deep pump ->
+# Errington tunnel (due NW) -> the VALLEY (blue) surface pump. Chad's job is to
+# stop them and kill the two SUDBURY pumps. Flipping this to "sudbury" inverts
+# every one of those roles.
+#
+# ★★★ RUNG E13 ALSO HANGS OFF THIS KEY. Chad's ruling 2026-08-24: "We could
+# just increase the number of enemies now 2/1. We can be outnumbered and that
+# will increase the difficulty." The wing is no longer 5/5 — it is
+# **7 SUDBURY / 3 VALLEY** (combat/conquest.h kSudburyTeamSize), so flying
+# VALLEY means being outnumbered 7 to 3 with a thinner squadron behind you.
+# ⚠ SETTING THIS TO "sudbury" NOW PUTS YOU ON THE BIG TEAM and outnumbers the
+# AI instead. The flip already inverted every other role; this is one more.
+player_faction = "valley"  # "valley" | "sudbury" — which side the pilot flies
+# 2026-07-26 CHAD RULING (supersedes fly-2 ruling C): pump destruction SHRINKS
+# the victim faction's own dome, and it must go all the way to nothing. Each
+# faction has exactly TWO pumps (1 surface + 1 deep), so 0.5 per pump means:
+# one pump killed = HALF the bubble left, both killed = the bubble is GONE
+# (combat::kFactionScaleFloor is now 0.0, not 0.4).
+shrink_radius_frac = 0.5   # victim's radius_scale -= this on a pump death
+shrink_ceiling_frac = 0.5  # victim's ceiling_scale -= this on a pump death
+# 2026-07-25 fly-2 ruling D: seconds of sustained all-guns-on-target fire to
+# kill a pump. pump_max_hp = pump_kill_seconds * the live gun battery's DPS
+# (combat::derive_pump_max_hp) — config-derived, never welded to today's
+# gun table.
+pump_kill_seconds = 15.0
+# game-AI-R3 (Chad's ruling 2026-08-05, "the AI plays the game"): the fraction
+# of the PLAYER battery DPS ANY raider/striker (both factions, surface AND deep
+# pumps) deals while on-station. Retuned 0.15 -> 0.5 from the game-loop
+# certificate measurement: a raid orbit accrues ~30 s of on-station credit per
+# 10 min, so at 0.15 a pump effectively never fell to the AI (a ~33-minute
+# kill); at 0.5 an UNOPPOSED raid campaign takes a pump down in roughly ten
+# minutes — real pressure, still defendable by showing up (the raid pauses)
+# or killing the raider. Abstracted (no real enemy ballistics vs pumps).
+#
+# ★★★ RUNG E12.2 — RETUNED 0.5 -> 0.65 ON CHAD'S "YOU CAN ACTUALLY LOSE"
+# RULING (2026-08-23). This is the dial that decides how fast a pump falls ONCE
+# A RAIDER IS ON IT; E12.1's backfill is what decides how often one is. Both
+# were needed, and this one is deliberately second — the structural fix came
+# first so this is not paying for a hole.
+#
+# MEASURED on probe P-H (test/unit/test_conquest_match.cpp), a whole 22-minute
+# match replaying Chad's own signed tape 7, with the backfill ON:
+#     frac   player pumps down   first pump lost   deep pump left
+#     0.50        1 of 2            21.3 min           30%
+#     0.65        1 of 2            17.8 min            9%   <- SHIPPED
+#     0.80        2 of 2             6.2 min            0%
+#     1.00        2 of 2             6.2 min            0%
+# ★ 0.80 is a CLIFF, not a step: it takes his first pump at SIX MINUTES, which
+# is not "you can lose", it is "you have already lost". 0.65 puts the second
+# pump within 9% of dying at the buzzer — a match he can lose if he ignores it
+# and win if he goes home. ★ And P-H is ENEMY-FAVOURABLE against the real game
+# (its shipped arm kills a pump the real tape left at 32%), so the real number
+# is gentler than the table above, which is the direction to err in.
+# Unopposed kill time: pump_kill_seconds / raid_dps_frac = 15 / 0.65 = 23 s of
+# on-station, ~7.7 min of raid campaign. Walk-back is the four characters 0.5.
+raid_dps_frac = 0.65
+# ALL-VS-PLAYER FURBALL (Chad's ask, 2026-07-26: "MAKE THE AI CHASE AND KILL
+# ME, ALL OF THEM VS ME. MAKE THEM GOOD."). true = the WHOLE non-inert fleet,
+# either faction, hunts the player every tick (overrides the 5v5 team split,
+# the [combat] difficulty max_engaged cap, and the engage/disengage range
+# gate so a distant or sky-high drone still commits) and suppresses the
+# maverick tunnel-run diversions (app/main.cpp) so nobody breaks off mid-chase
+# for a bore run. false restores the pre-furball 5v5 conquest mode exactly.
+#
+# 2026-07-26 BACK TO TRUE (Chad: "have them come after me in the bubble ...
+# please get them to engage me").
+#
+# The reasoning that briefly set this false still stands IN THE FUTURE, but not
+# yet: the strike mission (docs/strike_mission_plan.md rung 1) is NOT BUILT, so
+# there is no sortie for the furball to cancel. False just bought the
+# max_engaged cap + the engage-range gate, which left most of the fleet
+# patrolling instead of hunting. True = every non-inert plane, either faction,
+# any range, commits to the player.
+#
+# WHEN RUNG 1 LANDS this must go false again, and the fleet's aggression has to
+# come from the mission state machine instead -- because true SUPPRESSES THE
+# TUNNEL RUNS (see above), which would silently cancel the whole sortie.
+# game-AI-R4 (Chad's fly ruling 2026-08-05): FALSE — real 5v5 teams. His
+# squadron fights WITH him (AI-vs-AI air war, pump raids, defense); the enemy
+# team fights him. true = the old all-hostile furball (kept as a toggle).
+all_vs_player = false
+# SUDDEN-DEATH MATCH CLOCK (Chad's ruling, 2026-07-26): the instant a faction
+# loses its LAST pump — its dome scale hits 0, the bubble is gone — that side is
+# ON THE CLOCK for this many seconds. Win outright before the buzzer (kill every
+# enemy maverick, or take all the player's planes) and you take the match; let it
+# run out and you lose. Armed ONCE, never re-armed, so a later second collapse
+# can't hand the first side a free extension.
+match_countdown_s = 600.0   # 10 minutes
+# FIX-F3 (docs/ai_phase2_fix_spec.md, tape-attributed 2026-08-06): the raid
+# pause latch (instructor_tick.h's raid_range_ok) used to read the FOE-
+# ASSIGNMENT engage_range/disengage_range (scenario.toml [combat], 6000/7000 m
+# -- sized for dogfight assignment), so an enemy raider fled the player's pump
+# while the player was still 6 km out -- unseeable, reads as "they don't
+# try". These are the raid pause's OWN dial, split from combat assignment:
+# the player must close inside raid_pause_engage_m (visual range of the pump
+# fight) before a raid suspends, and open back past raid_pause_disengage_m
+# before it re-arms. Loader-checked disengage > engage > 0.
+# FLAG FOR CHAD: 1500/2500 are FABLE'S defaults, pending his stick ruling.
+raid_pause_engage_m = 1500.0
+raid_pause_disengage_m = 2500.0
+
+# ---------------------------------------------------------------------------
+# RUNG E5 — REINFORCEMENT WAVES (CHAD'S RULING, 2026-08-20).
+#
+# ★ THIS CONSCIOUSLY SUPERSEDES THE R-ERA RULING `respawn_drones = false`
+#   ("conquest mode: no respawn — a killed maverick STAYS dead, an inert
+#   wreck"). That ruling is not a mistake being corrected; it is being
+#   overruled on new evidence. THE EVIDENCE: Chad's fly tape conquest_tape_1
+#   (2026-08-20) — the enemy strikers were all dead by 3:34 and the remaining
+#   13 minutes of the match were EMPTY sky. His ruling: keep 5v5 density, the
+#   match must never go empty, kills stay meaningful because the wave delay is
+#   EARNED BREATHING ROOM, not because the enemy runs out.
+#
+# A killed conquest pilot returns as a FRESH pilot (clean latches, full HP,
+# the SAME trait identity — his spawn_index still decides his patrol period,
+# his raid duty and his faction) launching AIRBORNE from his own faction's
+# home air, on the same shared placement law the crash relocation and the
+# scramble use. `respawn_drones` itself is UNTOUCHED: a wreck is still inert
+# the instant it dies, and at 0.0 below nothing ever brings it back.
+#
+# 0.0 = OFF = today's permanent death, bit-identical (the knob-off arm).
+reinforce_delay_s = 75.0
+#
+# ★ FLAG FOR CHAD — WHAT A WAVE DOES TO THE SCOREBOARD (the score/radius_scale
+#   question, answered by measurement of combat/conquest.h): a faction's
+#   radius_scale / ceiling_scale are moved by EXACTLY ONE routine —
+#   damage_pump(), i.e. pump deaths. NOTHING derives a dome from how many
+#   planes a faction has flying. So a reinforced pilot CANNOT re-inflate a
+#   crushed faction's bubble, and a wave never touches score, growth, shrink
+#   or the sudden-death clock. The one real coupling is the KILL ROSTER
+#   (mav_alive), and with waves on it decides exactly ONE thing: whether
+#   re-killing that pilot SCORES.
+#     true  (shipped) — the reborn pilot is on the books again, so every kill
+#                       you earn counts, life after life.
+#     false           — the scoreboard is a body count of DISTINCT pilots: a
+#                       slot scores once, ever, and re-kills are worth zero.
+reinforce_restores_roster = true
+#
+# ---------------------------------------------------------------------------
+# RUNG E6.6 — THE FINITE REINFORCEMENT POOL (CHAD'S RULING, 2026-08-20 midday,
+# on fly tape conquest_tape_2). His words: wave replacement kills victory-by-
+# elimination. ★ THIS AMENDS THE E5 RULING DIRECTLY ABOVE — "the match must
+# never go empty" stands, but not forever: each faction gets N wave revives per
+# match, and when a faction's pool is spent its waves stop and the ORIGINAL
+# victory-by-wipe path re-arms EXACTLY as written (nothing in the wipe route
+# changes; it is simply no longer vetoed).
+#
+#   -1  INFINITE — rung E5 exactly, bit-identical (the off-value).
+#    0  NO WAVES — pre-E5 permanent death.
+#    N  N revives per faction. Kill the wing N+1 times over and it is yours.
+reinforce_pool_n = 4
+#
+# ---------------------------------------------------------------------------
+# RUNG E6.4 — THE CRUSHED-DOME LEASH FLOOR. MEASURED on tape 2: the enemy
+# faction's radius_scale was crushed to 0.0 by 9:17 (both its pumps dead) and
+# its revived pilots sat at home for the rest of the match. The leash only fell
+# back to the surviving faction's dome when its own ellipse was LITERALLY
+# degenerate; a dome floored at kFactionScaleFloor is a live, tiny ellipse, so
+# containment faithfully pinned a whole wing inside a bubble that barely
+# exists — at home, in vacuum, out of the war.
+#
+# A faction whose radius_scale is BELOW this is treated as having no dome for
+# leash purposes, so its pilots are leashed to the enemy's air instead — the
+# same "confinement DRIVES the invasion" rule the extinct branch already runs.
+# 0.0 = today, bit-identical. 0.25 catches the whole crushed band.
+leash_min_radius_scale = 0.25
+#
+# ---------------------------------------------------------------------------
+# RUNG E6.5 — RELENTLESS RAIDS. ★ CHAD'S RULING OVERRIDES THE PHASE-2 RAID
+# PAUSE (FIX-F3, raid_pause_engage_m/raid_pause_disengage_m above). His words:
+# "they should relentlessly attack it and fight me at the same time, not fly
+# away to safety and then fight me. We are literally fighting for air here."
+#
+# true = a raider under player threat does NOT abandon the pump: the order
+# stands, the attack run continues, and the raider takes the gun shots the
+# geometry offers ([combat] raid_fight_in_place in scenario.toml is the
+# drone-side half). The raid_pause_* dials stay in this file, and their
+# hysteresis latch still runs, purely so this is one character to walk back.
+# false = the FIX-F3 pause, bit-identical.
+raid_no_pause = true
+#
+# ---------------------------------------------------------------------------
+# ★★★ RUNG E12.1 — THE RAIDER BACKFILL. CHAD'S RULING, 2026-08-23, on the
+# match he had just signed: "the ai is doing what it is supposed to, lets now
+# get out of easy mode and increase its ability to destroy pumps."
+#
+# THE DEFECT, MEASURED IN HIS OWN SIGNED TAPE 7 (not inferred): raid duty was
+# handed to a faction's top-2 AGGRESSION pilots by a ranking of the fixed trait
+# table, which never asks whether those two pilots are alive. The enemy's pair
+# (spawn 0 and 1) was dead 65% and 60% of that 22-minute match and PERMANENTLY
+# dead from 10:17 once the E6.6 pool was spent. The enemy still had three
+# aeroplanes flying for the last twelve minutes and not one of them carried a
+# pump order. His surface pump took ZERO damage after minute ten. That is what
+# "easy mode" was: not a weak offense, an offense that switches off.
+#
+# true  = raid duty is "my two angriest AVAILABLE pilots" — a dead raider is
+#         replaced by the next pilot down the same faction's aggression order.
+# false = the pre-E12 static designation, bit-identical.
+raid_backfill = true
+#
+# ★ AND THE ONE RULE THAT CHANGES BY ITSELF WHEN reinforce_delay_s > 0:
+#   VICTORY-BY-WIPE IS OFF. "The match must never go empty" and "you win by
+#   wiping the wing" cannot both be true — with waves live a faction cannot be
+#   wiped, so crowning VICTORY on a momentarily empty enemy roster would award
+#   a win the war has not produced. Set reinforce_delay_s = 0 and the wipe
+#   route comes straight back, bit-identical.
+#
+# THE WAR STAYS WINNABLE, two ways (both measured in probe P-E):
+#   1. Pump destruction still ends the match with waves on — a wave does not
+#      defend anything it was not already going to defend.
+#   2. A faction whose dome has shrunk to nothing has NO AIR TO LAUNCH INTO,
+#      so its waves stop: the shipped airborne policy refuses, the wreck stays
+#      where it fell, and the sudden-death clock runs out on it.
+# ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+[interact]  # L1 THE MILLWRIGHT LOOP -- the diegetic reach law
+# (docs/PLAN_20260901_game_loop_millwright.md §3; app/interact.h).
+#
+# Every key in this loop is a key AT A POSITION. These are the positions, in
+# metres, and they are the ONLY thing that decides whether J / F / O do
+# anything. Chad's ruling R5, 2026-09-01: "Sudburian stands and walks to the
+# snowmachine, gets on with a button ... fix the pumps by driving up, getting
+# off, then making the fix."
+sled_reach_m = 2.5      # walk this close to the snowmachine and J gets you on
+aircraft_reach_m = 3.0  # ... and this close to the parked aeroplane to board it
+gun_reach_m = 3.0       # the flak gun's approach mark (no gun on this branch --
+                        # the site kind exists, nothing registers one yet)
+dismount_side_m = 0.9   # how far LEFT of the machine's centreline he steps off
+dismount_stop_ms = 1.0  # you do not step off a snowmachine moving faster than
+                        # this [m/s]
+
+[repair]  # L1 registered the sites and the prompt; L2 owns the progress clock
+# and the only second writer of pump hp (combat/pump_repair.h).
+#
+# Chad's ruling R2, 2026-09-01: "the fix should take about a minute to full
+# restore." full_s is the time from ZERO HP to full, so a merely damaged pump
+# finishes sooner in exact proportion to the damage left in it.
+reach_m = 8.0  # stand this close (along the ground, to the pump's FOOT) to an OWN
+               # surface pump that is dead or damaged. 2026-09-06: 6 -> 8 with the
+               # pump house now standing on the ground, 12 m wide -- the prompt
+               # lights at its wall, an arm's length out (Chad: "it needs to come
+               # down").
+               # and F starts the fix
+full_s = 60.0  # seconds of SIM time from 0 hp to max_hp (never a frame clock)
+repair_points = 0  # score for putting a pump back. 0 = OFF and 0 SHIPS: Chad
+                   # has not ruled a number and an invented one would be a guess
+                   # wearing a dial's clothes.
+#
+# ★★★ L10 THE ENGINE FIX (Chad 2026-09-07: "allow the sudburian to fix the
+# airplane engine when it says engine out, the same way the sudburian can fix
+# the pump"). Its own pair, never the pump's: the two jobs share a key, a pose
+# and a law, and they share NO number.
+engine_reach_m = 5.0  # stand this close (along the ground, to the aeroplane's CG)
+                      # to work on its engine. Wider than [interact]
+                      # aircraft_reach_m = 3.0 because boarding happens at the
+                      # cockpit and the wrench happens at the nose, and he must be
+                      # able to stand clear of a wing.
+engine_full_s = 45.0  # seconds of SIM time from a DEAD engine to a whole one. NOT
+                      # the pump's 60: the pump's minute is Chad's ruling about a
+                      # thing with a match clock running against it, and a parked
+                      # aeroplane has no such race. A dial, not a ruling.
+
+[spawn]  # L3 WHERE THE PLAYER IS BORN (plan §4.3; app/spawn_policy.h)
+#
+# Chad's ruling R4, 2026-09-01: "knowing from flying it's almost always death
+# spawning in where we do, so the ability to fix a pump should be allowed
+# through respawn straight into the snowmachine from a set distance away from
+# the pump."
+#
+# The machine is set down this far from the pump ALONG THE SURFACE, on the
+# bearing from the pump toward your own faction's bubble centre -- i.e. on YOUR
+# side of it -- and facing the pump, so the objective is on screen from the
+# first frame. Open question 3 for Chad: is 300 m the right ride?
+sled_dist_m = 1000.0
+# ... and the aeroplane is parked this far to the machine's right, grounded and
+# stopped, so a snowmachine spawn never costs you the aircraft. Same 5 m gap the
+# KEY_J mount seed leaves between the two bodies.
+aircraft_beside_m = 5.0

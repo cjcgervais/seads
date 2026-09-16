@@ -11,38 +11,1196 @@
 # Angles in DEGREES at this boundary only (converted to radians in the loader).
 # Distances in METERS. Grayscale/strength values are luminance fractions in [0,1].
 
-[sky]
-# Mercury-silver newsreel sky (docs/world_build_plan.md P1 step 1). NOT a flat
-# value: a minimal 2-stop zenith->horizon gradient the water mirrors (a flat sky
-# reflects a constant => no lake beacon). The full per-pixel glow is P4.
-silver              = 0.82      # base sky luminance
-gradient            = 0.25      # zenith->horizon 2-stop gradient strength
+[atmosphere]
+# The little-planet sky (docs/little_planet_plan.md Stage 2; supersedes [sky]).
+# SPACE-FIRST (RULING, Chad 2026-07-08, flown): overhead is near-black SPACE so the
+# celestial layer (stars/moon/sun) reads against it; the atmosphere is only a THIN
+# silver rim hugging the horizon. MONOCHROME at a frozen epoch: the horizon BAND is
+# blended day<->dusk<->night by SUN ELEVATION over local_up; the band fades to
+# sky_space by view elevation. Plus an exp-shell haze, a night legibility floor,
+# dither. Color scatter (Rayleigh/Mie) + the weather variable arrive in Stage 3.
+sky_space           = 0.02      # zenith/overhead = near-black SPACE (celestial backdrop)
+sky_band_top_deg    = 3.0       # silver rim THICKNESS above the planet limb (thin arc; fly-dial)
+sky_day             = 0.60      # horizon-BAND day luminance (silver; dimmer = more transparent)
+sky_dusk            = 0.30      # horizon-band luminance through the dusk band
+sky_night           = 0.05      # horizon-band night luminance
+dusk_lo_deg         = -8.0      # sun elevation below which night fully sets in
+dusk_hi_deg         = 6.0       # sun elevation above which full day holds
+night_fill_min      = 0.05      # THE legibility floor (starlight/airglow) + night GROUND ambient
+ground_day_gain     = 1.60      # ground diffuse gain at full sun (Stage 3b: day = albedo*(night_fill
+                                # + gain*ndl); night side falls to night_fill. Decoupled from the
+                                # disc sun_intensity so day-ground brightness dials independently)
+horizon_definition  = 0.08      # max sky<->ground luminance step at the limb
+dither              = 0.004     # twilight/night gradient dither (anti-banding)
+# Haze density at FULL overcast (Stage 3 weather gate). The per-frame effective
+# haze fed to the shader is weather_haze(t_cel) * this: clear weather (~70% of
+# the time) => ~0 (dark-starry, the space-first sky untouched); light haze
+# (~0.35 of the weather amount) => ~0.3 here; overcast => ~this. Supersedes the
+# old always-on haze_density_light whisper (the [[haze-rare-not-envelope]]
+# placeholder the weather variable REPLACES). Fly-dial: overcast strength.
+haze_overcast_density = 0.90    # haze density at full overcast (weather=1) [0,1]
+haze_scale_m        = 2300.0    # exp-shell haze scale height
+# Atmospheric SCATTERING (Stage 3) — the ONLY colored sky, and only when hazy.
+# The whole contribution is x the current haze amount (uWeatherAmt), so clear
+# weather (~70% of the time) stays EXACTLY dark-starry (planes are the primary
+# chroma). Rayleigh BLUE with the sun high; a Mie ORANGE forward-scatter HALO on
+# a low sun (the sun halo Chad removed in 3a returns here as physics). Both are
+# zero-gated below the horizon so night-under-overcast reads grey, never colored.
+# Cheap single-scatter, NOT a physical model. Fly-dials: strength (overall punch),
+# mie_g (halo tightness — higher = tighter/hotter), the two tints (hue).
+scatter_strength    = 1.0              # overall scatter gain (x haze amount); 0 = off
+mie_g               = 0.66             # Henyey-Greenstein forward asymmetry [0,0.95); turned
+                                       #   DOWN 0.80->0.66 to soften the sun glare/bloom (~3x
+                                       #   dimmer forward-halo peak) — Chad's fly-dial 2026-07-09
+rayleigh_tint       = [0.45, 0.66, 1.25]  # desaturated blue, sun high (turned UP ~25% for more blue)
+mie_tint            = [0.80, 0.36, 0.16]  # orange sunset halo, sun low (trimmed with the glare)
+# S-sunglare (Chad's fly 2026-08-09: "the suns glare is too intense"). These
+# three were BAKED CONSTANTS inside the scatter GLSL; the S-sungate fix (which
+# raised the low-sun weight from 0.057 to ~0.60) turned the old 3.2x dusk boost
+# into a ~10-17x over-bright blaze, because that boost had been tuned to
+# compensate for the very gate defect that got fixed. mie_halo_gain is THE
+# glare knob - turn it DOWN if the sun still flares, UP for more blaze.
+mie_halo_gain       = 0.30      # overall sun-forward halo gain (THE glare dial)
+mie_dusk_boost      = 1.0       # extra halo as the sun drops: x(1 + this) at low sun
+mie_rim_lift        = 0.18      # broad low-elevation warm lift (separate from the halo,
+                                #   so trimming glare does not flatten the horizon band)
+
+# S-airdome (docs/bubble_atmosphere_spec.md, Chad's 2026-08-09 ruling): the
+# atmosphere lives ONLY in the faction bubbles (+ the global low deck), ALWAYS
+# on there (no weather gate) — render::AirField's optical-depth march over the
+# SAME sim::AtmosphereField the plant flies. Outside every bubble/deck (the
+# vacuum gap, high above the deck) it stays near-black space, unchanged.
+#
+# QUALITY FIX PASS (docs/airdome_report.md, 2026-08-09): the spec's starting
+# numbers were never dialed and produced a ~12:1 imbalance — a 2.4-2.6 km
+# zenith chord inside a dome (tau_scale_m=12000 => tau~0.22 => airAmt~0.20,
+# too thin to read blue) against a 30+ km horizon chord (tau~2.5 =>
+# airAmt~0.92, saturated) that then got pinned to a GREY uSkyDay lift
+# (air_haze_density=0.85) instead of carried by color. Retuned by eye against
+# docs/airdome_shots/: tau_scale_m down ~4.6x so the zenith reaches
+# airAmt~0.55-0.75 at 2 km inside a dome; air_haze_density down ~3.4x so the
+# grey lift reads as a gentle veil, not the dominant sky value; aerial_gain
+# down ~2.9x so terrain stays clearly visible through the dome, never milk.
+air_haze_density   = 0.25   # always-on in-air haze density (was 0.85 - grey wash)
+air_weather_gain   = 0.40   # how much a weather cell thickens air on top. RAISED 0.30->0.40
+                            # (Chad 2026-08-09, "I didnt see any weather in the bubbles"):
+                            # the squall's haze contrast was subtle, and with mie_tint_day
+                            # now 0 the cream/sepia white-out risk that held this at 0.30 is
+                            # gone. Prior note, still the guard rail: 0.55 washed to a
+                            # white-out, so keep this well under that.
+tau_scale_m        = 2600   # path length of unit air = 1 optical depth (was 12000)
+march_max_m        = 55000  # sky ray march cap (was 90000 - domes are ~35km)
+march_steps_sky    = 20     # was 14 (6.4km stride vs 1.2km soft edges banded)
+march_steps_ground = 6
+aerial_gain        = 0.35   # ground extinction gain (was 1.0 - terrain went milk)
+mie_tint_day       = [0.0, 0.0, 0.0]      # the WHITE scatter — OFF (Chad, 2026-08-09:
+                                          # "lets lose the white scatter" / the daytime
+                                          # whitewash-with-glare). mieTint =
+                                          # mix(mie_tint_day, mie_tint, lowSun), so zeroing
+                                          # the DAY end leaves the dusk orange blaze
+                                          # untouched: high sun = pure blue Rayleigh, low
+                                          # sun = the blaze. Restore [0.92,0.94,0.98] to
+                                          # bring the white back.
+
+[weather]
+# The WEATHER VARIABLE (docs/little_planet_plan.md Stage 3). A pure deterministic
+# function of celestial time t_cel returning a haze amount in [0,1] (0 = clear,
+# ~0.35 = light haze, ~1 = overcast), gating the [atmosphere] haze above. RULING
+# (Chad 2026-07-08, [[haze-rare-not-envelope]]): CLEAR dominates — ~70% clear /
+# 25% light haze / 5% overcast. Fable-vetted (measured 69/25/5 over 2M samples):
+# three INCOMMENSURATE-prime-period sines (the fronts) + a smoothstep gate that
+# hard-zeros the low band (=> clear plateau). Chad ruled the DYNAMIC-ARENA tempo
+# (2026-07-08): fastest front ~197 s ~3.3 min, so a front can roll in mid-fight.
+# Seam-safe (t_cel only, no clock); the debug ]/[ scrub wheels weather for free.
+#
+# TUNING: gate_lo/gate_hi are THE distribution knobs (raise gate_lo => more
+# clear; lower gate_hi => more overcast). The periods set TEMPO, not the mix.
+# Keep the periods incommensurate (primes) — commensurate periods repeat on a
+# short cycle and can SYNC weather to sunset (never pick multiples of day_period).
+period1_s           = 1499.0    # slow front (~5 days at the 300 s day)
+period2_s           = 547.0     # mid front (~1.8 days)
+period3_s           = 197.0     # fast front (~0.66 day ~3.3 min)
+weight1             = 0.5       # amplitude weights, SUM = 1 (the bell width)
+weight2             = 0.3
+weight3             = 0.2
+phase1              = 3.6       # fixed phases; t=0 (spawn) reads CLEAR exactly
+phase2              = 1.7       # (distribution-invariant — only the spawn look)
+phase3              = 4.2
+gate_lo             = -0.05     # smoothstep gate low edge: signal below => clear (0)
+                                #   S-bubbleweather: LOWERED 0.12 -> -0.05 (Chad's "more
+                                #   frequently"). The budget is now active a majority of the
+                                #   time instead of ~30%. SPAWN-CLEAR IS PRESERVED and is the
+                                #   binding constraint on this dial: s(0) = -0.098 with the
+                                #   shipped phases, so gate_lo must stay ABOVE -0.098 or t=0
+                                #   no longer reads exactly clear. Raise back toward 0.12 for
+                                #   rarer weather.
+gate_hi             = 1.10      # high edge > 1: peak only APPROACHES overcast
+
+[weather_cell]
+# The LOCALIZED WEATHER FIELD (docs/weather_seasons_plan.md W2). RULING (Chad
+# 2026-07-12): weather is LOCALIZED — "we don't get overcast but microsystems
+# that might pop up." The [weather] scalar above becomes the storm BUDGET (how
+# much weather is active); this block decides WHERE on the sphere it lands: a
+# FIXED golden-spiral lattice of cells, each ACTIVATED by the budget through an
+# ordered threshold (never multiplied — Fable P0-1), combined by soft-OR. NO
+# WIND — centers are fixed, squalls pulse in place. budget == 0 => field == 0
+# everywhere (the ~70% clear + spawn-clear inherit). W2a feeds the field at the
+# eye's ground-track into the ONE uWeatherAmt scalar (all six consumers agree,
+# zero fork); W2b will evaluate the identical field per fragment. The structural
+# math lives in render::weather_cell.
+cell_count          = 24        # # microsystem cells on the sphere (>=1). More => finer patchwork
+inner_deg           = 8.0       # full local haze within this angle of a cell center (deg)
+outer_deg           = 16.0      # falloff to 0 by this angle (MUST exceed inner_deg)
+thresh_lo           = 0.05      # per-cell activation thresholds spread across [lo,hi] in (0,1):
+thresh_hi           = 0.65      # a lo cell hazes at a modest budget, a hi cell needs near-overcast
+                                #   (S-bubbleweather: band NARROWED 0.15/0.95 -> 0.05/0.65 so more
+                                #   cells are live at a typical budget — Chad's "more micro events")
+env_width           = 0.15      # smoothstep width in BUDGET a cell fades in over (>0; C1 in budget)
+
+# S-bubbleweather (Chad's fly, 2026-08-09: "add more weather as micro events
+# that happen more frequently within the bubble"). The keys above place cells
+# over the WHOLE SPHERE — but the domes cover only ~8% of it, so ~2 of 24 cells
+# landed in breathable air and the rest of the storm budget was spent on cells
+# in vacuum that the air gate then zeroed. These keys drive the ANCHORED
+# lattice instead: cells packed INSIDE each dome, at a squall scale sized to a
+# bubble. The sphere lattice above remains the fallback when there are no
+# bubbles at all (so a non-conquest world still gets weather).
+bubble_cell_count   = 16        # microsystem cells per dome (>=1). Sized by measurement:
+                                #   at 8 these small cells covered no more of a dome than the
+                                #   old big sphere cells did — see render/weather.h
+bubble_inner_deg    = 2.5       # full local haze within this angle (deg; ~655 m at R=15 km)
+bubble_outer_deg    = 6.0       # falloff to 0 by here (~1.6 km) — a ~3 km-wide squall
+bubble_fill_frac    = 0.80      # fraction of the dome radius cell centres spread over, (0,1].
+                                #   <1 keeps squalls off the fading rim where air is thinning
+
+[seasons]
+# The WEATHER SEASON framing (docs/weather_seasons_plan.md W1). Winter => snow,
+# Spring => rain, Summer/Autumn => dry (W3). DISTINCT from the [celestial]
+# declination season. RULING (Chad 2026-07-12): the season is a RANDOM DRAW at
+# every spawn (no day-long timing system) — but SETTABLE to a static season for
+# building the winter-only game loop. Precedence: env SEADS_SEASON >
+# static_season (below) > smoke default > the weighted random draw.
+static_season       = "winter"  # "random" | "winter" | "spring" | "summer" | "autumn"
+                                # RULING (Chad, 2026-08-09): "lets make the default winter from
+                                # now on for this game loop" — Scarce Skies is a WINTER world.
+                                # This outranks the deterministic smoke default (Summer), so
+                                # --smoke screenshots now show the same season Chad flies; that
+                                # matters, since the smoke-is-Summer mismatch is exactly what hid
+                                # the dry-season precip bug from the S-skyfix A/B shots.
+                                # Winter also turns on W4 ground snow-cover, not just snowfall.
+                                # Set "random" to restore the four-season draw.
+weight_winter       = 1.0       # random-draw weights (each >= 0, SUM > 0). Equal
+weight_spring       = 1.0       # weights => a uniform draw over the four seasons.
+weight_summer       = 1.0       # Bias the mix by raising/lowering a weight
+weight_autumn       = 1.0       # (e.g. weight_winter = 3 for a snow-heavy world).
+
+[precip]
+# PRECIPITATION (docs/weather_seasons_plan.md W3). Season-gated (Winter => snow,
+# Spring => rain, Summer/Autumn => dry) AND weather-gated: it only snows/rains
+# where a localized W2 weather cell is active at the eye, fading as you leave.
+# A world-anchored jittered lattice (flakes stay put in world space and STREAM
+# past the plane as you fly) whose only visible motion is the fall along local-up
+# (NO wind — Chad's ruling; no horizontal advection). The box follows the eye
+# with a radial boundary fade. MONO/silver: snow reads white, rain grey. The
+# structural math lives in render::precip_sample. SEADS_NO_PRECIP=1 = A/B bypass.
+enabled             = 1          # A/B toggle: 0 = dry, 1 = season-gated precip
+cell_size_m         = 3.0        # world lattice spacing == flake spacing (m). Smaller = denser
+box_half_m          = 21.0       # half-extent of the eye-following box / fade radius (m)
+wrap_fade           = 0.12       # vertical wrap fade fraction [0,0.5) — C0 hides the fall reset
+color               = [0.90, 0.93, 0.97]   # near-white mono flake/streak tint (low-sat -> silver)
+# Snow (Winter): round soft flecks, slow gentle drift.
+snow_size_m         = 0.18       # flake radius (m) — toned down from 0.28 (Chad: too big / in-your-face)
+snow_rate_hz        = 0.20       # fall cycles/s (fall speed = cell_size_m * this; slow)
+snow_opacity        = 0.75       # alpha at full weather intensity [0,1]
+# Rain (Spring): thin grey streaks along local-up, fast near-vertical fall.
+rain_size_m         = 0.05       # streak half-width (m)
+rain_streak_m       = 1.30       # streak half-length along local-up (m)
+rain_rate_hz        = 1.50       # fall cycles/s (fast)
+rain_opacity        = 0.55       # alpha at full weather intensity [0,1]
 
 [water]
 # Mirror-silver lakes (§2, §6 bold #0): analytic sky reflection, no render-to-texture.
 reflectivity        = 0.90      # mirror strength of the sky in calm water
 sparkle_sharpness   = 200.0     # specular pow() exponent for the sun sparkle
 min_lake_m          = 350.0     # authored lake floor (landmask ~46 m/texel; keep >300 m)
+surface_lift_m      = 0.4       # dedicated lake mirror-mesh: radial lift above the flattened lakebed.
+                                # R4e: the mirror grid re-baked 250 m -> 100 m, so its facet sag fell
+                                # ~1.04 m -> ~0.17 m and the lift drops 1.2 -> 0.4 (the deck no longer
+                                # forces the half-sunk stance). MUST exceed the tessellation sag (the
+                                # offline bake asserts this). If lakes show holes/shimmer at grazing
+                                # angles, raise toward 0.7. Fable ★4. (Rivers reuse this lift.)
+# Procedural STAR sparkle reflected in the water (lakes + rivers). Night-gated + haze-
+# dimmed; single-sourced in the planet water branch (a soft hashed point per ~15% of
+# reflected-dir cells, scattered by a per-location ripple so a starfield reads). NOT the
+# real starfield — a procedural reflection (won't match real star positions). 0 = off.
+star_reflect        = 0.5       # reflected-star brightness (additive on the mirror) [0,1]
+star_density        = 220.0     # reflected-star cell density (cells per unit reflected dir; higher = more)
 
 [ground]
-relief_scale_m      = 600.0     # theatrical radial displacement at full-white heightfield
+relief_scale_m      = 350.0     # theatrical radial displacement at full-white heightfield
+                                # (Chad flew 1000/5x as too steep+jagged — Sudbury is rolling
+                                # Shield; ~1.8x gentle, detail returns via the M2 normal map.
+                                # MUST match offline sudbury_config.RELIEF_SCALE_M)
 field_scale_m       = 200.0     # farmland/bush patchwork cell (the known-size ruler)
 use_procedural      = 1         # A/B toggle: 0 = keep Earth DEM, 1 = procedural Sudbury
+# W4 SEASONAL GROUND (docs/weather_seasons_plan.md W4): a WINTER snow-cover tint on
+# the LAND albedo (a shader lift, no terrain re-bake — toggles instantly with the
+# static-season override for the winter-only loop). Whitens flat ground toward snow,
+# MASKED off water (lakes stay dark mirror) and reduced on steep slopes (rock faces
+# keep grey). Only active in Winter (0 otherwise). The night --smoke baseline
+# brightens under snow (physically right; expected).
+winter_snow_cover   = 0.85      # winter snow amount [0,1] (0 = no snow, terrain as-is)
+snow_albedo         = 0.92      # mono snow target the land whitens toward [0,1]
+snow_slope_lo       = 0.55      # flatness dot(N,localUp) below which slopes shed snow [0,1)
+# ★ S1 LAKE ICE. The lakes were still a summer MIRROR in a permanently-winter
+# world. Applied like snow — an albedo change BEFORE lighting, so terminator /
+# moon-fill / aerial survive — then the mirror is DAMPED, not deleted (real ice
+# keeps a weak sheen, and a hard branch would fork the shared river path).
+#
+# ★ ice_albedo MUST stay below snow_albedo, and load_world.cpp enforces it.
+# §6b.2 makes this plane the drivable ice and §3.5 punches through it, so
+# "where does the lake end and the shore begin" is a survival read for the
+# sled. Equal values erase the shoreline. Current separation 0.92 - 0.78 = 0.14.
+ice_albedo          = 0.78      # frozen-lake albedo [0,1] (MUST be < snow_albedo)
+ice_reflect_frac    = 0.18      # sky-mirror strength kept under winter [0,1]
+ice_glint_frac      = 0.25      # sun/moon/star glint kept under winter [0,1]
+# ★★ S1b WINTER NIGHT (Chad, 2026-08-10): "it should just lose brightness at
+# night, but the stars and moon should be reflecting off the snow and ice making
+# it white. That's the beauty of a winter night." Before this, snow and ice fell
+# to albedo*night_fill and read as if they had MELTED — the world went back to
+# looking like summer the moment the sun set.
+#
+# night_glow is a NEUTRAL lift (never a tint: snow must lose BRIGHTNESS, not
+# change HUE) applied to snow and ice only, scaled by how far below the horizon
+# the sun is. Physically the right term, not a cheat — snow at albedo ~0.9
+# returns ~9x the starlight/skyglow that summer ground does, and snow/sky
+# multiple scattering compounds it. night_fill alone cannot express that,
+# being a flat floor that knows nothing about what it lights.
+# ★ MULTIPLIES ALBEDO — it is an illumination term, not a flat lift. The first
+# attempt added a constant, and that was the wrong FORM, not just too small a
+# number: a constant raises snow and dark rock equally, greying the scene toward
+# the middle, so it can never make snow white without also lifting everything
+# that should stay black. Multiplying albedo separates snow (0.92) from bare
+# rock (~0.1) about 9:1 for free — a white ground carrying near-black verticals,
+# which is what a winter night actually looks like and what §2.5 needs.
+#
+# MEASURED A/B, deterministic night smoke frame, ground band, HUD chroma cut.
+# p75/p95 track OPEN SNOW; the mean is dragged down by the dark trees, which are
+# SUPPOSED to stay dark — judging "is the snow white" off the mean is exactly
+# what made the first pass look adequate when Chad could see it was not:
+#     night_glow   mean lum   p75 snow   p95 snow
+#        ~0         0.2194     0.2685     0.2908    <- the melted-looking bug
+#         0.35      0.3471     0.4893     0.5195
+#         0.55      0.4199     0.6189     0.6505
+#      >> 0.75      0.4879     0.7360     0.7686    <<
+#         0.95      0.5433     0.8212     0.8572
+# 0.75 puts open snow at ~0.74-0.77 — reads WHITE — while the mean stays 0.49
+# because the trees hold their dark. Drop to 0.55 if it reads too bright.
+# ★ COOL, not neutral — and the tint is doing real work, not taste. Two
+# independent reasons agree: moon/starlight IS cooler than sunlight (snow under
+# a moon reads blue-white), AND the post split-tone deliberately warms
+# highlights (split_hi = [1.07,1.01,0.90], the flown silver look). A NEUTRAL
+# night light measured R/B = 1.13 on open snow — visibly CREAM, against Chad's
+# "snow needs to stay WHITE". The post pass is a game-wide flown choice and is
+# NOT touched; this pre-compensates for it. load_world.cpp enforces b > r.
+# ★ CHAD'S FLY FINDING 2026-08-11: "snow is a mid grey at night... snow is
+# always white even at night". Raised x1.357 from [0.70,0.75,0.84], cool ratio
+# preserved EXACTLY. The old value could not reach white unaided:
+#     glow = albLum 0.85 x night_glow 0.745 x winterSurf 0.85 x nightAmt = 0.538
+# so moonless open snow topped out at 0.58 BEFORE sky_aerial mixed it toward the
+# night sky with distance -- 0.35..0.50 from altitude, i.e. mid grey. Note
+# winter_snow_cover 0.85 enters TWICE (once inside albLum, once as winterSurf),
+# a quadratic penalty capping the glow at 72% of its dial.
+# ★ WHY THE OLD VALUE CERTIFIED AS "WHITE": the A/B table below was measured on
+# a frame WITH MOON FILL (~+0.21 lum). [moon] fill_lo = 0.45 zeroes the fill for
+# roughly half the lunar cycle, so Chad flew an unsubsidized night and saw the
+# real number. Re-run that A/B at moon phase < fill_lo, never above it.
+# At 1.013 lum: moonless snow = 0.0425 + 0.85x1.013x0.85 = 0.77 (their own table
+# calls 0.74..0.77 "reads WHITE"); full moon saturates toward 1.0, correct for a
+# moonlit snowfield. Components > 1 are legitimate for an illumination GAIN and
+# load_world.cpp enforces only (>0, b>r), which this satisfies.
+night_glow          = [0.95, 1.02, 1.14]  # COOL snow/ice night light (0 = the melted-looking bug)
+# The SECOND cause of the same report: ice was mirroring the near-black night
+# sky, which dragged it blue-black — a hue shift a brightness floor cannot
+# explain. The sky-mirror drops further after dark, while the star/moon GLINTS
+# are deliberately LEFT ALONE, because those reflections are exactly what Chad
+# asked to keep.
+ice_night_reflect_frac = 0.35   # extra sky-mirror damp on ice after dark [0,1]
+# Snow sparkle (Chad, twice: snow "appears to sparkle" in moon AND starlight).
+# A per-cell glint term, night-only, on snow/ice. Starlight sparkle is
+# DELIBERATE (kStar in the shader) -- it must NOT be moon-gated, Chad
+# explicitly wants it. 0 disables the term entirely.
+snow_sparkle        = 0.4    # night glint amplitude on snow/ice (0 = off)
+snow_sparkle_sharp  = 120.0  # glint exponent (higher = smaller, rarer points)
+# ★ FACE-DARK (Chad's fly 3, 2026-08-11): "the really steep slopes need to be
+# even blacker so it stands out more." Past the shed law's full-shed slope
+# ([snowpack] barren_slope_hi_deg) the rock is already bare, so the steepest
+# barren faces darken the ALBEDO itself toward void-black. Render-only art --
+# the depth law / drive surface are untouched.
+# ★ Fly 4 (2026-08-11): "the blackest parts are not black enough" -- deepened
+# 0.65 -> 0.85 (steep faces now land ~0.02 albedo).
+barren_face_dark        = 0.95   # albedo kill at the ramp's end [0,1]
+barren_face_dark_hi_deg = 20.0   # full face-dark at/above this macro slope
+# ★ FACE-MOTTLE (Chad's fly 5): "smooth and shiny black... the most steep
+# parts need to be mottled a lot." A flat face-dark multiply crushes the baked
+# mottle's ABSOLUTE range (x0.05 leaves 1-3 DN -- invisible), which is why the
+# steepest faces read as smooth paint. The baked mottle's BRIGHT patches now
+# RESIST face-dark by this fraction: grooves stay void-black, charcoal patches
+# survive, so the steepest rock is the MOST mottled. 0 restores the flat kill.
+barren_face_mottle      = 0.6    # bright-mottle resistance to face-dark [0,1]
+
+# ============================================================================
+# [snowpack] -- ★ THE SNOWPACK FUNCTION (WINTER_LAW 2.2), S2
+# ============================================================================
+# depth = f(slope, aspect, curvature, elevation, drainage_accumulation),
+# analytic and globe-wide, evaluated in world/snowpack.cpp off the ONE height
+# field. There is no snow raster and there never will be: a Sudbury-sized
+# raster cannot cover a planet, and a function derived from radius_at() cannot
+# fork from the terrain the way a second asset would.
+#
+# ★ THIS BLOCK IS THE RIDE-FEEL DIAL FOR THE WHOLE WINTER GAME (LAW 2.1c).
+# The driven surface is terrain + depth; because depth loads in concave
+# curvature and scours on convex, that sum is a curvature-weighted SMOOTHING of
+# the DEM. So winter is the low-pass filter, the DEM needs no micro-relief term
+# (INV-2), and how the ground FEELS is tuned here -- depth resolution is the
+# dial, height resolution is not. Tune the sled here, never in the terrain.
+#
+# ★ THE GAINS WERE MEASURED, NOT GUESSED. offline_tool/measure_snowpack.py
+# evaluates these terms over the shipped DEM. On 79,847 land samples at a 40 m
+# probe the terrain reads slope p50 3.6 deg / p95 21.1, curvature p95 0.047 /
+# p99 0.197, drainage proxy p95 0.309. With the values below that lands
+#     depth  p5 0.37  p50 0.77  p95 1.14  p99 1.75 m
+#     2.56% of land bare (< 0.10 m), 0.59% deeper than 2 m
+# and the homogenizer claim measures -7.76% rms curvature on terrain+depth vs
+# terrain -- the law's claim, quantified. Raising curv_gain deepens the
+# smoothing monotonically (-5.3% at 2.0, -7.8% at 4.0, -10.7% at 8.0), which is
+# exactly what "this function is the dial" means. Re-run that script after any
+# change here and put the numbers in the commit.
+# ★ R5 ROW 9 — SHADOWS ON SNOW (docs/snow_R5_immersion_ledger.md ROW 9,
+# option (c): receiver-side analytic occluder proxies in the planet shader —
+# no shadow map, no decal, no drape). Look dials ONLY: caster geometry is
+# MEASURED in code (render/shadow_casters.h — aircraft_node_specs box_dims +
+# sim SledParams), the penumbra comes from [celestial]
+# sun_angular_diameter_deg (the SHIPPED 1.40 — distance-proportional softness,
+# the descent-sharpening landing cue), and SEADS_SHADOWS is the run dial
+# (0 kills the row exactly: the app leaves the caster list empty and the
+# shader early-outs on the count).
+#
+# strength/tint shape only the DIRECT-SUN term inside a shadow; the
+# night-fill ambient survives by construction. At strength 1.0 with this tint
+# the full umbra sits at ~38% of the sunlit field at a high sun — inside the
+# real-snow 30-50% band — and the tint is COOL (b > r, loader-enforced): the
+# ribbons.h:37-47 ruling, darkened snow is darker AND bluer, never grey.
+[shadows]
+enabled              = true
+strength             = 1.0             # occluded fraction of direct sun at
+                                       # full umbra [0,1] (x SEADS_SHADOWS)
+tint                 = [0.30, 0.36, 0.52]  # full-umbra direct-sun multiplier
+                                       # (sky-blue shadow; lum ~0.36)
+underground_margin_m = 2.0             # casters deeper than this below the
+                                       # drive surface (the tunnel network)
+                                       # cast nothing (fence 5)
+
+[snowpack]
+base_m              = 0.85      # depth on flat, mid-elevation, uncurved ground
+slope_shed          = 0.85      # fraction shed at slope_full and beyond [0,1]
+slope_full_deg      = 45.0      # a cliff holds no snow
+curv_gain           = 4.0       # ★ metres of depth per unit concavity -- THE
+                                # homogenizer dial. Measured sweep above.
+curv_probe_m        = 40.0      # finite-difference step for slope + curvature
+elev_gain_per_km    = 0.35      # more snow higher up
+elev_ref_m          = 300.0     # depth == base_m at this elevation
+aspect_lee          = 0.30      # +/- fraction of base_m at full lee / windward
+wind_dir            = [1.0, 0.0, 0.0]   # prevailing winter wind (planet frame);
+                                # its tangential part is the local wind
+drain_gain          = 0.9       # ★ the creeks. LAW 2.2's "deepest in the
+                                # drainage lines" -- a LOCAL CONVERGENCE PROXY
+                                # (concavity/slope, the TWI shape), not a D8
+                                # flow accumulation, which cannot be evaluated
+                                # pointwise on a globe. 2.2 already accepts the
+                                # resolution asymmetry: creeks near home.
+drain_slope_eps     = 0.02      # rad; keeps that quotient finite on flat ground
+depth_max_m         = 4.0
+
+# ★ OWED TO THE BLACK-ROCK AGENT AT S2 (LAW 6c.1), and now paid. Their shader
+# carried a PROVISIONAL `snowCover *= (1 - 0.75*barren)` because there was no
+# depth field to ask. The physics in it is real -- barren ground sheds snow --
+# so it is ABSORBED here rather than deleted, at their value. INV-9: they
+# supply `barren`, we own `depth`, and after this there is one exposure field
+# instead of two.
+# ★ CHAD'S FLY FINDING 2026-08-11 ("reads too light"): a LINEAR shed could not
+# make black rock at ANY field value. `barren` is a COVERAGE product whose
+# MEASURED median on land is 0.212 (p90 0.541), so k=0.75 linear shed only ~16%
+# of depth typically -- and the floor depth*0.25 = 0.19 m at the signed 0.77 m
+# ambient made `bare_rock_depth_m` 0.10 UNREACHABLE, i.e. RockOutcrop was dead
+# code. The shed is now a SATURATING curve; the thresholds are derived, not
+# dialled (see world/snowpack.h for the derivation).
+k_barren            = 1.0       # depth *= (1 - k_barren * smoothstep(lo,hi,barren))
+barren_shed_lo      = 0.10      # ceiling of semi-barren valley refugia: they KEEP snow
+barren_shed_hi      = 0.60      # min a fully-killed mapped crest carries: full shed
+
+# ★ THE SLOPE GATE (Chad's fly rulings 2026-08-11 x2). He flew the k=1.0 shed
+# and ruled: flat barren ground should be snow-covered; sloped/steep barren
+# faces should be the blackest ("black as the slag dump hill").
+# GATE(slope) = flat + (1-flat)*smoothstep(x_lo,x_hi,1-cos(slope)) is the
+# SECOND factor of the shed, single-sourced into the shader via
+# render::set_barren_shed_law (INV-9). The thresholds are MEASURED at the
+# macro (mesh/probe) scale -- see the derivation in world/snowpack.h; the
+# shader keys them on the MESH normal, never the 4 m normal map.
+barren_slope_lo_deg    = 8.0    # below this, the landform reads wintered
+barren_slope_hi_deg    = 12.0   # at/above this, the barren shed is full
+barren_flat_shed_frac  = 0.10   # the gate's FLOOR on dead-flat ground -- 0
+                                # would erase the hero layer's lobes on flats
+
+# ICE. ★ INV-8: the landmask alpha is FRACTIONAL, not 0/1. The depth blend is a
+# LERP across the one-texel shore feather (that feather IS the shore
+# transition); only the surface CLASS thresholds. One field, two consumers,
+# exactly one of them thresholds.
+ice_snow_m          = 0.25      # wind-swept snow lying on lake ice
+water_class_frac    = 0.5       # fraction above which the class is LAKE ICE
+
+# CORRIDORS (LAW 2.3, 2.4b, 2.4c). ★ No width lives here. The corridor
+# half-width is RECOVERED from the drawn ribbon vertices at load
+# (world/linework.h), so INV-6 -- "the render ribbon width and the physics
+# hard-pack corridor width read the SAME number" -- holds by construction and
+# a re-bake that changes a width moves the physics with it.
+trail_pack_m        = 0.12      # groomed hard pack: flat, buttery, thin
+corridor_search_m   = 90.0      # linework query radius
+corridor_edge_m     = 4.0       # corridor surface -> ambient feather (NEVER 0:
+                                # a zero-width feather is a step, and a step
+                                # stops the machine dead)
+
+# ★ THE SNOWBANK (LAW 2.4c, RULED 2026-08-10). Roads are plowed and read BARE;
+# the snow the plow moves piles at the edges as banks, and the banks are BROKEN
+# at intersections and driveways so a road crossing is a DECISION, not a wall.
+# Hitting one at speed must send the machine AIRBORNE -- and that must be
+# EMERGENT (contact patches reading terrain + depth over a resolved ramp),
+# never a scripted launch.
+#
+# ★ This is where LAW 2.1c's "depth resolution is the dial" acquires a NUMBER.
+# Both faces are smoothstep, so the peak gradient of each is exactly
+# 1.5*height/width -- 0.65 on the inner face, 0.33 on the outer -- and
+# load_world.cpp checks both against bank_max_grade at load, exactly, rather
+# than sampling for it.
+road_bare_m         = 0.02      # scraped, not zero: sparks need a surface and
+                                # the contact patch needs something to sit on
+# *** SK-1a (Chad 2026-08-24): the CLASS BLEND width, metres of lateral
+# distance over which a contact patch ramps between the corridor class and
+# the off-corridor class instead of STEPPING. The step is what made one ski
+# grazing a road edge throw the machine into 1.34 rotations at 24 m/s with
+# no steer input (rho_eff 0 -> 260 under ONE ski = a pure yaw+roll couple).
+# 0.0 = OFF, bit-identical. Measured on `seads_sled_probe bankgraze`:
+#   blend 0.0 -> yaw -482.7 deg, roll 166.6 deg, ROLLED
+#   blend 1.0 -> yaw  -11.6 deg, roll  52.7 deg, no rollover
+# and 6/10 m/s unchanged. AWAITING CHAD'S DRIVE -- not ruled.
+class_blend_m       = 0.0
+
+# *** ROAD-REPAIR (2026-09-09): THE CORNER BLEND. Metres of EXCESS distance --
+# how much further the runner-up centreline is than the winner -- over which
+# LineNetwork::nearest blends the competing corridors' half-widths and feet
+# instead of STEPPING between them when the argmin flips. corridor_eval feeds
+# `e = dist - half_w` into bank_profile, so a step in half_w IS a step in bank
+# depth: crossing the bisector between a 5.5 m major and a 3.0 m minor moved
+# the bank 2.5 m sideways in one sample. That is the jag Chad saw from the
+# street (census_after_sink.md 5 item 2).
+# 0.0 = OFF and BIT-IDENTICAL (a branch, not 0-width blend arithmetic).
+# Outside the band the winner is still uniquely the nearest, bit-for-bit.
+# 2.0 m measured on the full census (docs/road_repair/census_after_corners.md).
+corner_blend_m      = 2.0
+
+bank_height_m       = 1.30      # crest height ABOVE ambient
+bank_rise_m         = 3.00      # edge -> crest (inner face; grade 0.65)
+bank_fall_m         = 6.00      # crest -> ambient (outer ramp; grade 0.33)
+bank_max_grade      = 1.20      # ~50 deg. The rideability bound: above this a
+                                # bank stops the sled instead of launching it.
+bank_gap_m          = 14.0      # amplitude fades to 0 within this of a junction
+
+# SURFACE CLASS dials (LAW 2.3, 6c.2).
+barren_class_frac   = 0.5       # 6c.2: barren > 0.5 => Rock outcrop ...
+bare_rock_depth_m   = 0.10      # ... AND our snow must actually be gone there
+
+# ★ PHASE W3 (docs/ground_interaction_spec.md). RULED-GI-1: Chad's A/B --
+# drive the drawn facet; default OFF. ★ ON for the GI drive (Chad's call,
+# 2026-08-13: "drive the exact drawn mesh") -- flip to false to A/B back.
+hf_faceted_ground   = true
+
+# ============================================================================
+# [snowhill] -- ★ THE ST. CHARLES SNOW MOUNTAIN (WINTER_LAW 3.6b), rung SF1
+# ============================================================================
+# Chad's ruling 2026-08-12: "a big 20 ft high conical pile of snow with 2 or 3
+# different assemblages of peaks, like a snow mountain", right-centre of the
+# playground BEHIND St. Charles elementary (Chelmsford), for jumps. It is
+# DEPTH, never DEM height (INV-2): world/snowhill.cpp adds these peaks to the
+# snowpack inside r_cut_m of the baked anchor (world/snowhill_geo.gen.h --
+# lat 46.58204, lon -81.18875, ~55 m east of the school). The hero mesh
+# (assets/heroes/snowhill_stcharles.glb) is GENERATED from the same function
+# by tools/snowhill_mesh -- re-run it after ANY change here, or the drawn
+# mountain forks from the driven one (test_snowhill's conformance leg gates).
+#
+# ★ MEASURED SHAPE (scratchpad tune_hill.py, docs/snowhill_sf1_spec.md): max
+# 6.20 m; max grade 0.767 (37.5 deg); ascent lane due N toward the rail-trail
+# mouth, 31.5 deg max; big face DUE SOUTH, 37.3 deg; kicker line (x=-11 local)
+# composite 3.86 m, 23.7 deg max, SOFT LIP (lip rotation topples the machine
+# off a sharp small kicker at speed -- measured; sy 5.0 is the fix). The
+# steep axis is N-S so the straight jump run lands ON the fall line (probe
+# shape v2, rot -45, rolled on a cross-slope landing), and the N shoulder
+# OVERLAPS the main peak -- the run line is measured MONOTONE from crest to
+# yard (probe shape v3, shoulder at y=9.5, made a col that bucked and rolled
+# the machine at 9 m/s BEFORE the crest).
+[snowhill]
+enabled             = 1
+r_cut_m             = 60.0      # depth is EXACTLY ambient beyond this (bit-==)
+feather_m           = 15.0      # C1 window width inward from r_cut
+class_min_m         = 0.30      # hill above this reads Surface::TrailMain
+pack_cap_m          = 0.30      # compacted pile: only this much snow is LOOSE
+                                # (sinkage/roost); the geometry keeps the full
+                                # sum. The 3.6b "carry speed up it" dial.
+# peakN = [dx_m, dy_m, h_m, sx_m, sy_m, rot_deg]  (local metres: x=E, y=N)
+peak1               = [ 0.0, 0.0, 4.6, 4.3, 7.5,  90.0]  # main crest: steep
+                                                          # axis N-S (fall-line
+                                                          # jump run due S)
+peak2               = [ 0.0, 7.0, 1.9, 6.0, 10.0,  0.0]  # broad N shoulder =
+                                                          # the ascent backside
+peak3               = [-11.0, -4.0, 2.4, 4.5, 5.0,  0.0]  # the kid-built KICKER
+                                                          # (SW, open yard beyond
+                                                          # = the landable jump)
+
+# ============================================================================
+# [bank_mesh] -- ★ OREO SNOWBANKS (WINTER_LAW 3.6c), rung SF2-BANKS
+# ============================================================================
+# Chad's ruling 2026-08-12, from the first street drive (the banks were
+# force-only invisible): "put gravel in the snowbanks -- that's what snowbanks
+# are, mixed with sand, and the plows build the banks and it looks like oreo
+# ice cream." The bank SHAPE has no dial here: every strip vertex samples
+# SnowpackField::depth_at (render/bank_mesh.cpp -- the drawn bank IS the
+# driven bank, the SF1 one-fn-two-consumers pattern). The bank LIFT has no
+# dial either: it single-sources [ribbons] lift_m (SF2 red-team F8). These are
+# the resample/burial/paint dials only.
+[bank_mesh]
+enabled             = 1
+station_m           = 16.0      # longitudinal resample (m); 8 doubles startup
+skirt_m             = 6.0       # outer burial ramp run (F3: no terrace edge)
+skirt_bury_m        = 0.5       # skirt ring sinks below the drawn terrain
+speckle_density     = 0.22      # fraction of ~22 cm grains showing gravel
+speckle_dark        = 0.55      # how dark a gravel fleck bites [0,1]
+crest_smudge        = 1.2       # extra fleck density at the crest band (the
+                                # plow's dirtiest throw = the oreo crumb line)
+min_amp_m           = 0.20      # CLEAR THE INTERSECTIONS (Chad's street
+                                # drive): stations whose measured bank
+                                # amplitude gap-fades below this emit nothing
+                                # -- junction gaps become real holes, not
+                                # white film across the crossing. 0 disables.
+                                # ★ ROAD-REPAIR: the station it culls is now
+                                # EMITTED FIRST as a taper cap and the strip
+                                # breaks after it, so the hole is still a hole
+                                # but its lip is no longer a vertical wall up
+                                # to bank_height_m tall.
+# ★ ROAD-REPAIR (2026-09-09) -- the two dials the "jagged banks" round added.
+# Both trade STARTUP VERTICES for continuity, and both have an identity value
+# that reproduces the pre-repair mesh exactly (skirt_rings 1, chord_tol_m 0).
+skirt_rings         = 3         # the burial skirt is drawn as this many
+                                # sub-rings across skirt_m, with the strip's
+                                # excess over the terrain walking to the burial
+                                # on a smoothstep. At 1 the whole ~1.7 m fall
+                                # lands in ONE quad as a crease -- invisible
+                                # while the strips were unlit, a hard black
+                                # line down every roadside now that they are.
+# *** ROAD-REPAIR (2026-09-09): the SHORT station length used where the
+# junction gap is fading -- census_after_banks.md 2's named follow-up. The
+# taper cap that closed the junction wall spends the whole fall over ONE
+# station; at 16 m that is a 4 deg ramp the eye likes and a > 0.5 m step the
+# metric does not. 4.0 m spends it over three or four stations instead.
+# 0.0 = OFF and the resampler is BIT-IDENTICAL. The WINDOW is [snowpack]
+# bank_gap_m -- there is deliberately no second dial for it here.
+junction_station_m  = 4.0
+# *** ROAD-REPAIR, THE ONAPING ROAD-EDGE PASS (2026-09-10), RUNG 2 -- THE
+# DRAWN APRON. Chad, 2026-09-08: "the roads are bad there and some drop offs
+# coming off the road you dont see." Rung 1 measured it
+# (docs/road_repair/onaping_edge.md): within 2.5 km of the Valley pump 12.3 %
+# of plowed stations have a metre or more of TERRAIN falling away outward
+# across the 6 m burial skirt. The hill is real and stays; what was wrong is
+# that the drawn strip STOPPED at the skirt, so past it the only thing the eye
+# was shown is the planet mesh -- which off the corridor sits BELOW the surface
+# the machine is actually placed on. The apron continues the strip outward
+# along drive_radius_at (the sled's own ground function, sampled) until the
+# planet mesh and the driven surface agree, then buries on the skirt's law.
+# apron_m = 0.0 is the IDENTITY: no apron strip, not one vertex moved.
+# SEADS_NO_APRON=1 forces it to 0 for a seat A/B without a rebuild.
+apron_m             = 12.0      # max apron reach past the skirt (m) -- TWO
+                                # burial skirts, i.e. 18 m past the bank foot:
+                                # the whole band a machine leaving the road
+                                # crosses before it is committed. MEASURED:
+                                # the tolerance below is met inside 12 m at
+                                # only 14.6 % of qualifying stations, so this
+                                # CAP is the operative bound and it is chosen
+                                # on its own merits, not on the tolerance.
+                                # 0.0 is the IDENTITY -- no apron strip is
+                                # built and not one existing bank vertex moves
+                                # (arm C and arm D both report 8,024,055 bank
+                                # verts). SEADS_NO_APRON=1 is the same thing
+                                # without a rebuild, and it is the seat A/B.
+apron_tol_m         = 0.25      # stop where |drawn planet - driven| is under
+                                # this; past there the mesh is telling the
+                                # truth and more geometry would be bling
+apron_min_drop_m    = 0.50      # a station's own side needs this much terrain
+                                # fall across the skirt before it gets an
+                                # apron at all -- flat ground pays ZERO
+                                # vertices
+chord_tol_m         = 0.05      # the cross-section ring set is refined by
+                                # bisection until no chord of the composed
+                                # profile misses the curve by more than this.
+                                # The shipped 7-knot set missed by 0.178 m (a
+                                # visible facet on a 1.30 m bank); 0.05 buys
+                                # 12 knots and 0.045 m. 0 disables refinement.
+
+# ============================================================================
+# [cold] -- ★ COLD IS POWER (WINTER_LAW 3.7), rung SC1
+# ============================================================================
+# Chad's ruling, from the trail: snowmachines run faster when it is cold --
+# the trail sinters harder, less sinkage, less plow drag, higher top speed.
+# ONE clock (the same sun-elevation scalar that drives the night art) drives
+# air_temp_c(sun_sin_elev, night_phase); hardness(t) is the ONE multiplier on
+# the Bekker pack stiffness (world/cold.cpp; consumed by sim/sled.cpp). h is
+# ONE-SIDED [1.0, h_max] -- warm never softens the pack (that would reopen
+# the §2.2a burial-saturation failure on signed terrain); warm's performance
+# loss lives entirely on mu_kin (drag), never on hardness.
+#
+# ★ MEASURED, RED-TEAMED (Game_loop_idea/vehicle_program/SC1_COLD_SPEC.md v2,
+# scratchpad coldrig/ rig.cpp/rig2.cpp). h_max = 1.35: the p99 drainage line
+# (1.75 m) still bogs at the snap through 1.40 and un-bogs by ~1.45 --
+# deleting a signed behaviour the S3 tune deliberately preserved.
+[cold]
+enabled             = 1
+t_ref_c             = -15.0     # ★ THE REFERENCE -- the S3 sled dials (Bekker
+                                # constants, c_snow_pa, mu_kin...) are tuned
+                                # AT this temperature. hardness(t_ref_c) == 1.0
+                                # exact; enabled=0 is bit-neutral off at this
+                                # temperature too.
+t_day_max_c         = -5.0      # warmest, mid-afternoon
+t_night_c           = -22.0     # baseline night (not the snap)
+t_snap_c            = -30.0     # the post-midnight snap -- coldest point
+snap_center         = 0.58      # night_phase of the snap centre; > 0.5 ==
+                                # AFTER solar midnight ("extra cold in the
+                                # midnight", the ruled diurnal shape)
+snap_width          = 0.35      # night_phase half-width of the snap dip
+cold_gain           = 1.0       # ★ THE DECLARED GAIN on the h excursion about
+                                # 1 (the §2.5 headlight precedent: "exaggerated
+                                # fast" is a named game gain, never smuggled).
+                                # 1.0 IS the honest-physics default -- red-team
+                                # measured 2.0 sits outside the safe band.
+h_slope_per_c       = 0.022     # h growth per degree C below t_ref_c
+h_max               = 1.35      # ★ HARD CEILING -- see the header note above
+warm_drag_gain      = 0.35      # mu_kin warm-drag penalty (sinkable rows) --
+                                # ALL of warm's performance loss lives here
 
 [planet]
 # Cubesphere MESH build (render-only; the physics crash surface is the perfect R
 # sphere — SPEC 6). These moved out of render/draw.cpp constexprs into config so
 # no bare geometry number lives in render/ (docs/world_build_plan.md 1).
 subdiv              = 200       # verts per face edge (2..256; ushort index cap)
+tiles               = 2         # R4d face tiling: tiles^2 sub-meshes per face (1..4). Effective
+                                # grid = tiles*(subdiv-1)+1 verts/edge (2 -> ~59 m cells vs 118 m
+                                # at 1): the render facets track radius_at ~4x tighter, which is
+                                # what lets the road/water lifts below drop. Lifts were DERIVED
+                                # for this value — retune them if you change it.
 u_offset            = 0.806     # longitude alignment of the map (fraction of 360)
 dem_blur_radius     = 3         # DEM softening; coupled to ground.relief_scale_m
+cubemap_size        = 4096      # albedo cubemap per-face edge (texels); 4096 = smoother close-ups (upsamples the 8192 equirect)
+
+[trees]
+# S2 boreal tree scatter (stereoscope-sudbury). Instanced mono cross-quads placed
+# by a deterministic hash-Poisson scatter against assets/sudbury_treedensity.png,
+# sitting on the planet's own height field (never float). The scene is authored
+# MONO so the S1 silver post tones the trees and the planes stay the only chroma.
+# density_gain is the moonscape-density fly-dial; the raster holds the gradient.
+enabled          = 1         # A/B toggle: 0 = treeless (pre-S2), 1 = boreal scatter
+density_gain     = 0.85      # acceptance = density * gain * jacobian (lower = sparser)
+min_scale        = 0.72      # per-tree size jitter (min)
+max_scale        = 1.5       # per-tree size jitter (max)
+height_m         = 16.0      # trunk height at scale 1 (m)
+base_width_m     = 4.5       # crown half-spread at scale 1 (m)
+render_range_m   = 6000.0    # hard fade-out distance cap (m); horizon caps it lower when low
+ambient          = 0.16      # mono ambient floor (feeds the silver post)
+diffuse          = 0.72      # mono lambert gain against the sun
+fade_frac        = 0.16      # scale-fade band as a fraction of the effective reach
+cells_per_face   = 1280      # grid cells per cube-face edge (~18 m spacing at R=15 km)
+chunk_cells      = 256       # cells per chunk edge (cull/cache unit; G=5 chunks/face)
+# * S2b THE TRAIL CORRIDOR CLEARS THE CANOPY (WINTER_LAW 2.4b). Chad flew S2:
+# "snow machine trails still have trees on it". With every large tree collidable,
+# a trail with trunks in it is not a trail -- and the cleared gap IS what makes a
+# woods trail identifiable, walled by the dark branch lines that crowd the edge.
+# The clearing is the DRAWN ribbon half-width (recovered from its own vertices,
+# INV-6) plus this margin, so what you see cleared is what the physics corridor
+# reads. Negative = mask off, bit-identical to the pre-corridor scatter (A/B).
+corridor_margin_m = 3.0      # metres of canopy cleared BEYOND the ribbon edge
+
+[ribbons]
+# S3 draped linework (stereoscope-sudbury). OSM roads + snowmobile trails baked to
+# draped triangle strips (render/sudbury_gis.gen.h) that hug the terrain, replacing
+# the old rasterized albedo road-lines. Geometry is baked; these are the FELT look
+# dials. Roads are MONO (r==g==b) so the S1 silver post tones them; the snowmobile
+# trail is the ONE sanctioned world-chroma — a light-green dash into the bush.
+enabled          = 1              # A/B toggle: 0 = no ribbons, 1 = draped roads+trails
+lift_m           = 0.45           # CLEARANCE above the RENDERED terrain facet (R4d). The drape now sits on
+                                  # facet_radius_at (the mesh's own interpolation), so the old interp-mismatch
+                                  # floor (which forced 1.2-2.0 and made roads hover on flats) is gone; this
+                                  # only clears z-fight + the between-station chord kink. MEASURED at tiles=2,
+                                  # densify 80 (measure_drape_gap.py --kink): kink burial p90 0.17 / p95 0.29 /
+                                  # p99 0.82 m -> 0.45 covers >p95 outright, polygon offset absorbs the shallow
+                                  # tail. Raise toward 0.7 if rough-terrain segments still stitch; drop toward
+                                  # 0.25 if the hover reads. Re-derive if [planet] subdiv/tiles change.
+# ★ ROAD-REPAIR / ONAPING SINK (Chad, 2026-09-10 fly: "a few spots near Onaping
+# (Valley) pump I went into the road on snowmachine ... on a hill to the north of
+# the pump in the middle of the road going up slightly inclined pavement").
+# The drape is EXACT at the baked GIS rungs and a straight CHORD between them, and
+# those rungs are 52.67 m apart at the median (p90 73.2, max 79.9). Over a concave
+# grade break the chord bridges ABOVE the ground the machine stands on and the body
+# ends up inside the asphalt; over a crest the deck sinks under it. MEASURED before
+# the cut (docs/road_repair/onaping_sink.md §1): 218 of 529 drawn plowed segments
+# within 2.5 km of the Valley pump (41.2%) carried positive chord sag past the road
+# census's own 0.10 m SINK threshold, worst +7.224 m -- while the census itself,
+# which samples the ribbon FUNCTION at its stations, reported SINK 0 there.
+# max_seg_m subdivides every drawn quad at BUILD time so no chord exceeds it.
+# 0.0 = the identity (the byte-identical pre-cut mesh); SEADS_RIBBON_MAXSEG=<m>
+# overrides it live, so the before/after is one exe (SEADS_RIBBON_MAXSEG=0 is the
+# OFF arm). Cost is vertices + startup, both reported by the RIBBONS: build log.
+max_seg_m        = 8.0            # see docs/road_repair/onaping_sink.md §2
+# The TRANSVERSE half of the same defect, and the BIGGER half at the centreline:
+# a baked rung is ONE quad across the WHOLE road (recovered half-widths reach
+# 7.55 m on a road_major, so 15 m of flat span), so the drawn deck in the MIDDLE
+# of the road -- exactly where Chad rode -- is the flat chord between the two
+# EDGES, and no longitudinal split can touch it. MEASURED at max_seg_m = 8 with
+# max_tr_m = 0: 118 of the 133 remaining >0.10 m plowed segments near Valley were
+# this term alone. max_tr_m is the longest chord ACROSS the deck; above one span
+# the column count is forced EVEN so v = 0 is a REAL vertex row and the dashed
+# centreline still lands on the centreline. A ribbon narrower than this keeps its
+# single span (a 5 m trail gets no centre row; a 15 m road gets four columns).
+# 0.0 = identity; SEADS_RIBBON_MAXTR=<m> overrides it live (the OFF arm).
+max_tr_m         = 5.0            # see docs/road_repair/onaping_sink.md §3
+# Roads = WEATHERED asphalt ("less perfect"): a global light fade + lighter mottled
+# patches over ~mottle_frac of the length, with a thin dashed light centerline. Mono.
+road_bed         = [0.10, 0.10, 0.10]   # dark asphalt (mono)
+road_line        = [0.80, 0.80, 0.80]   # light dashed centerline (mono)
+road_center_frac = 0.06           # |v| < this (transverse) == the centerline stripe (thin line)
+road_dash_m      = 7.0            # centerline dash length (m of sphere arc)
+road_gap_m       = 10.0           # centerline gap length (m)
+road_mottle      = 0.14           # strength of the lighter mottled patches [0,1] (kept SUBTLE)
+road_mottle_frac = 0.25           # fraction of the road length that mottles lighter
+road_fade        = 0.10           # global light fade on the asphalt [0,1] (subtle; road stays dark)
+# Snowmobile trails = a SUBTLE smooth CLAY/earth path (brown). The width is baked
+# (~25% narrower than the first pass) and CLIPPED off road crossings. Winter
+# groomer/corduroy lines return with the weather-dynamics pass. The clay is the one
+# (subtle) world-chroma the post passes.
+trail_color      = [0.37, 0.27, 0.19]   # SUMMER clay path (kept: uWinter=0 => identity)
+trail_mottle     = 0.15           # subtle natural variation on the clay path [0,1]
+# ★ S1 WINTER TRAIL — the groomed snowmobile trail. The trail was rendering as a
+# BROWN CLAY EARTH PATH in a permanently-winter world, which is exactly the
+# "summer-coloured ground" §5 forbids and the reason this rung exists.
+#
+# ★ IT IS DELIBERATELY DARKER AND BLUER THAN THE SNOWPACK (snow_albedo 0.92),
+# not brighter, and load_world.cpp enforces both. Packed/groomed snow really is
+# denser, bluer and slightly darker than fresh cover — and a WHITE trail on a
+# WHITE world is LESS legible than the clay it replaced, i.e. a regression that
+# looks like the fix (S1_SPEC RT-1). Legibility comes from value contrast plus
+# the groomer CORDUROY, which is how a real trail reads from the air.
+#
+# HONEST LIMIT: at the baked half-width of 2.6 m (5.2 m total) the trail stays
+# hard to spot from altitude whatever colour it is — Chad reported exactly that
+# after the S0 fly. Colour is S1's half; WIDTH is S2's (§2.4b ruled main trails
+# 8–9 m). Do NOT chase visibility by over-brightening this.
+trail_winter_color = [0.80, 0.84, 0.90] # groomed packed snow (blue-shifted, < snow_albedo)
+# ★ RULED (Chad, S2 fly 2026-08-10): THE GROOMER LINES RUN PARALLEL TO THE LENGTH
+# OF THE TRAIL, not perpendicular across it. A groomer's drag pan leaves ridges
+# ALONG the direction of travel -- that is the corduroy anyone who has ridden a
+# groomed trail is looking for. (The shader's own docstring already SAID
+# "longitudinal" while the code modulated arc length and drew them transverse;
+# the intent was always his, the implementation had drifted.)
+# Spacing is therefore metres ACROSS the trail, and it wants to be FINE. The
+# shader anti-aliases analytically (fwidth on the phase) so fine lines fade to
+# flat when under-sampled at altitude instead of shimmering -- the same moire
+# that got the road's high-frequency mottle deleted.
+trail_corduroy   = 0.055          # groomer line depth [0,1] (subtle: it aliases if strong)
+trail_corduroy_m = 0.28           # line spacing ACROSS the trail (m) -- ~19 lines on a 5.2 m trail
+# NOTE: rivers (OSM waterway) are NOT ribbons — they render as MIRROR water (the planet
+# water branch, render/river_surfaces), reflecting the sky + the [water] star sparkle.
+# The stream density (tiny-creek cutoff) is a bake dial: sudbury_config RIBBON_STREAM_MIN_CHAIN_M.
+
+[buildings]
+# S4 building massing (stereoscope-sudbury). Real OSM footprints extruded to
+# flat/gabled/hipped prisms, baked as static draped meshes (render/sudbury_gis.gen.h).
+# Geometry (footprints, heights, roof archetypes) is baked; these are the FELT look
+# dials only. MONO (r==g==b) so the S1 silver post tones the town; the planes stay the
+# only chroma. Sun-lit flat facets read as 3D blocks from the air.
+enabled          = 1              # A/B toggle: 0 = no buildings, 1 = extruded massing
+# DARK-ROOF town (Chad 2026-07-11): roofs read DARKER than the walls (dark shingle/tar
+# rooftops over lighter walls), and the whole town toned down off the bright urban albedo.
+# roof_val < wall_val inverts the earlier light-roof look. All fly-dials.
+wall_val         = 0.46           # vertical-wall base luminance (mono) [0,1]
+roof_val         = 0.30           # roof/cap base luminance (mono; DARKER than walls) [0,1]
+ambient          = 0.48           # flat ambient term [0,1] (shadowed faces still read)
+diffuse          = 0.60           # N·L sun-diffuse gain [0,1] (moderate silver swing)
+height_scale     = 1.0            # vertical exaggeration of the baked heights (depth-read dial)
+# Night window lights: most houses show lit windows on their walls when the sun is
+# down (the town twinkles from the air). The warm-white tint is low-saturation so the
+# S1 post keeps it silver-warm, not a chroma pop. window_bright = 0 turns it off.
+window_color     = [1.0, 0.98, 0.95]  # near-white glow — LOW saturation so the S1 post keeps it
+                                       # silver (planes stay the only chroma). Lower G,B for a warm
+                                       # glow, but that introduces a 2nd chroma (Chad's call).
+window_bright    = 0.9            # emissive strength [0,1+]
+window_lit_frac  = 0.5            # fraction of a lit building's windows that are on [0,1]
+
+[streetlamps]
+# Night point lights lining the TOWN streets (visible from the air — the "town from
+# above at night" glow). Baked along minor roads near buildings (render/sudbury_gis.gen.h);
+# these are the look dials. Additive glow, night-gated. Near-white (low-sat) so the S1
+# post keeps it silver; enabled=0 turns lamps off.
+enabled          = 1              # A/B toggle
+# NEAR-WHITE (low saturation): C/mx must stay < ~0.06 or the S1 split-tone gate lets
+# the warm tint through as a 2nd chroma (violates planes-are-the-only-chroma). A warm
+# sodium look is an opt-in chroma decision, not a free dial.
+color            = [1.0, 0.98, 0.95]  # glow tint (near-white; stays silver via the post)
+brightness       = 0.40           # soft-HALO (aura) strength — lowered from 0.55 now the
+                                  # residential fill is 3.3x denser (avoids an overpowering wash)
+# Two-part glow: the soft halo above + a tight hot CORE (the bulb) so lamps read as
+# ACTUAL lit points up close, not vague hazes, WITHOUT the dense-street blowout a bright
+# halo causes. core_bright = illuminate up close; core_sharp keeps the bulb tight (no
+# oversaturation). Chad's fly-dials for the up-close look.
+core_bright      = 1.7            # hot-core (bulb) additive strength — the "illuminated" dial
+                                  # (1.0->1.7, 2026-07-13: lamps barely perceptible looking straight
+                                  # DOWN — a brighter bulb pops each lamp against the lit grid overhead)
+core_sharp       = 34.0           # core tightness (higher = smaller/crisper bulb, less bloom)
+# The glow has a WORLD radius (grows on screen as you fly closer -> a real glow up
+# close) with a MIN pixel floor (so far lamps stay a visible dot that aggregates into
+# lit streets). screen radius = max(world, min_px). Fixes lamps vanishing up close.
+size_m           = 3.5            # world glow radius (m) — the up-close size
+min_px           = 4.0            # far floor: never smaller than this on screen (px) — 2.5->4.0
+                                  # (2026-07-13: a bigger floor reads overhead where lamps sit in this
+                                  # regime; the far aggregate stays a legible glow, not a bloom)
+
+[smoke]
+# CC1 — Superstack smoke (Living Copper Cliff). A mono drifting plume off the Copper
+# Cliff Superstack top, as camera-facing alpha billboard puffs whose positions are a
+# PURE function of a wrapped phase the app derives from t_cel (render/ reads no clock).
+# MONO grey (low-sat) so the S1 post silvers it — the CC3 hot slag is the ONE chroma
+# exception, not this. enabled=0 turns the plume off (SEADS_NO_SMOKE=1 also A/B's it).
+enabled          = 1              # A/B toggle
+puffs            = 28             # billboard count rising up the column
+# MONO grey — keep low-sat (C/mx small) so the split-tone gate silvers it like the town.
+color            = [0.60, 0.60, 0.62]  # plume grey (stays silver via the post)
+rise_m           = 900.0          # vertical rise over one puff's life (m above the stack top)
+drift_m          = 560.0          # downwind horizontal drift over a life (m)
+r0_m             = 26.0           # puff radius at birth (m)
+r1_m             = 155.0          # puff radius at death — expands as it rises (m)
+opacity          = 0.42           # peak per-puff alpha (fades to 0 at birth AND death)
+jitter_m         = 16.0           # fixed per-puff lateral scatter so it's a column, not a line
+wind             = [1.0, 0.15, 0.0]  # world wind hint (projected into the stack tangent)
+rate_hz          = 0.03           # plume cycle rate (puff birth->death cycles per second of t_cel)
+
+[train]
+# CC2 — slag-pot trains (Living Copper Cliff). An electric trolley loco hauling a
+# string of open slag pots along a hand-authored CLOSED spur (smelter -> dump ->
+# return) draped on the terrain at Copper Cliff. Each car's pose is a PURE function
+# of a wrapped phase the app derives from t_cel (render/ reads no clock). MONO steel
+# (silvered by the S1 post — the CC3 hot slag is the ONE chroma exception, not this).
+# enabled=0 turns the train off (SEADS_NO_TRAIN=1 also A/B's it).
+enabled          = 1              # A/B toggle
+pots             = 8              # slag-pot CARS trailing the loco (2 steel pots each)
+# CC5 (2026-07-13): the dump leg now runs ATOP the CC4 slag ridge crest and each pot
+# TIPS over the edge as it passes the dump, FEEDING the pour (single clock = the train
+# head). car_gap_m sets the pour cadence (F8: gap/speed = seconds between pot pours);
+# tip_span_m is how far each pot tips through the dump zone.
+car_gap_m        = 36.0          # spacing between cars = the pour cadence (m); 24->36 (CC7) lengthens each pot's pour so the slow braided ooze reads (train speed unchanged)
+tip_span_m       = 14.0          # arc-length each pot tips over the dump edge (m)
+lift_m           = 1.4           # drape above the terrain (rail head, m)
+# MONO steel — keep low-sat (C/mx small) so the split-tone gate silvers it like the town.
+color            = [0.46, 0.46, 0.48]  # steel grey (stays silver via the post)
+ambient          = 0.34          # flat ambient term
+diffuse          = 0.72          # N·L sun term gain
+rate_hz          = 0.0011        # loop cycles per second of t_cel (~4-5 m/s slag haul)
+
+[slag]
+# CC3 — slag pour (Living Copper Cliff), the MARQUEE. A dark procedural slag-heap
+# mound at the Copper Cliff dump, a slag pot that TIPS at the rim, and a molten LAVA
+# cascade flowing down the pour face as fiery orange/vermilion rivers — the iconic
+# Sudbury night spectacle. Mound + pot are MONO (silvered by the S1 post); the LAVA
+# is the ONE sanctioned WARM-CHROMA exception (Chad's ruling) — a single-sourced
+# hot->cooling-red->crust emissive whose high chroma survives the split-tone gate,
+# like the aircraft. Every phase is PURE in t_cel (render/ reads no clock).
+# enabled=0 turns it off (SEADS_NO_SLAG=1 also A/B's it).
+enabled          = 1             # A/B toggle
+mound_radius_m   = 150.0         # (legacy cone dial; the CC4 ridge ignores it) base radius (m)
+mound_top_r_m    = 62.0          # (legacy) flat-top radius (m); must be < mound_radius_m
+mound_height_m   = 45.0          # CC4 ridge CREST height above the surrounding ground (m)
+# CC4 (2026-07-13) — the dump is a LINEAR slag RIDGE (flat crest carries the track, one
+# steep pour face), NOT a cone. ridge_length_m is Chad's "proper length of the hill ridge"
+# fly-dial; the crest runs along the smelter->dump spur, the pour face aims NW (highway).
+ridge_length_m   = 1000.0        # crest length (m) — long ridge = long gradual ramp the train climbs to the crest (Chad 2026-07-13)
+crest_width_m    = 36.0          # CC6 flat MESA top width carrying the rail track (m; widened)
+face_angle_deg   = 35.0          # MEAN pour-face slope = the slag angle of repose (deg)
+# CC6 (2026-07-13) — the pour face is TERRACED (benched) like the real man-made slag range:
+# `benches` steep risers + flat treads, MEAN slope = face_angle_deg. 1 = the legacy planar
+# face. Shared single-source profile feeds the mesh + lava + rail drape (Fable). Fly-dial.
+benches          = 3             # terrace steps down the pour face [1..5]
+# MONO dark matte slag — keep low-sat so the post silvers it (CC6 darkened toward charcoal).
+mound_color      = [0.075, 0.075, 0.08]
+ambient          = 0.30          # mound/pot flat ambient
+diffuse          = 0.55          # mound/pot N·L sun gain
+# CC7 (2026-07-14) — the pour is a BRAIDED river: `rivers` molten threads weave across the
+# face, crossing/splitting/merging with dark crust bars between, and the flow front OOZES
+# down slowly (decelerating, ~2x the old descent time; the shader owns the timing). The
+# per-pot pour CADENCE is `[train] car_gap_m` / train speed — raise car_gap_m to slow it.
+rivers           = 8             # braided molten threads down the pour face (weave/split/merge)
+river_halfwidth_m = 5.0          # each thread's half width at the source (m); pulses + widens downslope
+glow             = 1.0           # emissive lava gain (the warm-chroma dial)
+night_boost      = 0.7           # extra lava emissive when the sun is down (night-brightest)
+pour_rate_hz     = 0.02          # pour cycles per second of t_cel (~one every 50 s)
+lift_m           = 1.5           # lava lift above the mound face (anti z-fight, m)
+
+[fleet_rig]
+# The render-only articulated Fleet Rig (docs/fleet_rig_plan.md, /orchestrate
+# rig-A.2). MIRROR-finished planes are the ONLY chroma in the grayscale world:
+# a grayscale env-cubemap reflection over one hyper-saturated per-plane color,
+# with a Fresnel rim that blazes that color at the silhouette edge. FELT knobs
+# ONLY — the rest-pose geometry is structural (render/rig.cpp aircraft_node_specs,
+# like the old DrawCube dims). Colors are RGB fractions in [0,1] and are the ONLY
+# saturated entries in the whole render config (the world vision: noir ground,
+# chroma planes).
+reflectivity        = 0.45                  # env-reflection strength over the body color [0,1]
+fresnel_power       = 3.0                   # rim exponent (higher = tighter edge blaze) (>0)
+# NOTE (S-mapteam 2026-08-09): the two per-plane chroma colors USED to live
+# here (player_color / bandit_color). They are now the FACTION palette in
+# [teams] below - one table for the map and the sky both - so an allied
+# maverick, its name tag and its map icon can never disagree. Removed from
+# here deliberately; the loader no longer reads them.
+# rig-B state-driven surface deflection: the cosmetic throw at FULL command
+# (degrees), driven by the commanded Inputs. Direction is structural
+# (render/rig.cpp); these are magnitudes. Prop is a throttle-scaled blur disc.
+aileron_deg         = 18.0                  # aileron throw at |roll| = 1
+elevator_deg        = 20.0                  # elevator throw at |pitch| = 1
+rudder_deg          = 22.0                  # rudder throw at |yaw| = 1
+gear_deploy_deg     = 85.0                  # gear swing, deployed -> tucked in-bay
+prop_disc_alpha     = 0.30                  # prop blur-disc opacity at full throttle [0,1]
+prop_idle_alpha     = 0.06                  # prop blur-disc opacity at idle [0,1]
+
+[plane_legibility]
+# RUNG E4 — VISIBILITY (docs/ENEMY_AI_E1_E2_SPEC.md; Chad's fly report
+# 2026-08-20: "they are hard to see especially in the white scatter light,
+# their tag and color is also a bit hard to see").
+#
+# EVERY dial here has an OFF VALUE that reproduces the FLOWN-APPROVED frame
+# EXACTLY (the atmosphere/scatter/sky visuals are signed work; this rung is not
+# allowed to move them). The off set is:
+#   aircraft_haze_frac 1.0 · tag_outline_px 0 · tag_min_px 0 ·
+#   enemy_tint_shift 0.0 · glint_size_m 0.0
+# Set those five and the frame is today's frame — that is the A/B baseline
+# (see the --smoke screenshot recipe in docs/, below).
+#
+# ★ E4.1 — WHAT THE HAZE SEAM ACTUALLY IS. The drone meshes receive ZERO
+# atmospheric haze: sky_aerial() (render/sky.cpp) is called only by the planet
+# FS and the lake surfaces, never by the aircraft mirror shader. What washes a
+# plane out in white scatter light is the mirror finish's own GRAYSCALE
+# ENVIRONMENT REFLECTION — render/rig.cpp:281,
+#     col = mix(body, envCol, u_reflectivity * (1.0 - fres))
+# — which over a white winter world replaces ~45% of the plane's chroma with
+# the ambient white of the world. aircraft_haze_frac scales that env wash for
+# DRONES ONLY (never the player's signed hero-plane look, never terrain/sky/
+# any other pass), and fades in with range so the approved close-up mirror is
+# untouched at the merge. Full detail in render/plane_legibility.h.
+aircraft_haze_frac  = 0.35                  # drone share of the mirror env wash [0,1]; 1.0 = today
+haze_full_range_m   = 2000.0                # range at which the fraction is fully applied (>=0; 0 = no ramp)
+# E4.2 tag legibility. The outline is a dark halo ring drawn behind the glyphs
+# so ALLY/BANDIT + the range readout survive both a blown-white sky and dark
+# ground. tag_min_px floors the on-screen tag height (the shipped constant is
+# 12 px in render/draw.cpp — the ONE base, not duplicated here).
+tag_outline_px      = 1.0                   # halo ring radius [px]; 0 = today (no halo)
+tag_min_px          = 16.0                  # tag size floor [px]; 0 = off, else [8,48]
+# E4.2 enemy tint. A DERIVED shift of the ruled slag orange toward a deeper,
+# more saturated red so an enemy can never read as warm haze —
+# render::enemy_legibility_tint() in render/team_color.h is the one authority
+# (there is no second colour literal anywhere). DELIBERATELY NOT applied to the
+# slag pour (the lava IS the slag colour by ruling) or to the tactical map
+# (newsprint has the opposite contrast problem, and that plate is signed).
+enemy_tint_shift    = 1.0                   # 0 = today's slag orange, 1 = full deep red
+tag_min_alpha       = 140.0                 # fade FLOOR inside the 4-9 km band (0 = today's
+                                            # fade; the 9 km cutoff still kills the tag --
+                                            # Fable adjudication, rung E4: at Chad's 2-4 km
+                                            # the 200->0 fade was half of "hard to see")
+# E4.3 engagement glint: a small deterministic nav-light bead on ENEMY drones
+# inside engage range. REAL GEOMETRY (DrawSphere) — DrawBillboard silently
+# renders nothing in this engine. Phase is frame_count + index*prime: no clock,
+# no rng, and the fleet does not blink in sync.
+glint_size_m        = 0.55                  # bead world radius [m]; 0 = OFF (nothing drawn)
+glint_range_m       = 4000.0                # only within this slant range of the eye
+glint_min_mrad      = 0.55                  # angular floor [mrad] so a 4 km bead stays > 1 px
+glint_period_frames = 48                    # blink period [frames]; 0 = off. RENDER
+                                            # frames, not sim ticks: 0.8 s at 60 fps,
+                                            # 0.33 s at 144 -- retune here if the rig
+                                            # runs high-refresh (red-team P2-2)
+glint_duty          = 0.22                  # lit fraction of the period [0,1]
+
+[guns]
+# GUN BATTERY (rig-D guns leg; weapon/ballistics.*). The Bf 109 F-4/R1 fit — a
+# single-trigger converging battery: 1 hub 20mm (Motorkanone), 2 cowl 7.92mm MG,
+# 2 wing 20mm gondolas. SCAFFOLD: loaded + validated now, CONSUMED next session
+# when firing (LMB / tracers / damage) is wired. Muzzle tips are ASSEMBLY body
+# coords (+X right / +Y up / -Z nose) MEASURED from generated/bf109/build_all.py.
+convergence_range_m = 500.0                 # harmonisation range (>= 50; floored) — Chad taste: 300→500 m
+cannon_speed_mps    = 805.0                 # 20mm MG151/20 M-Geschoss muzzle speed (Williams/L.Dv.4000-10)
+mg_speed_mps        = 855.0                 # 7.92mm MG17 SmK-v (verbessert) muzzle speed (L.Dv.4/10; Chad's cowl-gun call)
+cannon_rof_hz       = 12.0                  # 20mm cyclic (~700 rpm)
+mg_rof_hz           = 19.0                  # 7.92mm cyclic (~1150 rpm)
+# Quadratic drag constants (v(x) = v0*e^(-k*x); a_drag = -k*|v|*v per tick).
+# Single-sourced from docs/ballistics_reference.json; SHARED with the pipper
+# (render/gunsight) — do NOT hand-copy these values anywhere else.
+cannon_drag_k_per_m = 0.00080               # 20mm arcade retune: ~67% velocity retained at 500 m (was 0.001565→~46% — Chad taste: flatter, punchier)
+mg_drag_k_per_m     = 0.000710              # 7.92mm MG17 SmK-v; sS-validated k as flagged proxy (see docs/ballistics_research_notes.md)
+tracer_lifetime_s   = 3.5                   # [s] tracer trail age cap — raised to cover the lethal
+                                            #   envelope: at 805 m/s (cannon) a round reaches ~1000 m
+                                            #   in ~1.4 s; at 140 m/s tail-chase closure the round
+                                            #   needs ~3.5 s to catch a receding drone at 1000 m.
+                                            #   Old value 1.5 s cut tracers off at ~1160 m (before
+                                            #   impact), hiding fall-of-shot at long range. (Task B.1)
+tracer_len_m        = 8.0                   # streak length in world metres (render)
+# Tracer colours: orange→red fire family (Chad taste, iter-7).
+# Cannon leans hot red (the heavier Geschoss burns hotter); MG leans brighter orange.
+tracer_cannon_r     = 1.0                   # 20mm tracer R (deep red-orange)
+tracer_cannon_g     = 0.30                  # 20mm tracer G (low → redder)
+tracer_cannon_b     = 0.02                  # 20mm tracer B (near-zero → no cool cast)
+tracer_mg_r         = 1.0                   # 7.92mm tracer R (orange)
+tracer_mg_g         = 0.55                  # 7.92mm tracer G (mid → warm orange)
+tracer_mg_b         = 0.04                  # 7.92mm tracer B (near-zero)
+# Tracer comet look dials (lifted from render/draw.cpp inline — iter-7 Task E).
+# base: per-class width multiplier (cannon bigger than MG).
+# r_core_frac: core radius = r_core_frac * view_dist (screen-constant angular size).
+# r_glow_mult: glow radius = r_glow_mult * r_core.
+# core_alpha / glow_alpha: additive blend alpha for the hot core and soft glow.
+# head_r_mult: head sphere radius = head_r_mult * r_core.
+# head_lum: head luminance multiplier (>1 = white-hot over-drive).
+# slag_dark: how dark the slag modulation is (0=no slag, 1=fully black flecks).
+# slag_period_m: world-space repeat of the dark slag chunks (m along the comet axis).
+tracer_cannon_base  = 1.0                   # 20mm width base multiplier
+tracer_mg_base      = 0.72                  # 7.92mm width base multiplier (narrower)
+tracer_r_core_frac  = 0.0011               # core angular radius (r_core = frac*dist)
+tracer_r_core_min   = 0.05                 # minimum core radius (m; floor for near-muzzle)
+tracer_r_glow_mult  = 3.0                  # glow radius = mult * r_core
+tracer_glow_lum     = 0.5                  # glow layer luminance (fraction of tint)
+tracer_glow_alpha   = 0.45                 # glow layer additive alpha
+tracer_core_lum     = 1.0                  # core layer luminance (full tint)
+tracer_core_alpha   = 0.95                 # core layer additive alpha
+tracer_head_r_mult  = 1.5                  # head radius = mult * r_core
+tracer_head_lum     = 1.5                  # head luminance (white-hot over-drive)
+tracer_head_alpha   = 1.0                  # head alpha
+tracer_slag_dark    = 0.75                 # slag fleck darkness [0=none, 1=black]
+tracer_slag_period_m = 1.8                 # world-space repeat of dark slag chunks (m)
+tracer_glow_len_mult = 1.7                 # glow tail length = tracer_len_m * mult (longer soft tail)
+muzzle_hub          = [ 0.000,  0.000, -2.870]   # hub 20mm (through the prop hub)
+muzzle_cowl_l       = [-0.160,  0.400, -2.400]   # left cowl MG  (above & behind hub)
+muzzle_cowl_r       = [ 0.160,  0.400, -2.400]   # right cowl MG
+muzzle_wing_l       = [-2.182, -0.389, -0.250]   # left wing gondola
+muzzle_wing_r       = [ 2.182, -0.389, -0.250]   # right wing gondola
+cannon_damage       = 30.0   # [HP] 20mm REFERENCE damage — dealt at a normal hit whose relative impact speed == muzzle speed; combat_tick scales by (|v_rel|/v_ref)^2·obliquity (KE falloff). ~4 hits point-blank, more at range. (> 0; > mg_damage)
+# FLAK (docs/FLAK_GUN_SPEC.md §7.4) -- the manned 20 mm Oerlikon. Muzzle
+# speed / cyclic / drum size are MEASURED facts pinned in render/flak_gun.h
+# (single-sourced with the GLB extras + test_flak_gun), NOT dials, so they do
+# not appear here. These three ARE dials:
+flak_damage        = 200.0 # [HP] reference damage per flak hit (Chad 2026-08-30:
+                           #   "take the number of hits to kill down" -- at 30
+                           #   the drag-slowed KE law averaged ~5 HP/hit at
+                           #   683 m = ~19 hits/kill, smoke-measured; 200 puts
+                           #   a typical engagement at ~2-3 hits, one-shot only
+                           #   point-blank square-on. A 20 mm HE hit on a light
+                           #   aircraft IS lethal; the old 30 simply mirrored
+                           #   cannon_damage. KE-scaled the same way as cannon.
+flak_reload_s      = 4.0   # [s] the drum swap -- one 60-rd drum ~ one strafing
+                           #   pass, the reload is the breath between passes
+flak_selfdestruct_s = 4.8  # [s] tracer self-destruct: the flak-curtain read +
+                           #   ranging cue; 0 = rounds fly to kMaxFlightTime.
+                           #   RULED 4.8 (Chad 2026-08-30, round 5: "raise the
+                           #   self destruct time"): with cannon_drag_k 0.0008,
+                           #   x(t)=ln(1+k*v0*t)/k puts 4.8 s at ~1800 m = the
+                           #   sight's engage_m, closing the 909-1800 m band
+                           #   where a valid pipper could never produce a hit.
+                           #   (Was 1.6 s ~ 909 m. Prox fuze is unchanged and
+                           #   live the whole flight; under kBallisticTMax 10.)
+flak_prox_radius_m = 4.0   # [m] proximity-fuze radius ADD on aircraft -- the HE
+                           #   shell bursts NEAR the plane (added to hit_radius_m,
+                           #   never replacing it); 0 = bare 20 mm, direct hits only
+# FLAK TRACER LOOK (Stage B, immersion ladder 2/4) -- COSMETIC ONLY. Separate
+# from the tracer_* keys above on purpose: the aircraft tracer look is SIGNED
+# and does not move. A ground gun walking 20 mm fire into the sky must read
+# longer, hotter and redder than the fighter's rounds at the same range.
+flak_tracer_r       = 1.0    # flak tracer R (red-orange 20 mm)
+flak_tracer_g       = 0.38   # flak tracer G (a touch warmer than the plane's 0.30)
+flak_tracer_b       = 0.05   # flak tracer B (near-zero -> no cool cast)
+flak_tracer_base    = 1.55   # width multiplier (vs the plane's cannon 1.0)
+flak_tracer_len_mult = 2.1   # streak length = tracer_len_m * this (the WALK read)
+flak_tracer_lum_mult = 1.30  # glow/core/head luminance gain (the brighter core)
+mg_damage           = 6.0    # [HP] 7.92mm REFERENCE damage (same KE scaling; > 0)
 
 [tone]
-# The B&W newsreel tone curve, applied per-material in the world/prop shaders.
+# S1 STEREOSCOPE POST PASS (render/post.cpp = the ONE tone owner; the scene is
+# authored MONO, the aircraft are the only chroma). ALL display-space (Fable
+# 2026-07-10: no ACES). Chad locks these ONCE over Chelmsford, then dials.
 # Chad's call: HIGH CONTRAST, MINIMAL GRAIN (crisp filmic, not a dust storm).
-contrast            = 1.35      # >1 steepens the value ladder
+contrast            = 1.35      # display sigmoid steepness (>1 steepens the value ladder)
 lift                = 0.02      # small black lift so the ground stays a readable reference
 grain               = 0.02      # whisper of grain (near off; do NOT crush legibility)
+# Silver split-tone: luminance MULTIPLIER tints, (1,1,1)=pure grey. Cool shadows,
+# warm highlights = the silver-gelatin look. Kept near-neutral (silver, not sepia).
+split_shadow        = [0.90, 0.94, 1.07]   # cool silver shadows
+split_hi            = [1.07, 1.01, 0.90]   # warm silver highlights (DAY — the flown look)
+# ★ S1b-3 WINTER NIGHT (Chad, 2026-08-10): "snow needs to stay white."
+# The split-tone REPLACES hue for low-saturation pixels (col ~= Y*tint), it does
+# not multiply it — so once winter night snow became bright it was repainted
+# CREAM by the warm highlight tint above, and tinting the LIGHT could not fix
+# it. Measured on open night snow: a cool night light moved R/B only
+# 1.129 -> 1.116, while neutralising this tint gave 0.972 (a true cool white).
+#
+# So the highlight tint blends to NEUTRAL after dark, driven by sun elevation.
+# ★ DAYLIGHT IS BIT-IDENTICAL — the blend is 0 at day, so the flown silver look
+# Chad approved is untouched. Set this equal to split_hi to disable.
+split_hi_night      = [1.00, 1.00, 1.00]   # highlight tint at full night (neutral = white snow)
+# Split-tone chroma GATE (Fable): mono terrain (chroma<c0) -> full silver; the
+# planes (chroma>c1) pass through as color. sat_dark = the near-black divide floor.
+sat_c0              = 0.06
+sat_c1              = 0.25
+sat_dark            = 0.04
+# Warm halation bloom off bright glints (a print artifact — a sanctioned chroma).
+halation            = 0.15      # bloom strength [0,1]
+halation_threshold  = 0.78      # luma above which highlights bloom [0,1]
+halation_tint       = [1.0, 0.82, 0.55]    # warm
+vignette            = 0.32      # corner exposure falloff [0,1]
+fxaa                = 1.0       # edge softening blend [0,1] (soft edges read "photograph")
+
+[dof]
+# S6 STEREOSCOPE depth of field (render/post.cpp; Fable-vetted). FAR-FIELD ONLY,
+# Chad's call: everything you fly/fight THROUGH stays perfectly crisp; only the
+# distant background/limb softly blurs — the hyperreal "fly through an old
+# stereoscope viewer" depth, with zero cost to combat readability. View-space
+# METERS (the scene clip planes are near=2, far=60000). enabled=0 == SEADS_NO_DOF.
+enabled             = 1
+# NOTE the tiny-planet horizon geometry: on R=15 km the HORIZON from ~2 km up is
+# only ~8 km away, so visible TERRAIN rarely exceeds ~8-10 km — focus_end must be
+# small or only the sky blurs. Crisp out to combat/near range, soft by the limb.
+focus_start_m       = 2500.0    # perfectly crisp out to here (near flight/combat)
+focus_end_m         = 9000.0    # full soft blur reached by here (the distant limb/background)
+radius_px           = 3.0       # blur disc radius at full CoC (screen px) — the strength dial
+sky_coc             = 0.40      # cap the far-SKY blur so the space-first starfield survives
+
+[halftone]
+# S6 "printed card" HALFTONE / ORDERED-DITHER mode (render/post.cpp; Fable-vetted).
+# OFF by default (enabled=0 == bit-exact identity). When on, the mono silver world
+# becomes a screen-LOCKED 1940s newsprint print (the paper is fixed, the world
+# scrolls under it); the aircraft stay smooth color (the split-tone chroma gate).
+# The plan warns hard dither can fight the smooth silver — dial `soft`/`ink` to
+# taste, or leave OFF. A/B live with SEADS_HALFTONE=0|1|2 (launch-time override).
+enabled             = 0         # 0 = off (identity) · 1 = on
+style               = 1         # 1 = AM halftone DOTS · 2 = ordered (Bayer) DITHER
+scale_px            = 4.0       # dot-cell size in screen px (mode 1 only; >=2). Bigger = coarser print
+angle_deg           = 45.0      # screen-grid rotation (mode 1 only; 45 = classic single-ink screen angle)
+soft                = 1.0       # mode 1: edge AA width MULT (~1px at 1.0); mode 2: tonal crossfade (1.0 = +/-half a Bayer step = crisp)
+ink                 = 0.05      # ink darkness (× split_shadow -> cool near-black); 0 = pure black ink
+grain_mul           = 0.25      # grain kept on the mono print (planes always get FULL grain)
 
 [horizon_cull]
 # Prop/chunk cull is altitude- AND prop-height-aware (§2). margin pads a feature
@@ -57,10 +1215,269 @@ furniture_scale     = 5.0       # landmark structures at ~5x, GENERALIZED silhou
 frame_budget_ms     = 8.0       # world render fits well under a 120 Hz sim frame
 max_draw_calls      = 24        # instanced batches; a hard ceiling
 
+[celestial]
+# The little planet in space (docs/little_planet_plan.md Stage 1). ONE inertial
+# celestial frame + ONE daily wheel about the tilted spin axis â; the sim sphere
+# stays inertially fixed (a rotating GROUND is banned). Naming is sky CONTENT
+# (spin_axis/declination/ra-dec), never north/heading/lat/lon (the §6 seam).
+orbit_normal            = [0.0, 1.0, 0.0]   # ecliptic pole (orbit plane normal)
+tilt_deg                = 23.5              # axial tilt of the spin axis
+tilt_lean               = [1.0, 0.0, 0.0]   # which way â leans from the normal
+day_period_s            = 300.0            # SOLAR day (what the player feels): 5 min
+                                           # (Chad: sun goes around in 5 min; fly-dial)
+year_period_s           = 3600.0           # integer x SOLAR day => 12 days/year (1 h year)
+epoch_day_frac          = 0.35             # three INDEPENDENT epoch phase offsets
+epoch_year_frac         = 0.45             #   (season/time-of-day/moon set apart,
+epoch_moon_frac         = 0.0              #    so the probe can reach every cell)
+sun_angular_diameter_deg = 1.40            # small nearby star (Chad: 2x again = 4x orig)
+sun_distance_m          = 450000.0         # finite position (>=30*R = 450 km)
+sun_intensity           = 2.00             # Chad: way up (NOTE: disc already saturates
+                                           # to white in LDR; headroom for scatter/bloom)
+sun_glare_deg           = 3.0              # PARKED: the sun halo is a Stage-3 haze-
+                                           # gated Mie forward-scatter, NOT an always-on
+                                           # disc glare (Chad ruled the disc halo off, 3a)
+moon_angular_diameter_deg = 1.5
+moon_period_s           = 5400.0           # 1.5 h moon
+moon_inclination_deg    = 8.0              # off the ecliptic (eclipses stay rare)
+moon_intensity          = 0.12             # the night fill-light
+star_brightness         = 0.8
+
+[stars]
+# Real bright-star field (docs/little_planet_plan.md Stage 4). The CATALOG is a
+# compiled header (render/star_catalog.gen.h) baked from the public-domain HYG
+# database to magnitude 5.5 (~2865 stars, true positions/brightness — Chad ruled
+# real data 2026-07-09). These are the render knobs. Drawn as one instanced-quad
+# pass between the sky and the planet (additive, depth off; the planet overdraws
+# below-horizon stars for free). The sky WHEELS the whole field about Polaris.
+mag_limit          = 5.5    # cull catalog stars fainter than this (<= the 5.5 bake)
+mag_ref            = 2.5    # magnitude mapped to brightness 1.0 (Pogson 10^-0.4(m-ref))
+size_px            = 2.2    # constant on-screen core half-size [px], FOV-compensated
+                            #   (so RMB aim-zoom does NOT inflate the stars)
+glare_suppress_deg = 4.0    # fade stars within this angle of the sun disc
+wash_lum           = 0.14   # sky luminance above which stars wash out (day/horizon)
+# S-starnight (Chad's fly 2026-08-09: "at night time the stars should be
+# visible, there is an atmosphere but no overcast"). S-airdome had stars fading
+# in proportion to the ALWAYS-ON dome air (airAmt ~0.55-0.75 at the zenith), so
+# a clear night inside a bubble lost most of its starfield. Star extinction is
+# now driven by the WEATHER amount instead - which is itself air-gated, so it
+# is nonzero only inside a dome: fly into a squall at night and the stars go
+# out, sit in clear dome air and they burn. Raise toward 1.0 to bring the old
+# air-veils-stars behaviour back.
+air_extinction     = 0.0    # how much clear dome AIR veils stars [0,1]; 0 = not at all
+r_star_m           = 300000.0  # cosmetic view-space depth (< the ~2500 km far plane)
+
+[moon]
+# Moon + moonlight (docs/little_planet_plan.md Stage 5). The moon rides its own
+# inclined circle ([celestial] moon_period_s/inclination) and wheels with the
+# sky; here are the LOOK knobs. The silver disc carries an HONEST phase (sphere-
+# normal lit by the sun). Moonlight is a 2nd directional light on the planet,
+# PHASE-SCALED (Chad's ruling 2026-07-09): full moon = a beautifully lit night
+# side + silver lakes; new moon = genuinely dark for "dive into the dark to break
+# contact". moon_angular_diameter_deg lives in [celestial] (the orbital block).
+disc_intensity     = 1.15   # silver moon-disc brightness (additive; boosted since the real
+                            #   albedo texture darkens the disc — highlands read bright silver) [0,4]
+ground_gain        = 0.55   # moonlight ground fill at FULL moon (phase-scaled) [0,2]
+fill_lo            = 0.45   # phase knee: below this illuminated fraction, ~no ground fill [0,1)
+sparkle_sharpness  = 90.0   # moonlit-lake glint specular exponent (>0; softer than the sun)
+
+[aurora]
+# Aurora borealis (docs/little_planet_plan.md Stage 8, pulled forward). ⭐ MONO RULING
+# (Chad 2026-07-12) — the aurora is now SILVER, completing the B&W world (closes the
+# "SCENE-MONO GAP": its old green/red chroma was passing the S1 split-tone gate as a
+# 2nd chroma so the night sky was not truly mono). This SUPERSEDES the earlier GREEN/
+# teal ruling (2026-07-09). The tints below are NEUTRAL GREY (C/mx < sat_c0=0.06) so
+# the S1 split-tone silvers the whole curtain like the town — the planes + the CC3
+# hot slag stay the ONLY chroma. The tints keep the old green-base/red-top LUMINANCE
+# structure (bright base, dimmer tops) so the two-band curtain + vertical falloff
+# still read, now in silver. The ground glow reuses tint_low, so it silvers too.
+# night-only, gated to the auroral OVAL about the spin axis â (the fixed geographic
+# pole, so it does NOT wheel with the stars), cloud-suppressed. The verbose curtain
+# GLSL is Gemini-generated (render/aurora_glsl.*), periodic so it never strobes. Fly
+# TOWARD the pole (Polaris at the zenith) to get under the curtain. Fly-dials:
+# intensity, the oval position/width, curtain_scale.
+enabled            = 1         # 0 = off (forces intensity to 0)
+intensity          = 0.9       # overall curtain gain (additive on the night sky)
+oval_center_deg    = 30.0      # oval colatitude from â (deg from the pole; fly-dial:
+                               # lower = tighter to the pole, higher = toward the equator)
+oval_width_deg     = 12.0      # oval band half-width (deg)
+curtain_scale      = 10.0      # vertical ribbons per radian of azimuth
+height_m           = 12000.0   # aurora shell altitude (> max flyable alt; eye stays inside)
+anim_rate          = 0.40      # curtain drift rate (rad/s of the periodic phase; flowing rays)
+ground_glow        = 0.12      # faint SILVER night-ground glow under the oval (reuses tint_low) [0,1]
+haze_suppress      = 1.0       # how strongly cloud hides the aurora [0,1]
+tint_low           = [0.80, 0.80, 0.80]  # MONO silver base (was vivid oxygen-green; luma ~0.80,
+                                         # bright, so the post silvers it — C/mx=0 < sat_c0)
+tint_high          = [0.42, 0.42, 0.42]  # MONO silver curtain tops (was red/magenta; luma ~0.42,
+                                         # dimmer so the vertical falloff still reads in silver)
+
+# ---------------------------------------------------------------------------
+# [map] - the M-KEY tactical chart (S-mapread, Chad 2026-08-09: "the map is too
+# cluttered... allies green and change my color to green as well... enemies red
+# ... no conflicting or camouflaging colors... arial font, newspaper greyscale
+# for the look but objectives and playermarkers properly color coded").
+#
+# THE RULING THIS TABLE ENCODES: the BASEMAP carries no chroma at all (it is a
+# printed newspaper plate - neutral greys only, enforced executably by the
+# loader), so the ONLY coloured pixels on the map belong to the tactical read
+# and nothing on the plate can camouflage a marker. Team colour is
+# PLAYER-RELATIVE (Chad's side is green whichever faction he flies), and hue is
+# never the only cue: ally = circle, enemy = square, objective = diamond,
+# player = arrow, so the map stays legible on SHAPE alone under red-green
+# colour blindness. The defaults are also separated in LIGHTNESS (ally luma
+# ~0.55 / enemy ~0.30 / objective ~0.75) for the same reason.
+# ---------------------------------------------------------------------------
+[map]
+# -- basemap (newspaper greyscale; RGB [0,1], all three channels near-equal by
+#    rule - the loader REJECTS a tinted paper/ink/water)
+paper               = [0.900, 0.898, 0.892]  # newsprint stock
+ink                 = [0.130, 0.130, 0.135]  # darkest printed ink
+water               = [0.738, 0.740, 0.744]  # lake/river grey plate
+basemap_ink         = 0.92     # overall plate strength [0,1]; lower = the chart
+                               # screens back further behind the markers
+lake_label_span_m   = 8000.0   # only lakes at least this wide get a name (was
+                               # 3000 -> the label pile-up Chad called clutter)
+trails_visible      = 0        # 176 dashed snowmobile trails: the single biggest
+                               # source of noise on the before-shot. 1 = back on
+minor_roads_visible = 1        # town street grid, now a light hairline
+rivers_visible      = 1        # river web, now a thin uncased hairline
+zone_labels_visible = 0        # "Onaping / Dowling" + "Coniston" place text -
+                               # redundant with the objective markers on top
+place_labels_visible = 0       # S-mapteam (Chad 2026-08-09): "rEMOVE ALL THE
+                               # PLACE NAMES FROM THE MAP PLEASE". Towns,
+                               # airstrip NAMES and lake NAMES - the whole
+                               # place-name layer, off in one dial. Nothing is
+                               # deleted from the data: 1 = every name back
+                               # exactly as before. Airstrip DOTS, compass,
+                               # scale bar and title block are chart FURNITURE
+                               # and are unaffected either way.
+
+# -- map chrome (the TEAM hues live in [teams] below - one table, never two)
+neutral_color       = [0.45, 0.45, 0.47]   # unfactioned contact
+outline_color       = [0.04, 0.04, 0.05]   # the contrast halo behind everything
+marker_px           = 5.5      # ally/enemy/neutral marker half-size (px)
+objective_px        = 7.5      # pump-glyph CASING radius (px). The drawn glyph
+                               # is ~1.8x this (the volute cone stands proud of
+                               # the casing) and the owner ring is derived from
+                               # THAT extent, so this one dial scales the whole
+                               # assembly - ring included - without re-tuning
+                               # anything by hand.
+player_px           = 16.0     # player arrow half-length (px) - the biggest
+outline_px          = 2.2      # halo thickness around every marker (px)
+territory_fill      = 0.0      # team wash inside a bubble [0,1]; 0 = outline
+                               # only. A green/red wash under green/red markers
+                               # IS the camouflage - raise only if the outline
+                               # alone reads too thin
+territory_outline_px = 3.0     # bubble boundary stroke (px)
+arrow_hold_sin      = 0.15     # S-maparrow degeneracy guard: hold the last good
+                               # bearing while the nose is within asin(0.15) =
+                               # ~8.6 deg of straight up/down. 0 = guard OFF
+                               # (the kill-switch arm: recompute always)
+
+# -- L4 THE MILLWRIGHT MAP (Chad 2026-09-01: "update the map to have less
+#    clutter and more accurate objectives, zoomable via mousewheel, better
+#    local scale ... pointer good at both large and small scales").
+#
+# ZOOM IS A MULTIPLE OF FIT, NOT A px/m SCALE. 1 = both faction ellipses on
+# screen (exactly the chart that shipped before L4); the wheel multiplies it.
+# The floor is 1 by construction and is not a dial - there is nothing further
+# out than both bubbles.
+zoom_step           = 1.25     # per wheel notch, GEOMETRIC (every notch is the
+                               # same percentage, like the freelook dolly), so
+                               # the steps are fine at fit and coarse at 64x.
+                               # <= 1 disables the wheel (the kill-switch arm)
+zoom_max            = 64.0     # top of the clamp, in multiples of fit
+follow_zoom         = 4.0      # ABOVE this the view stops being a chart and
+                               # follows the player (plan 4.4's strict ">")
+# The declutter thresholds ADD to the visible bools above, never subtract:
+# a layer is on when `visible || zoom >= threshold`. At zoom 1 these three
+# reproduce today's chart exactly (trails off, roads on, names off).
+trails_zoom         = 4.0      # the 176 dashed sled trails come back at local
+                               # scale, where they are the thing you are on
+minor_roads_zoom    = 4.0      # only bites if minor_roads_visible is dialled 0
+place_labels_zoom   = 8.0      # names return when a name is what you are
+                               # actually reading
+
+# ---------------------------------------------------------------------------
+# [teams] - THE ONE FACTION PALETTE (S-mapteam, Chad 2026-08-09, verbatim:
+# "Make the enemies the slag orange color we use across this codebade and make
+# the allies switch back to an opposite blue functionally and with precision
+# the opposite of blue on the color wheel of the orange slag color and verify
+# this is right. Then go an make sure all allies planes and their name tag are
+# colored blue in map and in game. And the [enemy] planes the same slag orange
+# code for the in game planes, map icons and their enemy name tags").
+#
+# ONE TABLE, EVERY SURFACE. render::set_team_colors() pushes these once at
+# startup and BOTH layers read them: the map tactical layer (contact markers,
+# the ALLIED AIR / ENEMY AIR airspace tags, the player arrow, the pump owner
+# rings) AND the world draw (Fleet Rig aircraft livery, the in-game ALLY /
+# BANDIT tags, Chad's own callsign tag, the 3D pump beacons). There is
+# deliberately no second colour table anywhere - that fork is what CLAUDE.md's
+# H1 rule forbids.
+#
+# `enemy` IS the slag orange: render/slag.cpp injects this exact value into the
+# lava fragment shader as the heatColor() `hot` stop, so the molten slag pour
+# and the enemy faction are the same number by construction.
+#
+# `ally` is DERIVED, not picked - the exact 180 deg HSV complement of `enemy`
+# at the same saturation and value:
+#     enemy (1.00, 0.55, 0.12) -> HSV (29.3181818 deg, S 0.88, V 1.00)
+#     +180 deg                 -> HSV (209.3181818 deg, S 0.88, V 1.00)
+#                              -> RGB (0.12, 0.57, 1.00)  exactly
+# The loader ENFORCES that (render::is_exact_complement, 1e-6) and so does
+# test/unit/test_team_color.cpp. Do NOT "simplify" ally to (0.12, 0.55, 1.00) -
+# that channel-reversal looks right and is 181.36 deg away, not 180; both
+# checks reject it.
+#
+# Orange/blue also replaces green/red, the most-confused colour-blind pair.
+# ---------------------------------------------------------------------------
+[teams]
+enemy     = [1.00, 0.55, 0.12]  # SLAG ORANGE - the heatColor() hot stop
+ally      = [0.12, 0.57, 1.00]  # the EXACT 180 deg complement (derived above)
+objective = [0.000, 0.518, 0.239]
+# ^ MEDICAL-OXYGEN GREEN, the pump hue. Chad: "the same green used for oxygen
+# bottles in an ambulance". North American medical gas containers and their
+# markers follow CGA Pamphlet C-9 (adopted by NFPA 99C), which assigns GREEN to
+# oxygen - the green on an ambulance O2 cylinder. C-9 names the colour but
+# publishes no Pantone; the de-facto ink used by medical-gas marker printers is
+# the ANSI Z535.1 safety green, PANTONE 348 C = #00843D = (0,132,61)/255. Its
+# luma (~0.39) sits well below both team hues (ally ~0.51, enemy ~0.61), so the
+# objective separates from both teams in LIGHTNESS as well as hue.
+
+# ---------------------------------------------------------------------------
+# [pump_frame] - THE NEON TEAM WIRE CUBE around a pump (S-pumpcube, Chad
+# 2026-08-09, verbatim): "the green pumps inside the black stope need a wire
+# cube that is neon slag and opposing blue of the same team color codes to frame
+# in that pump otherwise they dont apper claimed by either side in the black
+# stope".
+#
+# The two DEEP pumps live in a sealed unlit rock chamber and have no beacon
+# column, so nothing on them says whose they are. The frame is drawn ADDITIVELY
+# (self-lit - a shaded wireframe is invisible down there, which IS the defect)
+# with depth-WRITE off and depth-TEST on, after every opaque depth-writer.
+# Colours come from [teams] above - there is no second palette here by design.
+# Full rationale: render/pump_frame.h.
+# ---------------------------------------------------------------------------
+[pump_frame]
+enabled       = 1     # master switch; 0 = nothing drawn at all
+deep_only     = 1     # 1 = Chad's literal ask (stope pumps only; the surface
+                      #     pump look is untouched). 0 = frame EVERY pump,
+                      #     surface ones included.
+half_extent_m = 40.0  # cube half-edge (m). Must exceed the 26 m deep-pump
+                      # beacon shell (render::kDeepPumpShellM) - the loader
+                      # rejects a frame that would z-fight the body.
+layers        = 3     # nested wire shells = the neon thickness. NOT a line
+                      # width: GL core profile clamps glLineWidth to 1, so a
+                      # width-based glow ships as a hairline. Shells bloom
+                      # additively up close, collapse to one bright line far.
+layer_step_m  = 0.4   # radial spacing between those shells (m)
+brightness    = 1.0   # additive strength of the inner shell [0,4]
+neutral_color = [0.35, 0.35, 0.38]
+# ^ the frame of an UNOWNED or DEAD pump. A destroyed pump is genuinely
+# unowned, and painting its frame in the last owner's colour would be a
+# stale-ownership lie of exactly the kind this mechanism exists to fix.
+
 # ---------------------------------------------------------------------------
 # FUTURE sections (defined when the phase that needs them lands; kept here as the
 # single source so no number is ever born in code):
-#   [teams]  the ONLY saturated entries in all of config — complementary duos
-#            (orange+blue, green+red, purple+yellow), picked per match. (P2)
 #   [landing][zone]  forward-compat data regions (Garson runway, capture caps). (P5)
 # ---------------------------------------------------------------------------

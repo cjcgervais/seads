@@ -5,6 +5,7 @@
 // committed table so the test can't drift from the schema.
 
 #include <catch2/catch_approx.hpp>
+#include <cmath>
 #include <catch2/catch_test_macros.hpp>
 #include <filesystem>
 #include <fstream>
@@ -58,13 +59,50 @@ TEST_CASE("load_controller: the committed table loads and is sane") {
     CHECK(cp.blend_lo > 0.08);  // 5 deg ~ 0.087 rad
     CHECK(cp.blend_lo < 0.10);
     // v5 rung D (Chad 2026-07-23 arcade energy ruling): 16.0 -> 32.0.
-    CHECK(cp.n_max == 32.0);  // Â§7 performance tune (6.0 -> 10.0 -> 16.0 -> 32.0)
+    CHECK(cp.n_max ==
+          32.0);  // Â§7 performance tune (6.0 -> 10.0 -> 16.0 -> 32.0)
     // The critical-damping rule and the stall bound hold for the real table.
     CHECK(cp.K_w_pitch >= 4.0 * ap.I_pitch * cp.K_theta);
     CHECK(cp.aoa_max <= ap.Cl_max / ap.Cl_alpha);
-    // Ease-back is a real window and inside CQ2's 300 ms cap.
-    CHECK(cp.freelook_easeback_time > 0.0);
+    // Ease-back: RETIRED at the flown value (pilot ruling 2026-08-06 — the
+    // release is instant, so the 300 ms mouse->aim suspension protects nothing
+    // mechanical). 0 is the shipped value; the CQ2 cap still binds any re-arm.
+    CHECK(cp.freelook_easeback_time == 0.0);
     CHECK(cp.freelook_easeback_time <= 0.300);
+    // The double-tap ORIENT verb is retired too (redundant: every airborne
+    // release fires the verb + the instant horizon roll).
+    // Fly-4 2026-08-06: the double-tap is RESTORED (the pilot's manual echo of
+    // the automatic release verb — instant, no dwell, no gates).
+    CHECK(cp.orient_double_tap_s == 0.30);
+    // Inverted righting carries NO added delay (same ruling): the rest
+    // condition is the only wait. The rate knob is still the real mechanism.
+    CHECK(cp.inverted_delay == 0.0);
+    CHECK(cp.inverted_rate > 0.0);
+    // v13 rest-edge camera recovery: a real dwell, on the deadzone's scale.
+    CHECK(cp.horizon_recovery_rate > 0.0);
+    CHECK(cp.horizon_recovery_rest_dwell >= 0.0);
+    // Fly-5/fly-7 2026-08-06 ("engage a little sooner" / "trigger a little
+    // sooner when I settle"): the camera's dwell is FASTER than the cascade's
+    // deadzone dwell — the two dials are decoupled.
+    CHECK(cp.horizon_recovery_rest_dwell == 0.05);
+    // v13g ease-in (fly-7): the rest-edge roll ramps in, never launches at
+    // full rate on the capture tick.
+    CHECK(cp.horizon_recovery_ease_in > 0.0);
+    // v13c arm gates (fly-2): inversion-class debt only, aim on the flight
+    // path; both load deg -> rad at the boundary.
+    constexpr double kPiLocal = 3.14159265358979323846;
+    // Fly-4 2026-08-06: any debt above the finish epsilon rights at settled
+    // rest — the settled gates (path_band/straight_max/dwell) do the guarding.
+    CHECK(cp.horizon_recovery_arm_min == 0.0);
+    // Fly-7 2026-08-06 (whole arm chain lowered): path_band 10 -> 15,
+    // straight_max 6 -> 9; fly 2026-09-10 straight_max 9 -> 12 (Chad:
+    // "trigger a bit sooner, not move faster").
+    CHECK(cp.horizon_recovery_path_band ==
+          Catch::Approx(15.0 * kPiLocal / 180.0));
+    // v13d straightness gate: above the great-circle floor (v_redline/R), far
+    // below any real turn.
+    CHECK(cp.horizon_recovery_straight_max ==
+          Catch::Approx(12.0 * kPiLocal / 180.0));
     // Mouse sensitivities load positive, deg -> rad at the boundary.
     CHECK(cp.aim_sensitivity > 0.0);
     CHECK(cp.aim_sensitivity < 0.01);  // 0.15 deg/px ~ 0.0026 rad/px
@@ -106,6 +144,22 @@ TEST_CASE("load_controller: the committed table loads and is sane") {
                                  // fallback): 6 -> 8. History 8->10->12->16->
                                  // 10->6->8; 16 flown + REJECTED bank-eager.
     CHECK(cp.lean_max == Catch::Approx(30.0 * kPi / 180.0).margin(1e-9));
+    // S-leanlead (feel/yaw-bank-balance 2026-09-10): a dimensionless mix
+    // weight. Walked back to 0.0 on 2026-09-12 (Chad: unwanted bank nosing
+    // down and through a straight loop), then RESTORED to the flown 0.3 the
+    // same day once the regression was attributed to the LEAD reading a
+    // pure-pitch aim as lateral -- the fix is the structural gate below, not
+    // the scalar. Walk-back order is lean_lead_lateral = false (== the
+    // rejected v14), then 0.2 / 0.15 / 0.1, then 0 (the pre-v14 tree).
+    CHECK(cp.lean_lead == 0.3);
+    // S-leanlead-lateral: the horizon-lateral-share gate on the lead. Shipped
+    // ON. lat_lo is sin(lean_max) EXACTLY -- see the wall below; it is the
+    // geometry, not a tuned constant, so it is pinned as the identity.
+    CHECK(cp.lean_lead_lateral == true);
+    CHECK(cp.lean_lead_lat_lo == 0.50);
+    CHECK(cp.lean_lead_lat_hi == 0.85);
+    CHECK(cp.lean_lead_lat_lo ==
+          Catch::Approx(std::sin(cp.lean_max)).margin(1e-12));
     // Aim-motion gate (rudder-flick Fly 6): SECONDS, not rad. Fly-7/8 A/B:
     // both states flown 2026-07-10, Chad chose the GATED build ("smaller
     // steps"); 0.15 is the flown-and-chosen value.
@@ -226,6 +280,66 @@ TEST_CASE("load_controller: rejects out-of-range MB-lean knobs") {
         replace_all(base, "lean_max  = 30.0", "lean_max  = 50.0");
     CHECK_THROWS(
         cfg::load_controller_toml(write_temp(bad_max, "lean_max_over"), ap));
+    // S-leanlead: a lead PAST the live target is a new oscillator; negative
+    // would lag behind held_bank (the sign-flip class).
+    REQUIRE(base.find("lean_lead = 0.3") != std::string::npos);
+    const std::string bad_lead_hi =
+        replace_all(base, "lean_lead = 0.3", "lean_lead = 1.5");
+    CHECK_THROWS(cfg::load_controller_toml(
+        write_temp(bad_lead_hi, "lean_lead_over"), ap));
+    const std::string bad_lead_neg =
+        replace_all(base, "lean_lead = 0.3", "lean_lead = -0.5");
+    CHECK_THROWS(cfg::load_controller_toml(
+        write_temp(bad_lead_neg, "lean_lead_neg"), ap));
+
+    // S-leanlead-lateral (2026-09-12): the share edges. Both are fractions of
+    // the total pointing error, so out of [0,1] is meaningless; and the
+    // smoothstep needs lo < hi or its divide blows.
+    REQUIRE(base.find("lean_lead_lat_lo = 0.50") != std::string::npos);
+    REQUIRE(base.find("lean_lead_lat_hi = 0.85") != std::string::npos);
+    const std::string bad_lat_lo_neg =
+        replace_all(base, "lean_lead_lat_lo = 0.50", "lean_lead_lat_lo = -0.1");
+    CHECK_THROWS(cfg::load_controller_toml(
+        write_temp(bad_lat_lo_neg, "lean_lat_lo_neg"), ap));
+    const std::string bad_lat_hi_over =
+        replace_all(base, "lean_lead_lat_hi = 0.85", "lean_lead_lat_hi = 1.4");
+    CHECK_THROWS(cfg::load_controller_toml(
+        write_temp(bad_lat_hi_over, "lean_lat_hi_over"), ap));
+    // Degenerate band (lo >= hi): the smoothstep would divide by zero.
+    const std::string bad_lat_band =
+        replace_all(base, "lean_lead_lat_hi = 0.85", "lean_lead_lat_hi = 0.50");
+    CHECK_THROWS(cfg::load_controller_toml(
+        write_temp(bad_lat_band, "lean_lat_band"), ap));
+    // THE GEOMETRY TRIPWIRE (the "retune silently disarms" class): the gate
+    // exists to read 0 for a pure-PITCH aim at every bank the lean can
+    // command, and that aim reads share |sin(phi)| -- so lat_lo must stay at
+    // or above sin(lean_max). Lowering lat_lo alone silently re-opens the
+    // v14 regression across part of the shallow-bank band; so does RAISING
+    // lean_max without re-deriving lat_lo. Both directions must fail loud.
+    const std::string bad_lat_lo_under =
+        replace_all(base, "lean_lead_lat_lo = 0.50", "lean_lead_lat_lo = 0.30");
+    CHECK_THROWS(cfg::load_controller_toml(
+        write_temp(bad_lat_lo_under, "lean_lat_lo_under"), ap));
+    const std::string bad_lean_max_up =
+        replace_all(base, "lean_max  = 30.0", "lean_max  = 40.0");
+    CHECK_THROWS(cfg::load_controller_toml(
+        write_temp(bad_lean_max_up, "lean_max_vs_lat_lo"), ap));
+    // A typo in the flag must fail loud, never silently default to OFF (the
+    // optional_bool contract).
+    const std::string bad_lat_flag = replace_all(
+        base, "lean_lead_lateral = true", "lean_lead_lateral = \"yes\"");
+    CHECK_THROWS(cfg::load_controller_toml(
+        write_temp(bad_lat_flag, "lean_lat_flag"), ap));
+    // ABSENT keys => the structural OFF default (the landed v14 lead), never
+    // a throw: an untouched toml must keep loading.
+    const std::string no_lat_keys = replace_all(
+        replace_all(replace_all(base, "lean_lead_lateral = true", ""),
+                    "lean_lead_lat_lo = 0.50", ""),
+        "lean_lead_lat_hi = 0.85", "");
+    const control::ControllerParams defaulted =
+        cfg::load_controller_toml(write_temp(no_lat_keys, "lean_lat_absent"), ap);
+    CHECK(defaulted.lean_lead_lateral == false);
+    CHECK(defaulted.lean_lead == 0.3);
 }
 
 TEST_CASE("load_controller: rejects a righting roll faster than p_max") {
@@ -279,13 +393,38 @@ TEST_CASE("load_controller: rejects an ease-back window past CQ2's 300 ms") {
     const sim::AircraftParams ap =
         cfg::load_aircraft_toml(SEADS_CONFIG_DIR "/aircraft.toml");
     const std::string base = slurp(SEADS_CONFIG_DIR "/controller.toml");
-    REQUIRE(base.find("easeback_time = 0.30") != std::string::npos);
+    REQUIRE(base.find("easeback_time = 0.0") != std::string::npos);
     // 0.40 s > 0.30 s -> a smoothed camera basis suspended far too long,
-    // and the held aim would feel frozen after the pilot came back (CQ2).
+    // and the held aim would feel frozen after the pilot came back (CQ2). The
+    // shipped value is now the retired 0 (pilot ruling 2026-08-06), so the
+    // mutation re-arms the window PAST the cap from there — the wall that
+    // survives the retirement is the one this leg pins.
     const std::string bad =
-        replace_all(base, "easeback_time = 0.30", "easeback_time = 0.40");
+        replace_all(base, "easeback_time = 0.0", "easeback_time = 0.40");
     const std::string path = write_temp(bad, "easeback_over_cap");
     CHECK_THROWS(cfg::load_controller_toml(path, ap));
+}
+
+TEST_CASE("load_controller: rejects a negative horizon rest dwell") {
+    // v13 rest-edge camera recovery (pilot ruling 2026-08-06): the dwell may be
+    // 0 (arm on the first still tick) but never negative — a negative is a typo
+    // that would arm the capture before any rest was measured.
+    const sim::AircraftParams ap =
+        cfg::load_aircraft_toml(SEADS_CONFIG_DIR "/aircraft.toml");
+    const std::string base = slurp(SEADS_CONFIG_DIR "/controller.toml");
+    // The [horizon_recovery] key specifically (the [deadzone] one ships the
+    // same value and has its own wall).
+    const std::string key = "rest_dwell = 0.05    # [s] mouse-still";
+    REQUIRE(base.find(key) != std::string::npos);
+    const std::string bad =
+        replace_all(base, key, "rest_dwell = -0.01    # [s] mouse-still");
+    const std::string path = write_temp(bad, "horizon_rest_dwell_negative");
+    CHECK_THROWS(cfg::load_controller_toml(path, ap));
+    // ...and 0 is accepted (the legal "arm immediately" arm).
+    const std::string ok_toml =
+        replace_all(base, key, "rest_dwell = 0.0    # [s] mouse-still");
+    const std::string ok_path = write_temp(ok_toml, "horizon_rest_dwell_zero");
+    CHECK_NOTHROW(cfg::load_controller_toml(ok_path, ap));
 }
 
 TEST_CASE("load_controller: rejects globe-inertia cap 0 while tau is on") {
@@ -419,7 +558,8 @@ TEST_CASE("load_controller: rejects out-of-band capture dials (S-rimshot v2)") {
     CHECK_NOTHROW(cfg::load_controller_toml(write_temp(off, "cap_off"), ap));
 }
 
-TEST_CASE("load_controller: [freelook] release_orient optional, default false") {
+TEST_CASE(
+    "load_controller: [freelook] release_orient optional, default false") {
     const sim::AircraftParams ap =
         cfg::load_aircraft_toml(SEADS_CONFIG_DIR "/aircraft.toml");
     const std::string base = slurp(SEADS_CONFIG_DIR "/controller.toml");
@@ -474,4 +614,19 @@ TEST_CASE("load_controller: line_hold_ff shipped pin + wall (S-straightline)") {
             replace_all(shipped, "line_hold_ff = 1.0", "line_hold_ff = -0.5"),
             "linehold_neg"),
         ap));
+}
+
+// S-righthand (red-team P2): the shipped value and its wall had ZERO mentions
+// in the loader suite, so a retune to 0 (silently disarming the veto) or past
+// the felt ceiling would have landed unremarked.
+TEST_CASE("loader: right_hand_rest is shipped live and walled") {
+    const sim::AircraftParams ap =
+        cfg::load_aircraft_toml(SEADS_CONFIG_DIR "/aircraft.toml");
+    const control::ControllerParams cp =
+        cfg::load_controller_toml(SEADS_CONFIG_DIR "/controller.toml", ap);
+    // The SHIPPED value: MB-right's hand-rest veto is armed.
+    CHECK(cp.right_hand_rest == 0.25);
+    // ...and the wall holds both ends (0 is legal -- it is the OFF arm).
+    CHECK(cp.right_hand_rest >= 0.0);
+    CHECK(cp.right_hand_rest <= 2.0);
 }

@@ -5,6 +5,30 @@ play**, not history — the reasoning lives in `docs/DECISIONS.md`, which is aut
 
 ---
 
+## ⛔ 2026-09-15 — READ THIS FIRST: the sentinel role, kernel v15, and what is on hold
+
+Written 2026-09-15 by the session Chad brought back after a month away. Everything below
+this section is older state; the 2026-07-29 snapshots in §2 are superseded by the first row
+of its table and by `docs/DECISIONS.md`'s 2026-09-15 entry.
+
+1. **You are the SENTINEL for pushes into flight_sim2** (Chad's word 2026-09-15). Read
+   `docs/SENTINEL_LEDGER.md` — the SOP packet, the queue and the dated ledger. Arm ONE watch on
+   `origin/main` of `D:\flight_sim2\seads` (read-only `git fetch` + `rev-parse`). `ListAgents`
+   and send every live lane session one packet. Silence is never a go.
+2. **The kernel is v15** (`b697d24a5`, S-righthand). `reference/seads-feel/` is at that tip.
+3. **v16 is ON HOLD FOR CHAD** — the lateral nose-down (`docs/cascade/lateral-nose-down-unload.md`).
+   His open question: land anyway, narrow the unload so it cannot arm in a vertical loop, or
+   drop the unload and keep only the yaw budget. Do not build the §3.4 aim-conditioned bank
+   sizing without his ruling. A feel agent may be live on `feel/lateral-yawbudget`; it lands
+   AFTER atmosphere-snow by the sentinel's order.
+4. **This repo's GitHub remote is missing** ("Repository not found"). Commit locally; the
+   nightly Drive job is the off-site copy. Ask Chad to recreate or re-point it.
+5. **Nightly backup:** two scheduled tasks — "Mandalark Kernel GDrive Backup" 21:30 (this repo)
+   and "Mandalark Drive Sentinel Backup" 22:30 (the whole `D:` drive + bundles + the sentinel
+   observation). Logs in `tools/backup_logs/`. rclone's shared client_id retires in 2026.
+
+---
+
 ## ⛔ ACTION REQUIRED, KERNEL-DOCS AGENT — SOP-01 must be enforced in your docs
 
 **Added 2026-08-02 by Chad's ruling. This is the project's number one imperative and it
@@ -75,6 +99,7 @@ You two hand off through Chad, and through `docs/*_handoff.md` files in the live
 | repo | branch | tip | note |
 |---|---|---|---|
 | `mandalark-kernel` | `main` | see git | pushed, clean |
+| `seads-feel` | **`origin/main` = `b697d24a5`** (2026-09-15) | `kernel-v15-righthand-signed` | **KERNEL v15 flies on `main` and on `seads-recon`.** Feel lanes are now short-lived `feel/<name>` branches landed through the sentinel protocol; `feel/kernel-v5` is dead at `15571a5f4`. `reference/seads-feel/` re-snapshotted at `b697d24a5`. v16 candidate ON HOLD on `feel/lateral-yawbudget` @ `40325f297`. Older row kept below for lineage: |
 | `seads-feel` | `feel/kernel-v5` | `e362df289` | pushed. **Seal `flight-kernel-v12-2026-07-30` @ tip** (S-straightline flown-approved — "the baseline for a quality flight kernel"; ⚠ tag is LIGHTWEIGHT, convention deviation noted). `reference/seads-feel/` re-snapshotted at the v12 seal, no purity exceptions |
 | `seads-recon` | `sandbox/kernel-v5-reconcile` | `2116f6ea3` | pushed. **Flies sealed v12** — gate 914/914 (pre-registered 905+9), Environment* seam adapt documented, build-play re-stamped (`line_hold_ff = 1.0` confirmed) |
 | `seads-recon` | `sandbox/kernel-v5-reconcile` | see git | **graft of the sealed v10 state was in flight 2026-07-30** — verify before treating recon as flying the committed seal (it flew the byte-matched logged flip before that) |

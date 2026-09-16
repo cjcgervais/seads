@@ -99,7 +99,8 @@ TEST_CASE("app::tick: crash-reset respawns on the first altitude<=0 crossing") {
     double alt_at_death = -999.0;
     for (int i = 0; i < 200 && !respawned; ++i) {
         const double alt_prev = sim::altitude(loop.curr.position, kAp);
-        const app::TickResult r = app::tick(loop, instr_in(0.3), kAp, kCp);
+        const app::TickResult r =
+            app::tick(loop, instr_in(0.3), kAp, kCp, nullptr);
         REQUIRE(finite_state(loop.curr));
         if (r.respawned) {
             respawned = true;
@@ -150,7 +151,7 @@ TEST_CASE("app::tick: crash-reset respawns on the first altitude<=0 crossing") {
     held.override_mask[0] = true;
     held.override_sign[0] =
         +1.0;  // full pitch-up demand, ignored while grounded
-    const app::TickResult g = app::tick(loop, held, kAp, kCp);
+    const app::TickResult g = app::tick(loop, held, kAp, kCp, nullptr);
     CHECK(g.inputs.pitch == 0.0f);
     CHECK(g.inputs.yaw == 0.0f);
     CHECK(g.inputs.roll == 0.0f);
@@ -183,7 +184,7 @@ TEST_CASE("app::tick: raw mode respawns on the same crash predicate") {
 
     bool respawned = false;
     for (int i = 0; i < 200 && !respawned; ++i) {
-        const app::TickResult r = app::tick(loop, raw, kAp, kCp);
+        const app::TickResult r = app::tick(loop, raw, kAp, kCp, nullptr);
         REQUIRE(finite_state(loop.curr));
         respawned = r.respawned;
     }
@@ -266,6 +267,115 @@ TEST_CASE("app::instructor_camera: forwards the carried aim-up") {
 }
 
 // ===========================================================================
+// T9a CAVECAM — the shared inside_tunnel() predicate + the forwarding of the
+// underground flag through app::instructor_camera. A DEFAULTED new param ships
+// DEAD without a leg that drives it live on the shipped path (the
+// moved-consumer house lesson): the forwarding leg flies a deep-underground
+// nose-up state through app::instructor_camera(..., underground=true) and
+// asserts the eye is NOT hoisted to bare radius (== the raw offset). The helper
+// leg pins the predicate: null env => false, inside-egg point => true, surface
+// point => false. One predicate feeds BOTH the crash yield and the camera flag.
+// ===========================================================================
+TEST_CASE("app::inside_tunnel: predicate is true only inside the net") {
+    // A bare-sphere tunnel net (null ground): the hollow-core cavern shell sits
+    // well below the surface (T10). A point in the middle of the shell is
+    // inside.
+    world::TunnelParams tp;
+    tp.sphere_R = kAp.R;
+    tp.tube_width_m = 110.0;
+    tp.tube_height_m = 90.0;
+    tp.depth_m = 1600.0;
+    tp.soft_m = 40.0;
+    tp.ramp_frac = 0.3;
+    tp.spacing_m = 150.0;
+    tp.floor_height_m = 20.0;
+    tp.arena_a_m = 7350.0;
+    tp.arena_c_m = 2600.0;
+    tp.arena_depth_m = 1500.0;
+    tp.cavern_core_m = 2500.0;
+    tp.breach_margin_m = 300.0;
+    tp.chamber_long_m = 200.0;
+    tp.chamber_lat_m = 140.0;
+    tp.chamber_vert_m = 120.0;
+    tp.chamber_breach_offset_m = 800.0;
+    tp.connector_radius_m = 60.0;
+    tp.bowl_radius_m = 450.0;
+    tp.bowl_depth_m = 300.0;
+    tp.mouth_sink_m = 130.0;
+    tp.min_cover_m = 60.0;
+    const world::TunnelNet net = world::build_tunnel_net(tp, nullptr);
+
+    sim::Environment env;
+    env.tunnels = &net;
+
+    // A point in the middle of the flyable arena (deep below the surface): the
+    // arena center itself (guaranteed inside the arena ellipsoid).
+    const glm::dvec3 shell_pt = net.arena.center;
+    const glm::dvec3 surface_pt = glm::normalize(shell_pt) * (kAp.R + 2000.0);
+
+    // null env => false (the surface-flight clamp / altitude<=0 rule).
+    REQUIRE(app::inside_tunnel(nullptr, shell_pt) == false);
+    // env with null tunnels => false.
+    sim::Environment env_no_tun;
+    REQUIRE(app::inside_tunnel(&env_no_tun, shell_pt) == false);
+    // inside the arena => true.
+    REQUIRE(net.contains(shell_pt));  // premise
+    REQUIRE(app::inside_tunnel(&env, shell_pt) == true);
+    // a point 2 km above the surface => false.
+    REQUIRE(!net.contains(surface_pt));  // premise
+    REQUIRE(app::inside_tunnel(&env, surface_pt) == false);
+    // the CORE interior (below core_r) is OUTSIDE the net (a crash wall).
+    const glm::dvec3 core_pt =
+        glm::normalize(shell_pt) * (tp.cavern_core_m * 0.5);
+    REQUIRE(!net.contains(core_pt));
+    REQUIRE(app::inside_tunnel(&env, core_pt) == false);
+}
+
+TEST_CASE("app::instructor_camera: forwards the underground CAVECAM flag") {
+    // Deep-underground nose-UP state where the surface clamp would hoist the
+    // eye to bare radius. Position ~ R-2500 (legally below the surface, in the
+    // tunnel); nose (aim forward) points radially up so the chase eye lands
+    // radially below the target.
+    const glm::dvec3 pos_dir = glm::normalize(glm::dvec3{0.3, 1.0, -0.4});
+    sim::SimState s;
+    s.position = pos_dir * (kAp.R - 2500.0);
+    const glm::dvec3 lu = sim::local_up(s.position);
+    const glm::dvec3 fwd = lu;  // nose radially up
+    // aim_up = a tangent (⟂ fwd) so the frame is well-formed.
+    const glm::dvec3 tang =
+        glm::normalize(glm::cross(fwd, glm::dvec3{0.0, 0.0, 1.0}));
+    const glm::dvec3 aim_up =
+        glm::length(tang) > 0.1
+            ? tang
+            : glm::normalize(glm::cross(fwd, glm::dvec3{1.0, 0.0, 0.0}));
+    s.orientation = glm::normalize(glm::quat_cast(
+        glm::dmat3{glm::normalize(glm::cross(aim_up, -fwd)), aim_up, -fwd}));
+
+    const render::ChaseParams chase;
+    const render::CameraOrbit orbit;
+    // underground=true: the eye must NOT be hoisted — it stays at the raw
+    // offset (below the target). underground=false (default): the clamp hoists
+    // it to bare radius. Mutation (m1: hardcode false in instructor_camera) =>
+    // the underground pose gets hoisted, failing the < |position| check.
+    const render::CameraPose ug =
+        app::instructor_camera(s, fwd, aim_up, kAp, chase, orbit,
+                               /*underground=*/true);
+    const render::CameraPose sf =
+        app::instructor_camera(s, fwd, aim_up, kAp, chase, orbit,
+                               /*underground=*/false);
+    std::printf("[app-tick cavecam] |ug.eye|=%.1f |sf.eye|=%.1f |pos|=%.1f\n",
+                glm::length(ug.eye), glm::length(sf.eye),
+                glm::length(s.position));
+    // underground: eye on the plane (below the target, not hoisted).
+    CHECK(glm::length(ug.eye) < glm::length(s.position));
+    // surface-flight arm: eye hoisted to bare radius (the bug this fixes).
+    CHECK(glm::length(sf.eye) ==
+          Catch::Approx(kAp.R + chase.min_eye_altitude).epsilon(1e-9));
+    // The forwarded flag genuinely changed the pose.
+    CHECK(glm::length(ug.eye - sf.eye) > 100.0);
+}
+
+// ===========================================================================
 // S7-cam3 "the mouse never inverts" (the executable form of Chad's complaint
 // "after a split-S the mouse goes all opposite"). With camera-up = the CARRIED
 // aim-frame up, a MOUSE-UP nudge moves the reticle UP ON SCREEN at EVERY
@@ -343,7 +453,7 @@ glm::dvec3 tick_aim_forward(const sim::SimState& s, double aim_dx,
     app::TickInput in = instr_in(0.7);
     in.freelook_held = freelook;
     in.aim_dx = aim_dx;
-    app::tick(loop, in, kAp, kCp);
+    app::tick(loop, in, kAp, kCp, nullptr);
     return loop.aim.forward();
 }
 }  // namespace
@@ -384,6 +494,12 @@ TEST_CASE(
 // dropped ("pin the CONSUMER", the 4d-audit lesson).
 // ===========================================================================
 TEST_CASE("app::tick: mouse->aim stays suspended across the CQ2 ease-back") {
+    // The window is RETIRED at the flown value (pilot ruling 2026-08-06:
+    // easeback_time = 0), but the MECHANISM stays wired — so this leg pins its
+    // own nonzero window rather than reading the shipped 0, which would make it
+    // vacuous (the fixture-no-op class).
+    control::ControllerParams cp = kCp;
+    cp.freelook_easeback_time = 0.30;
     const glm::dvec3 up{1.0, 0.0, 0.0}, heading{0.0, 0.0, -1.0};
     const sim::SimState s =
         harness::level_state(kAp, 150.0, 3000.0, up, heading);
@@ -393,11 +509,11 @@ TEST_CASE("app::tick: mouse->aim stays suspended across the CQ2 ease-back") {
         app::LoopState loop = flying(s);
         app::TickInput hold = instr_in(0.7);
         hold.freelook_held = true;
-        app::tick(loop, hold, kAp, kCp);  // hold freelook one tick
+        app::tick(loop, hold, kAp, cp, nullptr);  // hold freelook one tick
         app::TickInput rel = instr_in(0.7);
         rel.freelook_held = false;  // RELEASE this tick: ease-back armed
         rel.aim_dx = aim_dx;        // mouse delta during the suspension window
-        app::tick(loop, rel, kAp, kCp);
+        app::tick(loop, rel, kAp, cp, nullptr);
         return loop.aim.forward();
     };
     const double delta =
@@ -430,7 +546,7 @@ TEST_CASE("app::tick: first override during freelook snaps aim to the nose") {
     in.freelook_held = true;
     in.override_mask[0] = true;  // seize the pitch axis mid-freelook (rule 2)
     in.override_sign[0] = +1.0;
-    app::tick(loop, in, kAp, kCp);
+    app::tick(loop, in, kAp, kCp, nullptr);
 
     std::printf("[app-tick snap] fwd.nose=%.7f\n",
                 glm::dot(loop.aim.forward(), nose));
@@ -456,7 +572,7 @@ TEST_CASE("app::tick mirrors harness::ClosedLoop::tick over a level cruise") {
     harness::ClosedLoop cl(s0, s0.orientation * glm::dvec3{0.0, 0.0, -1.0});
 
     for (int i = 0; i < 600; ++i) {  // 5 s
-        app::tick(loop, instr_in(thr), kAp, kCp);
+        app::tick(loop, instr_in(thr), kAp, kCp, nullptr);
         cl.tick(thr, kAp, kCp);
         REQUIRE(finite_state(loop.curr));
     }
@@ -510,7 +626,7 @@ TEST_CASE(
         in.override_sign[2] = sign;
         float roll = 0.0f;
         for (int i = 0; i < 12; ++i)  // ~0.1 s: the 80 ms engage ramp saturates
-            roll = app::tick(loop, in, kAp, kCp).inputs.roll;
+            roll = app::tick(loop, in, kAp, kCp, nullptr).inputs.roll;
         return roll;
     };
 
@@ -539,6 +655,10 @@ TEST_CASE(
 // delta dropped.
 // ===========================================================================
 TEST_CASE("app::tick: GROUNDED clears a pending freelook ease-back") {
+    // Own window: the shipped value is the retired 0 (pilot ruling
+    // 2026-08-06), which would arm nothing for the GROUNDED reset to clear.
+    control::ControllerParams cp = kCp;
+    cp.freelook_easeback_time = 0.30;
     const glm::dvec3 up{1.0, 0.0, 0.0}, heading{0.0, 0.0, -1.0};
     const sim::SimState s =
         harness::level_state(kAp, 150.0, 3000.0, up, heading);
@@ -550,15 +670,18 @@ TEST_CASE("app::tick: GROUNDED clears a pending freelook ease-back") {
         app::LoopState loop = flying(s);
         app::TickInput hold = instr_in(0.7);
         hold.freelook_held = true;
-        app::tick(loop, hold, kAp, kCp);  // freelook held one tick
+        app::tick(loop, hold, kAp, cp, nullptr);  // freelook held one tick
         app::TickInput rel = instr_in(0.7);
         rel.freelook_held = false;
-        app::tick(loop, rel, kAp, kCp);  // release: ease-back armed (~300 ms)
-        loop.grounded = true;            // a respawn/toggle GROUNDED pairing
-        app::tick(loop, instr_in(0.7), kAp, kCp);  // grounded tick: fl.reset()
+        app::tick(loop, rel, kAp, cp,
+                  nullptr);    // release: ease-back armed (~300 ms)
+        loop.grounded = true;  // a respawn/toggle GROUNDED pairing
+        app::tick(loop, instr_in(0.7), kAp, cp,
+                  nullptr);  // grounded tick: fl.reset()
         app::TickInput fly = instr_in(0.7);
         fly.aim_dx = aim_dx;
-        app::tick(loop, fly, kAp, kCp);  // first flight tick: mouse offered
+        app::tick(loop, fly, kAp, cp,
+                  nullptr);  // first flight tick: mouse offered
         return loop.aim.forward();
     };
     const double delta =
@@ -625,7 +748,7 @@ MouseVert drive_mouse_vertical(const sim::SimState& s0, int sgn,
         in.aim_dy = (i < push) ? dy : 0.0;
         in.cam_fwd = cam.cam_fwd;  // previous tick's basis (one-tick lag)
         in.cam_up = cam.cam_up;
-        const app::TickResult r = app::tick(st, in, kAp, kCp);
+        const app::TickResult r = app::tick(st, in, kAp, kCp, nullptr);
         cam.advance(st.curr, st.aim.forward(), st.aim.up(), kCp, kAp.sim_dt);
         REQUIRE(finite_state(st.curr));
         m.aim_min_behind =
@@ -750,17 +873,20 @@ TEST_CASE("app::tick: RAW mouse loops cleanly over the top at a slow sweep") {
 // aim still rolls / the DOWN split-S still rolls through) — this pins ONLY the
 // rest/hold wings-leveling half-space gating.
 // ===========================================================================
-// MB-right RE-SCOPE (Chad 2026-07-07, supersedes the 2026-07-06 loop ruling
-// for LONG rests): "stays inverted" now holds only WITHIN [auto_level]
-// inverted_delay — after ~2 s of belly-up rest the slow righting roll arms
-// (pinned in test_cascade "MB-right", incl. the knob-off arm that preserves
-// this test's old full-window behavior at inverted_rate = 0). This leg keeps
-// the S7-loop-invert mutation coverage inside the window: the un-gated-
-// wings-hold mutant (restore F2) rolls from TICK 1, well inside the delay,
-// so the within-window asserts still catch it.
+// MB-right RE-SCOPE, second pass (pilot ruling 2026-08-06): inverted righting
+// carries NO added delay — inverted_delay is 0, so at rest the plane rights
+// from the FIRST rest tick and there is no "within the window" left to fly.
+// The S7-loop-invert half-space gate this leg exists for is UNCHANGED (inverted
+// flight under active hands is still never fought), so the leg now flies the
+// mechanism's own knob-off arm — inverted_rate = 0, the documented way back to
+// the old stays-inverted law — where the wings-leveling gate is the ONLY thing
+// that could roll the plane. Mutation coverage is intact and sharper: the
+// un-gated-wings-hold mutant (wings_level_gate := 1.0, restore F2) rolls from
+// TICK 1 with nothing else in the picture. The zero-delay righting itself is
+// pinned in test_cascade "MB-right".
 TEST_CASE(
-    "control::step: an inverted plane at rest STAYS inverted (no auto-right "
-    "within the righting delay)") {
+    "control::step: an inverted plane at rest STAYS inverted with the "
+    "righting knob off") {
     const glm::dvec3 up{1.0, 0.0, 0.0}, heading{0.0, 0.0, -1.0};
     // Belly-up: rolled 150 deg about the nose (cos_phi_theta = cos 150 ~ -0.87,
     // clearly inverted), otherwise flying ~level.
@@ -768,23 +894,19 @@ TEST_CASE(
         kAp, 160.0, 4000.0, up, heading, rad(150.0), 0.0, 0.0);
     harness::ClosedLoop cl(s, s.orientation * glm::dvec3{0.0, 0.0, -1.0});
 
-    // Strictly inside the righting delay (a 12-tick margin for the arm edge).
-    const int window =
-        static_cast<int>(kCp.inverted_delay / kAp.sim_dt + 0.5) - 12;
-    // Premise re-derived for the dial inverted_delay 1.0 -> 0.5 s (Chad
-    // 2026-07-28; window 108 -> 48 ticks): the un-gated-wings-hold mutant
-    // (wings_level_gate := 1.0, restore F2) emits a roll input from TICK 1,
-    // so max|roll| < 0.05 kills it inside ANY >= 0.3 s window —
-    // MUTATION-RE-VERIFIED at window = 48 on this dial (max|roll| saturates
-    // ~1.0 immediately). Below ~36 ticks the cpt_final "stayed inverted"
-    // companion loses meaning; a delay dialed under 0.4 s must re-derive.
-    REQUIRE(window > 36);
+    // The knob-off arm: no righting mechanism at all, so the window is a
+    // plain 1 s of belly-up rest (config-independent — it no longer keys off
+    // a delay dial that ships 0).
+    control::ControllerParams cp = kCp;
+    cp.inverted_rate = 0.0;
+    const int window = 120;
+    REQUIRE(cp.inverted_rate == 0.0);  // the leg really flies the off arm
     double cpt0 = 1.0, cpt_final = 1.0, max_roll = 0.0, max_pitch = 0.0;
     for (int i = 0; i < window; ++i) {
         cl.aim_nose();  // REST: aim tracks the nose so err ~ 0
-        const control::Telemetry t = cl.tick(0.7, kAp, kCp);
+        const control::Telemetry t = cl.tick(0.7, kAp, cp);
         REQUIRE(finite_state(cl.state));
-        REQUIRE_FALSE(t.righting);  // the delay has not elapsed
+        REQUIRE_FALSE(t.righting);  // knob off: the latch can never arm
         if (i == 0) cpt0 = t.extracted.cos_phi_theta;
         cpt_final = t.extracted.cos_phi_theta;
         max_roll = std::max(max_roll,
@@ -823,7 +945,8 @@ control::ControllerParams hrz_cp(double rate_deg_s, double settle) {
     // S-relorient ADDENDUM (2026-07-28): the D9 cancel/never-arm legs below
     // pin the SEALED-V6 semantics, so pin the knob explicitly — the shipped
     // toml now sets release_orient_with_keys = true, which retires exactly
-    // those clauses. The knob-ON arms live in test_relorient.cpp (cases 9/9b/9c).
+    // those clauses. The knob-ON arms live in test_relorient.cpp (cases
+    // 9/9b/9c).
     c.freelook_release_orient_with_keys = false;
     return c;
 }
@@ -847,8 +970,21 @@ void freelook_tap(app::LoopState& loop, const control::ControllerParams& cp,
                   int hold_ticks = 3) {
     app::TickInput hold = instr_in(0.7);
     hold.freelook_held = true;
-    for (int i = 0; i < hold_ticks; ++i) app::tick(loop, hold, kAp, cp);
-    app::tick(loop, instr_in(0.7), kAp, cp);  // the release tick
+    for (int i = 0; i < hold_ticks; ++i)
+        app::tick(loop, hold, kAp, cp, nullptr);
+    app::tick(loop, instr_in(0.7), kAp, cp, nullptr);  // the release tick
+}
+
+// A tick input with the hand ON the mouse: a 1-px jiggle, alternating sign so
+// the net aim rotation over a run is ~0. Any nonzero delta sets ci.aim_moved,
+// which is the ONE cancel the v13 rest-edge camera recovery keys on (pilot
+// ruling 2026-08-06 - the recovery fires only when the hand RESTS, and the
+// hand always wins). Legs that must pin "nothing rights this frame" fly THIS,
+// not a still mouse.
+app::TickInput hand_on(int t, double thr = 0.7) {
+    app::TickInput in = instr_in(thr);
+    in.aim_dx = (t % 2 == 0) ? 1.0 : -1.0;
+    return in;
 }
 
 }  // namespace
@@ -878,20 +1014,23 @@ TEST_CASE("S7-hrz: freelook release rights the horizon INSTANTLY (v9)") {
     const app::TickInput in = instr_in(0.7);
     const double m_after = std::abs(misalign(loop));
     for (int t = 0; t < 3 * 120; ++t) {
-        app::tick(loop, in, kAp, cp);
+        app::tick(loop, in, kAp, cp, nullptr);
         CHECK(loop.recov.remaining == 0.0);
     }
     CHECK(std::abs(std::abs(misalign(loop)) - m_after) < 1e-6);
 }
 
 TEST_CASE(
-    "S7-hrz: righting is EDGE-ONLY - a rolled frame is never auto-leveled") {
-    // The successor of the open-loop pin, same ban, sharper shape: the ONLY
-    // thing that may right the carried frame is the release edge itself. A
-    // frame rolled off-horizon DURING mouse-aim flight must stay rolled for
-    // as long as the pilot flies — any drift toward level here is the
-    // S7-mouselevel banned continuous auto-leveling reappearing. This leg
-    // fails under a per-tick recompute mutant (the old F1/P0 class).
+    "S7-hrz: righting is EVENT-ONLY - a hand on the mouse is never "
+    "auto-leveled") {
+    // The S7-mouselevel ban, re-scoped by the v13 rest-edge recovery (pilot
+    // ruling 2026-08-06): the frame may be righted by DISCRETE events - the
+    // freelook release, and now the aim coming to REST - but NEVER
+    // continuously underneath a pilot who is actively aiming. While the hand
+    // is on the mouse the carried frame must stay exactly as rolled, for as
+    // long as he flies. A per-tick horizon-lock mutant (the old F1/P0 class)
+    // rights it regardless of the hand and FAILS here; so does a rest-edge
+    // recovery that forgets to cancel on aim_moved.
     const control::ControllerParams cp = hrz_cp(150.0, 5.0);
     app::LoopState loop = misaligned_loop(120.0);
     freelook_tap(loop, cp);
@@ -901,13 +1040,13 @@ TEST_CASE(
     loop.aim.roll_about_forward(rad(60.0));
     const double m1 = std::abs(misalign(loop));
     REQUIRE(deg(m1) > 55.0);
-    const app::TickInput in = instr_in(0.7);
-    for (int t = 0; t < 3 * 120; ++t) app::tick(loop, in, kAp, cp);
+    for (int t = 0; t < 3 * 120; ++t)
+        app::tick(loop, hand_on(t), kAp, cp, nullptr);
     const double m_end = std::abs(deg(misalign(loop)));
-    std::printf("[S7-hrz edge-only] standing misalign after 3 s = %.2f deg\n",
+    std::printf("[S7-hrz event-only] standing misalign after 3 s = %.2f deg\n",
                 m_end);
-    CHECK(m_end > 55.0);  // nothing rights it without a release edge
-    CHECK(loop.recov.remaining == 0.0);
+    CHECK(m_end > 55.0);  // the hand is on the mouse: nothing rights it
+    CHECK(loop.recov.remaining == 0.0);  // and nothing was ever captured
 }
 
 TEST_CASE("S7-hrz: edge legs - re-release rights again; keys-held knob-off") {
@@ -924,7 +1063,7 @@ TEST_CASE("S7-hrz: edge legs - re-release rights again; keys-held knob-off") {
 
         loop.aim.roll_about_forward(rad(90.0));  // new debt, mid-flight
         REQUIRE(deg(std::abs(misalign(loop))) > 80.0);
-        freelook_tap(loop, cp);  // press + release again
+        freelook_tap(loop, cp);                      // press + release again
         CHECK(deg(std::abs(misalign(loop))) < 1.0);  // righted again, instantly
     }
 
@@ -937,10 +1076,12 @@ TEST_CASE("S7-hrz: edge legs - re-release rights again; keys-held knob-off") {
         loop.aim.roll_about_forward(rad(60.0));  // standing debt
         const double m0 = std::abs(deg(misalign(loop)));
 
-        app::TickInput ovr = instr_in(0.7);
-        ovr.override_mask[2] = true;  // roll axis keyboard jink
-        ovr.override_sign[2] = -1.0;
-        for (int t = 0; t < 60; ++t) app::tick(loop, ovr, kAp, cp);
+        for (int t = 0; t < 60; ++t) {
+            app::TickInput ovr = hand_on(t);  // hand on the mouse: no rest edge
+            ovr.override_mask[2] = true;      // roll axis keyboard jink
+            ovr.override_sign[2] = -1.0;
+            app::tick(loop, ovr, kAp, cp, nullptr);
+        }
         CHECK(loop.recov.remaining == 0.0);
         CHECK(std::abs(deg(misalign(loop))) == Catch::Approx(m0).margin(2.0));
     }
@@ -955,16 +1096,20 @@ TEST_CASE("S7-hrz: edge legs - re-release rights again; keys-held knob-off") {
         hold_both.freelook_held = true;
         hold_both.override_mask[0] = true;
         hold_both.override_sign[0] = 1.0;
-        for (int t = 0; t < 5; ++t) app::tick(loop, hold_both, kAp, cp);
+        for (int t = 0; t < 5; ++t)
+            app::tick(loop, hold_both, kAp, cp, nullptr);
 
         app::TickInput key_only = instr_in(0.7);  // Space up, key still down
         key_only.override_mask[0] = true;
         key_only.override_sign[0] = 1.0;
-        app::tick(loop, key_only, kAp, cp);  // the release edge, key held
+        app::tick(loop, key_only, kAp, cp,
+                  nullptr);  // the release edge, key held
         CHECK(std::abs(deg(misalign(loop))) == Catch::Approx(m0).margin(3.0));
 
-        for (int t = 0; t < 120; ++t) app::tick(loop, in, kAp, cp);  // key up
-        // No new edge -> still unrighted (the one-shot-edge semantics).
+        for (int t = 0; t < 120; ++t)
+            app::tick(loop, hand_on(t), kAp, cp, nullptr);  // key up, aiming
+        // No new edge and the hand is on the mouse -> still unrighted (the
+        // one-shot-edge semantics; the v13 rest edge needs a RESTING hand).
         CHECK(std::abs(deg(misalign(loop))) == Catch::Approx(m0).margin(6.0));
         CHECK(loop.recov.remaining == 0.0);
     }
@@ -983,13 +1128,14 @@ TEST_CASE("S7-hrz: recov is permanently INERT under the instant law (F9')") {
     app::TickInput hold = instr_in(0.7);
     hold.freelook_held = true;
     for (int t = 0; t < 3; ++t) {
-        app::tick(loop, hold, kAp, cp);
+        app::tick(loop, hold, kAp, cp, nullptr);
         CHECK(loop.recov.remaining == 0.0);
     }
-    app::tick(loop, in, kAp, cp);  // the release tick (rights instantly)
+    app::tick(loop, in, kAp, cp,
+              nullptr);  // the release tick (rights instantly)
     CHECK(loop.recov.remaining == 0.0);
     for (int t = 0; t < 30; ++t) {
-        app::tick(loop, in, kAp, cp);
+        app::tick(loop, in, kAp, cp, nullptr);
         CHECK(loop.recov.remaining == 0.0);
     }
     app::instructor_focus_loss(loop);  // still callable, still a no-op
@@ -1004,7 +1150,7 @@ TEST_CASE("S7-hrz: rate = 0 is a structural no-op (knob-off superset, F8)") {
     freelook_tap(loop, cp0);
     CHECK(loop.recov.remaining == 0.0);  // capture never ran
     const app::TickInput in = instr_in(0.7);
-    for (int t = 0; t < 120; ++t) app::tick(loop, in, kAp, cp0);
+    for (int t = 0; t < 120; ++t) app::tick(loop, in, kAp, cp0, nullptr);
     CHECK(loop.recov.remaining == 0.0);
     // The horizon stayed exactly misaligned (transport preserves it; nothing
     // rolled it). The whole EXISTING suite is the rest of this proof: goldens
@@ -1025,7 +1171,7 @@ TEST_CASE("S7-hrz: mouse-up stays screen-up AFTER the instant roll (F6')") {
     freelook_tap(loop, cp);  // the release tick rights ~120 deg instantly
     REQUIRE(deg(std::abs(misalign(loop))) < 1.0);
     const app::TickInput in = instr_in(0.7);
-    for (int t = 0; t < 60; ++t) app::tick(loop, in, kAp, cp);
+    for (int t = 0; t < 60; ++t) app::tick(loop, in, kAp, cp, nullptr);
 
     const double fovy = rad(60.0), aspect = 16.0 / 9.0;
     const glm::dvec3 f = loop.aim.forward();
@@ -1057,18 +1203,367 @@ TEST_CASE("S7-hrz: righting runs AFTER the rule-3 snap (diff red-team P2-1)") {
 
     app::TickInput hold = instr_in(0.7);
     hold.freelook_held = true;
-    for (int t = 0; t < 3; ++t) app::tick(loop, hold, kAp, cp);
+    for (int t = 0; t < 3; ++t) app::tick(loop, hold, kAp, cp, nullptr);
     app::TickInput hold_key = hold;  // pitch+yaw override held INSIDE the hold
     hold_key.override_mask[0] = true;
     hold_key.override_sign[0] = 1.0;
     hold_key.override_mask[1] = true;
     hold_key.override_sign[1] = 1.0;
-    for (int t = 0; t < 90; ++t) app::tick(loop, hold_key, kAp, cp);
-    for (int t = 0; t < 3; ++t) app::tick(loop, hold, kAp, cp);  // keys up
+    for (int t = 0; t < 90; ++t) app::tick(loop, hold_key, kAp, cp, nullptr);
+    for (int t = 0; t < 3; ++t)
+        app::tick(loop, hold, kAp, cp, nullptr);  // keys up
 
-    app::tick(loop, instr_in(0.7), kAp, cp);  // release: snap + instant right
+    app::tick(loop, instr_in(0.7), kAp, cp,
+              nullptr);  // release: snap + instant right
     CHECK(loop.recov.remaining == 0.0);
     CHECK(std::abs(deg(misalign(loop))) < 1.0);  // righted about the NEW fwd
+}
+
+// ===========================================================================
+// v13 REST-EDGE CAMERA HORIZON RECOVERY (pilot ruling 2026-08-06: "after a
+// maneuver ending inverted — split-S, Immelmann — the CAMERA also rights
+// itself automatically at rest: horizon level, planet below — without a
+// freelook release"). Same gauge move as the release roll, second trigger:
+// the aim coming to REST. Every leg drives a REAL misaligned frame through the
+// shipped app::tick (the mechanism-FIRING discipline), and the cancel legs use
+// a hand ON the mouse — the one and only cancel the mechanism reads.
+// ===========================================================================
+namespace {
+// The dwell in ticks, derived from the dial the mechanism actually reads (a
+// welded constant here would silently disarm on a retune — the AT-15 class).
+int dwell_ticks(const control::ControllerParams& cp) {
+    return static_cast<int>(cp.horizon_recovery_rest_dwell / kAp.sim_dt + 0.5);
+}
+}  // namespace
+
+TEST_CASE("v13 rest-edge: a carried inversion rights itself at rest") {
+    // The split-S case: the maneuver ends with the carried aim/camera frame
+    // upside down (the world above the pilot), the hand comes off the mouse,
+    // and the horizon must come back on its own — no freelook release.
+    const control::ControllerParams cp = hrz_cp(150.0, 5.0);
+    app::LoopState loop = misaligned_loop(170.0);  // carried inversion
+    const double m0 = std::abs(deg(misalign(loop)));
+    REQUIRE(m0 > 165.0);
+
+    const app::TickInput still = instr_in(0.7);
+    const int dwell = dwell_ticks(cp);
+    REQUIRE(dwell > 4);  // the dial is a real dwell on the shipped table
+
+    // (a) BEFORE the dwell elapses nothing moves: the capture is EDGE
+    // triggered, not a per-tick lock (mutation: capture every rest tick, or
+    // drop the dwell -> the frame is already rolling here).
+    for (int t = 0; t < dwell - 2; ++t)
+        app::tick(loop, still, kAp, cp, nullptr);
+    CHECK(std::abs(deg(misalign(loop))) == Catch::Approx(m0).margin(0.05));
+    CHECK(loop.recov.remaining == 0.0);
+
+    // (b) the rest EDGE captures ONCE and the debt rolls out at <= rate.
+    double prev = deg(misalign(loop));
+    double max_step = 0.0;
+    bool rolled = false;
+    int done_tick = -1;
+    const double per_tick_cap = deg(cp.horizon_recovery_rate) * kAp.sim_dt;
+    for (int t = 0; t < 900; ++t) {
+        app::tick(loop, still, kAp, cp, nullptr);
+        const double now = deg(misalign(loop));
+        rolled = rolled || loop.recov.remaining > 0.0;
+        max_step = std::max(max_step, std::abs(now - prev));
+        prev = now;
+        if (done_tick < 0 && rolled && loop.recov.remaining == 0.0)
+            done_tick = t;
+    }
+    std::printf(
+        "[v13 rest-edge] m0=%.1f -> %.4f deg, max step %.3f deg/tick "
+        "(cap %.3f), done@%d ticks\n",
+        m0, std::abs(prev), max_step, per_tick_cap, done_tick);
+    CHECK(rolled);  // the recovery genuinely ran (non-vacuous)
+    // Rate-limited: no tick may exceed the dial (mutation: retire the whole
+    // debt in one tick, as the RELEASE edge does -> ~170 deg in one step).
+    CHECK(max_step <= per_tick_cap + 0.05);
+    // Terminates, structurally: remaining reaches EXACTLY 0 and the horizon is
+    // level inside the finish epsilon (~0.57 deg).
+    CHECK(done_tick > 0);
+    CHECK(loop.recov.remaining == 0.0);
+    CHECK(std::abs(prev) <= deg(input::HorizonRecovery::kFinishEps));
+}
+
+TEST_CASE("v13 rest-edge: a captured roll completes as one smooth motion") {
+    // Pilot fly-ruling 2026-08-06 (first v13 build: "the camera rotation is
+    // happening in steps — it should be one smooth motion"): mouse motion
+    // never cancels a roll IN FLIGHT — the captured debt completes, exactly as
+    // the freelook-RELEASE roll survives a mid-roll keypress (the S7-hrz
+    // open-loop law). The hand owns the CAPTURE only: motion resets the dwell
+    // and disarms a FINISHED roll. (Mutation: restore the aim_moved
+    // recov.reset() -> the mid-roll jiggle below stalls the roll and the
+    // misalignment parks; the smooth leg fails.)
+    const control::ControllerParams cp = hrz_cp(150.0, 5.0);
+    app::LoopState loop = misaligned_loop(170.0);
+    const app::TickInput still = instr_in(0.7);
+    const int dwell = dwell_ticks(cp);
+
+    for (int t = 0; t < dwell + 30; ++t)
+        app::tick(loop, still, kAp, cp, nullptr);
+    REQUIRE(loop.recov.remaining > 0.0);  // mid-roll
+    const double m_mid = std::abs(deg(misalign(loop)));
+    REQUIRE(m_mid < 165.0);  // it really had rolled some
+    REQUIRE(m_mid > 20.0);   // ...and is nowhere near finished
+
+    // Resting-hand sensor jitter: a 1-px delta every 30 ticks, all the way
+    // through. The roll must keep retiring monotonically — never stall, never
+    // re-dwell — and finish inside the finish epsilon on schedule.
+    double prev = std::abs(deg(misalign(loop)));
+    double worst_stall = 0.0;  // longest run of ticks with no roll progress
+    double stall = 0.0;
+    for (int t = 0; t < 900; ++t) {
+        const bool jig = (t % 30) == 0;
+        app::tick(loop, jig ? hand_on(t) : still, kAp, cp, nullptr);
+        const double now = std::abs(deg(misalign(loop)));
+        // Roll progress is "misalignment decreased". Track the longest
+        // no-progress run over every tick the debt is PHYSICALLY outstanding
+        // (misalignment > eps) — NOT gated on recov.remaining: the cancel
+        // mutant's re-dwell parks have remaining == 0, which is exactly the
+        // stall this leg exists to catch (first draft was gated on remaining
+        // and the mutant passed — the fixture-no-op class).
+        if (now > deg(input::HorizonRecovery::kFinishEps) + 0.2 &&
+            now >= prev - 1e-9)
+            stall += 1.0;
+        else
+            stall = 0.0;
+        worst_stall = std::max(worst_stall, stall);
+        prev = now;
+    }
+    CHECK(loop.recov.remaining == 0.0);
+    CHECK(prev <= deg(input::HorizonRecovery::kFinishEps) + 0.2);
+    // One smooth motion: no re-dwell gaps. A cancel+re-arm mechanism parks for
+    // at least a full dwell (18 ticks) after every jiggle; the completing roll
+    // never pauses at all.
+    CHECK(worst_stall <= 2.0);
+
+    // The hand still owns the CAPTURE: after completion, motion disarms, and a
+    // fresh inversion + rest re-captures only after a full new dwell.
+    app::tick(loop, hand_on(0), kAp, cp, nullptr);
+    CHECK_FALSE(loop.recov_armed);
+    CHECK(loop.aim_rest == 0.0);
+    loop.aim.roll_about_forward(rad(170.0));
+    for (int t = 0; t < dwell - 2; ++t)
+        app::tick(loop, still, kAp, cp, nullptr);
+    CHECK(loop.recov.remaining == 0.0);  // not before the fresh dwell
+    for (int t = 0; t < 900; ++t) app::tick(loop, still, kAp, cp, nullptr);
+    CHECK(std::abs(deg(misalign(loop))) <=
+          deg(input::HorizonRecovery::kFinishEps));
+}
+
+TEST_CASE("v13c arm gate: a sub-arm_min tilt never fires the recovery") {
+    // The arm_min MECHANISM pin (fly-2 2026-08-06). The SHIPPED value is 0
+    // since fly-4 ("any change in horizon from flat should automatically
+    // adjust") — so this leg dials its own 60 deg gate locally, exactly as the
+    // easeback tests pin their own window: the dial's machinery must survive
+    // for the walk-back. (Mutation: drop the arm_min gate -> this tilt rolls
+    // level.)
+    control::ControllerParams cp = hrz_cp(150.0, 5.0);
+    cp.horizon_recovery_arm_min = rad(60.0);
+    const double tilt = deg(cp.horizon_recovery_arm_min) * 0.5;
+    app::LoopState loop = misaligned_loop(tilt);
+    const double m0 = std::abs(deg(misalign(loop)));
+
+    const app::TickInput still = instr_in(0.7);
+    for (int t = 0; t < dwell_ticks(cp) + 600; ++t)
+        app::tick(loop, still, kAp, cp, nullptr);
+    CHECK(loop.recov.remaining == 0.0);
+    CHECK_FALSE(loop.recov_armed);
+    // The tilt stays (small carried-transport drift aside): nothing rolled it.
+    CHECK(std::abs(deg(misalign(loop))) > m0 - 3.0);
+}
+
+TEST_CASE("v13c arm gate: a held-off aim blocks the capture until on-path") {
+    // The reticle-stability half of the fly-2 ruling: the roll sweeps every
+    // off-center pixel of the picture, so the capture may only fire when the
+    // aim is RESOLVED ON THE FLIGHT PATH (angle aim-vs-velocity <=
+    // path_band) — then the reticle sits ~centered and the roll cannot
+    // displace it perceptibly. A held-off aim (a carve) structurally cannot
+    // fire even with the mouse dead still. (Mutation: drop the on_path gate ->
+    // the capture fires on the first post-dwell tick at ~40 deg off path.)
+    const control::ControllerParams cp = hrz_cp(150.0, 5.0);
+    const double band = deg(cp.horizon_recovery_path_band);
+    REQUIRE(band > 1.0);
+
+    app::LoopState loop = misaligned_loop(170.0);
+    // Yank the aim ~40 deg off the flight path in ONE gesture (test-side frame
+    // surgery, not a tick input — the mouse then rests for the whole leg).
+    loop.aim.apply_mouse(1.0, 0.0, rad(40.0));
+
+    const app::TickInput still = instr_in(0.7);
+    int capture_tick = -1;
+    double angle_at_capture = 1e9;
+    bool ever_offpath_armed = false;
+    for (int t = 0; t < 2400 && capture_tick < 0; ++t) {
+        app::tick(loop, still, kAp, cp, nullptr);
+        const double speed = glm::length(loop.curr.velocity);
+        const double ang =
+            deg(std::acos(glm::clamp(glm::dot(loop.aim.forward(),
+                                              loop.curr.velocity / speed),
+                                     -1.0, 1.0)));
+        if (loop.recov.remaining > 0.0) {
+            capture_tick = t;
+            angle_at_capture = ang;
+        } else if (ang > band + 2.0 && t > dwell_ticks(cp) + 2) {
+            // Post-dwell, mouse still, debt huge — ONLY the path gate holds.
+            ever_offpath_armed = ever_offpath_armed || loop.recov_armed;
+        }
+    }
+    CHECK_FALSE(ever_offpath_armed);
+    // The pursuit converges the path onto the held aim, and the capture fires
+    // only once resolved — no fresh dwell needed (the gate binds the capture,
+    // not the rest).
+    CHECK(capture_tick > 0);
+    CHECK(angle_at_capture <= band + 1.0);
+}
+
+TEST_CASE("v13d arm gate: a turning path blocks the capture until straight") {
+    // Chad fly-3 2026-08-06: "wait until I fly straight to do so." A held
+    // pitch override loops the plane with the mouse dead still — the dwell
+    // banks, the sweeping path even CROSSES the aim (on_path goes true at the
+    // crossings), and only the straightness gate (path rotation rate <=
+    // [horizon_recovery] straight_max) holds the capture. (Mutation: drop the
+    // `straight` conjunct -> a crossing tick captures mid-loop.)
+    const control::ControllerParams cp = hrz_cp(150.0, 5.0);
+    const double band = deg(cp.horizon_recovery_path_band);
+    app::LoopState loop = misaligned_loop(170.0);
+    // Start the pull with the aim held OFF the path (fly-5 note: from an
+    // on-path start the capture legitimately fires inside the override ramp's
+    // first straight ticks — settled is settled; the blocking this leg pins is
+    // the TURNING case, so the aim starts 30 deg off and only the mid-loop
+    // path sweeps cross it, at full turn rate). The offset is PITCH (dy) so
+    // the aim stays inside the elevator-loop's sweep plane — a yawed-off aim
+    // is never crossed at all (crossings == 0, the leg goes vacuous).
+    loop.aim.apply_mouse(0.0, 1.0, rad(30.0));
+
+    app::TickInput pull = instr_in(0.9);
+    pull.override_mask[0] = true;  // elevator held, mouse still
+    pull.override_sign[0] = 1.0;
+    int crossings = 0;
+    glm::dvec3 prev_v = loop.curr.velocity;
+    double max_rate = 0.0;
+    for (int t = 0; t < 1400; ++t) {
+        app::tick(loop, pull, kAp, cp, nullptr);
+        const double speed = glm::length(loop.curr.velocity);
+        REQUIRE(speed > 1.0);
+        const glm::dvec3 path = loop.curr.velocity / speed;
+        const double ang = deg(std::acos(
+            glm::clamp(glm::dot(loop.aim.forward(), path), -1.0, 1.0)));
+        if (ang <= band) ++crossings;
+        const glm::dvec3 pv = prev_v / glm::length(prev_v);
+        max_rate = std::max(
+            max_rate,
+            deg(std::acos(glm::clamp(glm::dot(path, pv), -1.0, 1.0))) /
+                kAp.sim_dt);
+        prev_v = loop.curr.velocity;
+        // The whole pull: never a capture, never a roll.
+        REQUIRE(loop.recov.remaining == 0.0);
+    }
+    REQUIRE(crossings > 0);  // non-vacuous: the path DID sweep through the aim
+    // Non-vacuity margin: the pull must turn WELL above the qualifier. The
+    // elevator loop peaks at ~35 deg/s (physics, not a dial); with
+    // straight_max at 12 (fly 2026-09-10, "trigger a bit sooner") a 3x margin
+    // would demand 36, so the margin is 2x -- still ~3 dial-widths of daylight
+    // between the loop and the gate, and the blocking assertion above (no
+    // capture through the whole pull) is unchanged.
+    REQUIRE(max_rate > deg(cp.horizon_recovery_straight_max) * 2.0);
+    CHECK_FALSE(loop.recov_armed);
+
+    // Keys off, path settles straight onto the held aim: the capture fires.
+    const app::TickInput still = instr_in(0.7);
+    bool fired = false;
+    for (int t = 0; t < 2400 && !fired; ++t) {
+        app::tick(loop, still, kAp, cp, nullptr);
+        fired = loop.recov.remaining > 0.0 || loop.recov_armed;
+    }
+    CHECK(fired);
+}
+
+TEST_CASE("v13 rest-edge: freelook held suppresses the recovery") {
+    // Checking six is not resting: while the mouse is on the CAMERA the
+    // carried frame is the pilot's to look around with, and nothing rights it.
+    const control::ControllerParams cp = hrz_cp(150.0, 5.0);
+    app::LoopState loop = misaligned_loop(120.0);
+    app::TickInput look = instr_in(0.7);
+    look.freelook_held = true;
+    for (int t = 0; t < 600; ++t) {
+        app::tick(loop, look, kAp, cp, nullptr);
+        REQUIRE(loop.recov.remaining == 0.0);  // never captured
+        REQUIRE_FALSE(loop.recov_armed);
+        REQUIRE(loop.aim_rest == 0.0);  // the dwell never accumulates
+    }
+    CHECK(std::abs(deg(misalign(loop))) > 100.0);  // still rolled off-horizon
+}
+
+TEST_CASE("v13 rest-edge: GROUNDED cancels an in-progress recovery") {
+    // A respawn must never inherit the dead life's roll or its banked dwell
+    // (the fl.reset() pairing discipline, applied to the v13 latches).
+    const control::ControllerParams cp = hrz_cp(150.0, 5.0);
+    app::LoopState loop = misaligned_loop(170.0);
+    const app::TickInput still = instr_in(0.7);
+    for (int t = 0; t < dwell_ticks(cp) + 30; ++t)
+        app::tick(loop, still, kAp, cp, nullptr);
+    REQUIRE(loop.recov.remaining > 0.0);  // mid-roll when the plane dies
+
+    loop.grounded = true;
+    app::tick(loop, still, kAp, cp, nullptr);  // the GROUNDED pairing tick
+    CHECK(loop.recov.remaining == 0.0);
+    CHECK(loop.aim_rest == 0.0);
+    CHECK_FALSE(loop.recov_armed);
+}
+
+TEST_CASE("v13 rest-edge: the recovery never moves the aim direction") {
+    // It is a GAUGE move: only the roll DOF about the aim's own forward is
+    // steered. Pinned differentially (rate ON vs rate OFF, identical input
+    // trace): the aim FORWARD and the whole trajectory must match while the
+    // UP debt is retired on one arm only. This is also the RA9/§9.1 pin — a
+    // recovery the instructor could see would be a control-loop smoothing.
+    const control::ControllerParams cp_on = hrz_cp(150.0, 5.0);
+    const control::ControllerParams cp_off = hrz_cp(0.0, 5.0);
+    app::LoopState on = misaligned_loop(170.0);
+    app::LoopState off = misaligned_loop(170.0);
+    const app::TickInput still = instr_in(0.7);
+    for (int t = 0; t < 900; ++t) {
+        app::tick(on, still, kAp, cp_on, nullptr);
+        app::tick(off, still, kAp, cp_off, nullptr);
+    }
+    REQUIRE(std::abs(deg(misalign(on))) <=
+            deg(input::HorizonRecovery::kFinishEps));  // the roll ran
+    REQUIRE(std::abs(deg(misalign(off))) > 160.0);     // and not on the other
+
+    const double fwd_gap = glm::length(on.aim.forward() - off.aim.forward());
+    const double pos_err = glm::length(on.curr.position - off.curr.position);
+    std::printf("[v13 gauge] aim fwd gap=%.17e  pos_err=%.17e m\n", fwd_gap,
+                pos_err);
+    CHECK(fwd_gap < 1e-12);  // pointing untouched: ONLY the up rolled
+    CHECK(pos_err < 1e-9);   // and the plane flew the identical path
+}
+
+TEST_CASE("v13 rest-edge: an upright rest is a structural no-op") {
+    // Below kFinishEps the capture RESETS instead of latching, so a level rest
+    // costs no quaternion math at all — the aim frame is bit-identical to the
+    // knob-off arm tick for tick (the strict-superset proof shape). A mutant
+    // that captures/rolls a sub-epsilon debt perturbs those bits.
+    const control::ControllerParams cp_on = hrz_cp(150.0, 5.0);
+    const control::ControllerParams cp_off = hrz_cp(0.0, 5.0);
+    const glm::dvec3 up{1.0, 0.0, 0.0}, heading{0.0, 0.0, -1.0};
+    const sim::SimState s =
+        harness::level_state(kAp, 150.0, 3000.0, up, heading);
+    app::LoopState on = flying(s);
+    app::LoopState off = flying(s);
+    REQUIRE(std::abs(misalign(on)) < input::HorizonRecovery::kFinishEps);
+    const app::TickInput still = instr_in(0.7);
+    for (int t = 0; t < 600; ++t) {
+        app::tick(on, still, kAp, cp_on, nullptr);
+        app::tick(off, still, kAp, cp_off, nullptr);
+        REQUIRE(on.recov.remaining == 0.0);  // never fires at rest upright
+    }
+    CHECK(on.aim.q.w == off.aim.q.w);
+    CHECK(on.aim.q.x == off.aim.q.x);
+    CHECK(on.aim.q.y == off.aim.q.y);
+    CHECK(on.aim.q.z == off.aim.q.z);
 }
 
 TEST_CASE("S7-hrz: the roll never moves the trajectory (diff red-team P2-2)") {
@@ -1090,8 +1585,8 @@ TEST_CASE("S7-hrz: the roll never moves the trajectory (diff red-team P2-2)") {
     freelook_tap(off, cp_off);
     const app::TickInput in = instr_in(0.7);
     for (int t = 0; t < 3 * 120; ++t) {
-        app::tick(on, in, kAp, cp_on);
-        app::tick(off, in, kAp, cp_off);
+        app::tick(on, in, kAp, cp_on, nullptr);
+        app::tick(off, in, kAp, cp_off, nullptr);
     }
     REQUIRE(on.recov.remaining == 0.0);  // the roll genuinely ran on one arm
     REQUIRE(std::abs(deg(misalign(on))) < 1.0);
@@ -1129,7 +1624,7 @@ TEST_CASE("S7-nest: aim rides the nose during freelook keyboard flight (D7)") {
     in.override_mask[0] = true;  // full pitch pull, nose on the move
     in.override_sign[0] = 1.0;
     for (int t = 0; t < 120; ++t) {
-        app::tick(loop, in, kAp, cp);
+        app::tick(loop, in, kAp, cp, nullptr);
         // Nested every tick: the aim IS the nose (snapped to this tick's
         // pre-step nose; the post-step nose is at most one tick of body
         // rotation away, ~0.5 deg at the G-limited pitch rate).
@@ -1155,13 +1650,13 @@ TEST_CASE("v9 WELD: aim rides the nose during freelook with NO keys") {
     // Park the aim WELL off the nose first (the mid-turn mouse command).
     app::TickInput sweep = instr_in(1.0);
     sweep.aim_dx = rad(45.0) / kCp.aim_sensitivity;
-    app::tick(loop, sweep, kAp, cp);
+    app::tick(loop, sweep, kAp, cp, nullptr);
     REQUIRE(glm::dot(loop.aim.forward(), nose_dir(loop)) < std::cos(rad(20.0)));
 
     app::TickInput fl = instr_in(1.0);
     fl.freelook_held = true;  // NO override keys anywhere
     for (int t = 0; t < 120; ++t) {
-        app::tick(loop, fl, kAp, cp);
+        app::tick(loop, fl, kAp, cp, nullptr);
         CHECK(glm::dot(loop.aim.forward(), nose_dir(loop)) >
               std::cos(rad(1.5)));
     }
@@ -1190,7 +1685,7 @@ TEST_CASE(
     double max_pitch = 0.0, max_up_step = 0.0;
     glm::dvec3 up_prev = loop.aim.up();
     for (int t = 0; t < 500; ++t) {
-        app::tick(loop, in, kAp, cp);
+        app::tick(loop, in, kAp, cp, nullptr);
         REQUIRE(std::isfinite(loop.aim.up().x));
         const double cang = glm::dot(loop.aim.up(), up_prev);
         max_up_step = std::max(max_up_step, std::acos(std::min(1.0, cang)));
@@ -1225,7 +1720,7 @@ TEST_CASE(
     for (int t = 0; t < 120; ++t) {
         const glm::dvec3 f0 = loop.aim.forward();
         const glm::dvec3 u0 = loop.prev_up;
-        app::tick(loop, in, kAp, cp);
+        app::tick(loop, in, kAp, cp, nullptr);
         // Transport this tick used up(prev position) — st.prev holds it now.
         const glm::dvec3 u1 = sim::local_up(loop.prev.position);
         const glm::dvec3 expected = control::transport_rotation(u0, u1) * f0;
@@ -1253,8 +1748,9 @@ TEST_CASE("S7-nest: release lands the aim on the NOSE (v9 S-nosesnap)") {
         app::TickInput pull = hold;
         pull.override_mask[0] = true;
         pull.override_sign[0] = 1.0;
-        for (int t = 0; t < 60; ++t) app::tick(loop, pull, kAp, cp);
-        for (int t = 0; t < 2; ++t) app::tick(loop, hold, kAp, cp);  // key up
+        for (int t = 0; t < 60; ++t) app::tick(loop, pull, kAp, cp, nullptr);
+        for (int t = 0; t < 2; ++t)
+            app::tick(loop, hold, kAp, cp, nullptr);  // key up
 
         // POISON the sim's held v-hat before the release tick (S4a: a
         // two-copies seam test must poison the copy it claims isn't read —
@@ -1263,7 +1759,7 @@ TEST_CASE("S7-nest: release lands the aim on the NOSE (v9 S-nosesnap)") {
         // CONTROL input). Kept so a velocity-target regression of EITHER
         // copy (caller's or the sim's held one) fails the nose check below.
         loop.curr.last_vhat = glm::normalize(glm::dvec3{0.3, -0.8, 0.5});
-        app::tick(loop, instr_in(1.0), kAp, cp);  // release
+        app::tick(loop, instr_in(1.0), kAp, cp, nullptr);  // release
         const glm::dvec3 vhat = glm::normalize(loop.curr.velocity);
         const glm::dvec3 nose = nose_dir(loop);
         const double gap =
@@ -1284,7 +1780,7 @@ TEST_CASE("S7-nest: release lands the aim on the NOSE (v9 S-nosesnap)") {
         app::TickInput pull = hold;
         pull.override_mask[0] = true;
         pull.override_sign[0] = 1.0;
-        for (int t = 0; t < 5; ++t) app::tick(loop, pull, kAp, cp);
+        for (int t = 0; t < 5; ++t) app::tick(loop, pull, kAp, cp, nullptr);
         // Manufacture the degenerate state at the release edge: sub-ballistic
         // speed with the velocity DIRECTION well OFF the nose (S7-nest
         // red-team P2: a nose-parallel velocity made the v_ballistic guard
@@ -1293,10 +1789,11 @@ TEST_CASE("S7-nest: release lands the aim on the NOSE (v9 S-nosesnap)") {
         // off the nose and the check below fails).
         loop.curr.velocity =
             5.0 * glm::normalize(nose_dir(loop) + 0.7 * loop.aim.up());
-        app::tick(loop, hold, kAp, cp);  // key up (re-pin after the tick)
+        app::tick(loop, hold, kAp, cp,
+                  nullptr);  // key up (re-pin after the tick)
         loop.curr.velocity =
             5.0 * glm::normalize(nose_dir(loop) + 0.7 * loop.aim.up());
-        app::tick(loop, instr_in(0.0), kAp, cp);  // release
+        app::tick(loop, instr_in(0.0), kAp, cp, nullptr);  // release
         CHECK(glm::dot(loop.aim.forward(), nose_dir(loop)) >
               std::cos(rad(1.0)));
     }
@@ -1310,10 +1807,10 @@ TEST_CASE("S7-nest: release lands the aim on the NOSE (v9 S-nosesnap)") {
         app::TickInput pull = hold;
         pull.override_mask[0] = true;
         pull.override_sign[0] = 1.0;
-        for (int t = 0; t < 5; ++t) app::tick(loop, pull, kAp, cp);
-        app::tick(loop, hold, kAp, cp);                // key up
-        loop.curr.velocity = -100.0 * nose_dir(loop);  // vhat . nose < 0
-        app::tick(loop, instr_in(0.0), kAp, cp);       // release
+        for (int t = 0; t < 5; ++t) app::tick(loop, pull, kAp, cp, nullptr);
+        app::tick(loop, hold, kAp, cp, nullptr);           // key up
+        loop.curr.velocity = -100.0 * nose_dir(loop);      // vhat . nose < 0
+        app::tick(loop, instr_in(0.0), kAp, cp, nullptr);  // release
         CHECK(glm::dot(loop.aim.forward(), nose_dir(loop)) >
               std::cos(rad(1.0)));
     }
@@ -1333,17 +1830,18 @@ TEST_CASE("S7-nest: release lands the aim on the NOSE (v9 S-nosesnap)") {
         // Park the aim off the nose first (a held turn), then a clean tap.
         app::TickInput mouse = instr_in(1.0);
         mouse.aim_dx = rad(30.0) / kCp.aim_sensitivity;
-        app::tick(loop, mouse, kAp, cp);
+        app::tick(loop, mouse, kAp, cp, nullptr);
         REQUIRE(glm::dot(loop.aim.forward(), nose_dir(loop)) <
                 std::cos(rad(20.0)));  // genuinely parked off the nose
         app::TickInput hold = instr_in(1.0);
         hold.freelook_held = true;
-        for (int t = 0; t < 10; ++t) app::tick(loop, hold, kAp, cp);
+        for (int t = 0; t < 10; ++t) app::tick(loop, hold, kAp, cp, nullptr);
         // The weld put the aim on the nose during the hold.
         CHECK(glm::dot(loop.aim.forward(), nose_dir(loop)) >
               std::cos(rad(1.5)));
         const glm::dvec3 welded = loop.aim.forward();
-        app::tick(loop, instr_in(1.0), kAp, cp);  // release, no override used
+        app::tick(loop, instr_in(1.0), kAp, cp,
+                  nullptr);  // release, no override used
         // Knob-off: the release tick snapped nothing (transport only).
         CHECK(glm::dot(loop.aim.forward(), welded) > std::cos(rad(0.5)));
     }
@@ -1374,7 +1872,7 @@ TEST_CASE("aim_gain_scale: scales the mouse->aim rotation, default is 1.0",
         app::TickInput in = instr_in(0.7);
         in.aim_dx = rad(20.0) / kCp.aim_sensitivity;
         if (set_scale) in.aim_gain_scale = scale;
-        app::tick(st, in, kAp, kCp);
+        app::tick(st, in, kAp, kCp, nullptr);
         return st.aim.forward();
     };
     const double a_full = ang_from_nose(swept(1.0, true));
@@ -1414,7 +1912,7 @@ TEST_CASE("app::tick: aim_moved reaches control::step; freelook never counts") {
     auto settle_latched = [&](app::LoopState& st) {
         app::TickResult r{};
         for (int i = 0; i < 4800; ++i) {
-            r = app::tick(st, instr_in(thr), kAp, gated);
+            r = app::tick(st, instr_in(thr), kAp, gated, nullptr);
             if (r.telem.deadzoned && r.telem.e < 0.5 * gated.deadzone_lo)
                 return true;
         }
@@ -1425,13 +1923,130 @@ TEST_CASE("app::tick: aim_moved reaches control::step; freelook never counts") {
     REQUIRE(settle_latched(st));
     app::TickInput mv = instr_in(thr);
     mv.aim_dx = tiny_dx;
-    CHECK_FALSE(
-        app::tick(st, mv, kAp, gated).telem.deadzoned);  // bit unlatches
+    CHECK_FALSE(app::tick(st, mv, kAp, gated, nullptr)
+                    .telem.deadzoned);  // bit unlatches
 
     app::LoopState st2 = flying(s0);
     REQUIRE(settle_latched(st2));
     app::TickInput fl = instr_in(thr);
     fl.freelook_held = true;
     fl.aim_dx = tiny_dx;  // mouse -> camera: NOT aim motion
-    CHECK(app::tick(st2, fl, kAp, gated).telem.deadzoned);
+    CHECK(app::tick(st2, fl, kAp, gated, nullptr).telem.deadzoned);
+}
+
+// ===========================================================================
+// R5e ESCAPE CLAIM (Chad fly-4: "I want no return to be at 4000m at 100m/s")
+// — crossing E_spec = 0 with the GravityField live severs the plant inputs
+// THAT tick and latches until respawn / field-off. The frozen path (env or
+// grav null) must be structurally unable to claim.
+
+namespace {
+
+const sim::GravityField kGravField{};  // the 3.B defaults (5000 / 1500)
+sim::Environment grav_env() {
+    sim::Environment e;
+    e.grav = &kGravField;
+    return e;
+}
+const sim::Environment kGravEnv = grav_env();
+
+const glm::dvec3 kEscDir = glm::normalize(glm::dvec3{0.41, -0.55, 0.62});
+
+// Radial climb ABOVE the escape line: binding(6000) = K*erfc(1000/(1500*sqrt2))
+// ~ 9313 J/kg at the defaults; 200 m/s carries E ~ +10.7 kJ/kg.
+sim::SimState escaped_state() {
+    sim::SimState s;
+    s.position = kEscDir * (kAp.R + 6000.0);
+    s.velocity = kEscDir * 200.0;
+    return s;
+}
+
+// Ordinary fight-band flight: E ~ -38 kJ/kg (deep bound).
+sim::SimState bound_state() {
+    sim::SimState s;
+    s.position = kEscDir * (kAp.R + 2000.0);
+    s.velocity =
+        140.0 * glm::normalize(glm::cross(glm::dvec3{0.0, 1.0, 0.0}, kEscDir));
+    return s;
+}
+
+app::TickInput raw_full_stick() {
+    app::TickInput in;
+    in.raw_mode = true;
+    in.raw_in.pitch = 1.0f;
+    in.raw_in.roll = -1.0f;
+    in.raw_in.throttle = 1.0f;
+    return in;
+}
+
+}  // namespace
+
+TEST_CASE("R5e: crossing the escape line severs the stick that same tick") {
+    // Fixture honesty: the state is genuinely past the line...
+    REQUIRE(sim::specific_energy(200.0, 6000.0, &kGravEnv, kAp) > 0.0);
+    app::LoopState st = flying(escaped_state());
+    const app::TickResult res =
+        app::tick(st, raw_full_stick(), kAp, kCp, &kGravEnv);
+    CHECK(res.escape_claimed);
+    CHECK(st.escape_claimed);
+    // The plant flew NEUTRAL inputs despite a full stick (dead stick,
+    // throttle-down — the sever, not a display).
+    CHECK(res.inputs.pitch == 0.0f);
+    CHECK(res.inputs.roll == 0.0f);
+    CHECK(res.inputs.yaw == 0.0f);
+    CHECK(res.inputs.throttle == 0.0f);
+    // ...and the SAME state/stick with the field OFF flies the command (the
+    // sever is the field's, not the fixture's — fixture-no-op guard).
+    app::LoopState st_null = flying(escaped_state());
+    const app::TickResult res_null =
+        app::tick(st_null, raw_full_stick(), kAp, kCp, nullptr);
+    CHECK_FALSE(res_null.escape_claimed);
+    CHECK(res_null.inputs.pitch == 1.0f);
+}
+
+TEST_CASE(
+    "R5e: the claim LATCHES -- falling back bound does not free the "
+    "plane") {
+    app::LoopState st = flying(bound_state());
+    st.escape_claimed = true;  // claimed earlier in this life
+    REQUIRE(sim::specific_energy(glm::length(st.curr.velocity), 2000.0,
+                                 &kGravEnv, kAp) < 0.0);  // now bound again
+    const app::TickResult res =
+        app::tick(st, raw_full_stick(), kAp, kCp, &kGravEnv);
+    CHECK(res.escape_claimed);           // still the sky's
+    CHECK(res.inputs.pitch == 0.0f);     // still severed
+    CHECK(res.inputs.throttle == 0.0f);  // engine stays surrendered
+}
+
+TEST_CASE("R5e: instructor mode is severed too") {
+    app::LoopState st = flying(escaped_state());
+    app::TickInput in = instr_in(0.9);  // pilot demands power
+    const app::TickResult res = app::tick(st, in, kAp, kCp, &kGravEnv);
+    CHECK(res.escape_claimed);
+    CHECK(res.inputs.throttle == 0.0f);  // the cascade's output is discarded
+    CHECK(res.inputs.pitch == 0.0f);
+}
+
+TEST_CASE("R5e: respawn and field-off both clear the claim") {
+    // Respawn: the GROUNDED pairing tick starts the fresh life unclaimed.
+    app::LoopState st = flying(bound_state());
+    st.escape_claimed = true;
+    st.grounded = true;  // this tick is the spawn tick
+    app::tick(st, raw_full_stick(), kAp, kCp, &kGravEnv);
+    CHECK_FALSE(st.escape_claimed);
+    // Field-off (the T rescue): claim clears and the stick flows again.
+    app::LoopState st2 = flying(bound_state());
+    st2.escape_claimed = true;
+    const app::TickResult res2 =
+        app::tick(st2, raw_full_stick(), kAp, kCp, nullptr);
+    CHECK_FALSE(st2.escape_claimed);
+    CHECK(res2.inputs.pitch == 1.0f);
+}
+
+TEST_CASE("R5e: bound flight with the field LIVE never claims") {
+    app::LoopState st = flying(bound_state());
+    const app::TickResult res =
+        app::tick(st, raw_full_stick(), kAp, kCp, &kGravEnv);
+    CHECK_FALSE(res.escape_claimed);
+    CHECK(res.inputs.pitch == 1.0f);  // the stick flows below the line
 }

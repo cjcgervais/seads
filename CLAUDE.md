@@ -28,13 +28,26 @@ authoritative reasoning record behind it.
 The v4→v5 reconciliation is DONE: `main` in the game trees is `game-kernel-v5`
 (`36ee936e9`, merged by Chad's word 2026-07-24, gate 797/797) — the whole game flies
 kernel v5. The live risk is now the other direction: the feel branch **moves past the
-seal**. `D:\flight_sim2\seads-feel`, branch **`feel/kernel-v5`**, is where new feel work
-lands first.
+seal**. `D:\flight_sim2\seads-feel` (a worktree of `D:\flight_sim2\seads`, on whichever
+`feel/<name>` lane is checked out) is where new feel work lands first.
 
-**Tip as of 2026-08-04, re-derived this session — RE-DERIVE IT AGAIN BEFORE CITING IT:**
-`e362df289`, sealed **`flight-kernel-v12-2026-07-30`** (*"SEAL v12 — S-straightline
-flown-approved (Chad verbatim), COMS-1 truth-check CLEARED"*). Seal chain
-v5→v6→v7→v8→v9→v10→v11→**v12**. `reference/seads-feel/` is snapshotted at the v12 seal.
+**Tip as of 2026-09-15, re-derived this session — RE-DERIVE IT AGAIN BEFORE CITING IT:**
+`origin/main` = **`b697d24a5`**, tag **`kernel-v15-righthand-signed`** (annotated, 2026-09-13,
+*"yes land the loop fix on main"*). Seal chain v5→…→v12→v13→v13g→v14→**v15**. The feel branch
+is NO LONGER `feel/kernel-v5` (it stopped at `15571a5f4`, 2026-08-06): feel work lands on
+short-lived `feel/<name>` lanes through the SENTINEL protocol and is tagged at the pushed
+`main` tip. **`reference/seads-feel/` is snapshotted at the v15 tip `b697d24a5`** (four stated
+purity exceptions in its README). The v16 candidate (the lateral nose-down, TARGET 2) sits on
+`feel/lateral-yawbudget` @ `40325f297`, **ON HOLD for Chad** — `docs/cascade/lateral-nose-down-unload.md`.
+The fly tree `D:\flight_sim2\seads-recon` (`sandbox/r4a-phase0`) carries `b697d24a5`.
+
+**THIS AGENT IS THE SENTINEL for pushes into flight_sim2 (Chad, 2026-09-15).** The SOP, the
+queue and the dated ledger are in **`docs/SENTINEL_LEDGER.md`**. Read-only in the live trees
+still applies: the lanes execute, the sentinel rules order and audits. The nightly job
+`tools/backup_drive_to_gdrive.ps1` writes the nightly `origin/main` observation to that ledger.
+
+⚠ **This repo's GitHub remote returned "Repository not found" on 2026-09-15.** Commits since
+`c103c64` are local-only; the nightly Drive bundle is the only off-site copy. Open for Chad.
 
 > ⚠ **This block used to read `cfe1bd7fe` / v6 and forecast *"Chad expects a quiet period."*
 > Six seals landed instead** — caught by `flying_architecture` (PACKET 6 §2) and verified here.

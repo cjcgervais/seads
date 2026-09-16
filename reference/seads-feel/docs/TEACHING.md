@@ -1,3 +1,5 @@
+> **FROZEN SNAPSHOT — two+ milestones stale (banner added 2026-07-08).** The mental models and traps remain sound teaching, but every status/"not yet built" claim has drifted (e.g. the target drone EXISTS — SPEC §0 S8-drone). Trust SPEC §0 + CLAUDE.md `## Threads` over any status here.
+
 # SEADS — The Teaching Companion
 
 *An annotated, red-marked walk through the codebase: the mental models, the why,

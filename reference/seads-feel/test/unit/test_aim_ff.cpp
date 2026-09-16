@@ -73,7 +73,7 @@ control::Output one_step(const sim::SimState& s, const glm::dvec3& target,
     in.throttle = 0.7;
     in.aim_moved = true;
     in.aim_rate_world = aim_rate;
-    return control::step(s, in, internal, kAp, cp, kAp.sim_dt);
+    return control::step(s, in, internal, kAp, cp, nullptr, kAp.sim_dt);
 }
 
 }  // namespace
@@ -366,7 +366,7 @@ TEST_CASE("aim-ff: a held override axis discards the FF") {
         in.aim_rate_world = rate;
         in.override_mask[0] = true;
         in.override_sign[0] = +1.0;
-        return control::step(s0, in, control::reset(), kAp, kCp, kAp.sim_dt);
+        return control::step(s0, in, control::reset(), kAp, kCp, nullptr, kAp.sim_dt);
     };
     const control::Output h0 = held_step(glm::dvec3{0.0});
     const control::Output h1 = held_step(5.0 * right);
@@ -415,7 +415,7 @@ TEST_CASE(
         for (int f = 0; f < n_frames; ++f) {
             double pdx = 0.0, pdy = per_frame_dy;
             const app::FrameResult fr =
-                app::step_frame(st, accum, frame_dt, fin, pdx, pdy, kAp, kCp);
+                app::step_frame(st, accum, frame_dt, fin, pdx, pdy, kAp, kCp, nullptr, nullptr);
             REQUIRE(fr.ticks ==
                     static_cast<int>(std::lround(frame_dt / kAp.sim_dt)));
             p.vec_sum += fr.aim_rate_dt_sum;
@@ -470,7 +470,7 @@ TEST_CASE("aim-ff: app tick forwards the rate and gates freelook and ground") {
         in.throttle = thr;
         in.aim_dy = 120.0;
         in.frame_ticks = 2;
-        const app::TickResult r = app::tick(st, in, kAp, kCp);
+        const app::TickResult r = app::tick(st, in, kAp, kCp, nullptr, nullptr);
         const double expect = 120.0 * kCp.aim_sensitivity / (2.0 * kAp.sim_dt);
         CHECK(glm::length(r.aim_rate_ff) ==
               Catch::Approx(expect).epsilon(1e-9));
@@ -481,7 +481,7 @@ TEST_CASE("aim-ff: app tick forwards the rate and gates freelook and ground") {
         app::TickInput in;
         in.throttle = thr;
         in.aim_rate_ff = glm::dvec3{0.1, 0.2, 0.3};
-        const app::TickResult r = app::tick(st, in, kAp, kCp);
+        const app::TickResult r = app::tick(st, in, kAp, kCp, nullptr, nullptr);
         CHECK(exact_eq(r.aim_rate_ff, glm::dvec3{0.1, 0.2, 0.3}));
     }
     // Freelook held: the mouse feeds the orbit, the controller sees ZERO
@@ -493,7 +493,7 @@ TEST_CASE("aim-ff: app tick forwards the rate and gates freelook and ground") {
         in.freelook_held = true;
         in.aim_dy = 120.0;
         in.aim_rate_ff = glm::dvec3{0.1, 0.2, 0.3};
-        const app::TickResult r = app::tick(st, in, kAp, kCp);
+        const app::TickResult r = app::tick(st, in, kAp, kCp, nullptr, nullptr);
         CHECK(exact_eq(r.aim_rate_ff, glm::dvec3{0.0}));
     }
     // Grounded spawn tick: zero.
@@ -503,7 +503,7 @@ TEST_CASE("aim-ff: app tick forwards the rate and gates freelook and ground") {
         app::TickInput in;
         in.throttle = thr;
         in.aim_dy = 120.0;
-        const app::TickResult r = app::tick(st, in, kAp, kCp);
+        const app::TickResult r = app::tick(st, in, kAp, kCp, nullptr, nullptr);
         CHECK(exact_eq(r.aim_rate_ff, glm::dvec3{0.0}));
     }
 }
@@ -575,7 +575,7 @@ TEST_CASE("aim-ff: tau filter steps first-order and resets on GROUNDED") {
     gin.target_dir_world = t;
     gin.grounded = true;
     gin.aim_rate_world = r;
-    const control::Output g = control::step(s0, gin, it, kAp, cp, kAp.sim_dt);
+    const control::Output g = control::step(s0, gin, it, kAp, cp, nullptr, kAp.sim_dt);
     CHECK(exact_eq(g.internal.aim_rate_filt, glm::dvec3{0.0}));
 
     // tau = 0: exact pass-through in one step.

@@ -11,6 +11,7 @@
 #include <cmath>
 #include <glm/glm.hpp>
 #include <glm/gtc/constants.hpp>
+#include <glm/gtc/matrix_transform.hpp>  // frustum/lookAt (independent oracle)
 #include <glm/gtc/quaternion.hpp>
 #include <vector>
 
@@ -45,6 +46,26 @@ glm::dvec3 some_tangent(const glm::dvec3& up) {
 
 bool finite(const glm::dvec3& v) {
     return std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z);
+}
+
+// Project a world DIRECTION to screen NDC through the SAME matrices raylib
+// composes (glm::frustum + glm::lookAt) — an oracle INDEPENDENT of both
+// frustum_corner_rays and project_dir (which share a hand-built basis), so a
+// shared-basis bug cannot self-consistently pass. w=0 => a point at infinity;
+// clip.w = -z_cam.
+glm::dvec2 project_dir_matrices(const glm::dvec3& dir, const glm::dmat4& proj,
+                                const glm::dmat4& view) {
+    const glm::dvec4 clip = proj * view * glm::dvec4(dir, 0.0);
+    return glm::dvec2(clip.x / clip.w, clip.y / clip.w);
+}
+
+// Screen-linear (bilinear-in-NDC) interpolation of the 4 corner rays, as the
+// fullscreen sky quad's rasterizer does before the FS normalizes.
+glm::dvec3 bilerp_corners(const glm::dvec3 c[4], double u, double v) {
+    const double a = (u + 1.0) * 0.5, b = (v + 1.0) * 0.5;
+    const glm::dvec3 bot = glm::mix(c[0], c[1], a);  // BL->BR
+    const glm::dvec3 top = glm::mix(c[3], c[2], a);  // TL->TR
+    return glm::mix(bot, top, b);
 }
 
 // What raylib's LookAt needs to survive: view and up-hint not parallel.
@@ -271,6 +292,120 @@ TEST_CASE("aim camera: eye never enters the planet", "[render][camera]") {
         render::aim_chase_camera(s, up, {0, 0, -1}, p, chase);
     require_valid_pose(pose);
     REQUIRE(glm::length(pose.eye) >= p.R + chase.min_eye_altitude - 1e-6);
+}
+
+// ---------------------------------------------------------------------------
+// T9a CAVECAM: underground (inside the tunnel net) the eye is legally below
+// R+2, so the surface clamp would hoist it to bare radius (the zoomed-out egg
+// view, plane invisible on a nose-up pose). The `underground` flag skips the
+// clamp + degenerate reseat so the eye stays on the raw offset. These legs pin
+// the flag LIVE in BOTH directions (both arms of both cameras).
+// ---------------------------------------------------------------------------
+
+// A deep-underground nose-UP state: position ~ R-2500 (below bare surface), the
+// nose (aim forward) points radially UP, so the chase eye behind lands radially
+// BELOW the target (|eye| < |target|) — the exact geometry where the false-arm
+// clamp binds and the reseat hoists the eye to bare radius.
+TEST_CASE("aim camera: underground keeps the eye on the plane (both arms)",
+          "[render][camera][tunnel]") {
+    const sim::AircraftParams p = world_params();
+    const render::ChaseParams chase;
+    const glm::dvec3 pos_dir = glm::normalize(glm::dvec3{0.3, 1.0, -0.4});
+    sim::SimState s;
+    s.position = pos_dir * (p.R - 2500.0);  // deep underground
+    const glm::dvec3 up = sim::local_up(s.position);
+    // Nose points radially up (aim forward = local_up), aim_up = a tangent so
+    // the frame is well-formed. The eye offset = -fwd*distance + up_orth*height
+    // then has a strongly-negative radial component (-fwd*distance points
+    // radially in), landing the eye below the target.
+    const glm::dvec3 fwd = up;
+    const glm::dvec3 aim_up = some_tangent(up);
+    s.orientation = attitude(fwd, aim_up);
+
+    // TRUE arm: eye is the raw aim offset, exactly (pure arithmetic — bitwise).
+    const render::CameraPose ug =
+        render::aim_chase_camera(s, fwd, aim_up, p, chase, {}, /*ug=*/true);
+    // Reconstruct the raw offset (mirror aim_chase_camera's basis math):
+    // right = cross(fwd, aim_up); up_orth = cross(right, fwd).
+    const glm::dvec3 right = glm::normalize(glm::cross(fwd, aim_up));
+    const glm::dvec3 up_orth = glm::cross(right, fwd);
+    const glm::dvec3 raw_eye =
+        s.position + (-fwd * chase.distance + up_orth * chase.height);
+    REQUIRE(ug.eye == raw_eye);  // bitwise: no clamp, no reseat
+    // The eye is BELOW the target (the geometry the false arm hoists).
+    REQUIRE(glm::length(ug.eye) < glm::length(s.position));
+
+    // FALSE arm: the surface clamp + reseat hoists the eye to bare radius.
+    // Oracle is exact: lift_needed = R + min - |target| = 2500 + min >> height,
+    // so the reseat lands the eye at exactly R + min_eye_altitude.
+    const render::CameraPose sf =
+        render::aim_chase_camera(s, fwd, aim_up, p, chase, {}, /*ug=*/false);
+    REQUIRE(glm::length(sf.eye) ==
+            Catch::Approx(p.R + chase.min_eye_altitude).epsilon(1e-12));
+    // And the two arms genuinely diverge (the flag is doing work).
+    REQUIRE(glm::length(ug.eye - sf.eye) > 100.0);
+}
+
+TEST_CASE("chase camera: underground keeps the eye on the plane (both arms)",
+          "[render][camera][tunnel]") {
+    const sim::AircraftParams p = world_params();
+    const render::ChaseParams chase;
+    const glm::dvec3 pos_dir = glm::normalize(glm::dvec3{-0.5, 0.7, 0.6});
+    sim::SimState s;
+    s.position = pos_dir * (p.R - 2500.0);  // deep underground
+    const glm::dvec3 up = sim::local_up(s.position);
+    // Nose radially up so the chase eye (pos - nose*distance + up*height) lands
+    // radially below the target: -nose*distance = -up*distance dominates.
+    const glm::dvec3 nose = up;
+    const glm::dvec3 body_up = some_tangent(up);
+    s.orientation = attitude(nose, body_up);
+
+    // TRUE arm: eye is the raw chase offset, exactly.
+    const render::CameraPose ug =
+        render::chase_camera(s, p, chase, /*underground=*/true);
+    const glm::dvec3 raw_eye =
+        s.position - nose * chase.distance + up * chase.height;
+    REQUIRE(ug.eye == raw_eye);  // bitwise: no clamp, no reseat
+    REQUIRE(glm::length(ug.eye) < glm::length(s.position));
+
+    // FALSE arm: hoisted to bare radius (same exact oracle).
+    const render::CameraPose sf =
+        render::chase_camera(s, p, chase, /*underground=*/false);
+    REQUIRE(glm::length(sf.eye) ==
+            Catch::Approx(p.R + chase.min_eye_altitude).epsilon(1e-12));
+    REQUIRE(glm::length(ug.eye - sf.eye) > 100.0);
+}
+
+// NO-OP AT CRUISE: above R+2 the clamp never binds, so underground=true and
+// underground=false produce the BIT-IDENTICAL pose (the default-false
+// bit-identity claim, proven where it matters — the surface-flight path).
+TEST_CASE("camera: underground flag is a no-op at cruise altitude",
+          "[render][camera][tunnel]") {
+    const sim::AircraftParams p = world_params();
+    const render::ChaseParams chase;
+    const glm::dvec3 pos_dir = glm::normalize(glm::dvec3{0.2, 0.9, -0.3});
+    sim::SimState s;
+    s.position = pos_dir * (p.R + 2000.0);  // normal surface flight
+    const glm::dvec3 up = sim::local_up(s.position);
+    const glm::dvec3 fwd = some_tangent(up);
+    const glm::dvec3 wing = glm::normalize(glm::cross(fwd, up));
+    const double bank = 35.0 * glm::pi<double>() / 180.0;
+    const glm::dvec3 aim_up = std::cos(bank) * up + std::sin(bank) * wing;
+    s.orientation = attitude(fwd, aim_up);
+
+    const render::CameraPose a0 =
+        render::aim_chase_camera(s, fwd, aim_up, p, chase, {}, false);
+    const render::CameraPose a1 =
+        render::aim_chase_camera(s, fwd, aim_up, p, chase, {}, true);
+    REQUIRE(a0.eye == a1.eye);
+    REQUIRE(a0.up == a1.up);
+    REQUIRE(a0.target == a1.target);
+
+    const render::CameraPose c0 = render::chase_camera(s, p, chase, false);
+    const render::CameraPose c1 = render::chase_camera(s, p, chase, true);
+    REQUIRE(c0.eye == c1.eye);
+    REQUIRE(c0.up == c1.up);
+    REQUIRE(c0.target == c1.target);
 }
 
 // ---------------------------------------------------------------------------
@@ -717,6 +852,74 @@ TEST_CASE("freelook orbit stays clear of the camera-up flip within the cap",
     const render::CameraPose flipped = render::aim_chase_camera(
         s, fwd, aim_up, p, chase, render::CameraOrbit{0.0, pole});
     CHECK(glm::dot(flipped.up, aim_up) < 0.5);
+}
+
+TEST_CASE("sky corner rays are frustum-exact under lens-shift and zoom") {
+    // P0 (little_planet_plan Stage 2): the fullscreen sky quad's per-pixel view
+    // ray must match the 3D scene under the off-center lens shift AND RMB-zoom,
+    // or the horizon swims against the world on the aim path.
+    // frustum_corner_rays returns UNNORMALIZED, screen-linear corner vectors;
+    // the quad interpolates them and the FS normalizes. Pinned against the
+    // INDEPENDENT glm::frustum + glm::lookAt path (not project_dir), at corners
+    // AND interior samples, swept over shift, zoom fovy, and a ROLLED up (the
+    // case a shared-basis or an axis-aligned setup would hide).
+    const double nearZ = 1.0, farZ = 1000.0, aspect = 1280.0 / 720.0;
+    const glm::dvec3 fwd{0.0, 0.0, -1.0};
+    const glm::dvec3 up_plain{0.0, 1.0, 0.0};
+    const glm::dvec3 up_roll = glm::normalize(glm::dvec3{0.4, 1.0, 0.0});
+    struct Case {
+        double fovy_deg, shift;
+        glm::dvec3 up;
+    };
+    const std::vector<Case> cases = {
+        {60.0, 0.0, up_plain},   // baseline
+        {60.0, 0.35, up_plain},  // lens shift
+        {15.0, 0.35, up_plain},  // zoom (narrow fovy) + shift
+        {60.0, 0.35, up_roll},   // rolled up
+    };
+    const glm::dvec2 corner_ndc[4] = {
+        {-1.0, -1.0}, {1.0, -1.0}, {1.0, 1.0}, {-1.0, 1.0}};
+
+    for (const Case& c : cases) {
+        const double fovy = c.fovy_deg * glm::pi<double>() / 180.0;
+        glm::dvec3 corners[4];
+        render::frustum_corner_rays(fovy, aspect, c.shift, fwd, c.up, corners);
+
+        const render::FrustumBounds fb =
+            render::off_center_frustum(fovy, aspect, nearZ, c.shift);
+        const glm::dmat4 proj =
+            glm::frustum(fb.l, fb.r, fb.b, fb.t, nearZ, farZ);
+        const glm::dmat4 view = glm::lookAt(glm::dvec3{0.0}, fwd, c.up);
+
+        // The four corners land at the four screen corners.
+        for (int i = 0; i < 4; ++i) {
+            const glm::dvec2 ndc = project_dir_matrices(corners[i], proj, view);
+            REQUIRE(ndc.x == Catch::Approx(corner_ndc[i].x).margin(1e-9));
+            REQUIRE(ndc.y == Catch::Approx(corner_ndc[i].y).margin(1e-9));
+        }
+        // Interior: center + edge midpoints. The screen-linear interpolation of
+        // the corners projects EXACTLY to the sampled NDC — the property a
+        // normalize-before-interpolate would break (interior rays bend).
+        const glm::dvec2 samples[5] = {
+            {0.0, 0.0}, {-1.0, 0.0}, {1.0, 0.0}, {0.0, -1.0}, {0.0, 1.0}};
+        for (const glm::dvec2& s : samples) {
+            const glm::dvec3 ray = bilerp_corners(corners, s.x, s.y);
+            const glm::dvec2 ndc = project_dir_matrices(ray, proj, view);
+            REQUIRE(ndc.x == Catch::Approx(s.x).margin(1e-9));
+            REQUIRE(ndc.y == Catch::Approx(s.y).margin(1e-9));
+        }
+        // The mutation the interior samples catch: NORMALIZING the corners
+        // before interpolation bends the center ray off screen-center (except
+        // at shift=0, where symmetry keeps the normalized average on the axis).
+        if (c.shift != 0.0) {
+            glm::dvec3 ncorners[4];
+            for (int i = 0; i < 4; ++i)
+                ncorners[i] = glm::normalize(corners[i]);
+            const glm::dvec2 bent = project_dir_matrices(
+                bilerp_corners(ncorners, 0.0, 0.0), proj, view);
+            REQUIRE((std::abs(bent.x) > 1e-6 || std::abs(bent.y) > 1e-6));
+        }
+    }
 }
 
 // ===========================================================================

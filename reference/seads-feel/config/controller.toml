@@ -538,6 +538,57 @@ lean_gain = 8.0   # [deg bank per deg lateral error] ~8 deg lean at 1 deg off.
                   #   + roll busy-ness sentinels at their most loaded;
                   #   fallback 11, then 10.
 lean_max  = 30.0  # [deg] cap (Chad ruling); saturated by ~3.75 deg lateral
+# S-leanlead (feel/yaw-bank-balance sandbox, 2026-09-10 -- Chad: "a near even
+# balance of yaw and bank in the confluence of the turn dynamic to the cascade
+# from mouse aim deflection... currently there is more yaw early on than
+# banking"). MEASURED TRUE (test_yawbank_balance.cpp): a FINE lateral step's
+# rudder closure is one lag (K_theta*yaw_scale, tau ~0.16 s) but its bank is
+# TWO series lags (held_bank chases the lean at `rate`, tau 0.18 s, THEN K_phi
+# chases held_bank, tau 0.2 s) -- the bank peaks after the nose has already
+# closed most of the error. This dial lets the wings-hold roll limb target the
+# LIVE lean (held_bank + lean_lead*(lean_target - held_bank)) while the aim is
+# asking for MORE bank in its own direction -- the first lag is skipped on the
+# way IN only; the release, the rest auto-level, the banked-spawn capture
+# (AT-13) and the inverted righting are bit-identical. yaw_scale, K_theta,
+# K_phi, rate, lean_gain UNTOUCHED (one dial). 0 = structurally OFF = the
+# flown main kernel (the walk-back). Fly sentinels: near-center centering must
+# still read as RUDDER (Fly-10 vector); slow-flight wallow < ~80 m/s; the
+# freelook CARVE side-scope banks sooner on a held lateral aim.
+# WALK-BACK 2026-09-12 -- Chad flew v14 more and reported: "nosing down often
+# makes my wings bank when unwanted... pulling a straight loop my wings are
+# completely unwantedly banking over 180 degrees". ATTRIBUTED, not dialed: the
+# lead reads lean_target = lean_gain*az_lat, and az_lat is the aim offset on
+# the HORIZON's right axis while the mouse deflects in the CARRIED (screen)
+# frame -- so a PURE PITCH aim of eps at bank phi reads az_lat ~= eps*sin(phi).
+# Nose-up that feeds back with the SAME sign as phi (wings-level is unstable
+# for eps > 1/lean_gain = 0.125 deg; the runaway crosses blend_lo and the
+# bank-to-turn limb then rolls it past 180) and nose-down with the OPPOSITE
+# sign (a ringing over-corrector -- the narrowed knife edge). The
+# contamination is MB-lean's own and predates v14; lean_lead merely bypassed
+# the auto_level rate lag that had been low-passing it.
+# So the dial is restored to its flown 0.3 and the LEAD is gated structurally
+# instead -- see lean_lead_lateral below. Walk-back order if the fly still
+# banks: lean_lead_lateral = false first (that is exactly the rejected v14),
+# then lean_lead 0.2 / 0.15 / 0.1, then 0 (the pre-v14 tree bit-identically).
+lean_lead = 0.3   # [0..1] 0 = structurally OFF = the pre-v14 flown tree
+# S-leanlead-lateral (2026-09-12): scale the LEAD -- never lean_target, the
+# flown MB-lean magnet is untouched -- by the aim offset's HORIZON-LATERAL
+# SHARE, g = smoothstep(lat_lo, lat_hi, |az_lat|/err). A pure-pitch aim reads
+# share == |sin(phi)|; a genuinely sideways aim reads share == 1 at ANY bank.
+# So the turn entry the dial was built for keeps the full lead while the
+# loop/dive contamination is gated off at the shallow banks it seeds in.
+# false = the landed v14 ungated lead, BIT-IDENTICALLY (the A/B arm).
+lean_lead_lateral = true
+# lat_lo = sin(lean_max) = sin(30 deg) = 0.50 EXACTLY -- a pure-pitch aim
+# reads g == 0 at every bank the lean itself can command, which is the whole
+# shallow-bank band the runaway seeds in (10 deg -> share 0.17, 20 -> 0.34,
+# 30 -> 0.50). Loader-walled against lean_max so a later cap retune cannot
+# silently re-open the gate.
+lean_lead_lat_lo = 0.50
+# lat_hi = 0.85 ~ cos(32 deg): full lead for any aim within ~32 deg of the
+# horizon-lateral axis, with margin for the vertical error that develops as
+# the nose closes during a turn entry (measured: the entry keeps g ~ 1).
+lean_lead_lat_hi = 0.85
 # Inverted auto-righting (MB-right, Chad 2026-07-07: "need to roll over on bank
 # after about 2 s no gross inputs if belly up... slow roll off ailerons").
 # Scoped amendment of S7-loop-invert's "inverted rest stays inverted": it still
@@ -559,8 +610,62 @@ lean_max  = 30.0  # [deg] cap (Chad ruling); saturated by ~3.75 deg lateral
 # delay 1.0 -> 0.5. The mouse-at-rest gate is unchanged — a loop apex or slow
 # roll where the hand rests a full half-second now rights sooner (watch for
 # that on the fly). Walk-back = 1.0.
-inverted_delay = 0.5    # [s] belly-up rest time before the righting roll arms
+# RULED 2026-08-06 (pilot): inverted righting carries NO added delay — "as soon
+# as the hands rest, the plane rolls level". This REVERSES the S7-loop-invert
+# "an inverted rest stays inverted" window: the wait is now the rest condition
+# itself (aim resolved inside blend_lo, pursuit live, genuinely belly-up), not a
+# timer on top of it. 0.5 -> 0.0; the walk-back is any positive value, and
+# inverted_rate = 0 still restores the old stays-inverted law outright.
+inverted_delay = 0.0    # [s] belly-up rest time before the righting roll arms
 inverted_rate  = 180.0  # [deg/s] the righting roll rate clamp (a 180 in ~1 s)
+# S-righthand (2026-09-12) -- MB-right must not right the aeroplane while the
+# pilot's hand is still flying it.
+#
+# MEASURED FROM CHAD'S OWN TAPE (feel_tape_loop.csv, 10134 ticks). At the apex
+# of his loop (t=18.02) the nose passes vertical, cos_phi_theta crosses zero,
+# and MB-right arms -- its "at rest" test is err < blend_lo and his tracking
+# err there is 4.6 deg, inside the circle. inverted_delay is 0.0, so it arms on
+# the first such tick and commands EXACTLY inverted_rate: the tape shows
+# wdz = -180.0 deg/s held through the rest of the apex. He is not resting
+# inverted; he is mid-loop with the nose 86 deg up and the mouse still moving.
+#
+# Chad: "the loop is sustained by me sustaining the motion, if I change the
+# motion it should change the behavior." So the righting AUTHORITY ramps with
+# hand-rest: 0 while he is moving the aim, full after right_hand_rest seconds
+# of rest. The 2026-08-06 ruling (no added delay once at rest) is preserved --
+# inverted_delay and inverted_rate are UNTOUCHED; hands off at the apex still
+# rights, just after this short rest.
+# 0.0 = the STRUCTURAL OFF arm (bit-identical legacy tree, hash-pinned).
+# MEASURED ON HIS FLIGHT (feel_tape_loops2.csv, 31656 ticks, flown at 0.25).
+# MB-right wanted to fire on 2344 ticks; the hand veto suppressed it on 2178 of
+# them (92.9%) -- each would otherwise have commanded up to the full
+# inverted_rate. At the six loop apices (cos_phi_theta crossing 0, nose > 80
+# deg up):
+#   apex  t(s)   theta   phi   alt  speed  righting  peak|roll_right|
+#     0  20.73   89.6    0.4  1322  234.2    155        8.7 deg/s
+#     1  46.11   85.2    4.7   675  242.6    116        2.3
+#     2  66.72   86.6    3.3   692  259.3    135        8.7
+#     3  94.39   86.7    3.4  1719  224.9      0        0.0
+#     4 203.93   80.6    9.4   355  209.5      0        0.0
+#     5 245.41   88.9   -0.9   836  258.3    118        5.0
+# Wings LEVEL at every apex (max |phi| 9.4 deg) against the 180.0 deg/s the
+# un-vetoed build commanded at the same geometry. Chad, on this flight: "I can
+# do the vertical loops and immelmans without a hitch."
+#
+# DEFERRED, measured, NOT fixed here -- P3-a, the unfold_bank zenith spike.
+# cos_phi_theta crosses zero because the NOSE is past vertical, not because the
+# aeroplane is inverted, so unfold_bank reports the bank as ~180 instead of ~0
+# and the FINE wings-hold limb sees a 178 deg error (K_phi * that = 893 deg/s
+# raw, faded by wings_level_gate). Integrated |roll_hold| through each apex on
+# his tape: 8.6 / 1.3 / 6.5 / 6.8 / 0.0 / 0.5 deg -- all inside the ~10 deg
+# bound, so it stays deferred. The cure is to stop feeding a zenith-degenerate
+# gauge to a roll limb; that is a mechanism change, not a dial.
+# ⚠ COVERAGE: the broad gate gives this veto essentially ZERO coverage --
+# harness ClosedLoop's aim_moved defaults FALSE, so every scenario in the suite
+# flies a "hand at rest" and the gate is 1.0 throughout. The apex probe in
+# test_loop_rollover.cpp is the SOLE instrument that exercises it with a moving
+# hand. A green gate says nothing about this dial; that probe does.
+right_hand_rest = 0.25  # [s] hand-at-rest before MB-right has full authority
 
 [regime]             # blend smoothstep(lo,hi,e); latch gates heldBank + telem
 blend_lo = 5.0       # [deg]
@@ -593,6 +698,44 @@ pull_floor = 1.0      # [frac of the sag-servo demand] 1.0 = full line-hold
 # the ~90 deg knife-edge from chattering (CLAUDE.md "every gate hysteretic")
 # without touching real banked turns (which are MANEUVER, roll_hold ~ 0 anyway).
 wings_level_band = 0.05  # [cos units] ~ +/-2.9 deg of bank around vertical
+# S-maninvert (feel/lean-lead-walkback, 2026-09-12) -- the SAME inversion fade
+# applied to the MANEUVER bank-to-turn limb, which wings_level_band above has
+# never covered (it fades only the wings-HOLD limb).
+#
+# THE MECHANISM (measured, test/unit/test_loop_rollover.cpp). A held mouse
+# sweeps the aim at aim_sensitivity * (px/s) with NO bound; the airframe can
+# only pull ~30-35 deg/s of loop. So on a straight mouse-UP loop the aim LAPS
+# the nose: with the aim d degrees around the loop plane ahead of the nose,
+# target_body.y == sin(d), so the moment d passes 180 deg the aim comes round
+# BELOW the wing line and tb.y goes NEGATIVE. There bank_error ==
+# atan2(tb.x, tb.y) jumps from ~0 to +/-160..180 deg -- "roll to put the target
+# above the nose" now means roll INVERTED -- and because err >> blend_hi the
+# whole roll channel IS the maneuver limb (blend == 1), so sqrt_law saturates
+# and the wings go through 180 deg at p_max. The PITCH channel already guards
+# this exact crossing (the elev_latch, astern_on/astern_off); ROLL had nothing.
+# Measured: it fires above ~40 deg/s of aim sweep at V220 (~285 px/s at
+# aim_sensitivity 0.14), and the seeded bank is irrelevant -- it reproduces
+# from bank0 == 0.000 exactly. NOT a regression: the instrument reads
+# bit-identical on main back to 2026-08-12 and WORSE on 2026-07-19.
+#
+# CHAD'S SPEC (2026-09-12), verbatim: "If I keep inputting upward deflection the
+# airframe should stay in its orientation right around the loop... an
+# Immelmann, where I stop inputting deflection at the top, auto rights the
+# airframe." Holding the deflection must not roll the wings; RELEASING at the
+# top must still right them -- so the fade lands on the MANEUVER limb ONLY and
+# the rest/auto-level righting path that owns the release is untouched.
+#
+# smoothstep(0, band, cos_phi_theta): EXACTLY 1 upright at cos >= band (so the
+# goldens, the turn-entry balance instrument and the whole FINE band are
+# bit-identical), EXACTLY 0 inverted, continuous across the knife-edge -- no
+# predicate, no latch. 0.0 = the STRUCTURAL OFF arm (bit-identical legacy tree;
+# the fly kill-switch). NAMED TRADE: a deliberate split-S / slice that rolls
+# THROUGH inverted loses bank-to-turn authority past the knife-edge -- that is
+# the price of the loop holding its orientation.
+# S-lapguard 2026-09-12: aim-laps-the-nose guard, measured inert on both of Chad's tapes (0 ticks), cost 272 m on a 300 deg/s lateral sweep; removed like S-aimclamp/S-retclamp.
+# The loop-rollover defect it targeted is real; the CURE was wrong -- it
+# never fired on his hand (0 of 10134 ticks, tape 1). The apex roll he
+# actually felt is [auto_level] right_hand_rest.
 # Blend-band roll TARGET continuity (the 5-10 deg roll slam, 2026-07-30 —
 # jitter_attribution §A6 + the kernel-base consult: coverage-completion of
 # MB-lean; the pitch align / yaw_gate McRuer-transition treatment applied to
@@ -684,9 +827,7 @@ side_cone_enter = 37.5   # [deg off the vertical plane] push only when inside
                          #   widens +10 deg, the roll-over region narrows.
                          #   His 2nd widening of this exact dial (22.5 -> 27.5
                          #   was 2026-07-07, same felt complaint); band kept
-                         #   5 deg. BACKPORTED from seads-recon 6cd91bb12
-                         #   (the tunnel-lineage widening) — this worktree's
-                         #   lineage split at the v9 seal and never got it.
+                         #   5 deg.
                          #   this. MB (Chad fly verdict 2026-07-07): 22.5->27.5
                          #   — "the knife edge on nose down maneuvers needs a
                          #   little widening... I got thrown over once when
@@ -694,8 +835,7 @@ side_cone_enter = 37.5   # [deg off the vertical plane] push only when inside
                          #   PUSHES instead of rolling over (band kept 5 deg).
 side_cone_exit  = 42.5   # [deg] roll over once the aim swings past this
 
-# Rung F "THE SACRED MIDDLE" (v5 kernel-v5-reconcile, Chad 2026-07-24 fly;
-# BACKPORTED from seads-recon 6cd91bb12 — flown-approved there, "I love it").
+# Rung F "THE SACRED MIDDLE" (v5 kernel-v5-reconcile, Chad 2026-07-24 fly).
 # Rung E's horizon_enter=45 blankets EVERYTHING below the horizon, so a
 # shallow straight-ahead dive (in-plane, 20-40 deg down) could no longer
 # pure-pitch: bank-to-turn rolled him over. Chad's ruling, BOTH halves kept:
@@ -881,15 +1021,87 @@ ramp_time = 0.080    # [s] engage ramp to full deflection (~80 ms, SPEC §9.5)
 # knob-off arm = sealed-v6 D9). rate = 0 still disables the mechanism
 # entirely; any rate > 0 is a pure ENABLE now (the 150 deg/s open-loop profile
 # is retired — the value no longer paces anything), and settle is inert.
-rate   = 150.0       # 0 = off; > 0 = enabled (instant — value no longer paces)
-settle = 5.0         # [1/s] inert since v9 (the open-loop tail is retired)
+# SECOND TRIGGER, v13 (pilot ruling 2026-08-06): "after a maneuver ending
+# inverted — split-S, Immelmann — the CAMERA also rights itself automatically at
+# rest: horizon level, planet below, WITHOUT a freelook release." So the same
+# gauge roll now also fires on the AIM-AT-REST edge: when the mouse has been
+# still for rest_dwell while airborne and out of freelook, the standing
+# up-misalignment is CAPTURED ONCE (edge-triggered, open-loop) and rolled out
+# about the aim's own forward at `rate`, easing through `settle` at the end.
+# This is NOT a per-tick horizon lock (the S7-mouselevel dead-end, banned): the
+# target is measured once at the rest edge and the debt is finite. A captured
+# roll COMPLETES as one smooth motion — mouse motion never cancels it mid-flight
+# (pilot fly-ruling 2026-08-06: resting-hand 1-px sensor jitter had shredded the
+# roll into steps via cancel + re-dwell; the release roll survives mid-roll input
+# by the same law). The hand owns the CAPTURE: motion resets the dwell and
+# disarms a finished roll. Freelook entry and grounded cancel outright; the
+# freelook-release roll above is unchanged (still instant, still whole-debt).
+# `settle` is therefore LIVE again (it paces only this rest-edge tail; the
+# release roll remains instant): w = min(rate, settle*remaining), so a 180 deg
+# debt rolls at the full 150 deg/s until ~30 deg out, then eases into level.
+# The camera reads NOTHING of the aircraft's functions here — only the mouse
+# (aim motion) and the flight path.
+rate   = 150.0       # [deg/s] 0 = off; paces the REST-EDGE roll (release = instant)
+settle = 5.0         # [1/s] terminal ease of the rest-edge roll (live again in v13)
+ease_in = 500.0      # [deg/s^2] v13g (fly-7 2026-08-06: "the motion should ease
+                     #   in and out rather than being jarring") — the rest-edge
+                     #   roll's speed RAMPS from 0 at this accel instead of
+                     #   launching at the full `rate` on the capture tick
+                     #   (~0.3 s to reach 150 deg/s). The settle ease-out tail
+                     #   is unchanged; the freelook-RELEASE roll stays instant
+                     #   (v9 ruling). 0 = the legacy instant launch.
+rest_dwell = 0.05    # [s] mouse-still dwell before the rest-edge capture arms (fly-7 2026-08-06: "trigger a little sooner when I settle", 0.15 -> 0.10 -> 0.05)
+                     #   (the [deadzone] rest_dwell value — the same hand-at-rest
+                     #   scale the cascade already trusts; >= 0, 0 = arm on the
+                     #   first still tick)
+# v13c ARM GATES (pilot fly-ruling 2026-08-06 fly-2: "the rotation occurs too
+# easily — even a little off angle of the horizon... affecting the relative
+# position of my mouse aim on the screen"). The roll turns the whole picture
+# about the view axis, so an off-center reticle MUST sweep with it; the honest
+# fix is arming only when the roll cannot disturb the pilot:
+#   arm_min   — the debt must be inversion-class before a capture fires; a
+#               smaller tilt stays the pilot's (retired on freelook release as
+#               always). 0 = the v13b every-debt law; 180 max.
+#   path_band — the aim must be RESOLVED ON THE FLIGHT PATH (angle between the
+#               aim and the velocity direction <= this) so the reticle sits
+#               ~centered when the roll fires and a held-off carve structurally
+#               cannot fire. Velocity is the LEGAL camera read (flight path —
+#               never body attitude, never keys); sub-1 m/s never arms.
+arm_min   = 0.0      # [deg] minimum up-debt to capture (fly dial; Chad fly-4
+                     #   2026-08-06: "any change in horizon from flat should
+                     #   automatically adjust as long as the mouse is settled
+                     #   and nose is settled relative to aim" — even a small
+                     #   standing debt was off-putting. 0 = every debt above
+                     #   the ~0.57 deg finish epsilon rights at settled rest;
+                     #   the settled gates (path_band + straight_max + the
+                     #   dwell) are what keep it out of the pilot's hands)
+path_band = 15.0     # [deg] max aim-vs-path angle at the capture (fly-7
+                     #   2026-08-06: 10 -> 15, whole arm chain lowered) (fly dial —
+                     #   with the path STRAIGHT (below) the nose rides the path
+                     #   to within AoA, so this IS Chad's "mouse and nose are
+                     #   resolved" through legal reads only)
+# v13d STRAIGHTNESS GATE (Chad fly-3: "wait until I fly straight to do so"):
+# the capture also requires the flight path's own rotation rate at or below
+# straight_max. Level great-circle flight curves at V/R by construction
+# (~0.6 deg/s at 150 m/s on R = 15 km) so the loader walls this above
+# v_redline/R; any real turn or loop (>= ~15 deg/s) blocks. Legal read: the
+# velocity direction across ticks — never body attitude, never keys.
+straight_max = 12.0  # [deg/s] max path turn rate to count as flying straight (fly-5: 3 -> 6; fly-7: 6 -> 9 — the post-maneuver settle qualifies sooner still; any real turn >= ~15 still blocks) (fly 2026-09-10: 9 -> 12 (Chad: 'trigger a bit sooner, not move faster'))
 
 [freelook]           # freelook aim state machine (SPEC §9.5 / §16 CQ2)
 # After a freelook release the camera eases back to behind the nose; during
 # that window mouse->aim is SUSPENDED (CQ2) so no easing-frame (smoothed
 # camera) basis ever feeds the aim. The loader caps this at 300 ms (CQ2's
 # "<=300 ms") — a bare number here would be a feel knob hidden in code.
-easeback_time = 0.30 # [s] post-release mouse->aim suspension (<= 0.30, CQ2)
+# RETIRED 2026-08-06 (pilot ruling): the 300 ms mouse->aim suspension is OFF.
+# Since v9 the release is INSTANT — the camera cuts behind the aircraft and the
+# whole horizon debt is rolled out in the release tick itself — so there is no
+# easing-frame basis left anywhere near the aim and the window protected nothing
+# mechanical; it only cost the pilot ~0.3 s of dead mouse right when he came
+# back to the stick. The MECHANISM stays (input::Freelook still counts the
+# window down, the loader still caps it at 300 ms, the tests still fly it): 0 is
+# the flown value, not a deletion.
+easeback_time = 0.0  # [s] post-release mouse->aim suspension (0 = retired)
 # S-orient (docs/comfort program Q3): the ORIENT verb — double-tap Space to
 # "put me back together". If a SECOND freelook press-edge lands within this
 # window of the first, the caller snaps aim := NOSE (v9 S-nosesnap, b4c0751 —
@@ -897,7 +1109,12 @@ easeback_time = 0.30 # [s] post-release mouse->aim suspension (<= 0.30, CQ2)
 # aircraft; the instant horizon righting lands via the second tap's release
 # edge. 0 disables the mechanism structurally (never fires). 0.30 s is the
 # fly value (a natural double-tap cadence); Chad's stick tunes it from there.
-orient_double_tap_s = 0.30 # [s] max gap between the two taps (0 = off; 0.30 = fly value — COMFORT MODE ON, Chad 2026-07-17)
+# RESTORED 2026-08-06 fly-4 (Chad: "also keep the space double tap as well" —
+# retired earlier the same day as redundant, but the manual "put me back
+# together" verb earns its keep on the stick: an instant whole-debt right NOW,
+# no dwell, no gates, whenever the pilot asks). Both triggers live: the release
+# fires the verb automatically; the double-tap is the pilot's echo.
+orient_double_tap_s = 0.30 # [s] max gap between the two taps (0.30 = fly value)
 # S-relorient (Chad 2026-07-28: "should be automatic upon release of the
 # spacebar"): EVERY airborne, no-override freelook release fires the ORIENT
 # verb — aim := NOSE (v9 S-nosesnap, b4c0751 — a no-op by construction: the

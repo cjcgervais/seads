@@ -1,3 +1,5 @@
+> **OVERTAKEN (2026-07-08).** Mission A (RMB aim-zoom) LANDED as S9-zoom; Mission B was executed as the MB instructor pass — Chad's fly verdict: "flight kernel is near perfect now." What remains of B is `docs/mission_b_instructor_plan.md` §3. Do not restart either mission from this file; kept for Chad's verbatim words.
+
 # Next missions (Chad, 2026-07-07 — each its OWN session + branch/worktree)
 
 *Written at the close of the horizon-recovery milestone (S7-hrz + S7-nest, both

@@ -56,7 +56,7 @@ TEST_CASE("AT-18a: measured ang-accel matches derived, per axis, two speeds") {
         for (double V : {v_low, v_high}) {
             CAPTURE(V);
             const double measured =
-                harness::measure_ang_accel_max(kP, V, ax.axis, 2000.0);
+                harness::measure_ang_accel_max(kP, V, ax.axis, 2000.0, nullptr);
             const double derived =
                 sim::ang_accel_max_derived(ax.c, ax.I, V, 2000.0, kP);
             CHECK(measured == Catch::Approx(derived).epsilon(1e-12));
@@ -66,13 +66,13 @@ TEST_CASE("AT-18a: measured ang-accel matches derived, per axis, two speeds") {
         // the unfloored value is visibly smaller — and at v_high the
         // compression ramp must be biting (delta < 1).
         const double measured_low =
-            harness::measure_ang_accel_max(kP, v_low, ax.axis, 2000.0);
+            harness::measure_ang_accel_max(kP, v_low, ax.axis, 2000.0, nullptr);
         const double unfloored = ax.c * sim::q_dyn(kP.rho, v_low) *
                                  sim::delta_max_eff(v_low, kP) / ax.I;
         CHECK(measured_low > 2.0 * unfloored);
 
-        const double measured_high =
-            harness::measure_ang_accel_max(kP, v_high, ax.axis, 2000.0);
+        const double measured_high = harness::measure_ang_accel_max(
+            kP, v_high, ax.axis, 2000.0, nullptr);
         const double unramped =
             ax.c * sim::q_eff(sim::q_dyn(kP.rho, v_high), kP) / ax.I;
         CHECK(measured_high < 0.95 * unramped);
@@ -84,8 +84,8 @@ TEST_CASE("AT-18a: measured ang-accel matches derived, per axis, two speeds") {
         // below sea-band at the same V). Mutation: apply atm_frac in the
         // plant torque but not in ang_accel_max_derived (or vice versa) ->
         // the identity splits by 1/f ~ 2.3x.
-        const double measured_hi_alt =
-            harness::measure_ang_accel_max(kP, v_high, ax.axis, 7000.0);
+        const double measured_hi_alt = harness::measure_ang_accel_max(
+            kP, v_high, ax.axis, 7000.0, nullptr);
         const double derived_hi_alt =
             sim::ang_accel_max_derived(ax.c, ax.I, v_high, 7000.0, kP);
         CHECK(measured_hi_alt == Catch::Approx(derived_hi_alt).epsilon(1e-12));

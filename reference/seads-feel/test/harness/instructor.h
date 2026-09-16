@@ -69,6 +69,14 @@ struct ClosedLoop {
     // key to model "the hand is moving the aim this tick". Default false =>
     // every existing scenario/golden flies the legacy latch bit-identically.
     bool aim_moved = false;
+    // R4: the nullable world this loop threads to control::step + sim::step
+    // (the R3-review P1: no wrapper may hard-code nullptr once ground is
+    // live). DELIBERATELY a member, not a tick() parameter: the ~114 golden/AT
+    // call sites fly the null world BY DESIGN (all-null bit-identity is their
+    // contract), while a ground scenario sets `loop.env = &e` — and its ATs
+    // assert the contact FIRES (the fixture-no-op guard), so a forgotten env
+    // fails loudly rather than silently testing nothing.
+    const sim::Environment* env = nullptr;
     // S-aimff (v4 rung 1): the scripted mouse-induced aim angular velocity
     // [rad/s, WORLD] a scenario reports alongside its aim motion (the track
     // instrument sets it while sweeping; scripted SET-jumps supply none).
@@ -158,10 +166,10 @@ struct ClosedLoop {
         }
 
         const control::Output o =
-            control::step(state, in, internal, ap, cp, ap.sim_dt);
+            control::step(state, in, internal, ap, cp, env, ap.sim_dt);
         internal = o.internal;
         last_inputs = o.inputs;
-        state = sim::step(state, o.inputs, ap, ap.sim_dt);
+        state = sim::step(state, o.inputs, ap, env, ap.sim_dt);
         return o.telem;
     }
 };
