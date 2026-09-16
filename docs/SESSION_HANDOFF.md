@@ -21,8 +21,9 @@ of its table and by `docs/DECISIONS.md`'s 2026-09-15 entry.
    drop the unload and keep only the yaw budget. Do not build the §3.4 aim-conditioned bank
    sizing without his ruling. A feel agent may be live on `feel/lateral-yawbudget`; it lands
    AFTER atmosphere-snow by the sentinel's order.
-4. **This repo's GitHub remote is missing** ("Repository not found"). Commit locally; the
-   nightly Drive job is the off-site copy. Ask Chad to recreate or re-point it.
+4. **Push target:** `origin` is dead ("Repository not found"). Push to remote `seads`
+   (`github.com/cjcgervais/seads`, SEADS_2026's repo) on branch `mandalark-kernel`:
+   `git push seads main:mandalark-kernel`. Never touch that repo's `main`.
 5. **Nightly backup:** two scheduled tasks — "Mandalark Kernel GDrive Backup" 21:30 (this repo)
    and "Mandalark Drive Sentinel Backup" 22:30 (the whole `D:` drive + bundles + the sentinel
    observation). Logs in `tools/backup_logs/`. rclone's shared client_id retires in 2026.

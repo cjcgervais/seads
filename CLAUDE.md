@@ -46,8 +46,10 @@ queue and the dated ledger are in **`docs/SENTINEL_LEDGER.md`**. Read-only in th
 still applies: the lanes execute, the sentinel rules order and audits. The nightly job
 `tools/backup_drive_to_gdrive.ps1` writes the nightly `origin/main` observation to that ledger.
 
-⚠ **This repo's GitHub remote returned "Repository not found" on 2026-09-15.** Commits since
-`c103c64` are local-only; the nightly Drive bundle is the only off-site copy. Open for Chad.
+⚠ **`origin` (`cjcgervais/mandalark-kernel`) returned "Repository not found" on 2026-09-15.**
+On Chad's word the same day this repo now pushes to remote **`seads`** =
+`github.com/cjcgervais/seads` (SEADS_2026's repo, unrelated history) on branch
+**`mandalark-kernel`** — never to its `main`. Push with `git push seads main:mandalark-kernel`.
 
 > ⚠ **This block used to read `cfe1bd7fe` / v6 and forecast *"Chad expects a quiet period."*
 > Six seals landed instead** — caught by `flying_architecture` (PACKET 6 §2) and verified here.

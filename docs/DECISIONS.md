@@ -21,8 +21,10 @@ Standing decisions for the flight kernel. Each entry: date, decision, why, statu
   (its README). `docs/cascade/lateral-nose-down-unload.md` written.
 - **This repo's own remote is GONE:** `git fetch origin` → *"Repository not found"* for
   `github.com/cjcgervais/mandalark-kernel.git`. Every commit here since `c103c64` (2026-08-04)
-  is local-only. The nightly Drive backup (bundle + mirror) is the only off-site copy until
-  Chad recreates or re-points the remote. **Open question for Chad.**
+  was local-only until Chad, same day, named `https://github.com/cjcgervais/seads` and asked
+  for a push there. That repo is SEADS_2026's (unrelated history, its `main` at `3f613aa5`),
+  so this repo pushes to it on its own branch **`mandalark-kernel`** (remote name `seads`),
+  never to its `main`. Pushed `628a557`.. and the `canonical-scaffold-v1` tag.
 - **The sentinel.** Chad: *"I need to have a sentinel for any pushes that are going into
   flight sim2 ... SEADS."* This agent holds the role from today, read-only in the live trees.
   The SOP, the ledger and the queue are in `docs/SENTINEL_LEDGER.md`. First act: the push
