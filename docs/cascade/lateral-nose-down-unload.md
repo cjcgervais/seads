@@ -1,10 +1,13 @@
 # The lateral nose-down — the slice, and the unload that answers it
 
-**Status (2026-09-15): KERNEL v16 CANDIDATE, FLOWN AND LIKED, NOT LANDED — ON HOLD FOR CHAD.**
-Grounded in `D:\flight_sim2\seads-feel` branch **`feel/lateral-yawbudget`** (code at
-`b4864512c`, handoff at `40325f297`), **not** in `reference/seads-feel/` (which is the v15
-`main`). Every symbol below is cited from that branch. When it lands, re-ground this entry
-in the snapshot and strike this paragraph.
+**Status (2026-09-15, evening): CHAD RULED — kernel v16 is the YAW BUDGET ALONE.** The
+unload dial (`unload_below_horizon`) was REMOVED at his ruling (`b2bc840c5`, handoff
+`18cc020ce` on `feel/lateral-yawbudget`). §2–§4 below keep the unload's mechanism and
+measurements as the record of what was built, measured and dropped — the scars section
+now includes it. The yaw budget (§3, dial 1) is the v16 candidate; it lands after the
+atmosphere-snow lane, by the sentinel's order, once flown alone and signed.
+Grounded in `feel/lateral-yawbudget` (`b4864512c` for the two-dial state, `b2bc840c5`
+after the removal), **not** in `reference/seads-feel/` (v15). Re-ground when it lands.
 
 ## Lineage
 
@@ -195,6 +198,11 @@ attitude alone cannot tell it from a slice). Ask him to fly one and say whether 
 held back.
 
 ## Scars (do not rebuild)
+
+- **`unload_below_horizon` (built `1b5d98e83`, removed `b2bc840c5` at Chad's ruling
+  2026-09-15):** the slice fix that also armed on the back half of a vertical loop. Chad chose
+  to keep the yaw budget alone rather than narrow it. Its mechanism and numbers stay in §2–§4
+  above so nobody rebuilds it blind.
 
 - `maneuver_invert_band` (landed `31d109915`, walked back `157245d84`): a `cosΦθ` fade on
   the maneuver roll limb is a self-locking wall at the knife-edge.
