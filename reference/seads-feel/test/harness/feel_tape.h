@@ -19,6 +19,7 @@
 #include <vector>
 
 #include "app/feel_tape_columns.h"
+#include "app/feel_tape_fields.h"
 
 namespace harness {
 
@@ -27,17 +28,20 @@ class FeelTape {
     // Required-column sets, named explicitly so a caller declares its
     // dependency and gets a hard error instead of a plausible zero.
 
-    // Everything app::tick needs to resume mid-tape at an arbitrary tick.
+    // Everything app::tick needs to resume mid-tape at an arbitrary tick --
+    // GENERATED from SEADS_TAPE_STATE_FIELDS, never hand-listed. A hand-listed
+    // set is exactly how sim::SimState::throttle/flap/gear stayed missing
+    // through a fix FOR the missing-column class: the reader can only guard
+    // names someone remembered to write down.
     static std::vector<std::string> seed_columns() {
-        return {"px",  "py",  "pz",  "vx",  "vy",  "vz",
-                "wx",  "wy",  "wz",  "qw",  "qx",  "qy",
-                "qz",  "vhx", "vhy", "vhz", "aqw", "aqx",
-                "aqy", "aqz", "int_roll_latch", "int_elev_latch",
-                "int_integx", "int_integy", "int_integz",
-                "int_aoa_filtered", "int_capture", "int_ballistic",
-                "int_deadzoned", "int_pursuit", "int_rest_time",
-                "int_inv_rest", "int_righting", "held_bank", "hand_rest"};
+        std::vector<std::string> v;
+#define SEADS_TAPE_NEED_ONE(name, expr) v.push_back(#name);
+        SEADS_TAPE_STATE_FIELDS(SEADS_TAPE_NEED_ONE, SEADS_TAPE_NEED_ONE,
+                                SEADS_TAPE_NEED_ONE, SEADS_TAPE_NEED_ONE)
+#undef SEADS_TAPE_NEED_ONE
+        return v;
     }
+
     // The recorded mouse -- what a replay drives with.
     static std::vector<std::string> input_columns() {
         return {"aim_dx", "aim_dy", "frame_ticks"};
@@ -124,6 +128,32 @@ class FeelTape {
             throw std::runtime_error("feel tape: short row for '" + n + "'");
         return rows_[row][size_t(i)];
     }
+    // Restores the COMPLETE replay state into `S` from row `row`. Every
+    // field of SEADS_TAPE_STATE_FIELDS, generated -- so a member added to
+    // sim::SimState or control::Internal cannot be forgotten here either.
+    void seed(size_t row, app::LoopState& S) const {
+#define SEADS_TAPE_READ_D(name, expr) (expr) = at(row, #name);
+#define SEADS_TAPE_READ_B(name, expr) (expr) = at(row, #name) > 0.5;
+#define SEADS_TAPE_READ_I(name, expr) (expr) = int(at(row, #name));
+#define SEADS_TAPE_READ_E(name, expr) \
+    (expr) = control::CaptureState(int(at(row, #name)));
+        SEADS_TAPE_STATE_FIELDS(SEADS_TAPE_READ_D, SEADS_TAPE_READ_B,
+                                SEADS_TAPE_READ_I, SEADS_TAPE_READ_E)
+#undef SEADS_TAPE_READ_D
+#undef SEADS_TAPE_READ_B
+#undef SEADS_TAPE_READ_I
+#undef SEADS_TAPE_READ_E
+        // The quaternions are stored as components; renormalise once (a tape
+        // round-trip is exact to max_digits10, but normalise anyway so a
+        // hand-edited or interpolated row can never feed a non-unit rotation
+        // into the plant).
+        S.curr.orientation = glm::normalize(S.curr.orientation);
+        S.aim.q = glm::normalize(S.aim.q);
+        // `prev` is not a seed field: app::tick overwrites it from `curr` on
+        // the next step, and the recorded prev IS the previous row's curr.
+        S.prev = S.curr;
+    }
+
     size_t size() const { return rows_.size(); }
     size_t columns() const { return names_.size(); }
     const std::string& banner() const { return banner_; }

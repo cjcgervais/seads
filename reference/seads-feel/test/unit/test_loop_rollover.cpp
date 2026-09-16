@@ -315,7 +315,10 @@ void trace(const char* tag, const LoopRun& L) {
 // pins this arm against a trace recorded from a build that had none of them.
 control::ControllerParams off_arm() {
     control::ControllerParams c = kCp;
-    c.right_hand_rest = 0.0;
+    // EVERY dial this lane has added, from the ONE list beside the loader
+    // (control/params.h). Zeroing them field-by-field here is what reddened
+    // the hash leg three times on a tree that was never wrong.
+    SEADS_FEEL_DIALS_OFF(c);
     return c;
 }
 

@@ -258,14 +258,23 @@ TEST_CASE("TAPE v5: the column set seeds a mid-window replay faithfully") {
         CHECK(deg(dphi_first) < 1e-3);
         CHECK(deg(dth_first) < 1e-3);
         CHECK(dalt_first < 1e-2);
-        // WHAT IS *NOT* PINNED, and why: over 300-900 ticks a ~1e-6 deg seed
-        // residual grows to ~0.6 deg. That is ~1.02 per tick -- Lyapunov
-        // growth in a closed loop running against the AoA clamp, NOT a
-        // missing column (adding the whole of control::Internal and the
-        // app-side horizon-recovery state moved these numbers by <0.01 deg;
-        // adding angular_vel moved the FIRST TICK by 4 orders). So a long
-        // window is not reproducible even from a perfect seed, and any
-        // counterfactual must be read on SHORT windows.
+        // WHAT IS *NOT* PINNED HERE, and why -- CORRECTED 2026-09-13.
+        // This case round-trips an in-memory Snap that carries only PART of
+        // the replay state, so it drifts. The earlier comment blamed that
+        // drift on Lyapunov growth ("~1e-6 deg grows to ~0.6 deg over
+        // 300-900 ticks, NOT a missing column") and concluded a
+        // counterfactual is only readable over a SHORT window. That was
+        // WRONG, and it was load-bearing: it justified capping every
+        // lateral counterfactual at 1 s.
+        //
+        // The e2e case below seeds the COMPLETE state (every member of
+        // sim::SimState and control::Internal, generated from
+        // SEADS_TAPE_STATE_FIELDS) and replays BIT-IDENTICALLY across the
+        // whole window -- dalt and dV exactly 0. The drift was never chaos;
+        // it was the missing columns. Long-window grading is legitimate.
+        //
+        // The bound below is therefore a property of THIS partial fixture,
+        // not of the plant.
         CHECK(deg(dphi) < 2.0);
     }
 }
@@ -296,15 +305,26 @@ TEST_CASE("TAPE e2e: the shipped writer's own CSV re-seeds a replay") {
                                 "e2e: scripted banked turn\n", kAp));
 
     app::LoopState st = flying(s0);
+    // NON-DEFAULT plant device state. This is the regression for the second
+    // instance of the missing-seed bug: throttle/flap/gear are slewed PLANT
+    // state that no INPUT can restore in one tick, so if any of them is
+    // absent from the tape the replay flies a different aeroplane and dV
+    // diverges. Defaults (0/0/0) would let the omission pass unnoticed.
+    st.curr.throttle = 0.62;
+    st.curr.flap = 0.35;
+    st.curr.gear = 0.20;
+    st.prev = st.curr;
+
     harness::MiniCamera cam;
     cam.seed(st.curr);
     const int N = 360;  // 3 s
     for (int i = 0; i < N; ++i) {
         app::TickInput in;
         in.raw_mode = false;
-        in.throttle = 1.0;
-        // a banked turn with a pull -- exercises roll, the AoA clamp and the
-        // latches, i.e. the state the seed columns exist to carry
+        // a throttle the plant must SLEW toward, away from the seeded 0.62
+        in.throttle = (i < 180) ? 0.40 : 0.95;
+        in.flap_cmd = 0.35;
+        in.gear_cmd = 0.20;
         in.aim_dx = rad(55.0) * kAp.sim_dt / kCp.aim_sensitivity;
         in.aim_dy = (i > 120) ? rad(18.0) * kAp.sim_dt / kCp.aim_sensitivity
                               : 0.0;
@@ -316,6 +336,9 @@ TEST_CASE("TAPE e2e: the shipped writer's own CSV re-seeds a replay") {
     }
     std::fclose(tape_ctx.f);
     tape_ctx.f = nullptr;
+    // the fixture must actually have moved the devices, or it proves nothing
+    REQUIRE(st.curr.throttle != 0.62);
+    REQUIRE(st.curr.flap > 0.0);
 
     // --- 2. READ IT BACK with the throwing reader ---
     harness::FeelTape tp;
@@ -326,58 +349,31 @@ TEST_CASE("TAPE e2e: the shipped writer's own CSV re-seeds a replay") {
         need.push_back(c);
     REQUIRE_NOTHROW(tp.load(path, need));  // throws if ANY name is absent
     std::printf("[e2e] wrote + parsed %zu rows x %zu columns (emitter "
-                "declares %d)\n",
-                tp.size(), tp.columns(), app::kFeelTapeColumnCount);
-    // The divergence that started all this: header names == row fields.
+                "declares %d; %d of them are replay state)\n",
+                tp.size(), tp.columns(), app::kFeelTapeColumnCount,
+                app::kFeelTapeStateFieldCount);
     CHECK(int(tp.columns()) == app::kFeelTapeColumnCount);
     REQUIRE(tp.size() == size_t(N));
 
     // --- 3. SEED MID-TAPE from those columns ALONE and replay ---
     const size_t start = 200;
     app::LoopState r;
-    r.curr.position = {tp.at(start, "px"), tp.at(start, "py"),
-                       tp.at(start, "pz")};
-    r.curr.velocity = {tp.at(start, "vx"), tp.at(start, "vy"),
-                       tp.at(start, "vz")};
-    r.curr.angular_vel = {tp.at(start, "wx"), tp.at(start, "wy"),
-                          tp.at(start, "wz")};
-    r.curr.orientation = glm::normalize(
-        glm::dquat(tp.at(start, "qw"), tp.at(start, "qx"),
-                   tp.at(start, "qy"), tp.at(start, "qz")));
-    r.curr.last_vhat = {tp.at(start, "vhx"), tp.at(start, "vhy"),
-                        tp.at(start, "vhz")};
-    r.prev = r.curr;
-    r.prev_up = sim::local_up(r.curr.position);
-    r.aim.q = glm::normalize(
-        glm::dquat(tp.at(start, "aqw"), tp.at(start, "aqx"),
-                   tp.at(start, "aqy"), tp.at(start, "aqz")));
-    r.internal = control::reset();
-    r.internal.roll_latch = tp.at(start, "int_roll_latch");
-    r.internal.elev_latch = tp.at(start, "int_elev_latch");
-    r.internal.integ = {tp.at(start, "int_integx"), tp.at(start, "int_integy"),
-                        tp.at(start, "int_integz")};
-    r.internal.aoa_filtered = tp.at(start, "int_aoa_filtered");
-    r.internal.capture =
-        control::CaptureState(int(tp.at(start, "int_capture")));
-    r.internal.ballistic = tp.at(start, "int_ballistic") > 0.5;
-    r.internal.deadzoned = tp.at(start, "int_deadzoned") > 0.5;
-    r.internal.pursuit = tp.at(start, "int_pursuit") > 0.5;
-    r.internal.righting = tp.at(start, "int_righting") > 0.5;
-    r.internal.rest_time = tp.at(start, "int_rest_time");
-    r.internal.inv_rest = tp.at(start, "int_inv_rest");
-    r.internal.held_bank = tp.at(start, "held_bank");
-    r.internal.hand_rest = tp.at(start, "hand_rest");
-    r.internal.last_vhat = r.curr.last_vhat;
-    r.grounded = false;
+    tp.seed(start, r);   // the COMPLETE state, generated from the field list
 
     harness::MiniCamera rcam;
     rcam.seed(r.curr);
-    double dphi_first = 0.0, dth_first = 0.0, dphi = 0.0, dth = 0.0;
+    double dphi_first = 0, dth_first = 0, dv_first = 0, dalt_first = 0;
+    double dphi = 0, dth = 0, dv = 0;
     bool first = true;
-    for (size_t i = start; i < tp.size(); ++i) {
+    // s_* is the POST-tick state of row `start`, so the next input to apply
+    // is row start+1's. (Seeding at `start` and replaying row `start` would
+    // redo that tick -- an off-by-one that reads as a 0.1 deg seed error.)
+    for (size_t i = start + 1; i < tp.size(); ++i) {
         app::TickInput in;
         in.raw_mode = false;
-        in.throttle = 1.0;
+        in.throttle = (i < 180) ? 0.40 : 0.95;
+        in.flap_cmd = 0.35;
+        in.gear_cmd = 0.20;
         in.aim_dx = tp.at(i, "aim_dx");
         in.aim_dy = tp.at(i, "aim_dy");
         in.frame_ticks = int(tp.at(i, "frame_ticks"));
@@ -390,23 +386,35 @@ TEST_CASE("TAPE e2e: the shipped writer's own CSV re-seeds a replay") {
         const double th = std::asin(std::clamp(glm::dot(nz, u), -1.0, 1.0));
         const double a = std::abs(tr.telem.extracted.phi - tp.at(i, "phi"));
         const double b = std::abs(th - tp.at(i, "theta"));
+        const double c =
+            std::abs(glm::length(r.curr.velocity) - tp.at(i, "speed"));
         if (first) {
             dphi_first = a;
             dth_first = b;
+            dv_first = c;
+            dalt_first = std::abs(sim::altitude(r.curr.position, kAp)
+                                  - tp.at(i, "alt"));
             first = false;
         }
         dphi = std::max(dphi, a);
         dth = std::max(dth, b);
+        dv = std::max(dv, c);
     }
-    std::printf("[e2e] seed at tick %zu -> first tick |dphi| %.3e deg "
-                "|dtheta| %.3e deg | over %.2f s max |dphi| %.4f deg\n",
-                start, deg(dphi_first), deg(dth_first),
-                (tp.size() - start) * kAp.sim_dt, deg(dphi));
+    std::printf("[e2e] seed at tick %zu -> FIRST TICK |dphi| %.3e deg "
+                "|dtheta| %.3e deg |dalt| %.3e m |dV| %.3e m/s\n"
+                "[e2e]   over %.2f s: max |dphi| %.4f deg |dtheta| %.4f deg "
+                "|dV| %.4f m/s\n",
+                start, deg(dphi_first), deg(dth_first), dalt_first, dv_first,
+                (tp.size() - start) * kAp.sim_dt, deg(dphi), deg(dth), dv);
     // The SEED is what the column set controls: exact on the first tick.
     CHECK(deg(dphi_first) < 1e-3);
     CHECK(deg(dth_first) < 1e-3);
-    // Downstream, the documented Lyapunov bound -- a ~1e-6 deg residual grows
-    // ~1.02x/tick against the AoA clamp. NOT a missing column.
+    CHECK(dalt_first < 1e-6);
+    // dV is the one that caught the throttle/flap/gear omission. It must be
+    // machine-eps, not "small" -- a 4.7e-02 m/s offset read as small for a
+    // whole night.
+    CHECK(dv_first < 1e-9);
+    // The complete seed replays EXACTLY: no drift to allow for.
     CHECK(deg(dphi) < 2.0);
 }
 

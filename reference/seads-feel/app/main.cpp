@@ -99,6 +99,7 @@
 #include "render/tunnel_lamp_hits.h"  // T5c: TunnelLampWorld (destructible)
 #include "render/tunnel_mesh.h"  // T2: render::kMouthCutFactor (portal cut radius)
 #include "render/vortex.h"
+#include "render/snowfall.h"  // AS-2: the snowfall field (beside the haze)
 #include "render/weather.h"
 #include "render/wind_audio.h"
 #include "render/wind_synth.h"
@@ -320,8 +321,41 @@ struct FrameProf {
             }
         lap.emplace_back(n, ms);
     }
+    // Per-bucket RUNNING MEAN over the whole run. The spike line above answers
+    // "what owned that hitch"; it cannot answer "what does this pass COST every
+    // frame", which is the question a perf budget is written against. A whole-
+    // frame A/B (run with and against SEADS_NO_PRECIP and subtract) was tried
+    // first and is USELESS here: run-to-run frame-time variance on this box is
+    // +/- 0.5 ms, larger than the pass being measured. So the laps are summed.
+    std::vector<std::pair<const char*, double>> sum;
+    long sum_frames = 0;
+    void accumulate() {
+        // Skip the first 60 frames: the lazy renderers (ribbons, buildings,
+        // trees, BOTH precip lattices) build their meshes on the frame they are
+        // first drawn, and a build cost folded into a steady-state mean is a
+        // number that lies. The smoke timing readout warms up the same way.
+        if (frame <= 60) return;
+        ++sum_frames;
+        for (const auto& b : lap) {
+            bool hit = false;
+            for (auto& t : sum)
+                if (std::strcmp(t.first, b.first) == 0) {
+                    t.second += b.second;
+                    hit = true;
+                    break;
+                }
+            if (!hit) sum.emplace_back(b.first, b.second);
+        }
+    }
+    void report() const {
+        if (sum_frames <= 0) return;
+        for (const auto& t : sum)
+            std::printf("[PROF_MEAN] %-14s %.3f ms/frame over %ld frames\n",
+                        t.first, t.second / sum_frames, sum_frames);
+    }
     void end() {
         ++frame;
+        accumulate();
         double total = 0.0;
         for (const auto& b : lap) total += b.second;
         std::vector<double> sorted = ring;  // median of RECENT frames
@@ -627,6 +661,11 @@ int main(int argc, char** argv) {
     // BUDGET; wcparams places the microsystem cells on the sphere. The frame
     // loop feeds weather_cell(eyeGroundTrack, t_cel) into atm.haze_density.
     render::WeatherCellParams wcparams;
+    // AS-2 (atmosphere rung, docs/SESSION_HANDOFF_20260912_atmosphere_snow.md):
+    // the SNOWFALL field's own params, mapped from [precip]. The snow gets a
+    // field BESIDE the haze so "more snow" never moves the Chad-signed haze
+    // distribution. flurry_level == 0 && snow_floor == 0 => the old wfield.
+    render::SnowfallParams sfparams;
     // Star field (Stage 4): the [stars] render knobs, mapped once from config.
     // The sky wheel (mat3) is set per frame in the loop; `cel` (built below)
     // supplies the star mesh's inertial basis via the FrameInfo pointer.
@@ -668,7 +707,8 @@ int main(int argc, char** argv) {
                 "%.1f..%.1f deg | horizon_recovery rate %.1f deg/s "
                 "straight_max %.1f deg/s\n"
                 "[config] regime: wings_level_band %.3f\n"
-                "[config] auto_level: right_hand_rest %.3f s (0 = off)\n",
+                "[config] auto_level: right_hand_rest %.3f s (0 = off)\n"
+                "[config] coordination: yaw_vert_budget %.2f (0 = off) gap %.1f..%.1f deg\n",
                 SEADS_CONFIG_DIR "/controller.toml", cparams.lean_lead,
                 int(cparams.lean_lead_lateral), cparams.lean_lead_lat_lo,
                 cparams.lean_lead_lat_hi, cparams.lean_gain,
@@ -681,7 +721,14 @@ int main(int argc, char** argv) {
                     3.14159265358979323846,
                 cparams.horizon_recovery_straight_max * 180.0 /
                     3.14159265358979323846,
-                cparams.wings_level_band, cparams.right_hand_rest);
+                cparams.wings_level_band, cparams.right_hand_rest,
+                cparams.yaw_vert_budget,
+                std::asin(std::clamp(cparams.yaw_vert_gap_lo, -1.0,
+                                     1.0)) * 180.0 /
+                    3.14159265358979323846,
+                std::asin(std::clamp(cparams.yaw_vert_gap_hi, -1.0,
+                                     1.0)) * 180.0 /
+                    3.14159265358979323846);
             g_config_banner = b;
         }
         std::fputs(g_config_banner.c_str(), stderr);
@@ -796,6 +843,31 @@ int main(int argc, char** argv) {
         wcparams.bubble_inner_deg = wccfg.bubble_inner_deg;
         wcparams.bubble_outer_deg = wccfg.bubble_outer_deg;
         wcparams.bubble_fill_frac = wccfg.bubble_fill_frac;
+
+        // AS-2 snowfall field params, mapped once from [precip].
+        sfparams.flurry_level = world.precip.flurry_level;
+        sfparams.flurry_thresh_lo = world.precip.flurry_thresh_lo;
+        sfparams.flurry_thresh_hi = world.precip.flurry_thresh_hi;
+        sfparams.flurry_gate_lo = world.precip.flurry_gate_lo;
+        sfparams.flurry_period_scale = world.precip.flurry_period_scale;
+        sfparams.flurry_inner_deg = world.precip.flurry_inner_deg;
+        sfparams.flurry_outer_deg = world.precip.flurry_outer_deg;
+        sfparams.flurry_cell_count =
+            static_cast<int>(world.precip.flurry_cell_count);
+        sfparams.flurry_phase_off = world.precip.flurry_phase_off;
+        sfparams.snow_floor = world.precip.snow_floor;
+        // AS-5: the snow squall's own dials. The HAZE still reads wparams/
+        // wcparams through weather_cell (wfield) -- only the snow sees these.
+        sfparams.squall_own_dials = world.precip.squall_own_dials;
+        sfparams.squall_inner_deg = world.precip.squall_inner_deg;
+        sfparams.squall_outer_deg = world.precip.squall_outer_deg;
+        sfparams.squall_cell_count =
+            static_cast<int>(world.precip.squall_cell_count);
+        sfparams.squall_gate_lo = world.precip.squall_gate_lo;
+        sfparams.squall_thresh_lo = world.precip.squall_thresh_lo;
+        sfparams.squall_thresh_hi = world.precip.squall_thresh_hi;
+        sfparams.squall_period_scale = world.precip.squall_period_scale;
+        sfparams.squall_phase_off = world.precip.squall_phase_off;
 
         // Star field render knobs (Stage 4), mapped once from [stars].
         // Brightness reuses the [celestial] star_brightness (the overall
@@ -1858,12 +1930,29 @@ int main(int argc, char** argv) {
          .wrap_fade = world.precip.wrap_fade,
          .color = world.precip.color,
          .snow_size_m = world.precip.snow_size_m,
-         .snow_rate_hz = world.precip.snow_rate_hz,
+         .snow_speed_mps = world.precip.snow_speed_mps,
          .snow_opacity = world.precip.snow_opacity,
          .rain_size_m = world.precip.rain_size_m,
          .rain_streak_m = world.precip.rain_streak_m,
          .rain_rate_hz = world.precip.rain_rate_hz,
-         .rain_opacity = world.precip.rain_opacity});
+         .rain_opacity = world.precip.rain_opacity,
+         // AS-1/AS-3 (atmosphere rung): per-flake variety, the density law, the
+         // zero-mean sway, the contrast rim, the underground band and the FAR
+         // veil lattice. Every one is OFF at 0 (rim_dark at 1).
+         .size_var = world.precip.size_var,
+         .alpha_var = world.precip.alpha_var,
+         .density_exp = world.precip.density_exp,
+         .density_soft = world.precip.density_soft,
+         .sway_m = world.precip.sway_m,
+         .rim_dark = world.precip.rim_dark,
+         .rock_band_m = world.precip.rock_band_m,
+         .veil_enabled = world.precip.veil_enabled,
+         .veil_cell_size_m = world.precip.veil_cell_size_m,
+         .veil_box_half_m = world.precip.veil_box_half_m,
+         .veil_size_m = world.precip.veil_size_m,
+         .veil_opacity = world.precip.veil_opacity,
+         .veil_sway_m = world.precip.veil_sway_m,
+         .veil_inner_fade_m = world.precip.veil_inner_fade_m});
     // CC1 Superstack smoke (Living Copper Cliff). [smoke] look dials -> the
     // render POD; the plume anchor (the Superstack axis dir + 381 m) is baked
     // into draw.cpp from the LOCKED projection. The per-frame wrapped phase is
@@ -5353,6 +5442,14 @@ int main(int argc, char** argv) {
     // hands-off --smoke shot so tracers appear in the screenshot.
     // SEADS_SMOKE_FIRE=1; only active when smoke_frames > 0.
     const bool smoke_fire = smoke_frames > 0 && std::getenv("SEADS_SMOKE_FIRE");
+    // ATMOSPHERE AS-1..AS-3 evidence rig (docs/atmosphere_snow/):
+    // SEADS_SNOW_FORCE=<0..1> forces FrameInfo::precip_intensity POST air-gate
+    // so a screenshot can show a NAMED intensity -- a flurry at 0.3, a squall
+    // at 1.0 -- instead of waiting for the storm budget and the eye's ground
+    // track to line up. Read ONCE here, smoke-only, exactly like the two above:
+    // in live play smoke_frames == 0 and this is a null pointer forever.
+    const char* const snow_force_smoke =
+        smoke_frames > 0 ? std::getenv("SEADS_SNOW_FORCE") : nullptr;
     render::ProbePlacement probe_place;  // probe bandit geometry (probe mode)
     glm::dvec3 probe_level_fwd{0.0, 0.0,
                                -1.0};  // pre-repoint level cam forward
@@ -10294,12 +10391,50 @@ int main(int argc, char** argv) {
         // to show precipitation regardless of the weather field — see the
         // matching season gate in render/precip_draw.cpp, which owns the same
         // ruling and must not fork from this rate.
-        const double precip_rate = current_season == render::Season::Winter
-                                       ? world.precip.snow_rate_hz
-                                       : world.precip.rain_rate_hz;
+        //
+        // AS-3 (atmosphere rung 2026-09-12): Winter's dial is now a fall SPEED
+        // in m/s, not cycles/s, because the NEAR and FAR lattices have
+        // different cell sizes and a flake falls exactly one cell per cycle —
+        // only a shared SPEED makes the two layers agree. rate = speed / cell.
+        const double precip_rate =
+            current_season == render::Season::Winter
+                ? (world.precip.cell_size_m > 0.0
+                       ? world.precip.snow_speed_mps / world.precip.cell_size_m
+                       : 0.0)
+                : world.precip.rain_rate_hz;
+        const double precip_rate_far =
+            current_season == render::Season::Winter &&
+                    world.precip.veil_cell_size_m > 0.0
+                ? world.precip.snow_speed_mps / world.precip.veil_cell_size_m
+                : 0.0;
         info.precip_phase =
             t_cel * precip_rate - std::floor(t_cel * precip_rate);
-        info.precip_intensity = wfield;
+        info.precip_phase_far =
+            t_cel * precip_rate_far - std::floor(t_cel * precip_rate_far);
+        // AS-2 — MORE SNOW. The precip intensity is no longer the HAZE scalar.
+        // It is the SNOWFALL FIELD (render::snowfall_intensity), built beside
+        // the haze out of the same machinery: max(squall, flurry, floor), where
+        // the squall term IS `wfield`'s weather_cell so the heavy band is
+        // unchanged and the Chad-signed [weather]/[weather_cell] distribution
+        // is untouched. `atm.haze_density` above still carries `wfield` alone.
+        //
+        // The SAME air gate as the haze (S-domeround, Chad 2026-08-09: "if
+        // there is thin air somewhere then no weather there") — snow in vacuum
+        // is nonsense, and the gate is the hard guarantee, not the generator.
+        const double snowfield = render::gate_weather_by_air(
+            render::snowfall_intensity(eye_track, t_cel, wparams, wcparams,
+                                       wanchors, wanchor_count, sfparams),
+            pose.eye, air_field_render);
+        info.precip_intensity = snowfield;
+        // SMOKE-ONLY evidence rig (docs/atmosphere_snow/): force the precip
+        // intensity POST air-gate so a screenshot can show a named intensity
+        // (a flurry at 0.3, a squall at 1.0) without waiting for the storm
+        // budget to cooperate. Never reachable in live play — smoke_frames is
+        // 0 there, exactly like SEADS_SMOKE_GEAR / SEADS_SMOKE_FIRE.
+        if (smoke_frames > 0 && snow_force_smoke != nullptr) {
+            info.precip_intensity =
+                std::clamp(std::atof(snow_force_smoke), 0.0, 1.0);
+        }
         // W4 seasonal ground (winter snow-cover): active ONLY in Winter (0 =
         // the terrain unchanged otherwise); a shader tint on the planet LAND
         // albedo.
@@ -12271,8 +12406,16 @@ int main(int argc, char** argv) {
         if (smoke_frames > 0 && !probe_mode &&
             std::getenv("SEADS_TUNCAM_BORE")) {
             double s_target = 500.0, back_off = 0.0;
-            std::sscanf(std::getenv("SEADS_TUNCAM_BORE"), "%lf,%lf", &s_target,
-                        &back_off);
+            // ATMOSPHERE AS-1: an optional 3rd token "out" flips the look
+            // direction to face BACK toward the Errington mouth -- the "stand
+            // in the mouth and look out" view, which is the ONE view that can
+            // prove the underground snow gate is per-FLAKE and not per-eye
+            // (snow outside the mouth still falls; nothing under the rock
+            // does). Smoke-only, same as the rest of this block.
+            char bore_look[16] = "in";
+            std::sscanf(std::getenv("SEADS_TUNCAM_BORE"), "%lf,%lf,%15s",
+                        &s_target, &back_off, bore_look);
+            const bool bore_out = std::strncmp(bore_look, "out", 3) == 0;
             // Walk the spine accumulating arc length to find the interpolation
             // point. The spine nodes are Errington-first (T1 convention).
             const auto& sp = tunnel_net.spine;
@@ -12311,7 +12454,7 @@ int main(int argc, char** argv) {
             const glm::dvec3 cam_up = glm::normalize(
                 radial_up - glm::dot(radial_up, tangent) * tangent);
             pose.eye = eye_pt;
-            pose.target = eye_pt + tangent * 500.0;  // look forward ~500 m
+            pose.target = eye_pt + tangent * (bore_out ? -500.0 : 500.0);
             pose.up = (glm::length(cam_up) > 0.1) ? cam_up : radial_up;
             std::printf(
                 "[TUNCAM_BORE] s=%.1f back_off=%.1f | "
@@ -12447,6 +12590,22 @@ int main(int argc, char** argv) {
             };
             info.overlay_ctx = &spawn_menu;
         }
+        // AS-1 EVIDENCE LINE (atmosphere rung, smoke-only). A screenshot of
+        // a dark cavern cannot by itself prove "zero flakes" -- a --smoke
+        // run is not bit-reproducible run to run -- so the rig also PRINTS
+        // the number the underground gate turns on: the tunnel-net signed
+        // distance at the FINAL eye, i.e. after every TUNCAM override
+        // above. < 0 == inside the net, and the renderer's whole-box
+        // decision then skips the pass entirely. Same single-source SDF
+        // app::inside_tunnel reads.
+        if (smoke_frames > 0 && snow_force_smoke != nullptr &&
+            env.tunnels != nullptr)
+            std::printf(
+                "[SNOW_ROCK] full_sd=%.2f roofed_sd=%.2f m (<0 = inside; the "
+                "GATE reads the ROOFED one) forced_intensity=%.3f\n",
+                env.tunnels->signed_distance(pose.eye),
+                env.tunnels->roofed_signed_distance(pose.eye),
+                info.precip_intensity);
         const auto t_draw0 = std::chrono::steady_clock::now();
         render::draw_frame(draw_state, params, pose, info, env_ptr);
         if (g_prof.on) g_prof.end();
@@ -12504,6 +12663,7 @@ int main(int argc, char** argv) {
                     "msaa=4x size=1920x1080 vsync=off\n",
                     q.size(), pct(50.0), pct(95.0), pct(99.0));
             }
+            g_prof.report();  // SEADS_PROF=1: the per-pass mean cost table
             if (probe_mode)
                 run_probe_measurement(pose, fovy, info.lens_shift_ndc,
                                       probe_place, probe_geom, probe_level_fwd,

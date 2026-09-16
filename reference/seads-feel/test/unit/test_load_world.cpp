@@ -484,12 +484,49 @@ TEST_CASE("load_world: the precip block loads (W3 snow/rain)") {
     CHECK(w.precip.wrap_fade == Catch::Approx(0.12));
     CHECK(w.precip.color.x == Catch::Approx(0.90));
     CHECK(w.precip.snow_size_m == Catch::Approx(0.18));
-    CHECK(w.precip.snow_rate_hz == Catch::Approx(0.20));
+    // AS-3: snow_rate_hz RETIRED -> snow_speed_mps. 0.60 m/s == the shipped
+    // 0.20 Hz x the 3.0 m cell, so this is a rename at the ship value.
+    CHECK(w.precip.snow_speed_mps == Catch::Approx(0.60));
     CHECK(w.precip.snow_opacity == Catch::Approx(0.75));
     CHECK(w.precip.rain_size_m == Catch::Approx(0.05));
     CHECK(w.precip.rain_streak_m == Catch::Approx(1.30));
     CHECK(w.precip.rain_rate_hz == Catch::Approx(1.50));
     CHECK(w.precip.rain_opacity == Catch::Approx(0.55));
+    // ATMOSPHERE AS-1/AS-2/AS-3 keys (all STRICT-required, see load_world.cpp).
+    CHECK(w.precip.flurry_level == Catch::Approx(0.35));
+    CHECK(w.precip.flurry_thresh_lo == Catch::Approx(0.00));
+    CHECK(w.precip.flurry_thresh_hi == Catch::Approx(0.65));
+    CHECK(w.precip.flurry_period_scale == Catch::Approx(1.4));
+    CHECK(w.precip.flurry_inner_deg == Catch::Approx(6.0));
+    CHECK(w.precip.flurry_outer_deg == Catch::Approx(14.0));
+    CHECK(w.precip.flurry_cell_count == Catch::Approx(5.0));
+    CHECK(w.precip.flurry_gate_lo == Catch::Approx(-0.95));
+    CHECK(w.precip.flurry_phase_off == Catch::Approx(2.6));
+    CHECK(w.precip.snow_floor == Catch::Approx(0.0));
+    // AS-5: the snow squall's own dials.
+    CHECK(w.precip.squall_own_dials);
+    CHECK(w.precip.squall_inner_deg == Catch::Approx(8.0));
+    CHECK(w.precip.squall_outer_deg == Catch::Approx(15.0));
+    CHECK(w.precip.squall_cell_count == Catch::Approx(3.0));
+    CHECK(w.precip.squall_gate_lo == Catch::Approx(-0.65));
+    CHECK(w.precip.squall_thresh_lo == Catch::Approx(0.0));
+    CHECK(w.precip.squall_thresh_hi == Catch::Approx(0.35));
+    CHECK(w.precip.squall_period_scale == Catch::Approx(1.0));
+    CHECK(w.precip.squall_phase_off == Catch::Approx(0.0));
+    CHECK(w.precip.rock_band_m == Catch::Approx(2.0));
+    CHECK(w.precip.size_var == Catch::Approx(0.40));
+    CHECK(w.precip.alpha_var == Catch::Approx(0.40));
+    CHECK(w.precip.density_exp == Catch::Approx(0.60));
+    CHECK(w.precip.density_soft == Catch::Approx(0.08));
+    CHECK(w.precip.sway_m == Catch::Approx(0.25));
+    CHECK(w.precip.veil_sway_m == Catch::Approx(0.60));
+    CHECK(w.precip.veil_enabled == true);
+    CHECK(w.precip.veil_cell_size_m == Catch::Approx(8.0));
+    CHECK(w.precip.veil_box_half_m == Catch::Approx(70.0));
+    CHECK(w.precip.veil_size_m == Catch::Approx(0.45));
+    CHECK(w.precip.veil_opacity == Catch::Approx(0.35));
+    CHECK(w.precip.veil_inner_fade_m == Catch::Approx(12.0));
+    CHECK(w.precip.rim_dark == Catch::Approx(1.0));
 }
 
 TEST_CASE("load_world: a precip box_half_m < cell_size_m is rejected") {

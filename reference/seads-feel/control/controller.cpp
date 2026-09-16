@@ -919,10 +919,66 @@ Output step(const sim::SimState& s, const Input& in, const Internal& internal,
                     // plant-lag chop at the line, narrow enough that a
                     // 10-deg-past-the-line commanded arc is never fought).
                     constexpr double kLineParaBand = 0.087;  // [dot units]
+                    // S-yawbudget: the vertical dig always allowed (rad/s) = 1 deg/s.
+                    constexpr double kYawBudgetFloor = 0.017453292519943295;
                     const double knife_fade =
                         smoothstep(0.0, kLineKnifeBand, e.cos_phi_theta);
                     const double fwd_gate_ff =
                         1.0 - smoothstep(0.85, 0.95, target_body.z);
+                    // S-yawbudget (2026-09-13, TARGET 2 -- the lateral
+                    // nose-down). ORDER IS LOAD-BEARING: the budget scales
+                    // `yaw` BEFORE the axis-correction below reads it, so the
+                    // pitch feedforward cancels the rudder contribution that
+                    // is ACTUALLY EMITTED. Applied AFTER, pitch cancels a dig
+                    // the budget then removes -- over-correcting, and
+                    // breaking S-straightline's stated contract that the FF
+                    // writes pitch ONLY while yaw stays equal across arms.
+                    //
+                    // `avail` uses the pitch BEFORE the cancellation is
+                    // spent: the elevator's spare vertical authority
+                    // available TO spend. That is the causally correct
+                    // quantity and it breaks the circularity
+                    // (budget -> yaw -> w_axis -> pitch -> budget).
+                    //
+                    // See control/params.h for the measured decomposition on
+                    // Chad's tape 4, the gate's V250 lat-90 numbers, and the
+                    // honest scope (a mitigation, not a fix).
+                    if (cp.yaw_vert_budget > 0.0 && e.cos_phi_theta > 0.0) {
+                        const double yv_dig = yaw * std::sin(e.phi);
+                        if (yv_dig < 0.0) {  // digging only, never climbing
+                            const double sag_pre =
+                                aim_elev - glm::dot(e.nose, e.local_up);
+                            const double avail =
+                                std::max(0.0, pitch_ceil - pitch)
+                                * e.cos_phi_theta;
+                            // BUDGET FLOOR (red-team P1-1, 2026-09-15):
+                            // 1 deg/s of vertical dig is always allowed.
+                            // With the elevator clipped `avail` is exactly
+                            // 0, so without a floor the scale is 1 - gate
+                            // for ANY dig -- including a dig that is
+                            // negligible because sin(phi) is: measured on
+                            // his tape 6, 475 ticks at |sin phi| < 0.2 had
+                            // 27-30 deg/s of RUDDER removed for a 0.2 deg/s
+                            // dig, and 9 phi sign-crossings landed on a
+                            // killed tick (a yaw step of gate*yaw). The
+                            // floor is CONTINUOUS at dig == floor (scale ->
+                            // 1) and also covers the pure-pitch roundoff
+                            // case (yv ~ 1e-17 << floor). Cost, measured:
+                            // the dive recoveries give back 3-18 m.
+                            const double budget = std::max(
+                                cp.yaw_vert_budget * avail, kYawBudgetFloor);
+                            if (-yv_dig > budget) {
+                                const double gate =
+                                    smoothstep(cp.yaw_vert_gap_lo,
+                                               cp.yaw_vert_gap_hi, sag_pre);
+                                const double yb_scale =
+                                    1.0 - gate
+                                              * (1.0 - budget / (-yv_dig));
+                                yaw *= yb_scale;
+                                out.telem.yaw_budget_scale = yb_scale;
+                            }
+                        }
+                    }
                     const double yv = yaw * std::sin(e.phi);
                     const double sag_now =
                         aim_elev - glm::dot(e.nose, e.local_up);
@@ -1079,6 +1135,15 @@ Output step(const sim::SimState& s, const Input& in, const Internal& internal,
                         -cp.p_max, cp.p_max);
                 roll = blend * roll_maneuver +
                        (1.0 - blend) * roll_hold;
+                // S-unload (1b5d98e83..40325f297) BUILT-AND-REMOVED 2026-09-15 at Chad's ruling
+                // ("no deck save unload, keep the yaw budget"). It scaled the
+                // PULL past 90 deg of bank_full while the flight path fell
+                // below the aim; it saved the t6 deck event (AGL 0 -> 80) but
+                // ARMED ON THE BACK HALF OF A PURE LOOP (25.9% of ticks), and
+                // kernel v15 was signed on loops. The full actuator table is in
+                // control/params.h; the code is recoverable at the scrap tag
+                // scrapped/s-unload-20260915. Nothing of it remains here.
+
                 // instrument-only report (Telemetry): the two limbs as
                 // emitted, WEIGHTED, so the tape shows what each contributed.
                 out.telem.roll_maneuver = blend * roll_maneuver;

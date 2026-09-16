@@ -15,12 +15,12 @@ of its table and by `docs/DECISIONS.md`'s 2026-09-15 entry.
    `docs/SENTINEL_LEDGER.md` — the SOP packet, the queue and the dated ledger. Arm ONE watch on
    `origin/main` of `D:\flight_sim2\seads` (read-only `git fetch` + `rev-parse`). `ListAgents`
    and send every live lane session one packet. Silence is never a go.
-2. **The kernel is v15** (`b697d24a5`, S-righthand). `reference/seads-feel/` is at that tip.
-3. **v16 is ON HOLD FOR CHAD** — the lateral nose-down (`docs/cascade/lateral-nose-down-unload.md`).
-   His open question: land anyway, narrow the unload so it cannot arm in a vertical loop, or
-   drop the unload and keep only the yaw budget. Do not build the §3.4 aim-conditioned bank
-   sizing without his ruling. A feel agent may be live on `feel/lateral-yawbudget`; it lands
-   AFTER atmosphere-snow by the sentinel's order.
+2. **The kernel is v16** (`354f6df3a`, S-yawbudget, landed 2026-09-15 23:2x; main `66036b98e` with a LANES follow-up). `reference/seads-feel/` is at that tip.
+3. **v16 LANDED.** Chad ruled the unload dial OUT ("no deck save unload keep the yaw budget");
+   v16 is the yaw budget alone. See `docs/cascade/lateral-nose-down-unload.md` and the
+   2026-09-15 ledger rows in `docs/SENTINEL_LEDGER.md` (the whole two-landing night is there).
+   Next in the queue: road-repair (F1 `fabb7c954` gated unflown; F2 paused, `junction_cut_m`
+   armed under a DO-NOT-BUILD note) and atmosphere AS-6 (two deferred P1s). Neither started.
 4. **Push target:** `origin` is dead ("Repository not found"). Push to remote `seads`
    (`github.com/cjcgervais/seads`, SEADS_2026's repo) on branch `mandalark-kernel`:
    `git push seads main:mandalark-kernel`. Never touch that repo's `main`.

@@ -1,0 +1,34 @@
+# GATE VERDICT -- atmosphere-snow AS-5 landing tip 2e5675742
+# Trimmed to header + verdict (road-repair precedent). Full log was untracked.
+# NOTE: the Stop hook fired a SECOND gate.sh against build/ during this run.
+# This log is uncontaminated: exactly one 'gate: N failed of M' line, zero
+# link/permission-denied signatures, exit 0, processes drained before reading.
+
+layer check OK
+graph.json is current
+[0/1] Re-running CMake...
+-- GLM: Version 1.0.1
+-- GLM: Build with C++ features auto detection
+-- Testing if -Werror=pointer-arith can be used -- compiles
+
+=== GATE OK -- red set matches the baseline ===
+gate: 6 failed of 2074
+baseline: 6 known reds
+OK -- the red set is EXACTLY the baseline, member for member.
+GATE_EXIT=0
+
+# ctest -N on the built merged tree: 2074 registered.
+# ^ SUPERSEDED. RESOLVED 2026-09-15 by the kernel lane's ctest -N name diff:
+# the gate read 2074 because SIXTEEN OF THIS LANE'S OWN LEGS WERE UNREGISTERED
+# in build/ from a STALE CMAKE CONFIGURE (Stop-hook gate collision the likely
+# moment). v15 main is 2060; 2060 + 30 = 2090 was right; 2074+16+11 = 2101.
+# THE LANDING GATE DID NOT RUN THESE 16: air_field domeround 1-6,
+# cpu_air_optical_depth x3, cpu_air_sky_max_dist, disabled-AirField-reads-1.0,
+# kAirFieldGLSL-contains, render::air_at-vs-sim::atm_frac_at, air_march_range x3
+# incl "the defect Chad flew". Verdict comes from the kernel gate on b4fbea3d4;
+# any red is an AS-5 finding on main and this lane owns it.
+# Verified here: CMakeLists dropped nothing (comm -23 vs main's 135 test files
+# EMPTY); every v15 instrument registered by name (test_loop_rollover 6/6,
+# test_tape_roundtrip 3/3, test_yawbank_balance 7/7); this lane's three files
+# 30 of 34, the 4 unregistered being exactly the hidden probes [.as5sweep]
+# [.as5ridge] [.as5gate] [.noise].

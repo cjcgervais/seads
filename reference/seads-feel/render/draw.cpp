@@ -679,11 +679,29 @@ void draw_lamps(const glm::dvec3& eye, const glm::vec3& sun_dir,
 // under an active W2 cell). Alpha, depth-test on / write off; runs in the
 // translucent tier.
 PrecipBuildParams g_precip_cfg{};
-PrecipRenderer g_precip;
+PrecipRenderer g_precip;       // NEAR: small flakes, tight box
+PrecipRenderer g_precip_veil;  // AS-3 FAR "veil": big soft flakes, deep box
 bool g_precip_tried = false;
 
+// AS-1 — the injected tunnel-net SDF. render/precip.h takes a plain callable so
+// seads_render_core never learns about world/; this thunk is the ONLY place the
+// two meet.
+//
+// It forwards to ROOFED_signed_distance, not signed_distance. The question the
+// snow asks is "is there rock ABOVE this flake", and the full SDF cannot answer
+// it: it mins in the Murray bowl, the Errington entry pit and the approach
+// trench, which are OPEN CUTS — sky above, by construction. Gating on the full
+// SDF deleted the snowfall inside the open pits, which main draws. The roofed
+// query is additive (world/tunnel_net.cpp); signed_distance, contains and
+// app::inside_tunnel are untouched, so the camera and the crash yield still see
+// exactly what they saw.
+double tunnel_sdf_thunk(const void* ctx, const glm::dvec3& p) {
+    return static_cast<const world::TunnelNet*>(ctx)->roofed_signed_distance(p);
+}
+
 void draw_precip(const CameraPose& pose, Season season, double intensity,
-                 double phase) {
+                 double phase, double phase_far, const world::TunnelNet* net,
+                 double ground_r) {
     if (!g_precip_cfg.enabled) return;
     static const bool no_precip = std::getenv("SEADS_NO_PRECIP") != nullptr;
     if (no_precip) return;  // A/B bypass (smoke + Chad's fly), read once
@@ -699,9 +717,44 @@ void draw_precip(const CameraPose& pose, Season season, double intensity,
         look.rain_size_m = static_cast<float>(g_precip_cfg.rain_size_m);
         look.rain_streak_m = static_cast<float>(g_precip_cfg.rain_streak_m);
         look.rain_opacity = static_cast<float>(g_precip_cfg.rain_opacity);
+        look.size_var = static_cast<float>(g_precip_cfg.size_var);
+        look.alpha_var = static_cast<float>(g_precip_cfg.alpha_var);
+        look.density_exp = static_cast<float>(g_precip_cfg.density_exp);
+        look.density_soft = static_cast<float>(g_precip_cfg.density_soft);
+        look.sway_m = static_cast<float>(g_precip_cfg.sway_m);
+        look.rim_dark = static_cast<float>(g_precip_cfg.rim_dark);
+        look.rock_band_m = static_cast<float>(g_precip_cfg.rock_band_m);
         g_precip = build_precip_renderer(look);
+        if (g_precip_cfg.veil_enabled) {
+            // ONE renderer TYPE, a second configuration — never a second code
+            // path. The veil is the same lattice at a wider cell, a deeper box,
+            // bigger softer flakes and a lower opacity, so distance reads as
+            // distance instead of as "the same dots, dimmer".
+            PrecipLook far_look = look;
+            far_look.cell_size_m =
+                static_cast<float>(g_precip_cfg.veil_cell_size_m);
+            far_look.box_half_m =
+                static_cast<float>(g_precip_cfg.veil_box_half_m);
+            far_look.snow_size_m = static_cast<float>(g_precip_cfg.veil_size_m);
+            far_look.snow_opacity =
+                static_cast<float>(g_precip_cfg.veil_opacity);
+            far_look.sway_m = static_cast<float>(g_precip_cfg.veil_sway_m);
+            far_look.inner_fade_m =
+                static_cast<float>(g_precip_cfg.veil_inner_fade_m);
+            g_precip_veil = build_precip_renderer(far_look);
+        }
     }
-    draw_precip_renderer(g_precip, pose, season, intensity, phase);
+    const PrecipSdf sdf = net != nullptr ? &tunnel_sdf_thunk : nullptr;
+    const void* ctx = net;
+    // FAR first, then NEAR: depth-write is off in this pass, so the draw order
+    // IS the composite order and the near flakes must land on top of the veil.
+    // The veil is snow only — a rain "veil" would be grey streaks at 70 m, which
+    // reads as fog, and W3's rain look was signed without one.
+    if (g_precip_veil.ok && season == Season::Winter)
+        draw_precip_renderer(g_precip_veil, pose, season, intensity, phase_far,
+                             sdf, ctx, ground_r);
+    draw_precip_renderer(g_precip, pose, season, intensity, phase, sdf, ctx,
+                         ground_r);
 }
 
 // CC1 Superstack smoke (Living Copper Cliff) — config POD + lazily-built plume,
@@ -3590,13 +3643,29 @@ void draw_frame(const sim::SimState& state, const sim::AircraftParams& params,
     // Phase is the FINISHED wrapped scalar the app derived from t_cel (render/
     // reads no clock).
     draw_smoke(pose.eye, info.smoke_phase);
+    pmark("smoke");
     // Precipitation (W3): season-gated snow/rain, only under an active W2
     // weather cell. World-anchored jittered lattice, box follows the eye, fall
     // along local_up ONLY (no wind). Alpha, depth-test on / write off; after
     // the opaque bodies + smoke, before the prop discs. Phase + intensity are
     // app-owned.
-    draw_precip(pose, info.season, info.precip_intensity, info.precip_phase);
-    pmark("smoke_precip");
+    // AS-1: the underground gate needs BOTH the tunnel SDF and the local terrain
+    // radius (a negative tunnel SDF alone also covers open air over the shallow
+    // arena). Same single-source terrain query the brace-for-impact AGL read
+    // above uses -- world::HeightField::radius_at -- so the snow and the ground
+    // can never disagree about where the surface is.
+    {
+        const double r_eye_p = glm::length(pose.eye);
+        const glm::dvec3 up_eye =
+            r_eye_p > 0.0 ? pose.eye / r_eye_p : glm::dvec3(0, 1, 0);
+        const double precip_ground_r =
+            (env != nullptr && env->ground != nullptr)
+                ? env->ground->radius_at(up_eye)
+                : params.R;
+        draw_precip(pose, info.season, info.precip_intensity, info.precip_phase,
+                    info.precip_phase_far, info.tunnel_net, precip_ground_r);
+    }
+    pmark("precip");
     // Translucent prop pass: ALL blur discs AFTER ALL opaque bodies (Fable C6),
     // alpha-blended with depth-WRITE off so a farther body can't overwrite a
     // nearer disc and overlapping discs composite.

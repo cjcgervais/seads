@@ -210,13 +210,162 @@ wrap_fade           = 0.12       # vertical wrap fade fraction [0,0.5) — C0 hi
 color               = [0.90, 0.93, 0.97]   # near-white mono flake/streak tint (low-sat -> silver)
 # Snow (Winter): round soft flecks, slow gentle drift.
 snow_size_m         = 0.18       # flake radius (m) — toned down from 0.28 (Chad: too big / in-your-face)
-snow_rate_hz        = 0.20       # fall cycles/s (fall speed = cell_size_m * this; slow)
+snow_speed_mps      = 0.60       # fall SPEED (m/s). AS-3 REPLACES snow_rate_hz: the near and far
+                                 #   lattices have different cell sizes, so only a SPEED can make
+                                 #   them fall together (rate_hz = speed / cell_size_m, derived
+                                 #   app-side). 0.60 m/s == the shipped 0.20 Hz x 3.0 m cell, so
+                                 #   this key is a rename at the ship value, not a retune.
 snow_opacity        = 0.75       # alpha at full weather intensity [0,1]
 # Rain (Spring): thin grey streaks along local-up, fast near-vertical fall.
 rain_size_m         = 0.05       # streak half-width (m)
 rain_streak_m       = 1.30       # streak half-length along local-up (m)
 rain_rate_hz        = 1.50       # fall cycles/s (fast)
 rain_opacity        = 0.55       # alpha at full weather intensity [0,1]
+
+# ---------------------------------------------------------------------------
+# ATMOSPHERE RUNG AS-1..AS-3 (Chad, 2026-09-12: "we do get more snow, but not in
+# the big stope ... more localized weather events not wind but appearance of snow
+# in a very effective way that deepens immersion"). EVERY key below has an OFF
+# value that is BIT-IDENTICAL to the pre-AS-3 look, named in its comment.
+# ---------------------------------------------------------------------------
+# AS-2 — the SNOWFALL FIELD (render::snowfall_intensity), built BESIDE the haze
+# so the Chad-signed [weather]/[weather_cell] distribution is untouched:
+#   snowfall = max(squall, flurry_level * flurry, snow_floor)
+# The squall term IS today's weather_cell (the heavy band is unchanged); the
+# flurry is the same machinery on a different lattice at a much lower activation
+# band; the floor is a constant winter dusting. flurry_level = 0 AND
+# snow_floor = 0 => bit-identical to today's wfield.
+flurry_level        = 0.35       # the light frequent band's peak intensity [0,1]. 0 = OFF
+flurry_thresh_lo    = 0.00       # flurry cells' activation band in the FLURRY budget — much
+flurry_thresh_hi    = 0.65       #   lower than the squall band's activation, so they light early.
+                                 #   AS-4 widened hi from 0.35: with five BIG cells instead of
+                                 #   23 small ones a narrow band lit them all at once and the
+                                 #   dome never dried out.
+# The flurry runs its OWN weather_haze instance: the same three front periods and
+# weights (the same tempo — you still fly into and out of bands), phase-offset so
+# it is not the squall budget in disguise, and gated much lower so the light band
+# is live most of the time. The Chad-signed [weather] block is UNTOUCHED: this is
+# a second instance of the function, not a change to its dials. Without it the
+# flurry inherited weather_haze's exact-zero ~58% clear plateau and no activation
+# band could put snow in the sky more than ~42% of the time (measured: 17%).
+flurry_gate_lo      = -0.95      # the flurry budget's clear-plateau edge, in (-1,1).
+                                 #   [weather] ships -0.05; lower = snow more of the time.
+flurry_phase_off    = 2.6        # rad added to the flurry budget's three front phases (>= 0).
+                                 #   Moves WHEN, never HOW OFTEN (distribution-invariant).
+                                 #   AS-4 moved this 1.7 -> 2.6 for the SQUALL-TO-FLURRY HANDOVER:
+                                 #   at 1.7 only 0.29 of squall deaths still had light snow
+                                 #   underneath, so a dying squall CUT to dry; at 2.6 it is 0.86
+                                 #   and the pilot gets a taper. The two budgets share their three
+                                 #   periods, so the phase is the only lever that decorrelates
+                                 #   their ups and downs -- no state, no hysteresis.
+# ---------------------------------------------------------------------------
+# AS-4 EVENT DURATION (Chad's fly of aa9d78142: "there is not enough durition of
+# the weather events, I didnt see any snowing in the tunnel so pass for that").
+#
+# DIAGNOSED BEFORE DIALLED (test_snowfall.cpp prints the table). In-dome orbits,
+# shipped AS-3 params: a STATIONARY eye already sat in 20.9 min episodes -- the
+# tempo was never the problem. The PLANE was: at 142 m/s it crossed a 6 deg
+# flurry cell in ~22 s, so its median episode was 36 s with 13 s gaps. Snow 87%
+# of the time, but BLINKING. That is what "not enough duration" feels like.
+#
+# So the fix is SPATIAL: the flurry gets its own, much bigger cell scale and
+# fewer of them, and the threshold band widens to keep the dome from going
+# permanently white. Measured after: plane 3.8 min, sled 6.6 min, stationary
+# 8.2 min, in-dome share 0.62, gaps still 32-92 s.
+#
+# ⚠ THE CEILING NOBODY CAN DIAL AROUND: a dome is 0.40 rad ~ 12 km across and a
+# plane at 142 m/s crosses it in 85 s. On any closed path inside it the median
+# episode is about (share x lap time), so a 3 min median at plane speed REQUIRES
+# a high in-dome share. Duration and "localized" are in direct tension at plane
+# speed; these values are the knee, not a free lunch.
+flurry_period_scale = 1.4        # x the flurry budget's three front periods. NOT monotonic:
+                                 #   MEASURED over a 12-orbit ensemble the plane's median episode
+                                 #   is 172 s at 1.0, 312 s at 1.4 and ~90 s by 1.8 -- the tempo
+                                 #   has to beat against the time the eye takes to cross a cell,
+                                 #   and too slow freezes the pattern so a fast eye chops at every
+                                 #   boundary. Scaling all three together keeps them incommensurate,
+                                 #   so no short repeat is introduced.
+                                 #   WARNING: 1.4 is a RIDGE in scale (1.3/1.4/1.5 = 299/312/146 s
+                                 #   for the plane) though a PLATEAU in phase. Everything in the
+                                 #   1.3-1.5 block keeps the sled above 7 min, the share near 0.60
+                                 #   and the handover above 0.5; only the plane's median swings.
+flurry_inner_deg    = 6.0        # the flurry cell's own full-intensity radius (deg). The squall
+flurry_outer_deg    = 14.0       #   cells stay 2.5/6.0 -- they are the HAZE's and they are signed.
+                                 #   0/0 = use the [weather_cell] bubble values (the OFF value).
+flurry_cell_count   = 5          # flurry cells per dome. 0 = bubble_cell_count + 7 (the AS-2
+                                 #   rule). Five BIG cells, not 23 small ones: that is the swap.
+snow_floor          = 0.0        # constant winter dusting [0,1]. SHIPS OFF: it is not a
+                                 #   localized event, and with the flurry on its own budget
+                                 #   it is no longer needed. ⚑ CHAD RULING WANTED (0.10 was
+                                 #   the value measured for a visible floor-only dusting).
+# ---------------------------------------------------------------------------
+# AS-5 SNOW-SQUALL ON ITS OWN DIALS. Chad flew 6aa0d79fb: "I just flew it and its
+# still no good, I see very few weather events and they barely last 15s?" The
+# events he reads are the SQUALL, and until AS-5 the squall WAS the haze's
+# weather_cell on the signed [weather_cell] bubble dials: ~3 km cells lit only
+# while the haze budget clears -0.05. RULING (via the sentinel, 2026-09-12):
+# "yes please do so" -- give the snow squall its own cell size and gate beside
+# the signed block, sized for the plane. [weather]/[weather_cell] UNTOUCHED; the
+# haze still draws from them.
+#
+# MEASURED (test_snowfall.cpp; the plane's squall = squall term > 0.5, 48
+# in-dome orbits x 4 independent draws that agree to a few seconds):
+#   today: plane median squall 26 s, 2.7 per 10 min, heavy 7% of in-dome time
+#   AS-5 : plane median squall 86 s, 2.9 per 10 min, gaps ~55 s, heavy ~31%
+# Every one-dial neighbour of these values stays 54-130 s (no ridge).
+# THE TRADE, stated plainly: several 1-2 min squalls per 10 min REQUIRES heavy
+# snow about a third of in-dome time. squall_gate_lo is the lever: -0.25 keeps
+# ~79 s but drops to ~2 squalls per 10 min and ~23% heavy ([.as5gate] probe).
+# The snow squall is no longer the haze's squall, so heavy snow can now fall
+# under a lighter haze than before.
+squall_own_dials    = 1          # 1 = the dials below. 0 = the haze's weather_cell squall,
+                                 #   bit-identical to 6aa0d79fb (the OFF value).
+squall_inner_deg    = 8.0        # squall cell full-intensity radius (deg). 0 = bubble_inner_deg
+squall_outer_deg    = 15.0       #   falloff radius (> inner). 0 = bubble_outer_deg (2.5/6.0 today)
+squall_cell_count   = 3          # squall cells per dome. 0 = bubble_cell_count (16)
+squall_gate_lo      = -0.65      # the squall budget's clear-plateau edge, in (-1,1). [weather]
+                                 #   ships -0.05; lower = squall cells lit more of the time.
+squall_thresh_lo    = 0.00       # per-cell activation band in the squall budget
+squall_thresh_hi    = 0.35       #   (0 <= lo <= hi <= 1). [weather_cell] ships 0.05/0.65.
+squall_period_scale = 1.0        # x the squall budget's three front periods (1.0 = OFF)
+squall_phase_off    = 0.0        # rad added to its front phases (0 = OFF: the squall rises and
+                                 #   falls WITH the haze fronts, so heavy snow still tends to come
+                                 #   with haze). The pure lever for the squall->flurry taper.
+# AS-1 — NO SNOW UNDERGROUND. Each flake is gated by the tunnel-net signed
+# distance at the FLAKE (not only at the eye), so standing in a mouth you still
+# see the snow outside while the flakes under rock are gone.
+rock_band_m         = 2.0        # C0 smoothstep half-width across the rock wall (m)
+# AS-3 — per-flake variety + density. size/alpha are hashed per world cell (a
+# flake keeps its size for life); density culls whole cells by intensity, so a
+# flurry is a FEW soft flakes and a squall is a dense fall.
+size_var            = 0.40       # flake size  x [1-v, 1+v]. 0 = OFF (uniform dots)
+alpha_var           = 0.40       # flake alpha x [1-v, 1]. 0 = OFF
+density_exp         = 0.60       # keep a cell iff hash01(cell) < intensity^this. 0 = OFF
+density_soft        = 0.08       # width in keep_p a culled cell fades back IN over, so a
+                                 #   squall breathing adds flakes smoothly instead of popping
+                                 #   whole cells on. 0 = the hard step.
+# AS-3 — ZERO-MEAN SWAY. ⚑ NOT WIND and ⚑ CHAD RULING WANTED: a tiny lateral
+# sinusoid on each flake, axis AND phase hashed per cell, whose average over one
+# full fall cycle is EXACTLY zero (pinned by test). No flake and no field ever
+# translates; there is no shared direction. Set both to 0 for the strict reading.
+sway_m              = 0.25       # NEAR lattice sway amplitude (m). 0 = OFF
+veil_sway_m         = 0.60       # FAR lattice sway amplitude (m). 0 = OFF
+# AS-3 — the FAR "veil": a SECOND lattice of the same renderer type, wider cell,
+# deeper box, bigger softer flakes, lower opacity, drawn BEFORE the near one. It
+# is what turns a 21 m globe of dots into snow with depth. Winter only.
+veil_enabled        = 1          # 0 = OFF (one lattice = exactly today)
+veil_cell_size_m    = 8.0        # far lattice spacing (m)
+veil_box_half_m     = 70.0       # far fade radius (m) — inside the H=12 ushort cap
+veil_size_m         = 0.45       # far flake radius (m) — bigger because further
+veil_opacity        = 0.35       # far alpha at full intensity [0,1] — a veil, not a fall
+veil_inner_fade_m   = 12.0       # the veil's HOLE: alpha 0 within this radius of the eye,
+                                 #   full by twice it. The veil's flakes are 0.45 m and Chad
+                                 #   ruled 0.28 m "too big / in your face" — this is what keeps
+                                 #   the big soft flakes at DISTANCE, where the near lattice has
+                                 #   thinned, instead of in the canopy. 0 = OFF.
+# AS-3 — CONTRAST. White flakes over white ground and a bright sky can vanish.
+# rim_dark mixes the flake EDGE toward uColor*rim_dark (mono, no chroma).
+rim_dark            = 1.0        # 1.0 = OFF. Lower (~0.85) to give day flakes a silhouette
 
 [water]
 # Mirror-silver lakes (§2, §6 bold #0): analytic sky reflection, no render-to-texture.

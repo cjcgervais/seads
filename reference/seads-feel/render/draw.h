@@ -309,13 +309,35 @@ struct PrecipBuildParams {
         0.12;  // vertical wrap fade fraction (C0 hides the fall reset)
     glm::dvec3 color{0.90, 0.93, 0.97};  // near-white mono flake/streak tint
     double snow_size_m = 0.28;           // Winter flake radius (m)
-    double snow_rate_hz = 0.20;          // Winter fall cycles/s (slow drift)
+    double snow_speed_mps = 0.9;         // Winter fall SPEED (m/s). AS-3: speed,
+                                         // not cycles/s, so the near and far
+                                         // lattices (different cell sizes) fall
+                                         // at the SAME physical rate and read as
+                                         // one snowfall at two depths.
     double snow_opacity = 0.75;          // Winter alpha at full intensity
     double rain_size_m = 0.05;           // Spring streak half-width (m)
     double rain_streak_m =
         1.30;                    // Spring streak half-length along local_up (m)
     double rain_rate_hz = 1.50;  // Spring fall cycles/s (fast)
     double rain_opacity = 0.55;  // Spring alpha at full intensity (grey read)
+    // --- AS-3 look terms (atmosphere rung). Every one OFF at its default. ---
+    double size_var = 0.0;     // per-flake size  x [1-v, 1+v]
+    double alpha_var = 0.0;    // per-flake alpha x [1-v, 1]
+    double density_exp = 0.0;   // hashed per-cell cull exponent (0 = keep all)
+    double density_soft = 0.0;  // width in keep_p a culled cell fades in over
+    double sway_m = 0.0;       // NEAR zero-mean lateral sway amplitude (m)
+    double rim_dark = 1.0;     // flake edge darkening (1 = off) — the
+                               // white-on-white contrast dial (mono)
+    // --- AS-1: the underground gate band (m). ---
+    double rock_band_m = 2.0;
+    // --- AS-3: the FAR "veil" lattice (a second renderer of the SAME type). ---
+    bool veil_enabled = false;      // false => exactly one lattice, i.e. today
+    double veil_cell_size_m = 8.0;  // wider spacing
+    double veil_box_half_m = 70.0;  // deeper box (inside the H=12 ushort cap)
+    double veil_size_m = 0.45;      // bigger flakes (they are further away)
+    double veil_opacity = 0.35;     // softer — a veil, not a second snowfall
+    double veil_sway_m = 0.0;       // far sway amplitude (m)
+    double veil_inner_fade_m = 0.0;  // radial hole in the veil around the eye
 };
 void set_precip_build_params(const PrecipBuildParams& p);
 
@@ -437,7 +459,13 @@ struct FrameInfo {
     // precip falls ONLY under an active microsystem and fades as you leave.
     // Both read-only.
     double precip_phase = 0.0;      // wrapped fall phase [0,1)
-    double precip_intensity = 0.0;  // weather_cell(eyeDir) [0,1] (0 => dry)
+    double precip_intensity = 0.0;  // the snowfall field at the eye [0,1]
+                                    // (AS-2: render::snowfall_intensity, air-
+                                    // gated — was weather_cell alone)
+    // AS-3: the FAR veil lattice's own wrapped fall phase. The two lattices have
+    // DIFFERENT cell sizes and therefore different cycle rates for one physical
+    // fall speed, so the app owns both wraps (render/ still reads no clock).
+    double precip_phase_far = 0.0;  // wrapped fall phase [0,1) for the veil
     // Seasonal ground (W4): winter snow-cover applied to the LAND albedo. cover
     // is the per-life amount (0 outside Winter => identity); albedo/slope_lo
     // are config look constants. Consumed as a render::SnowParams at the planet

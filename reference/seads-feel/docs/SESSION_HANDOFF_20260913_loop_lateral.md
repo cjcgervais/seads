@@ -7,109 +7,278 @@ Lane: `feel/lean-lead-walkback` in `D:\flight_sim2\seads-feel`.
 
 ## §0 STATUS
 
-**READ THIS FIRST: the 2026-09-13 overnight lateral verdicts were VOID.**
-Not "inconclusive" — void. They were measured on a state nobody ever flew.
-The dial may be fine or useless; the battery could not tell, and reported
-confident numbers anyway. §6.7 has the anatomy. The one-line version:
+### ★ 2026-09-15 -- CHAD RULED: v16 = THE YAW BUDGET ALONE, unload REMOVED
 
-> The tape's row writer emitted **74** columns while its header named **52**.
-> Every v5 seed field was on disk and named nowhere. The probe indexed by
-> name, its reader returned **0.0** for anything it could not find, and so
-> "Chad's 3 worst dives" replayed with zero body rates, a degenerate
-> `(0,0,0,0)` aim quaternion and a freshly reset controller. Neither arm was
-> ever in a dive, so ON == OFF — a fact about the harness, not the aeroplane.
+Chad, verbatim: **"no deck save unload keep the yaw budget"** (option 3 of
+§0.0 below). He was told the trade before ruling: the budget-only build is
+the tape-6 exe (`c912ecf46`) he had described as *"a deep propensity to
+really want to nose down still"*; the unload was what turned that into
+*"I like it now"*. He ruled anyway. The tremor debt and the knife-edge
+ringing stay parked for the rung AFTER v16 (his word: one signed change per
+kernel version, the v14/v15 precedent).
 
-**LANDED ON THE LANE (not pushed, awaiting Chad's land word):**
+**KERNEL v16 "S-yawbudget" = ONE dial, `[coordination]`:**
+
+| dial | value | what it does |
+|---|---|---|
+| `yaw_vert_budget` | 1.0, gap `-5..10` deg | caps what the RUDDER asks of the vertical axis (ev6 77% / ev1 19% / ev7 16% / t5worst 9% of the dive removed on his onset fixtures) |
+
+**DONE this session (`b2bc840c5`):** S-unload removed net-zero the v15
+way (kernel block, five params, X-macro entry, telemetry field, loader
+block, banner line, tape column 161 -> 160, the S-unload test legs incl.
+the OPEN loop-cost case); scar comments at every site; the actuator table
+stays in `control/params.h` with the unload row marked REMOVED; the loader
+now REFUSES any `[coordination] unload_*` key; scrap tag
+`scrapped/s-unload-20260915` = `40325f297`. S-yawbudget 8/44 green with the
+committed numbers restored exactly (lat-90 41.01 -> 41.85, ev7 -445.5,
+ONSET ev6 -439 -> -102) -- this is also the fix for the red-team's late P2
+(its doc comments had been contaminated by the unload's presence in the
+"budget off" arm). S-righthand hash `dbdf52980174305e` intact; 87 cases /
+51918 assertions green on the neighbouring sets. Graph regenerated.
+
+**RED-TEAM 2026-09-15 (fresh context, `docs/REDTEAM_20260915_v16_yawbudget.md`): LAND-WITH-FIX, all folded** -- P1-1 budget floor 1 deg/s (the dial removed the whole rudder wings-level for a 0.2 deg/s dig; fixture numbers moved 3-18 m, re-pinned), P1-2 gap_lo loader wall (-20), P2-5 degree range check, P2-1 the three dead fixtures pinned incl. "the budget does NOT save the deck", P1-3 duty cycle + inertness past 90 recorded in params.h/toml. Its second opinion: my freelook claim was WRONG (freelook welds aim := nose every tick, `app/instructor_tick.h`; his habit is what avoids the fault), acceptance is defensible if written as a statement about this pilot's hand. **ANALYST (`docs/TAPE_ANALYSIS_20260915_normal1.md`, normal-fight tape 17 min): strict slice 0; ONE real fault event at t 197-201 (freelook-exit flick 8.8x his p99, bank -41 -> -175, nose -33 vs aim +29 at onset, 607 m lost / 459 m excess, budget inert at onset, fatal 500 m lower); 30 of 32 dives deliberate; two kernel wing-strikes at 978/992 s from late pulls out of aim-down dives (no respawn).** CHAD after the tape: "I am actually pretty satisfied with the kernel now ... only uncontrolled manouvering will crash you ... I'm really good on this." Folds change the flown artefact (floor) -> one confirmation fly on the merged tip is owed per the SOP.
+
+**IN FLIGHT:** full gate on `b2bc840c5` in the isolated `build-gate/`
+(detached; log `build-gate/gate_v16_b2bc840c5.log`, status file beside it).
+`build-play/seads.exe` REBUILT on this tip (the 16:55 exe was the
+pre-fix unload build -- do not fly it).
+
+**NEXT, in order:** (1) gate reads baseline six by name
+(`python tools/gate/gate_baseline.py check build-gate/gate_v16_b2bc840c5.log`);
+(2) Chad flies the budget-only exe -- hard lateral pulls at speed, two
+loops, one Immelmann, one deliberate split-S, fresh tape
+`feel_tape_lateral8_budgetonly.csv`; (3) fresh-context red-team of the
+removal + the budget alone (the earlier red-team's P1-3 pins -- ramp-vs-step
+per smoothstep band -- are still REQUIRED before landing); (4) land per
+the v15 record: LANES verbatim, tag `kernel-v16-yawbudget-signed`, main
+fast-forwards, CLAUDE.md kernel line, flight-log row. seads-recon resync is
+the SENTINEL's.
+
+**THE UNFLOWN CAVEAT is gone with the dial** (the deliberate split-S was
+only a question for the unload's arm). What remains unflown is the
+budget-only tree on loops -- the budget is bit-identical on a pure-pitch
+pull by construction (gate never opens; pinned), so this is a confirmation
+fly, not a discovery fly.
+
+---
+
+### §0-HISTORY (2026-09-13, superseded by the ruling above)
+
+
+**TARGET 2 (the lateral nose-down) IS FLOWN AND SIGNED.** Chad, after the
+second unload flight, verbatim:
+
+> "I think it is okay now, could I be stalling in a sense when I am lower
+> speed, like just a natural crash of consequence?"
+
+then, after the stall question was answered with numbers:
+
+> "I like it now, we can commit and push to main and seads before I run out
+> of tokens"
+
+**KERNEL v16 "S-lateral" = TWO dials, both `[coordination]`:**
+
+| dial | value | what it does |
+|---|---|---|
+| `yaw_vert_budget` | 1.0, gap `-5..10` deg | caps what the RUDDER asks of the vertical axis |
+| `unload_below_horizon` | 1.0, bank `90..105`, gam `5..20` deg | removes PULL where the lift vector is below the horizon and the flight path is falling below the aim |
+
+App-side: feel-tape v5 contract (161 columns, complete-state seeding),
+the launch banner naming every live dial, and six committed onset fixtures.
+
+### ⛔ §0.0 LANDING ON HOLD -- a question for Chad first
+
+**Kernel v16 is NOT on main.** The fresh-context red-team returned
+**LAND-WITH-FIX**; the correctness fixes are folded (`b4864512c`), but one
+finding changes what Chad signed, so it waits for his word.
+
+**THE QUESTION FOR CHAD:**
+
+> The unload dial **arms during the back half of a pure vertical loop** --
+> nose below the horizon, inverted, your aim still ahead. Kernel v15 was
+> signed on *"I can do the vertical loops and immelmans without a hitch."*
+> Measured on a scripted loop it arms on **25.9%** of the loop and the loop
+> finishes **57.6 m higher** than without it. The red-team's own loop
+> scenario read **232 m lower** (unload only) / **110 m lower** (both on).
+> The Immelmann is completely unaffected (bit-identical, 0% armed).
+>
+> **Land anyway, narrow the arm so it cannot fire in a loop, or drop the
+> unload and keep only the yaw budget?**
+
+**THE NUMBERS BEHIND IT** (scripted, level V250 at 3000 m):
+
+| manoeuvre | both OFF | yaw budget only | unload only | both ON | unload armed |
+|---|---|---|---|---|---|
+| LOOP dy90 | +369.8 m | +369.8 | **+427.4** | **+427.4** | **25.9%** |
+| IMMELMANN dy70 | +567.5 m | +567.5 | +567.5 | +567.5 | 0.0% |
+| red-team's loop | -1091 m | -- | **-1323** | **-1201** | 17.3% |
+
+My scripted loop and the red-team's disagree in sign; I have **not**
+reproduced theirs and have **not** refuted it. Either way the loop's shape
+changes, which is what matters against v15's signature.
+
+**AN ERROR OF MINE IT EXPOSED.** §0.3 below reports the loop protection as
+*"verified on his hands, 0 of 723 ticks."* That was **incomplete**: it only
+examined nose above +60 deg -- the **climbing** half of a loop. The dial
+arms on the **back** half. The Immelmann claim stands.
+
+**WHAT WAS FOLDED** (`b4864512c`):
+
+* **P0 sign guard** -- `if (arm > 0.0 && pitch > 0.0)`: only pull is ever
+  removed; a push past 90 deg raises the nose and must never be scaled.
+  Measured: guarded vs unguarded is **bit-identical to 6 decimals** on all
+  five fixtures, so on these events the defect was **latent, not active**.
+  **The deck save holds: AGL 0 -> 80 m.**
+* **P1-2** -- the dial-off macro ignored its argument. The *suggested* fix
+  itself was undefined behaviour: `ControllerParams& c = (obj)` expands to
+  `c = (c)` in `off_arm()`, a reference bound to itself. It moved the v15
+  hash to `6055236146bfb3d5` and **segfaulted the suite**. Fixed with a
+  collision-proof binding name; hash back to `dbdf52980174305e`.
+* **P1-4** -- `yaw_vert_budget` silently dead when `line_hold_ff == 0`;
+  the loader now refuses it.
+* **P2** -- a comment cited a test file that does not exist; the `gam`
+  edges were mislabelled (they are sin-differences); telemetry scales are
+  written before the S-rimshot CARRY. All corrected or documented.
+
+> **⚠ FOR THE NEXT RED-TEAM -- read before proposing a macro fix.** The
+> P1-2 fix this red-team *suggested* was itself **undefined behaviour**:
+>
+> ```cpp
+> #define SEADS_FEEL_DIALS_OFF(obj) do { control::ControllerParams& c = (obj); ... } while (0)
+> ```
+>
+> `off_arm()` names its object `c`, so that expands to
+> `control::ControllerParams& c = (c);` -- a **reference bound to itself**,
+> initialised from its own uninitialised value. It compiled cleanly. It wrote
+> the dial zeros into garbage memory, left the real object's dials **ON**,
+> moved the v15 pre-change hash `dbdf52980174305e -> 6055236146bfb3d5`, and
+> **segfaulted the test suite**. The shipped fix binds a name no caller will
+> ever use (`seads_feel_dials_obj_`). **Lesson: a macro that introduces a
+> local must not reuse a plausible caller-side name, and a proposed fix is
+> not exempt from being run.** Verify a suggested patch against the real
+> call sites before treating it as correct.
+
+**NOT FOLDED -- REQUIRED BEFORE ANY LANDING (P1-3):** a ramp-vs-step pin
+for each smoothstep band, and a **direct non-push split-S leg** proving the
+arm stays 0. AT-15 is a weak witness: it spends 208 of 240 ticks in
+`push_mode`, where the block is unreachable. Deferred only because the
+dial's shape is now Chad's call.
+
+**INCIDENT, resolved:** a local commit was staged with `git add -A` and
+swallowed 349 files of the red-team's throwaway `build-rt/`. **It never
+reached origin** (the push was stopped; origin still read `9258b8f7a`). Because
+origin had never seen it, the four unpushed commits were rewritten from
+`9258b8f7a` so `build-rt/` appears in **no** commit on the branch (a backup
+ref was held until the clean push verified). `build-rt/` is now ignored
+(`14bb76928`) and this lane stages paths explicitly.
+
+**STATE:** lane `feel/lateral-yawbudget`, fixes at `b4864512c` with this handoff on top, pushed. Set 75
+cases / 9856 assertions green. main untouched at `b697d24a5`. The exe in
+`build-play` (16:55, `9258b8f7a`) is the pre-fix build Chad flew and liked.
+
+---
+
+### §0.1 THE MECHANISM, and why five other actuators failed
+
+The fault is an ELEVATION OVERSHOOT ending in a SLICE. The aim sits ABOVE
+the horizon; the nose passes through it and continues 80-108 deg below;
+`bank_full` is 95.7-103.4 deg median (peak 179.7), so the LIFT VECTOR IS
+BELOW THE HORIZON and **the pull IS the dive**. The pitch channel commands
+nose-UP in body frame on 100% of ticks for three of five events -- the
+instructor is pulling correctly and the world takes it downward.
+
+**THE ACTUATOR TABLE** (all measured on his own dives, seeded exact):
+
+| actuator | result | why |
+|---|---|---|
+| bank limit (cap phi mid-event) | **REJECTED** | ev6 no effect; ev7 turn 15.07 -> 7.45 for 0.2 m WORSE |
+| far-aim level-turn preference | **REJECTED** | every dive 3-8 m WORSE; phi 50/60/70 identical (cap saturates) |
+| top rudder | **REJECTED** | inert (ev7 0.8 m of 606); on 50.0% of ticks the lifting rudder is the OPPOSITE sign to the aim-chasing rudder |
+| `K_aoa` 10 -> 12.8 | **REJECTED** | 5-13 m of a 400-600 m descent, does not save the deck event, moves the kernel hash |
+| `path_above_aim` (fade the roll) | **REJECTED** | ev7 20.6 m WORSE, ev1 8.6 m WORSE (turn 6.53 -> 3.54) |
+| **`unload_below_horizon`** | **SHIPPED** | t6deck AGL 0 -> 80 (survives); t5worst -527 -> -262; ev7 -606 -> -538; ev1 -429 -> -391 |
+
+The first four failed for one reason: **roll cannot raise a nose, and the
+rudder is already claimed by the aim.** Only the G demand was left.
+
+### §0.2 THE DISCRIMINATOR
+
+He flies past 90 deg of `bank_full` on **50.7-57.4%** of the hard turns that
+HOLD ALTITUDE -- past 90 is his normal cruise-fight attitude, not a fault.
+A bank-only gate armed on 71.9% of the V250 lat-90 roll-in: the July
+2026-07-06 flat-turn regression. What separates the populations is the
+FLIGHT PATH:
+
+    GOOD (tracked, holding altitude)  gamma p50  +19.4 deg   n=10170
+    BAD  (inside an overshoot)        gamma p50  -55.1 deg   n=  332
+
+Armed on `(aim_elev - gamma)`: **slices 89.5%, good turns 3.1%** at the 5 deg
+edge. NO tau gate -- sustain-gating collapses slice coverage to 13-23%
+because the slices are SHORT (dwell p50 0.87 s) and his good past-90 turns
+are LONGER (p50 1.22 s); a tau separates them backwards.
+
+### §0.3 RUN 2 (339 s) -- HE IS NOT STALLING
+
+His question answered with numbers:
+
+    AoA filtered p50 5.54  p90 15.38  p99 17.25  max 20.02
+    ticks above aoa_max 20.0 :  3 (0.01%)   above plant stall 20.6 : 0
+    BALLISTIC ticks : 0        min V on the whole tape : 140.0 m/s
+    29 descent events: (a) stall/ballistic 0 | (b) slice 9 | (c) other 20
+    slices start at V p50 229.6 (min 216.2) -- his FASTEST flying
+
+Zero stalls, zero ballistic, never below 140 m/s. What he feels at the limit
+is the **AoA limiter binding on 11.3% of ticks** -- the protection holding
+him just under the cap, which reads as the aeroplane refusing to bite.
+**Zero crashes** (lowest AGL 86 m).
+
+**LOOP / IMMELMANN PROTECTION VERIFIED ON HIS HANDS: 0 of 723 ticks armed**
+with the nose above +60 deg. (Run 1 could not test this -- he flew no loops.)
+
+⚠ **THE ONE UNCLEARED CASE: a deliberate split-S with the aim held UP.**
+409 of 1523 nose-below-60 ticks armed; on those `aim_elev - gamma` is p50
++35.6 deg, i.e. the aim was 36 deg ABOVE the flight path -- those are slices,
+not split-Ses. But attitude alone cannot distinguish a committed split-S
+flown with the aim still near the horizon, and the dial WOULD fire on it.
+Ask him to fly one deliberately and say whether it felt held back.
+
+### §0.4 THE HONEST COSTS
+
+* **t5worst turn 48.92 -> 6.07 deg/s** -- it unloads and stops turning on that
+  one event. ev1/ev7 turn FASTER (6.53 -> 14.99, 14.06 -> 16.75), so it is
+  event-dependent, but the collapse is real.
+* **V250 lat-90 turn 41.85 -> 39.54 (-5.5%)**, G unchanged. The first COST
+  regression any surviving dial has had; lat 40 is bit-identical.
+* `frac 0.5` is nearly inert on the dives, so **1.0 is the only useful value**
+  -- the fallback is 0, not a smaller number.
+* **3.1% of his good past-90 ticks** arm and lose G.
+* **Past-90 dwell on descent ticks ROSE**: 7.3 / 19.7 / 33.7 / 37.4 / 27.0%
+  across tapes 4/5/6/run1/run2. The aeroplane spends LONGER at the slice
+  attitude because it unloads there instead of pulling through -- the gauge
+  looks worse while the outcome is better. Tell him before he reads it.
+* **MB-right co-activation 3.91%** and hand-rest veto 0.56% in run 2 (run 1
+  had zero of both). Different axes, no observed conflict, but it is the
+  first evidence they can be live together.
+
+### §0.5 LANDING STATUS
+
+Lane `feel/lateral-yawbudget`, pushed. Tips:
 
 | SHA | what |
 |---|---|
-| `0a52e7f61` | S-lapguard: the lap latch (SUPERSEDED — removed below) |
-| `039c65317` | **S-righthand**: `[auto_level] right_hand_rest` 0.25 |
-| `37d5f5d83` | S-lapguard machinery REMOVED outright |
-| `3d6de7ec1` | S-righthand red-team fold: the hand-rest clock is frame-rate invariant |
-| `4768ab263` | docs: this handoff |
-| `62ceaeff3` | feel tape v5 — **its "proved by a round-trip test" was an IN-MEMORY proof only** |
-| `9b3aaec3e` | docs: handoff §0 |
-| *(this)* | **tape emitter/reader correction** — §0.1 |
+| `52d1732c5` | feel tape: the emitter named 52 columns while writing 74 |
+| `7e951321e` | feel tape: seed the COMPLETE state, compiler-enforced |
+| `56ac2022a` | S-yawbudget + compact fixtures |
+| `4d79b7eca` | banner names yaw_vert_budget |
+| `c912ecf46` | S-yawbudget gate at ONSET (`-5..10`), wall re-derived |
+| `1b5d98e83` | **S-unload** |
+| `9258b8f7a` | banner names unload_below_horizon |
 
-**S-righthand is the one thing on this lane Chad has confirmed on the stick:**
-> "I can do the vertical loops and immelmans without a hitch."
-
-That confirmation stands. It is a felt verdict on the real exe, and nothing in
-this correction touches the kernel.
-
-### §0.1 The correction (this commit)
-
-1. **`app/feel_tape_columns.h`** — the column list, ONE definition. The writer
-   prints its header from it; every reader resolves names through it. A
-   hand-written header is what let 52 drift from 74.
-2. **`app/feel_tape.h`** — the writer hook lifted out of `main.cpp` (which is
-   not linked into the tests) so the round-trip test can drive **the shipped
-   writer**. It previously round-tripped a struct it also owned, which is why
-   it agreed with itself while the real emitter was broken.
-3. **`test/harness/feel_tape.h`** — the reader. It **throws** on a missing
-   required column, listing every one, and refuses a tape whose header count
-   disagrees with its row width. Silent-zero is banned outright.
-4. **`test_tape_roundtrip.cpp`** — now END-TO-END: fly → the real hook writes a
-   CSV → the throwing reader parses it → seed mid-tape → replay. Plus a
-   regression that a v4-era 52-column tape **throws** instead of defaulting.
-   Measured: 74 written, 74 named, first replayed tick `|dphi| 2.5e-07 deg`.
-   The in-memory case stays as a unit, but it is no longer the proof.
-5. **`test_loop_rollover.cpp`** — its reader was POSITIONAL with v2-era
-   offsets (`alt = v[29]`); at 74 columns that index is `hand_rest`, so the
-   bench was grading altitude against the hand-rest timer. Now name-indexed.
-
-### §0.2 The real lateral distributions
-
-Read from the recorded columns directly — those are sound; only the *seeded
-counterfactual* was void. **Sign, verified in source:**
-`elev_gap = theta - aim_elev` = **nose − aim**, so **negative = nose BELOW
-aim** = Chad's complaint. The first gate was reasoned about with this inverted.
-
-| discriminator | diving | tracked | ratio |
-|---|---|---|---|
-| position: gap < −20° | 33.6% | 3.1% | **10.8×** |
-| rate: sink > 20°/s (τ=0.1 s) | 34.4% (at onset) | 5.2% | 6.6× |
-
-**The position gate separates better than the rate gate.** Weigh this before
-building either: on the heaviest dive in the tape (t=146.5, `dAlt −93.8 m/s`)
-the gap only moves `0.8 → −3.5°` and sink p50 is `1.2 °/s` — **neither gate
-opens meaningfully on the worst event.**
-
-### §0.3 The one real cost measured
-
-The V250 hard-turn COST case is **scripted** (`harness::level_trim_state`, no
-tape), so it was never void. At `yaw_vert_budget = 1.0`:
-
-| case | OFF | ON |
-|---|---|---|
-| lat 40 | turn 33.88, yaw −27.79 | bit-identical |
-| lat 90 | turn 41.01, yaw −30.85 | **turn 41.82, yaw −28.28** |
-
-A genuine cost with, as of now, **no demonstrated benefit**. The prototype is
-parked in the session scratchpad (`S-yawbudget_prototype.patch`), unbuilt on
-the lane.
-
-### §0.4 NEXT STEP — in order; do not skip step 1
-
-1. **ONE fresh lateral tape from Chad on the fixed emitter.** Nothing about the
-   lateral dive can be graded until this exists — his current tapes are
-   52-column and the reader will now (correctly) refuse them.
-2. Then the battery for real, with the **position-gated prototype, correctly
-   signed** (`sag = aim_elev - dot(nose, up)`, positive = nose below) as the
-   first candidate: it was never actually tested, and it separates best.
-3. Only then consider the rate gate, and only if the position gate fails on
-   DATA rather than on a harness fault.
-
-**PARKED, awaiting Chad's ruling: the lateral nose-down.** He reports, on both
-the lane exe and on `seads-recon` at main-v14: *"that one still crashes me to
-the ground from lateral deflection"*, *"loops are good but still diving down on
-laterals"*. The mechanism is found and MEASURED (§3). No pitch-side dial can
-fix it. The remaining lever needs his word — see §3.4.
-
-**Dials live on the lane:** `[auto_level] right_hand_rest = 0.25`,
-`lean_lead = 0.3`, `lean_lead_lateral = true`, `[horizon_recovery] rate = 150`,
-`straight_max = 12`. `lap_roll_frac` no longer exists.
+**Gates:** `gate_arm2b` (`c912ecf46`) = baseline six + three harness smokes
+"Not Run" because `seads_harness` was unbuilt in the fresh `build-gate/`;
+all targets then built and those three re-run **3/3 PASS**, so that tip is
+baseline-six-equivalent. `gate_unload` (`9258b8f7a`) running in `build-gate/`
+with every target built -- **its verdict gates the landing.**
 
 ---
 

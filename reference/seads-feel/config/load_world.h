@@ -145,14 +145,61 @@ struct WorldParams {
         double wrap_fade = 0.12;  // vertical wrap fade fraction ([0, 0.5))
         glm::dvec3 color{0.90, 0.93,
                          0.97};      // near-white mono flake/streak tint
-        double snow_size_m = 0.28;   // Winter flake radius (m, > 0)
-        double snow_rate_hz = 0.20;  // Winter fall cycles/s (>= 0)
+        double snow_size_m = 0.28;  // Winter flake radius (m, > 0)
+        double snow_speed_mps =
+            0.60;  // AS-3: Winter fall SPEED (m/s, >= 0). REPLACES
+                   // snow_rate_hz — two lattices at different cell sizes can
+                   // only agree on a speed. rate_hz = speed / cell_size_m.
         double snow_opacity = 0.75;  // Winter alpha at full intensity ([0,1])
         double rain_size_m = 0.05;   // Spring streak half-width (m, > 0)
         double rain_streak_m =
             1.30;  // Spring streak half-length along local-up (m, > 0)
         double rain_rate_hz = 1.50;  // Spring fall cycles/s (>= 0)
         double rain_opacity = 0.55;  // Spring alpha at full intensity ([0,1])
+        // --- AS-2: the snowfall field (render::snowfall_intensity). ---
+        double flurry_level = 0.0;      // light-band peak [0,1] (0 = OFF)
+        double flurry_thresh_lo = 0.0;  // flurry activation band in BUDGET,
+        double flurry_thresh_hi = 0.65; //   lo <= hi, both in [0,1]
+        // AS-4 EVENT DURATION: the flurry's own cell scale + tempo. OFF values
+        // (scale 1.0, degrees 0, count 0) reproduce the AS-3 field exactly.
+        double flurry_period_scale = 1.4;  // x the three front periods (> 0)
+        double flurry_inner_deg = 6.0;     // 0 => cp.bubble_inner_deg
+        double flurry_outer_deg = 14.0;    // 0 => cp.bubble_outer_deg
+        double flurry_cell_count = 5.0;    // 0 => bubble_cell_count + 7
+        double flurry_gate_lo = -0.95;  // the flurry BUDGET's own clear-plateau
+                                        //   edge (< gate_hi; [weather] is -0.05)
+        double flurry_phase_off = 2.6;  // rad added to the flurry budget's three
+                                        //   front phases (>= 0)
+        double snow_floor = 0.0;        // constant winter dusting [0,1] (0=OFF)
+        // --- AS-5: the snow SQUALL on its own dials (render::snowfall_squall).
+        // squall_own_dials 0 => weather_cell on [weather]/[weather_cell]
+        // exactly, every squall_* key below ignored (the OFF value).
+        bool squall_own_dials = true;
+        double squall_inner_deg = 8.0;     // 0 => cp.bubble_inner_deg
+        double squall_outer_deg = 15.0;    // 0 => cp.bubble_outer_deg
+        double squall_cell_count = 3.0;    // 0 => cp.bubble_cell_count
+        double squall_gate_lo = -0.65;     // squall budget clear edge, (-1,1)
+        double squall_thresh_lo = 0.0;     // activation band in budget,
+        double squall_thresh_hi = 0.35;    //   lo <= hi, both in [0,1]
+        double squall_period_scale = 1.0;  // x the three front periods (> 0)
+        double squall_phase_off = 0.0;     // rad added to the phases (>= 0)
+        // --- AS-1: the underground gate. ---
+        double rock_band_m = 2.0;  // smoothstep half-width at the rock (m, >=0)
+        // --- AS-3: look/variety/veil. Each 0 (or 1 for rim_dark) is OFF. ---
+        double size_var = 0.0;     // flake size  x [1-v, 1+v], v in [0,1)
+        double alpha_var = 0.0;    // flake alpha x [1-v, 1], v in [0,1)
+        double density_exp = 0.0;   // per-cell cull exponent (>= 0)
+        double density_soft = 0.0;  // cull fade-in width in keep_p ([0,1))
+        double sway_m = 0.0;       // NEAR zero-mean sway amplitude (m, >= 0)
+        double veil_sway_m = 0.0;  // FAR zero-mean sway amplitude (m, >= 0)
+        bool veil_enabled = false;      // the FAR veil lattice on/off
+        double veil_cell_size_m = 8.0;  // far lattice spacing (m, > 0)
+        double veil_box_half_m = 70.0;  // far fade radius (m, >= cell)
+        double veil_size_m = 0.45;      // far flake radius (m, > 0)
+        double veil_opacity = 0.35;     // far alpha at full intensity ([0,1])
+        double veil_inner_fade_m = 0.0;  // veil hole radius around the eye (m,
+                                         //   >= 0; < veil_box_half_m)
+        double rim_dark = 1.0;          // flake edge darkening ([0,1], 1 = OFF)
     } precip;
     struct {
         double reflectivity = 0.0;       // mirror strength of the sky [0,1]

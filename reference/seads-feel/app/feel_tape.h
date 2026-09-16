@@ -20,6 +20,7 @@
 #include <glm/gtc/quaternion.hpp>
 
 #include "app/feel_tape_columns.h"
+#include "app/feel_tape_fields.h"
 #include "app/instructor_tick.h"
 #include "sim/world.h"
 #include "test/harness/recorder.h"
@@ -92,7 +93,7 @@ inline void feel_tape_hook(const app::TickInput& in, const app::LoopState& st,
         "%.17g,%.17g,%.17g,%.17g,%.17g,%.17g,"
         "%.17g,%.17g,%.17g,%.17g,%.17g,%.17g,%.17g,%.9g,%d,"
         "%.17g,%.17g,%.17g,"
-        "%.17g,%.17g,%.17g,%.17g,%.9g,%.9g,%.9g,%.9g,%.9g,%.9g,%d,%d,%d,%d,%.9g,%.9g,%d,%.9g,%.9g\n",
+        "%.17g,%.17g,%.17g,%.17g,%.9g,%.9g,%.9g,%.9g,%.9g,%.9g,%d,%d,%d,%d,%.9g,%.9g,%d,%.9g,%.9g,%.9g",
         c->tick, c->tick * c->sim_dt, in.frame_ticks, in.aim_dx, in.aim_dy,
         in.aim_rate_ff.x, in.aim_rate_ff.y, in.aim_rate_ff.z, aim.x, aim.y,
         aim.z, tb.x, tb.y, tb.z, telem.e, telem.blend, telem.extracted.phi,
@@ -135,7 +136,28 @@ inline void feel_tape_hook(const app::TickInput& in, const app::LoopState& st,
         // the pitch clamps, so a tape answers "was the channel bounded?"
         // by reading (the AoA pushback is what binds -- measured 112-333 of
         // 720 ticks on his lateral dives, against 0-3 for the G ceiling)
-        aoa_ceil, w_max_p);
+        aoa_ceil, w_max_p, telem.yaw_budget_scale);
+    // THE FULL REPLAY STATE -- one "%.17g," per field of
+    // SEADS_TAPE_STATE_FIELDS, in the same order kFeelTapeColumns names them.
+    // max_digits10: at |p| = R a float ulp is one tick of gravity (S1).
+    {
+        const app::LoopState& S = st;
+#define SEADS_TAPE_WRITE_D(name, expr) \
+    std::fprintf(c->f, ",%.17g", double(expr));
+#define SEADS_TAPE_WRITE_B(name, expr) \
+    std::fprintf(c->f, ",%d", int(expr) ? 1 : 0);
+#define SEADS_TAPE_WRITE_I(name, expr) \
+    std::fprintf(c->f, ",%d", int(expr));
+#define SEADS_TAPE_WRITE_E(name, expr) \
+    std::fprintf(c->f, ",%d", int(expr));
+        SEADS_TAPE_STATE_FIELDS(SEADS_TAPE_WRITE_D, SEADS_TAPE_WRITE_B,
+                                SEADS_TAPE_WRITE_I, SEADS_TAPE_WRITE_E)
+#undef SEADS_TAPE_WRITE_D
+#undef SEADS_TAPE_WRITE_B
+#undef SEADS_TAPE_WRITE_I
+#undef SEADS_TAPE_WRITE_E
+        std::fprintf(c->f, "\n");
+    }
     ++c->tick;
 }
 

@@ -353,6 +353,13 @@ struct Telemetry {
     double roll_maneuver = 0.0;  // the MANEUVER bank-to-turn limb's emission
     double roll_right = 0.0;     // the MB-right inverted-righting emission
     double hand_gate = 1.0;      // S-righthand's hand-rest authority ramp
+    // S-yawbudget: the factor the digging yaw was scaled BY this tick.
+    // 1.0 = untouched (the dial off, the gate shut, or the rudder already
+    // inside its budget). READ IT, never infer it: reconstructing the trim
+    // from a tape is impossible because `avail` uses the pitch BEFORE the
+    // S-straightline feedforward and only the final pitch is recorded --
+    // that under-reads avail and undercounts the binding ticks.
+    double yaw_budget_scale = 1.0;
     // S-rimshot (v4 rung 2): the event machine's state, mirrored for the
     // instrument and the tests. A state mirror alone is blind (the
     // moved-consumer trap) — every test pairs this probe with BEHAVIOR

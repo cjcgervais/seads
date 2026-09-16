@@ -225,6 +225,87 @@ control::ControllerParams load_controller_toml(const std::string& path,
     c.yaw_scale = require(root, "coordination", "yaw_scale");
     c.yaw_align_band = require(root, "coordination", "yaw_align_band");
     c.yaw_min_frac = require(root, "coordination", "yaw_min_frac");
+    // S-yawbudget. Optional so an older controller.toml still loads with
+    // the dial OFF (0 = bit-identical). Degrees in the toml -> sin() to the
+    // dot units the cascade's sag comparison uses.
+    // S-unload (1b5d98e83..40325f297) BUILT-AND-REMOVED 2026-09-15 at Chad's ruling.
+    // Its keys are NOT read: a controller.toml that still carries
+    // [coordination] unload_* is refused below so a flight can never be
+    // attributed to a dial that no longer exists.
+    for (const char* k : {"unload_below_horizon", "unload_bank_lo",
+                          "unload_bank_hi", "unload_gam_lo",
+                          "unload_gam_hi"}) {
+        check(root.at_path(std::string("coordination.") + k).node() ==
+                  nullptr,
+              "[coordination] unload_* was REMOVED (scrapped/s-unload-20260915)"
+              " -- delete the key; there is no dial behind it");
+    }
+    c.yaw_vert_budget =
+        optional_double(root, "coordination", "yaw_vert_budget", 0.0);
+    const double yv_gap_lo_deg =
+        optional_double(root, "coordination", "yaw_vert_gap_lo", 0.0);
+    const double yv_gap_hi_deg =
+        optional_double(root, "coordination", "yaw_vert_gap_hi", 90.0);
+    // (red-team P2-5) degrees WRAP through sin(): 170 would load as 10 and
+    // the banner would print 10. Refuse outside the principal range.
+    check(yv_gap_lo_deg >= -90.0 && yv_gap_lo_deg <= 90.0 &&
+              yv_gap_hi_deg >= -90.0 && yv_gap_hi_deg <= 90.0,
+          "[coordination] yaw_vert_gap_lo/hi must be within -90..90 deg "
+          "(they are sin()-mapped; larger values wrap)");
+    c.yaw_vert_gap_lo = std::sin(rad(yv_gap_lo_deg));
+    c.yaw_vert_gap_hi = std::sin(rad(yv_gap_hi_deg));
+    check(c.yaw_vert_budget >= 0.0 && c.yaw_vert_budget <= 1.0,
+          "0 <= [coordination] yaw_vert_budget <= 1 (it is a FRACTION of the "
+          "elevator's spare vertical authority)");
+    // (red-team P1-4) yaw_vert_budget is evaluated INSIDE the S-straightline
+    // block, which only runs when line_hold_ff > 0. With the axis-correction
+    // feedforward off the budget would be SILENTLY dead while reading 1.0 in
+    // the toml and the launch banner. Refuse that configuration.
+    if (c.yaw_vert_budget > 0.0) {
+        check(c.line_hold_ff > 0.0,
+              "[coordination] yaw_vert_budget > 0 requires"
+              " line_hold_ff > 0 -- the budget is evaluated"
+              " inside the S-straightline block and is SILENTLY"
+              " dead without it");
+    }
+    if (c.yaw_vert_budget > 0.0) {
+        check(c.yaw_vert_gap_lo < c.yaw_vert_gap_hi,
+              "[coordination] yaw_vert_gap_lo < yaw_vert_gap_hi (the "
+              "smoothstep needs a band)");
+        // (red-team P1-2) the LOWER edge has a wall too: at sag 0 the gate
+        // is smoothstep(lo, hi, 0) = 0.26 at -5, 0.84 at -30 -- measured
+        // V250 lat-90 yaw -30.85 -> -0.52 at gap_lo -40 (the plane stops
+        // following the mouse), flipped +1.66 at -60: the ungated collapse
+        // by the other edge.
+        check(c.yaw_vert_gap_lo >= std::sin(rad(-20.0)),
+              "[coordination] yaw_vert_gap_lo >= -20 deg -- measured: -40 "
+              "zeroes the V250 lat-90 yaw demand (-30.85 -> -0.52), the "
+              "ungated collapse by the other edge");
+        // THE WALL, re-derived 2026-09-13 -- it guards gap_HI, not gap_lo.
+        //
+        // THE HAZARD is the band SATURATING, which turns the dial into the
+        // UNGATED form: that collapses the V250 lat-90 turn 41.01 -> 31.19
+        // deg/s and FLIPS the yaw demand -30.85 -> +4.16 (the plane stops
+        // following the mouse -- Chad's own law inverted).
+        //
+        // MEASURED, tracked hard-turn ticks (n=3534 over his tapes 4 and 5,
+        // holding altitude at > 3 g), nose-below-aim sag:
+        //     p90  8.0 deg   p95 10.5 deg   p99 15.1 deg
+        // So a gap_hi at or below ~8 deg reaches FULL trim inside an
+        // ordinary coordinated hard turn and reproduces the collapse.
+        //
+        // THE OLD WALL (gap_lo > 2 deg) IS DROPPED: its premise -- that a
+        // low gap_lo "behaves as the ungated form" -- is measurably FALSE.
+        // gap_lo -5 / gap_hi 10 reads lat-90 turn 41.85, yaw -24.74 (the
+        // turn RISES, the yaw keeps its sign) against ungated 31.19 / +4.16.
+        // It guarded the wrong end of the band.
+        check(c.yaw_vert_gap_hi > std::sin(rad(8.0)),
+              "[coordination] yaw_vert_gap_hi > 8 deg -- tracked hard turns "
+              "measure nose-below-aim sag p90 8.0 / p95 10.5 deg, so a "
+              "gap_hi at or below that saturates the gate in an ordinary "
+              "turn and reproduces the UNGATED collapse (V250 lat-90 turn "
+              "41.01 -> 31.19 deg/s, yaw -30.85 -> +4.16)");
+    }
 
     c.ovr_ramp_time = require(root, "override", "ramp_time");
 

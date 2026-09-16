@@ -14,6 +14,42 @@
 
 namespace control {
 
+// ===========================================================================
+// THE FEEL-LANE DIAL LIST -- every dial this maintenance lane has ADDED to
+// the frozen kernel, each with the value that reproduces the PRE-DIAL tree
+// bit-identically.
+//
+// WHY IT EXISTS: three times now a new dial has been added and a test's
+// "off arm" -- the arm that must reproduce the pre-change expression tree
+// tick-for-tick -- was left zeroing only the PREVIOUS dials, so the
+// hash-pinned leg reddened on a tree that was never wrong. Field-by-field
+// off-arms do not survive a lane that adds dials.
+//
+// A test builds its off arm with SEADS_FEEL_DIALS_OFF(c) and gets every one.
+// Add a dial here in the same commit that adds it to the loader.
+//
+// X(member, off_value)
+#define SEADS_FEEL_DIALS(X)                                                   \
+    X(right_hand_rest, 0.0)   /* S-righthand (kernel v15) */                  \
+    X(yaw_vert_budget, 0.0)   /* S-yawbudget (TARGET 2)   */
+#define SEADS_FEEL_DIALS_OFF_ONE(member, off) (seads_feel_dials_obj_).member = (off);
+// (red-team P1-2) The macro used to IGNORE its argument and write to
+// whatever variable happened to be named `c` -- so SEADS_FEEL_DIALS_OFF(cp)
+// silently zeroed a DIFFERENT object (or failed to compile). It now binds
+// a reference to the argument it was given.
+// The binding name is deliberately one no caller will ever use. The
+// first version of this fix bound `control::ControllerParams& c =
+// (obj)`, and a caller whose object is itself named `c` (off_arm()
+// is) got `ControllerParams& c = (c)` -- a reference initialised
+// from ITSELF. Undefined behaviour: it wrote the zeros into
+// garbage, left the real object's dials ON (the pre-change hash
+// moved to 6055236146bfb3d5) and segfaulted the suite.
+#define SEADS_FEEL_DIALS_OFF(obj)                                \
+    do {                                                         \
+        control::ControllerParams& seads_feel_dials_obj_ = (obj); \
+        SEADS_FEEL_DIALS(SEADS_FEEL_DIALS_OFF_ONE)               \
+    } while (0)
+
 struct ControllerParams {
     // Outer-loop proportional gains (braking law linear regime, SPEC §9.3).
     double K_theta = 0.0;  // [1/s] pitch+yaw pointing (shared, per SOLUTION)
@@ -330,6 +366,106 @@ struct ControllerParams {
     // (feedback-plus-feedforward). Scales the FF: 1.0 = the exact kinematic
     // complement, 0.0 = STRUCTURAL OFF (bit-identical v11 tree — the fly
     // kill-switch and golden baseline arm).
+    // S-yawbudget (2026-09-13, TARGET 2 -- the lateral nose-down). Chad:
+    // "when I make a large sideways deflection of my mouse and ask the plane
+    // to follow it, it noses down crashing me if I am near the deck", and the
+    // law: "the plane should follow my mouse... an instructor would never
+    // crash me into the ground if I did not mount my mouse anywhere near
+    // there."
+    //
+    // MECHANISM, measured on his tape 4 (three worst dives, seeds exact):
+    //   d(elev)/dt = pitch*cosPhiTheta + yaw*sin(phi) + g/V
+    //   ev7  +9.90  -11.34  -2.51   AoA ceiling binding 41% of ticks
+    //   ev1  +5.13  -10.34  -2.95                      87%
+    //   ev6  +8.95  -23.27  -2.68                      14%
+    // The rudder's vertical component digs; S-straightline ALREADY computes
+    // the exact cancelling pitch feedforward (line_hold_ff's w_axis) -- and
+    // pitch_ceil (the AoA pushback) TRUNCATES it 14-87% of the time. Pitch
+    // cannot deliver the correction it is already asked for, so this dial
+    // makes YAW ask for less instead: the rudder may spend at most
+    // yaw_vert_budget of the elevator's SPARE vertical authority
+    //     avail = max(0, pitch_ceil - pitch) * cosPhiTheta
+    // At knife-edge cosPhiTheta -> 0 so avail -> 0 and the trim goes to full:
+    // the elevator has NO vertical authority there, which is exactly where
+    // his dives start (cosPhiTheta 0.25-0.49 at onset).
+    //
+    // HONEST SCOPE -- this is a MITIGATION, not a fix. Measured on his three
+    // worst dives it recovers 36-62 m of a 124-490 m descent; it does not
+    // prevent the dive. The remaining lever is the BANK itself.
+    //
+    // HONEST SHAPE -- where pitch is CLIPPED (pitch == pitch_ceil) avail is
+    // 0, so the block is effectively a BINARY kill of the digging yaw, not a
+    // proportional trim: 1.0 and 0.5 measure IDENTICALLY on all three dives.
+    // The fraction only separates where the elevator has spare authority.
+    //
+    // GATED on the nose being BELOW the aim (sag = aim_elev - nose_elev > 0,
+    // Chad's condition). The gate is what makes it safe: UNGATED it collapses
+    // the V250 lat-90 hard turn 41.01 -> 29.33 deg/s and FLIPS the yaw demand
+    // -30.85 -> +6.06 (it fails his own law -- the plane stops following the
+    // mouse). Gated, that case reads 41.82 / -28.28 at identical G 24.98:
+    // the flight path turns FASTER with LESS skid, which under the
+    // gun-director law is a benefit, not a cost.
+    // S-unload (1b5d98e83..40325f297) BUILT-AND-REMOVED 2026-09-15 at Chad's ruling
+    // (verbatim: "no deck save unload, keep the yaw budget"). Past 90 deg of
+    // bank_full the lift vector is below the horizon, so the PULL is what
+    // drives the nose down; S-unload scaled the pitch/G demand (only that;
+    // roll untouched) while the flight path fell below the aim. It worked on
+    // the dives (t6deck AGL 0 -> 80, t5worst -527 -> -262) but it ARMED ON
+    // THE BACK HALF OF A PURE VERTICAL LOOP (25.9% of ticks, altitude effect
+    // unreconciled +58 / -110..-232 m) and kernel v15 was signed on loops.
+    // Recoverable at tag scrapped/s-unload-20260915.
+    //
+    // THE ACTUATOR TABLE. Six actuators were built and measured against
+    // Chad's own dives; the numbers are kept here so nobody re-walks them:
+    //
+    //   bank limit (cap phi mid-event)  ev6 no effect; ev7 turn 15.07 ->
+    //       7.45 for 0.2 m WORSE altitude. Roll cannot raise a nose.
+    //   far-aim level-turn preference   every dive 3-8 m WORSE; sweep
+    //       phi 50/60/70 IDENTICAL (the cap saturates before it opens).
+    //   top rudder                      INERT: ev6 identical, ev7 0.8 m of
+    //       606. On 50.0% of the ticks that need it the nose-lifting rudder
+    //       is the OPPOSITE sign to the rudder chasing the aim.
+    //   K_aoa 10 -> 12.8                5-13 m of a 400-600 m descent, does
+    //       not save the deck event, AoA peak 16.8-17.5 vs 20.6 stall, and
+    //       it moves the kernel hash (it is a gain, not a 0-dial).
+    //   path_above_aim (fade the roll)  ev7 20.6 m WORSE, ev1 8.6 m WORSE
+    //       with turn 6.53 -> 3.54. Same wall: roll cannot raise a nose.
+    //   unload_below_horizon (REMOVED)  t6deck AGL 0 -> 80; t5worst -527 ->
+    //       -262; ev7 -606 -> -538; ev1 -429 -> -391; COST t5worst turn
+    //       48.92 -> 6.07, lat-90 turn -5.5%, loop back-half armed 25.9%.
+    //
+    // TELEMETRY CAVEAT (red-team P2): yaw_budget_scale is written BEFORE
+    // the S-rimshot CARRY may overwrite the demand later in the tick. On a
+    // CARRY tick the recorded scale describes the demand this block saw,
+    // not necessarily the one emitted. Read it as "the dial acted here",
+    // not as an exact multiplier on omega_des.
+    // RED-TEAM RECORD (2026-09-15, fresh context, on a605a792b -> folded):
+    //   * DUTY CYCLE on Chad's tape 6 (296 s, budget live): armed on 17.2%
+    //     of ALL ticks, scale < 0.5 on 13.5%; normal-fight tape (17 min):
+    //     4.45% / 2.76%. It is NOT a rare trim.
+    //   * STRUCTURALLY INERT INSIDE THE SLICE: the block needs
+    //     cos_phi_theta > 0, so past 90 deg of bank it does nothing --
+    //     armed on 0 of 120 slice ticks on tape 6. It is an ONSET-ONLY
+    //     mitigation. It does NOT save the deck event (onset_t6_deck AGL
+    //     ~0 on both arms; pinned) -- that was the removed S-unload.
+    //   * BUDGET FLOOR 1 deg/s (kYawBudgetFloor, controller.cpp): with the
+    //     elevator clipped avail == 0 and the scale was 1 - gate for ANY
+    //     dig; 475 wings-level ticks on tape 6 had the whole rudder removed
+    //     for a 0.2 deg/s dig. The floor costs 3-18 m on the dives (ONSET
+    //     ev6 -102 -> -121; ev7 -445.5 -> -449.6).
+    //   * ACCEPTED RESIDUAL (Chad's ruling 2026-09-15, "I'm really good on
+    //     this"): the slice under a sustained far-lateral aim at speed
+    //     stays. Normal-fight tape: 1 event in 17 min (a freelook-exit
+    //     flick at 8.8x his p99, 607 m lost / 459 m excess, budget inert
+    //     at onset), 0 held-deflection events. It is frozen-near-perfect
+    //     FOR THIS PILOT'S HAND; a second pilot who parks a far-lateral
+    //     aim for ~1 s at speed will find it. Precedent: flight-log
+    //     2026-07-12 "deflect full left ... long dive" -- accepted then.
+    double yaw_vert_budget = 0.0;   // [0..1] fraction of the elevator's spare
+                                    // vertical authority the rudder may
+                                    // spend. 0 = OFF, bit-identical.
+    double yaw_vert_gap_lo = 0.0;   // [dot] no trim at or above this sag
+    double yaw_vert_gap_hi = 0.0;   // [dot] full trim at or below it
     double line_hold_ff = 0.0;  // [frac of the axis correction], 0 = off
 
     // Push-vs-roll gate (SPEC §9.3, S7-push), every leg hysteretic. Decided on

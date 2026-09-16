@@ -244,12 +244,49 @@ WorldParams load_world_toml(const std::string& path) {
     px.wrap_fade = require(root, "precip", "wrap_fade");
     px.color = require_vec3(root, "precip", "color");
     px.snow_size_m = require(root, "precip", "snow_size_m");
-    px.snow_rate_hz = require(root, "precip", "snow_rate_hz");
+    px.snow_speed_mps = require(root, "precip", "snow_speed_mps");
     px.snow_opacity = require(root, "precip", "snow_opacity");
     px.rain_size_m = require(root, "precip", "rain_size_m");
     px.rain_streak_m = require(root, "precip", "rain_streak_m");
     px.rain_rate_hz = require(root, "precip", "rain_rate_hz");
     px.rain_opacity = require(root, "precip", "rain_opacity");
+    // AS-1/AS-2/AS-3 (atmosphere rung). STRICT like every key above: a missing
+    // key is a load failure, not a silent default — the OFF value is a NUMBER
+    // Chad can set in the file, never an absence.
+    px.flurry_level = require(root, "precip", "flurry_level");
+    px.flurry_thresh_lo = require(root, "precip", "flurry_thresh_lo");
+    px.flurry_thresh_hi = require(root, "precip", "flurry_thresh_hi");
+    px.flurry_gate_lo = require(root, "precip", "flurry_gate_lo");
+    px.flurry_period_scale = require(root, "precip", "flurry_period_scale");
+    px.flurry_inner_deg = require(root, "precip", "flurry_inner_deg");
+    px.flurry_outer_deg = require(root, "precip", "flurry_outer_deg");
+    px.flurry_cell_count = require(root, "precip", "flurry_cell_count");
+    px.flurry_phase_off = require(root, "precip", "flurry_phase_off");
+    px.snow_floor = require(root, "precip", "snow_floor");
+    // AS-5 (Chad via the sentinel, 2026-09-12: "yes please do so").
+    px.squall_own_dials = require(root, "precip", "squall_own_dials") != 0.0;
+    px.squall_inner_deg = require(root, "precip", "squall_inner_deg");
+    px.squall_outer_deg = require(root, "precip", "squall_outer_deg");
+    px.squall_cell_count = require(root, "precip", "squall_cell_count");
+    px.squall_gate_lo = require(root, "precip", "squall_gate_lo");
+    px.squall_thresh_lo = require(root, "precip", "squall_thresh_lo");
+    px.squall_thresh_hi = require(root, "precip", "squall_thresh_hi");
+    px.squall_period_scale = require(root, "precip", "squall_period_scale");
+    px.squall_phase_off = require(root, "precip", "squall_phase_off");
+    px.rock_band_m = require(root, "precip", "rock_band_m");
+    px.size_var = require(root, "precip", "size_var");
+    px.alpha_var = require(root, "precip", "alpha_var");
+    px.density_exp = require(root, "precip", "density_exp");
+    px.density_soft = require(root, "precip", "density_soft");
+    px.sway_m = require(root, "precip", "sway_m");
+    px.veil_sway_m = require(root, "precip", "veil_sway_m");
+    px.veil_enabled = require(root, "precip", "veil_enabled") != 0.0;
+    px.veil_cell_size_m = require(root, "precip", "veil_cell_size_m");
+    px.veil_box_half_m = require(root, "precip", "veil_box_half_m");
+    px.veil_size_m = require(root, "precip", "veil_size_m");
+    px.veil_opacity = require(root, "precip", "veil_opacity");
+    px.veil_inner_fade_m = require(root, "precip", "veil_inner_fade_m");
+    px.rim_dark = require(root, "precip", "rim_dark");
 
     w.water.reflectivity = require(root, "water", "reflectivity");
     w.water.sparkle_sharpness = require(root, "water", "sparkle_sharpness");
@@ -995,11 +1032,93 @@ WorldParams load_world_toml(const std::string& path) {
     check(
         px.snow_size_m > 0.0 && px.rain_size_m > 0.0 && px.rain_streak_m > 0.0,
         "precip flake/streak sizes > 0");
-    check(px.snow_rate_hz >= 0.0 && px.rain_rate_hz >= 0.0,
+    check(px.snow_speed_mps >= 0.0 && px.rain_rate_hz >= 0.0,
           "precip fall rates >= 0");
     check(px.snow_opacity >= 0.0 && px.snow_opacity <= 1.0 &&
               px.rain_opacity >= 0.0 && px.rain_opacity <= 1.0,
           "precip opacities in [0,1]");
+    // AS-2 snowfall field ranges. The flurry band is a BUDGET band, so both
+    // edges live in [0,1] and lo <= hi (an inverted band would make the
+    // ordered-threshold spread run backwards and pop every cell together).
+    check(px.flurry_level >= 0.0 && px.flurry_level <= 1.0,
+          "precip flurry_level in [0,1]");
+    check(px.flurry_thresh_lo >= 0.0 && px.flurry_thresh_hi <= 1.0 &&
+              px.flurry_thresh_lo <= px.flurry_thresh_hi,
+          "precip flurry_thresh_lo <= flurry_thresh_hi, both in [0,1]");
+    check(px.snow_floor >= 0.0 && px.snow_floor <= 1.0,
+          "precip snow_floor in [0,1]");
+    // The flurry budget is a SECOND weather_haze instance: its gate_lo must sit
+    // below the shared gate_hi or the smoothstep denominator degenerates, and
+    // below -1 the gate never bites at all (the signal's support is [-1,1]) --
+    // which would make the light band permanently overcast, not frequent.
+    check(px.flurry_gate_lo > -1.0 && px.flurry_gate_lo < 1.0,
+          "precip flurry_gate_lo in (-1,1)");
+    check(px.flurry_phase_off >= 0.0, "precip flurry_phase_off >= 0");
+    // AS-4. A zero or negative period scale would collapse the flurry budget's
+    // fronts to a constant. The degrees are 0-or-positive (0 = "use the bubble
+    // value"), and a positive outer must exceed a positive inner or the falloff
+    // smoothstep degenerates into a hard edge. The count is a whole number of
+    // cells; 0 means the AS-2 rule.
+    check(px.flurry_period_scale > 0.0, "precip flurry_period_scale > 0");
+    check(px.flurry_inner_deg >= 0.0 && px.flurry_inner_deg <= 90.0,
+          "precip flurry_inner_deg in [0,90]");
+    check(px.flurry_outer_deg >= 0.0 && px.flurry_outer_deg <= 180.0,
+          "precip flurry_outer_deg in [0,180]");
+    check(!(px.flurry_inner_deg > 0.0 && px.flurry_outer_deg > 0.0) ||
+              px.flurry_outer_deg > px.flurry_inner_deg,
+          "precip flurry_outer_deg > flurry_inner_deg when both are set");
+    check(px.flurry_cell_count >= 0.0 && px.flurry_cell_count <= 64.0 &&
+              px.flurry_cell_count ==
+                  static_cast<double>(static_cast<int>(px.flurry_cell_count)),
+          "precip flurry_cell_count is a whole number in [0,64]");
+    // AS-5: the squall's own dials carry the flurry's ranges, for the same
+    // reasons (a gate outside (-1,1) never bites or never opens; a degenerate
+    // falloff is a hard edge; a non-positive scale freezes the fronts).
+    check(px.squall_gate_lo > -1.0 && px.squall_gate_lo < 1.0,
+          "precip squall_gate_lo in (-1,1)");
+    check(px.squall_thresh_lo >= 0.0 && px.squall_thresh_lo <= 1.0 &&
+              px.squall_thresh_hi >= px.squall_thresh_lo &&
+              px.squall_thresh_hi <= 1.0,
+          "precip squall_thresh 0 <= lo <= hi <= 1");
+    check(px.squall_phase_off >= 0.0, "precip squall_phase_off >= 0");
+    check(px.squall_period_scale > 0.0, "precip squall_period_scale > 0");
+    check(px.squall_inner_deg >= 0.0 && px.squall_inner_deg <= 90.0,
+          "precip squall_inner_deg in [0,90]");
+    check(px.squall_outer_deg >= 0.0 && px.squall_outer_deg <= 180.0,
+          "precip squall_outer_deg in [0,180]");
+    check(!(px.squall_inner_deg > 0.0 && px.squall_outer_deg > 0.0) ||
+              px.squall_outer_deg > px.squall_inner_deg,
+          "precip squall_outer_deg > squall_inner_deg when both are set");
+    check(px.squall_cell_count >= 0.0 && px.squall_cell_count <= 64.0 &&
+              px.squall_cell_count ==
+                  static_cast<double>(static_cast<int>(px.squall_cell_count)),
+          "precip squall_cell_count is a whole number in [0,64]");
+    // AS-1/AS-3 ranges. size_var/alpha_var < 1 (at 1 a flake can vanish or
+    // double); density_exp >= 0 (negative inverts the density/intensity law).
+    check(px.rock_band_m >= 0.0, "precip rock_band_m >= 0");
+    check(px.size_var >= 0.0 && px.size_var < 1.0, "precip size_var in [0,1)");
+    check(px.alpha_var >= 0.0 && px.alpha_var < 1.0,
+          "precip alpha_var in [0,1)");
+    check(px.density_exp >= 0.0, "precip density_exp >= 0");
+    check(px.density_soft >= 0.0 && px.density_soft < 1.0,
+          "precip density_soft in [0,1)");
+    check(px.sway_m >= 0.0 && px.veil_sway_m >= 0.0,
+          "precip sway amplitudes >= 0");
+    check(px.rim_dark >= 0.0 && px.rim_dark <= 1.0,
+          "precip rim_dark in [0,1]");
+    // The FAR veil is a second lattice of the SAME renderer, so it inherits the
+    // same structural constraints the near lattice has.
+    check(px.veil_cell_size_m > 0.0, "precip veil_cell_size_m > 0");
+    check(px.veil_box_half_m >= px.veil_cell_size_m,
+          "precip veil_box_half_m >= veil_cell_size_m");
+    check(px.veil_size_m > 0.0, "precip veil_size_m > 0");
+    check(px.veil_opacity >= 0.0 && px.veil_opacity <= 1.0,
+          "precip veil_opacity in [0,1]");
+    // The veil's inner hole must leave a veil: twice the hole radius is where
+    // the fade reaches full, so it has to sit inside the box.
+    check(px.veil_inner_fade_m >= 0.0 &&
+              2.0 * px.veil_inner_fade_m < px.veil_box_half_m,
+          "precip veil_inner_fade_m >= 0 and 2x it < veil_box_half_m");
 
     check(w.water.reflectivity >= 0.0 && w.water.reflectivity <= 1.0,
           "water reflectivity in [0,1]");

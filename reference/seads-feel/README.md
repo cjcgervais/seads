@@ -1,13 +1,13 @@
 # reference/seads-feel/ — PRIMARY reference: the active kernel
 
-These files are **copies**, re-snapshotted **2026-09-15**, from `D:\flight_sim2\seads-feel`'s
+These files are **copies**, re-snapshotted **2026-09-15 (23:35)**, from `D:\flight_sim2\seads-feel`'s
 shared repository (`D:\flight_sim2\seads`, remote `github.com/cjcgervais/seads_sandbox1`) at
-**`b697d24a5`** = **`origin/main`** = tag **`kernel-v15-righthand-signed`** (annotated,
-`d7f46d865`, tagger cjcgervais 2026-09-13, verified local). This is the kernel Chad flies on
-both `main` and the `seads-recon` fly tree (`sandbox/r4a-phase0` @ `29e3b53de` carries it;
-`build-play/seads.exe` stamped 2026-09-13 10:39).
+**`354f6df3a`** = tag **`kernel-v16-yawbudget-signed`** (annotated, landed on `main`
+2026-09-15 23:2x through this repo's sentinel; `origin/main` = `66036b98e`, a LANES-only follow-up). This is the kernel on `main`; at the
+time of writing the `seads-recon` fly tree (`sandbox/r4a-phase0` @ `5d38ed150`, exe 22:17:44)
+still carried v15 + AS-5 and the v16 recon merge + rebuild was in flight — check the exe mtime.
 
-**Snapshot method:** `git archive b697d24a5 app config control docs input render sim test`.
+**Snapshot method:** `git archive 354f6df3a app config control docs input render sim test`.
 **Purity exceptions, stated (all reproducible from the tag, none touch the kernel):**
 
 - `render/*.gen.h` — the 26 MB generated Sudbury GIS header, omitted.
@@ -66,16 +66,20 @@ controller; the writer and reader both derive from one column list after the "vo
 defect (a reader that defaulted a missing column to 0.0 graded a dial against a non-dive for
 a night). `app/rest_horizon.h` (extracted from `instructor_tick.h` by the cam-smooth lane).
 
-## What is NOT here — the v16 candidate (ON HOLD for Chad)
+## KERNEL v16 (`kernel-v16-yawbudget-signed`, `354f6df3a`, 2026-09-15) — S-yawbudget, IN THIS SNAPSHOT
 
-The lateral nose-down fix (TARGET 2, "S-lateral": `[coordination] yaw_vert_budget` 1.0 and
-`unload_below_horizon` 1.0) lives on branch **`feel/lateral-yawbudget`** @ `40325f297`
-(fixes at `b4864512c`), flown and liked by Chad but **not landed** — the red-team's
-LAND-WITH-FIX finding changes what he signed (the unload arms in the back half of a pure
-vertical loop). Grounded in this repo at `docs/cascade/lateral-nose-down-unload.md`, which
-cites that branch explicitly rather than this snapshot. The launch document for the next
-kernel agent is the live tree's `docs/SESSION_HANDOFF_20260913_loop_lateral.md` (the
-lane-branch version, 206 lines newer than the copy in this snapshot).
+ONE dial `[coordination] yaw_vert_budget` 1.0 (gap −5..10°, `kYawBudgetFloor` 1 °/s): the
+rudder may spend at most the elevator's spare vertical authority, so a large lateral aim no
+longer digs the nose at knife-edge. Chad's ruling removed the companion unload dial ("no deck
+save unload keep the yaw budget"); his word on the landing exe: "I didnt notice a
+difference, I can fly it fine". Kernel delta v15→v16 is five files, +350/−0:
+`control/controller.cpp` (the guarded S-yawbudget block + the floor + the S-unload scar),
+`control/controller.h` (Telemetry `yaw_budget_scale`), `control/params.h`,
+`config/controller.toml`, `config/load_controller.cpp` (walls, `unload_*` refusal). Gate on
+`b4fbea3d4` = 6 of 2101 == baseline six by name. Instrument `test/unit/test_yawbudget.cpp`
+with the eight seeded `test/fixtures/*.csv` onset tapes. Cascade entry:
+`docs/cascade/lateral-nose-down-unload.md`. The v15 line above still describes the tree
+this one is built on.
 
 ## Lineage note
 

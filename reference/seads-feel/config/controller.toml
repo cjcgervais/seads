@@ -993,6 +993,67 @@ yaw_scale = 2.0   # rudder pointing GAIN scale (MB-rud: now multiplies K_theta
 # scaled by (1-blend) + blend*yaw_gate, with
 #   yaw_gate = yaw_min_frac + (1-yaw_min_frac)*smoothstep(-yaw_align_band, 0,
 #              cos(bankErr))
+
+# S-yawbudget (2026-09-13): THE LATERAL NOSE-DOWN dial. Chad: "when I make a
+# large sideways deflection of my mouse and ask the plane to follow it, it
+# noses down crashing me if I am near the deck."
+#
+# The rudder's vertical component (yaw*sin(phi)) digs at high bank.
+# S-straightline already computes the cancelling pitch feedforward, but
+# pitch_ceil (the AoA pushback) TRUNCATES it -- measured on Chad's tape 4,
+# binding 41% / 87% / 14% of ticks on his three worst dives. So this caps
+# what the RUDDER asks of the vertical axis instead:
+#     avail  = max(0, pitch_ceil - pitch) * cosPhiTheta
+#     budget = yaw_vert_budget * avail
+# and the digging yaw is scaled back toward that budget.
+#
+# MEASURED ON HIS THREE WORST DIVES (seeded exact from tape 4):
+#     ev7  dAlt -490 -> -446 m   AGL min 1201 -> 1246
+#     ev1  dAlt -286 -> -251 m   AGL min 1767 -> 1802
+#     ev6  dAlt -187 -> -124 m   AGL min 1614 -> 1676, gap -66 -> -18 deg
+# A MITIGATION, NOT A FIX: 36-62 m recovered of a 124-490 m descent. The
+# remaining lever is the BANK itself (aim-conditioned bank, not yet built).
+#
+# THE FRACTION IS EFFECTIVELY BINARY where pitch is CLIPPED: pitch_ceil -
+# pitch is then 0, so budget is 0 and the digging yaw is killed outright --
+# 1.0 and 0.5 measure IDENTICALLY on all three dives. It only separates where
+# the elevator has spare authority.
+# S-unload (1b5d98e83..40325f297) BUILT-AND-REMOVED 2026-09-15 at Chad's ruling
+# ("no deck save unload, keep the yaw budget"). unload_below_horizon 1.0
+# (bank 90..105, gam 5..20 deg) removed PULL past 90 deg of bank while the
+# flight path fell below the aim: the only actuator of six that saved the
+# deck event (AGL 0 -> 80) -- and it armed on the back half of a pure loop
+# (25.9% of ticks), which kernel v15 was signed on. The loader now REFUSES
+# any [coordination] unload_* key. Scrap tag: scrapped/s-unload-20260915.
+
+yaw_vert_budget = 1.0   # [0..1] 0 = OFF, bit-identical to the pre-dial tree.
+# RED-TEAM 2026-09-15: on Chad's own tapes this dial is armed 4-17% of ALL
+# ticks (it is not rare), is INERT past 90 deg of bank (cos_phi_theta > 0
+# guard: 0 of 120 slice ticks), does NOT save the deck event, and carries a
+# 1 deg/s budget floor so a wings-level rudder is never removed for a
+# negligible dig. The gate's edges have walls on BOTH sides in the loader
+# (gap_lo >= -20, gap_hi > 8, both within -90..90).
+
+# The GATE -- on the nose being BELOW the aim (sag = aim_elev - nose_elev).
+# LOAD-BEARING, not a safety blanket. UNGATED this dial collapses the V250
+# lat-90 hard turn 41.01 -> 29.33 deg/s and FLIPS the yaw demand -30.85 ->
+# +6.06: the plane STOPS FOLLOWING THE MOUSE, which is Chad's own law
+# inverted. Gated, that same case reads turn 41.82 (UP from 41.01) and yaw
+# -28.28 at identical G 24.98 -- the path turns faster with less skid, a
+# benefit under the gun-director law. V250 lat 40 is bit-identical.
+# Degrees here; the loader takes sin() to the dot units the cascade compares.
+# THE GATE EDGES, re-derived 2026-09-13 against ONSET fixtures (the earlier
+# 5..20 was set from mid-manoeuvre windows that could not see the roll-in).
+# Measured OFF -> ON on fixtures seeded 2 s BEFORE the lateral input:
+#     t4 ev6   dAlt -439.2 -> -102.1 m   AGL 1389 -> 1716   gap -62.8 -> +23.9
+#     t4 ev1   dAlt -530.2 -> -428.9 m   AGL 1567 -> 1669
+#     t4 ev7   dAlt -719.2 -> -606.3 m   AGL 1021 -> 1134
+#     t5 worst dAlt -582.2 -> -527.1 m   AGL  946 -> 1001
+# 9-77% of the descent removed (median ~18%), and the turn rate RISES on
+# ev6 (23.67 -> 38.01) and ev7 (11.13 -> 14.06).
+yaw_vert_gap_lo = -5.0  # [deg] trim starts BEFORE the nose reaches the aim
+yaw_vert_gap_hi = 10.0  # [deg] full trim once the nose is this far below
+
 # = FULL rudder while the bank is within 90 deg of aligned (the nose crabs
 # onto the aim immediately and through the whole roll-in — Chad's Q1b ruling),
 # fading to yaw_min_frac only past knife-edge, which is where the split-S

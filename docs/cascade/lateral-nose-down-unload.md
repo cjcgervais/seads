@@ -1,13 +1,13 @@
 # The lateral nose-down — the slice, and the unload that answers it
 
-**Status (2026-09-15, evening): CHAD RULED — kernel v16 is the YAW BUDGET ALONE.** The
-unload dial (`unload_below_horizon`) was REMOVED at his ruling (`b2bc840c5`, handoff
-`18cc020ce` on `feel/lateral-yawbudget`). §2–§4 below keep the unload's mechanism and
-measurements as the record of what was built, measured and dropped — the scars section
-now includes it. The yaw budget (§3, dial 1) is the v16 candidate; it lands after the
-atmosphere-snow lane, by the sentinel's order, once flown alone and signed.
-Grounded in `feel/lateral-yawbudget` (`b4864512c` for the two-dial state, `b2bc840c5`
-after the removal), **not** in `reference/seads-feel/` (v15). Re-ground when it lands.
+**Status (2026-09-15 23:2x): KERNEL v16 LANDED — the YAW BUDGET ALONE** (tag
+`kernel-v16-yawbudget-signed` @ `354f6df3a`, on `main`). Chad's ruling: *"no deck save unload
+keep the yaw budget"*; his word on the landing exe: *"I didnt notice a difference, I can fly
+it fine"*. Red-team fold added a budget FLOOR of 1 °/s (the dial had removed the whole rudder
+wings-level for a 0.2 °/s dig) and a `gap_lo ≥ −20°` loader wall. §2–§4 keep the unload's
+mechanism and measurements as the record of what was built, measured and dropped.
+**Grounded in `reference/seads-feel/` at `354f6df3a`** for the yaw budget; the unload code
+is only on the scrap tag `scrapped/s-unload-20260915` (= `40325f297`) in the live repo.
 
 ## Lineage
 

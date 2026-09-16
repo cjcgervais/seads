@@ -26,6 +26,8 @@
 // has exactly as many fields as the row the writer emits.
 // ===========================================================================
 
+#include "app/feel_tape_fields.h"
+
 namespace app {
 
 // Order IS the wire format: index i here is field i of every data row.
@@ -80,6 +82,17 @@ inline constexpr const char* kFeelTapeColumns[] = {
     //     reading (measured: the AoA ceiling binds 112-333 of 720 ticks on
     //     his lateral dives, against 0-3 for the G ceiling) ---
     "aoa_ceil", "w_max_p",
+    // S-yawbudget: the factor the digging yaw was scaled by (1 = untouched).
+    "yaw_budget_scale",
+// --- THE FULL REPLAY STATE, generated from SEADS_TAPE_STATE_FIELDS so the
+//     names can never drift from the members. Everything above this line is
+//     DIAGNOSTIC (what an analysis reads); everything below is what a SEED
+//     restores. sim::SimState::throttle/flap/gear live here -- their absence
+//     was the 4.7e-02 m/s first-tick dV.
+#define SEADS_TAPE_NAME_ONE(name, expr) #name,
+    SEADS_TAPE_STATE_FIELDS(SEADS_TAPE_NAME_ONE, SEADS_TAPE_NAME_ONE,
+                            SEADS_TAPE_NAME_ONE, SEADS_TAPE_NAME_ONE)
+#undef SEADS_TAPE_NAME_ONE
 };
 
 inline constexpr int kFeelTapeColumnCount =
