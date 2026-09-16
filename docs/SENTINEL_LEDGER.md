@@ -31,6 +31,9 @@ and rules order.
    `python tools/gate/gate_baseline.py check build/.gate_ctest.log` ("the red set is EXACTLY
    the baseline, member for member"); gate-log mtime postdates the tip's commit time by about
    the gate length. A docs-only delta does not invalidate a verdict; a source delta does.
+5b. **After ANY interrupted or collided gate, the build dir is suspect for REGISTRATION, not just
+   artefacts:** reconfigure from clean and compare `ctest -N` against the previous known count
+   before quoting a verdict (2026-09-15: the atmosphere gate silently ran 16 of its own legs short).
 6. **Fresh-context red-team** with a WRITTEN record committed under the lane's docs; P0/P1
    folded before the gate. A LANES status line is not a record.
 7. **Chad flies the merged tip's exe, his word verbatim** in the LANES block (kernel rungs:
