@@ -349,9 +349,23 @@ TEST_CASE("S-righthand: the off arm is the pre-change tree, tick for tick") {
         static_cast<unsigned long long>(off.hash),
         static_cast<unsigned long long>(kPreChange));
     REQUIRE(off.hash == kPreChange);
-    // NON-VACUITY lives in the S-righthand apex legs below: this
-    // rolling-loop probe never reaches the apex geometry the live dial
-    // acts on, so a "the dial moves this hash" assertion here would be
+    // S-tremor (2026-09-16): the pin must hold at the SHIPPED window too,
+    // not only at 0. This probe holds a 90 deg/s mouse, which the net
+    // measure reads as 90 deg/s and scores fully live from its first tick,
+    // and it never reaches the apex where the hand-rest ramp is consumed --
+    // so the dial is invisible here twice over, and that is asserted rather
+    // than assumed.
+    control::ControllerParams shipped_window = off_arm();
+    shipped_window.hand_net_window = kCp.hand_net_window;
+    const LoopRun onw = run_loop(shipped_window, 0.0, 12.0, 90.0, 220.0, 6000.0,
+                                 6.0, 0.0, /*stop_at_360=*/false);
+    std::printf("[loop] shipped-window roll-demand hash %016llx\n",
+                static_cast<unsigned long long>(onw.hash));
+    CHECK(onw.hash == kPreChange);
+    // NON-VACUITY lives in the S-righthand apex legs below, and for the
+    // window in the S-tremor block at the end of this file: this
+    // rolling-loop probe never reaches the apex geometry the live dials
+    // act on, so a "the dial moves this hash" assertion here would be
     // the vacuous kind.
 }
 
@@ -948,4 +962,797 @@ TEST_CASE("S-righthand: the righting authority ramps, it does not step") {
     // A STEP mutant spends ZERO ticks in the middle of the range.
     CHECK(mid > 5);
     CHECK(seen_full > 0);
+}
+
+// ===========================================================================
+// S-tremor (kernel v17 candidate) -- THE WINDOWED NET HAND-LIVE MEASURE.
+// Dial: [auto_level] hand_net_window (seconds). 0 = structurally off = v16.
+//
+// THE DEBT IT PAYS (v15 red-team P2, measured, deferred). S-righthand's
+// "the hand is live" was ANY nonzero aim motion this tick, so a
+// +/-1-count-per-frame mouse tremor resets the hand-rest clock EVERY FRAME,
+// the authority ramp never climbs, and a belly-up aeroplane is never righted:
+// integrated righting 1.76 deg against 117.75 with a still hand. From the
+// seat: "it will not right me." It is the 2026-08-06 resting ruling broken by
+// a hand that is resting but not perfectly still.
+//
+// THE CURE. A leaky window integral of the aim's own world rotation vector;
+// |net|/window is the sweep rate the last window ADDS UP TO; a continuous
+// smoothstep of that rate (1 deg/s floor, 3 deg/s saturation) scales how hard
+// the clock is reset. A tremor nets to ~one frame's rotation; a real sweep of
+// any size nets to its own rate and still vetoes (the gun-director law).
+//
+// THE RIG. Belly-up at theta 170 (the ramp leg's attitude: MB-right armed,
+// err inside the circle) driven through the SHIPPED app::step_frame, so the
+// mouse path graded is the mouse path Chad flies: real per-frame counts, real
+// apply_mouse, the real ZOH smear on ticks 2..N. Every number below is
+// printed, not just asserted.
+// ===========================================================================
+namespace {
+
+std::uint64_t apex_hash(const control::ControllerParams& cp, double theta_deg,
+                        double err_deg, double V, bool hand_moving,
+                        double secs) {
+    const glm::dvec3 up{1.0, 0.0, 0.0}, heading{0.0, 0.0, -1.0};
+    sim::SimState s0 = harness::level_state(kAp, V, 6000.0, up, heading);
+    const glm::dvec3 rb = s0.orientation * glm::dvec3{1, 0, 0};
+    s0.orientation =
+        glm::normalize(glm::angleAxis(rad(theta_deg), rb) * s0.orientation);
+    s0.velocity = V * (s0.orientation * glm::dvec3{0, 0, -1});
+    s0.last_vhat = glm::normalize(s0.velocity);
+    harness::ClosedLoop cl(s0, glm::dvec3{0.0, 0.0, -1.0});
+    cl.aim_nose();
+    cl.tick(0.9, kAp, cp, /*grounded=*/true);
+    std::uint64_t h = 0;
+    const int n = static_cast<int>(secs / kAp.sim_dt + 0.5);
+    for (int i = 0; i < n; ++i) {
+        const glm::dvec3 nose = cl.state.orientation * glm::dvec3{0, 0, -1};
+        const glm::dvec3 rw = cl.state.orientation * glm::dvec3{1, 0, 0};
+        cl.aim = glm::normalize(glm::angleAxis(rad(err_deg), rw) * nose);
+        cl.aim_moved = hand_moving;
+        const control::Telemetry tm = cl.tick(0.9, kAp, cp);
+        mix(h, tm.omega_des.z);
+        mix(h, tm.hand_gate);
+    }
+    return h;
+}
+std::uint64_t apex_hash_pair(const control::ControllerParams& cp) {
+    std::uint64_t h = 0;
+    mix(h, double(apex_hash(cp, 89.0, 4.5, 230.0, false, 2.0)));
+    mix(h, double(apex_hash(cp, 87.0, 4.5, 210.0, true, 1.0)));
+    return h;
+}
+
+// The lane's two arms, config-relative (the S-leanlead red-team P1 lesson: a
+// walk-back of the dial in the toml must not red this file).
+control::ControllerParams tr_on() {
+    control::ControllerParams c = rh_on();
+    if (c.hand_net_window <= 0.0) c.hand_net_window = 0.20;
+    return c;
+}
+control::ControllerParams tr_off() {
+    control::ControllerParams c = rh_on();
+    c.hand_net_window = 0.0;  // the STRUCTURAL OFF arm (right_hand_rest LIVE)
+    return c;
+}
+
+enum class Hand { STILL, TREMOR_ALT, TREMOR_WALK, SWEEP };
+
+struct TremorRun {
+    double gate_max = 0.0;
+    double gate_min = 1.0;
+    double integ_right_deg = 0.0;  // integral |roll_right| dt, over the run
+    double roll_right_peak = 0.0;
+    double hand_rest_max = 0.0;
+    double net_rate_max = 0.0;  // [deg/s] the measure's own reading
+    // ...and the SETTLED reading: the same max taken only after the window
+    // has had 0.5 s to fill. The raw max above is dominated by the first
+    // ticks, where the normaliser is still small and EVERY hand -- tremor or
+    // sweep -- reads a large instantaneous rate, because a window that has
+    // not filled cannot yet tell them apart. Grade the settled one.
+    double net_rate_settled = 0.0;
+    long righting_ticks = 0;
+    long ticks = 0;
+    int mid_ticks = 0;  // gate strictly inside (0.05, 0.95) while righting
+};
+
+struct HookCtx {
+    TremorRun* r;
+    double dt;
+    long settle_ticks;  // ticks of window fill ignored by net_rate_settled
+};
+
+void tremor_hook(const app::TickInput&, const app::LoopState& st,
+                 const control::Telemetry& tm, void* ctx) {
+    HookCtx* c = static_cast<HookCtx*>(ctx);
+    TremorRun& r = *c->r;
+    ++r.ticks;
+    r.hand_rest_max = std::max(r.hand_rest_max, st.internal.hand_rest);
+    r.net_rate_max = std::max(r.net_rate_max, deg(tm.hand_net_rate));
+    if (r.ticks > c->settle_ticks)
+        r.net_rate_settled =
+            std::max(r.net_rate_settled, deg(tm.hand_net_rate));
+    if (!tm.righting) return;
+    ++r.righting_ticks;
+    r.gate_max = std::max(r.gate_max, tm.hand_gate);
+    r.gate_min = std::min(r.gate_min, tm.hand_gate);
+    r.integ_right_deg += std::abs(deg(tm.roll_right)) * c->dt;
+    r.roll_right_peak = std::max(r.roll_right_peak, std::abs(tm.roll_right));
+    if (tm.hand_gate > 0.05 && tm.hand_gate < 0.95) ++r.mid_ticks;
+}
+
+// A FIXED LCG (never std::random_device -- a seeded, reproducible walk).
+struct Lcg {
+    std::uint64_t s;
+    int pm1() {
+        s = s * 6364136223846793005ULL + 1442695040888963407ULL;
+        return ((s >> 33) & 1ULL) ? 1 : -1;
+    }
+};
+
+// Belly-up (theta 170 about the NOSE -- the ramp leg's attitude), flown
+// through app::step_frame for `secs` at `frame_dt`, with the scripted hand.
+TremorRun belly_up_run(const control::ControllerParams& cp, double frame_dt,
+                       Hand hand, double sweep_deg_s, double secs,
+                       double hitch_at = 0.0, double hitch_dt = 0.0) {
+    const glm::dvec3 up{1.0, 0.0, 0.0}, heading{0.0, 0.0, -1.0};
+    sim::SimState s0 = harness::level_state(kAp, 230.0, 6000.0, up, heading);
+    const glm::dvec3 nb = s0.orientation * glm::dvec3{0, 0, -1};
+    s0.orientation =
+        glm::normalize(glm::angleAxis(rad(170.0), nb) * s0.orientation);
+    s0.velocity = 230.0 * (s0.orientation * glm::dvec3{0, 0, -1});
+    s0.last_vhat = glm::normalize(s0.velocity);
+    app::LoopState st = flying(s0);
+    app::Accumulator accum(kAp.sim_dt);
+    TremorRun r;
+    HookCtx ctx{&r, kAp.sim_dt, long(0.5 / kAp.sim_dt)};
+    double pdx = 0.0, pdy = 0.0, t = 0.0;
+    double sgn = 1.0;
+    Lcg lcg{0x5eadf1a17e57ULL};
+    while (t < secs) {
+        const bool hitching =
+            (hitch_at > 0.0 && t >= hitch_at && t < hitch_at + hitch_dt);
+        const double fdt = hitching ? hitch_dt : frame_dt;
+        app::FrameInput fin;
+        fin.raw_mode = false;
+        fin.throttle = 1.0;
+        switch (hand) {
+            case Hand::STILL:
+                pdx = pdy = 0.0;
+                break;
+            case Hand::TREMOR_ALT:
+                // ONE count per frame, sign alternating. ASSIGNED, not
+                // accumulated, and the sign flips only on a frame that
+                // actually CONSUMED: at frame_dt < sim_dt some frames advance
+                // zero ticks, and a blind per-frame flip there would feed the
+                // tick stream a CONSTANT +1 (a real sweep) instead of a
+                // tremor -- the rig would grade the opposite of what it says.
+                pdx = sgn;
+                pdy = sgn;
+                break;
+            case Hand::TREMOR_WALK:
+                // Zero-mean random walk, seeded LCG. NOTE (§3 departure, see
+                // the leg below): at aim_sensitivity 0.14 deg/count this is a
+                // genuine wandering aim, not a stationary tremor.
+                pdx = double(lcg.pm1());
+                pdy = double(lcg.pm1());
+                break;
+            case Hand::SWEEP:
+                // A SUSTAINED lateral sweep at a fixed ANGULAR rate, so the
+                // hand is identical at every frame rate.
+                pdx = rad(sweep_deg_s) * fdt / cp.aim_sensitivity;
+                pdy = 0.0;
+                break;
+        }
+        const app::FrameResult fr = app::step_frame(
+            st, accum, fdt, fin, pdx, pdy, kAp, cp, nullptr, nullptr, nullptr,
+            nullptr, nullptr, tremor_hook, &ctx);
+        if (hand == Hand::TREMOR_ALT && fr.ticks > 0) sgn = -sgn;
+        pdx = pdy = 0.0;  // never let an unconsumed delta pile up
+        t += fdt;
+    }
+    return r;
+}
+
+void print_run(const char* tag, const TremorRun& r) {
+    std::printf(
+        "[tremor] %-28s righting %4ld/%4ld  gate %.3f..%.3f  integ|roll_right|"
+        " %7.2f deg  peak %6.1f deg/s  rest_max %.3f s  net_rate settled "
+        "%5.2f peak %6.2f deg/s\n",
+        tag, r.righting_ticks, r.ticks, r.gate_min, r.gate_max,
+        r.integ_right_deg, deg(r.roll_right_peak), r.hand_rest_max,
+        r.net_rate_settled, r.net_rate_max);
+}
+
+}  // namespace
+
+// ===========================================================================
+// LEG 1 -- THE TREMOR LEG. The debt, reproduced at the dial OFF and paid at
+// the dial ON. 2 s belly-up with a +/-1-count-per-frame tremor at 60 fps.
+//
+// MUTATION: delete the measure (hand_live_frac := hand_live ? 1 : 0, i.e. the
+// v16 predicate) and the ON arm collapses onto the OFF arm -- gate pinned near
+// 0, integrated righting near 0. Raise the 3 deg/s saturation wall to swallow
+// the tremor's 0.7 deg/s and the same thing happens.
+// ===========================================================================
+TEST_CASE("S-tremor: a mouse tremor no longer cancels the righting") {
+    const TremorRun off =
+        belly_up_run(tr_off(), 2.0 * kAp.sim_dt, Hand::TREMOR_ALT, 0.0, 2.0);
+    const TremorRun on =
+        belly_up_run(tr_on(), 2.0 * kAp.sim_dt, Hand::TREMOR_ALT, 0.0, 2.0);
+    const TremorRun still =
+        belly_up_run(tr_on(), 2.0 * kAp.sim_dt, Hand::STILL, 0.0, 2.0);
+    print_run("OFF   tremor (the debt)", off);
+    print_run("ON    tremor (the cure)", on);
+    print_run("ON    still  (reference)", still);
+    // The debt IS reproduced at the dial off -- if this ever goes green the
+    // leg below is grading nothing (the vacuous-probe trap).
+    REQUIRE(off.righting_ticks > 0);  // MB-right armed: the geometry is right
+    CHECK(off.gate_max < 0.05);
+    CHECK(off.integ_right_deg < 5.0);
+    // The cure: the clock climbs through the tremor to FULL authority, and
+    // the aeroplane is righted at the rate the 08-06 ruling promises.
+    CHECK(on.gate_max > 0.99);
+    CHECK(deg(on.roll_right_peak) >= deg(kCp.inverted_rate) - 0.5);
+    CHECK(on.integ_right_deg > 20.0 * off.integ_right_deg);
+    // ...and it matches the STILL hand, which is the whole point: a tremor
+    // must be indistinguishable from a resting hand.
+    CHECK(on.integ_right_deg > 0.5 * still.integ_right_deg);
+}
+
+// ===========================================================================
+// LEG 2 -- A SWEEP NEVER LETS THE CLOCK START. A hand that sweeps from the
+// first tick must never accumulate any rest at all, at any size down to
+// 5 deg/s.
+//
+// ⚠ RENAMED 2026-09-16 (red-team P1-1, law/feel lens) TO WHAT IT GRADES. It
+// was called "a small slow deliberate sweep still vetoes" and read as THE
+// gun-director leg -- but its gate is 0 by CONSTRUCTION: the sweep starts at
+// t = 0 with hand_rest seeded 0, so the same assertions pass at the dial OFF,
+// at the dial ON, and (measured) in a build whose veto was 340 ms late. It is
+// a non-regression leg and is kept as one. The gun-director leg proper is
+// LEG 2b below, which starts from a gate of 1.000.
+//
+// MUTATION: drop the 3 deg/s saturation to ~6 deg/s (or lengthen the window
+// past ~1 s) and the 5 deg/s arm stops vetoing -- gate climbs off 0.
+// ===========================================================================
+TEST_CASE("S-tremor: a sweep never lets the clock start") {
+    for (double rate : {5.0, 12.0, 40.0}) {
+        const TremorRun on =
+            belly_up_run(tr_on(), 2.0 * kAp.sim_dt, Hand::SWEEP, rate, 2.0);
+        char tag[64];
+        std::snprintf(tag, sizeof tag, "ON    sweep %5.1f deg/s", rate);
+        print_run(tag, on);
+        REQUIRE(on.ticks > 0);
+        CHECK(on.gate_max < 0.05);
+        CHECK(on.hand_rest_max < 0.02);
+    }
+}
+
+// ===========================================================================
+// LEG 2b -- THE GUN-DIRECTOR LEG PROPER (folded 2026-09-16 from red-team
+// P0-1, found INDEPENDENTLY BY BOTH LENSES; the rig is the red team's own
+// RT1). THE CASE THE LANE NEVER RAN: the pilot is belly-up with his hand OFF,
+// the clock has climbed, the gate reads 1.000 and the aeroplane is rolling at
+// the full inverted_rate -- and THEN he puts his hand on. That is the only
+// state in which the gate is nonzero, i.e. the only state the gun-director
+// law is about, and every other sweep leg in this file starts from a gate
+// that is 0 by construction.
+//
+// THE FAILURE IT CAUGHT (shipped tip 9ba9beb35, since folded): the normaliser
+// added dt on EVERY tick, so it saturated at the window and the measure read
+// r*(1-exp(-t/window)) for a sweep that began after a rest. Integrated
+// |roll_right| AFTER the hand goes on: 14.42 deg over 0.100 s at 5 deg/s
+// (Chad's own fly-card row), 25.94 at 3 deg/s, 2.41 at 40 -- against v16's
+// 1.50 deg in 0.008 s at every rate.
+//
+// MUTATION: revert the fold (`+ dt` instead of `+ (hand_live ? dt : 0.0)` in
+// controller.cpp) and the 5 deg/s row reds on BOTH assertions. Delete the
+// measure entirely (v16) and it stays green -- deliberately: this leg grades
+// that the dial costs the law NOTHING here, so v16 is its reference arm.
+// ===========================================================================
+namespace {
+
+struct RtRun {
+    double integ_before_deg = 0.0;  // integral |roll_right| dt, t <= t_mark
+    double integ_after_deg = 0.0;   // integral |roll_right| dt, t >  t_mark
+    double gate_at_mark = -1.0;     // the gate on the first tick after t_mark
+    double gate_after_max = 0.0;
+    double t_gate_below05 = -1.0;  // s after t_mark until the gate < 0.05
+    long ticks = 0;
+};
+
+struct RtCtx {
+    RtRun* r;
+    double dt;
+    double t;
+    double t_mark;
+};
+
+void rt_hook(const app::TickInput&, const app::LoopState&,
+             const control::Telemetry& tm, void* ctx) {
+    RtCtx* c = static_cast<RtCtx*>(ctx);
+    RtRun& r = *c->r;
+    c->t += c->dt;
+    ++r.ticks;
+    const double d = std::abs(deg(tm.roll_right)) * c->dt;
+    if (c->t <= c->t_mark) {
+        r.integ_before_deg += d;
+        return;
+    }
+    r.integ_after_deg += d;
+    if (!tm.righting) return;
+    if (r.gate_at_mark < 0.0) r.gate_at_mark = tm.hand_gate;
+    r.gate_after_max = std::max(r.gate_after_max, tm.hand_gate);
+    if (r.t_gate_below05 < 0.0 && tm.hand_gate < 0.05)
+        r.t_gate_below05 = c->t - c->t_mark;
+}
+
+// Belly-up at theta 170 like belly_up_run, but with a SCRIPTED hand (t, the
+// frame dt -> the per-frame counts) and the integral split at t_mark, so a
+// leg can ask "what happened AFTER the hand went on".
+template <class HandFn>
+RtRun rt_run(const control::ControllerParams& cp, double frame_dt, double secs,
+             double t_mark, HandFn hand) {
+    const glm::dvec3 up{1.0, 0.0, 0.0}, heading{0.0, 0.0, -1.0};
+    sim::SimState s0 = harness::level_state(kAp, 230.0, 6000.0, up, heading);
+    const glm::dvec3 nb = s0.orientation * glm::dvec3{0, 0, -1};
+    s0.orientation =
+        glm::normalize(glm::angleAxis(rad(170.0), nb) * s0.orientation);
+    s0.velocity = 230.0 * (s0.orientation * glm::dvec3{0, 0, -1});
+    s0.last_vhat = glm::normalize(s0.velocity);
+    app::LoopState st = flying(s0);
+    app::Accumulator accum(kAp.sim_dt);
+    RtRun r;
+    RtCtx ctx{&r, kAp.sim_dt, 0.0, t_mark};
+    double t = 0.0;
+    while (t < secs) {
+        double pdx = 0.0, pdy = 0.0;
+        hand(t, frame_dt, pdx, pdy);
+        app::FrameInput fin;
+        fin.raw_mode = false;
+        fin.throttle = 1.0;
+        app::step_frame(st, accum, frame_dt, fin, pdx, pdy, kAp, cp, nullptr,
+                        nullptr, nullptr, nullptr, nullptr, rt_hook, &ctx);
+        t += frame_dt;
+    }
+    return r;
+}
+
+// The hand for both legs below: nothing until `mark`, then a sustained
+// lateral sweep at a fixed ANGULAR rate (so the hand is the same at any
+// frame rate).
+RtRun rested_then_sweep(const control::ControllerParams& cp, double rate,
+                        double mark = 0.40, double secs = 2.0) {
+    const double sens = cp.aim_sensitivity;
+    return rt_run(cp, 2.0 * kAp.sim_dt, secs, mark,
+                  [rate, mark, sens](double t, double f, double& dx, double&) {
+                      if (t + 1e-12 >= mark) dx = rad(rate) * f / sens;
+                  });
+}
+
+}  // namespace
+
+TEST_CASE("S-tremor: a sweep from a FULL gate vetoes on the next tick") {
+    std::printf(
+        "[gundir] rate   arm  gate@hand-on  t(gate<0.05)  integ|roll_right| "
+        "AFTER the hand goes on (before)\n");
+    for (double rate : {3.0, 5.0, 10.0, 40.0}) {
+        const RtRun off = rested_then_sweep(tr_off(), rate);
+        const RtRun on = rested_then_sweep(tr_on(), rate);
+        for (int arm = 0; arm < 2; ++arm) {
+            const RtRun& r = arm ? on : off;
+            std::printf(
+                "[gundir] %5.1f  %s  %11.3f  %12.3f  %8.2f deg (%.2f)\n", rate,
+                arm ? "ON " : "OFF", r.gate_at_mark, r.t_gate_below05,
+                r.integ_after_deg, r.integ_before_deg);
+        }
+        // NON-VACUITY: the hand arrives at FULL authority in both arms (if
+        // this ever goes green by the gate being 0, the leg grades nothing --
+        // the trap LEG 2 fell into).
+        REQUIRE(off.gate_at_mark > 0.99);
+        REQUIRE(on.gate_at_mark > 0.99);
+        REQUIRE(off.integ_before_deg > 20.0);
+        // The hands-off half is untouched by the dial (the 08-06 ruling,
+        // bit-identical).
+        CHECK(on.integ_before_deg == off.integ_before_deg);
+        // THE LAW: the veto lands within a tick or two of v16's, and the
+        // righting that leaks into the deliberate input is v16's.
+        CHECK(on.t_gate_below05 >= 0.0);
+        CHECK(on.t_gate_below05 <= off.t_gate_below05 + 2.0 * kAp.sim_dt);
+        CHECK(on.integ_after_deg <= off.integ_after_deg + 0.25);
+    }
+}
+
+// ===========================================================================
+// LEG 2c -- WHERE THE WALL ACTUALLY IS, PINNED AS A NUMBER (red-team P1-1,
+// mechanism lens). The smoothstep saturates at 3 deg/s, but the clock's reset
+// is MULTIPLICATIVE, so the FELT wall -- the rate at which the gate is halved
+// -- is at liveness 1/16, i.e. ~1.3 deg/s at the shipped sim_dt 1/120 and
+// right_hand_rest 0.25 (controller.cpp derives it). Below it a SUSTAINED
+// DELIBERATE drift is not vetoed at all, where v16 vetoed it 100 %.
+//
+// THIS LEG PINS THE RESIDUAL, NOT A CURE. It is the S-yawbudget precedent: a
+// measured residual, printed, asserted in the direction it was ruled in, so
+// it cannot move -- in EITHER direction -- without somebody re-reading it.
+// If the slow arm ever reds, the hole closed and Chad must be told; if the
+// fast arm reds, the law broke.
+//
+// MUTATION: raise kNetFloorRate and the 1.5 deg/s row crosses; lower it below
+// the tremor's 0.57 deg/s and LEG 1 (the cure) reds instead. The two walls
+// are one trade and these legs are its two ends.
+// ===========================================================================
+TEST_CASE("S-tremor: the felt wall of the veto, measured") {
+    std::printf(
+        "[wall] rate   integ|roll_right| AFTER the hand goes on   "
+        "gate_max_after  t(gate<0.05)\n");
+    double integ[6] = {0, 0, 0, 0, 0, 0};
+    int i = 0;
+    for (double rate : {0.5, 1.0, 1.5, 2.0, 3.0, 5.0}) {
+        const RtRun on = rested_then_sweep(tr_on(), rate);
+        integ[i++] = on.integ_after_deg;
+        std::printf("[wall] %5.1f  %24.2f deg  %14.3f  %12.3f\n", rate,
+                    on.integ_after_deg, on.gate_after_max, on.t_gate_below05);
+    }
+    const RtRun v16 = rested_then_sweep(tr_off(), 1.0);
+    std::printf("[wall] v16 reference at 1.0 deg/s: %.2f deg\n",
+                v16.integ_after_deg);
+    // THE HOLE, pinned: at 1.0 deg/s the deliberate drift is NOT vetoed...
+    CHECK(integ[1] > 20.0);
+    CHECK(v16.integ_after_deg < 5.0);
+    // ...and by 3 deg/s it is, within a hair of v16.
+    CHECK(integ[4] < 5.0);
+    // ...monotone in between: the wall is a ramp, not a cliff (no chatter).
+    CHECK(integ[2] >= integ[3]);
+    CHECK(integ[3] >= integ[4]);
+}
+
+// ===========================================================================
+// THE WOBBLE RESIDUAL -- MEASURED, NOT ARGUED AWAY (red-team P1-2). A
+// DELIBERATE tracking oscillation -- the pilot working the reticle back and
+// forth over a jinking bandit -- nets to nothing over the window and is
+// therefore discounted exactly as a tremor is. No patch can separate them:
+// that blindness IS the cure. So it is stated as a bounded exception in
+// params.h / controller.toml, printed here, and put on Chad's fly card as a
+// question: belly-up, hand working the reticle in a half-degree wobble --
+// righted, or not?
+//
+// PINS ONLY THE SHAPE: amplitude wins over frequency, and by +/-2 deg of
+// reticle travel the wobble is a hand again at every frequency.
+// ===========================================================================
+TEST_CASE("S-tremor: the tracking-wobble residual, measured not hidden") {
+    std::printf(
+        "[wobble] amp[deg] freq[Hz]   integ|roll_right| ON   (v16)   "
+        "gate_max\n");
+    double big = -1.0, small = -1.0;
+    for (double amp : {0.25, 0.5, 1.0, 2.0}) {
+        for (double f_hz : {1.0, 2.0, 4.0}) {
+            const control::ControllerParams cp_on = tr_on();
+            const control::ControllerParams cp_off = tr_off();
+            const double sens = cp_on.aim_sensitivity;
+            auto hand = [amp, f_hz, sens](double t, double f, double& dx,
+                                          double&) {
+                const double a0 = amp * std::sin(2.0 * kPi * f_hz * t);
+                const double a1 = amp * std::sin(2.0 * kPi * f_hz * (t + f));
+                dx = rad(a1 - a0) / sens;
+            };
+            const RtRun on = rt_run(cp_on, 2.0 * kAp.sim_dt, 2.0, 0.0, hand);
+            const RtRun off = rt_run(cp_off, 2.0 * kAp.sim_dt, 2.0, 0.0, hand);
+            std::printf("[wobble] %7.2f %8.1f   %17.2f  %7.2f  %8.3f\n", amp,
+                        f_hz, on.integ_after_deg, off.integ_after_deg,
+                        on.gate_after_max);
+            CHECK(off.integ_after_deg < 1.0);  // v16 vetoes all of them
+            if (amp == 0.25 && f_hz == 1.0) small = on.integ_after_deg;
+            if (amp == 2.0 && f_hz == 1.0) big = on.integ_after_deg;
+        }
+    }
+    // A half-degree wobble IS discounted (the exception, pinned as a number);
+    // a +/-2 deg one is a hand again.
+    CHECK(small > 50.0);
+    CHECK(big < 10.0);
+}
+
+// ===========================================================================
+// THE PRICE OF THE P0-1 FOLD, MEASURED (an INTERMITTENT tremor: one count
+// every k-th frame). Counting only LIVE time means the discount has to be
+// EARNED by continuous motion, so a tremor with gaps keeps less of the cure
+// than the (law-breaking) shipped form did. That is the trade, and it is
+// written down rather than discovered later: the law is a standing ruling,
+// the cure is this lane's proposal, so the law wins the tie.
+//
+// PINS: still far better than v16 at every k -- which is the claim the rung
+// is actually making.
+// ===========================================================================
+TEST_CASE("S-tremor: an intermittent tremor, the fold's measured price") {
+    std::printf(
+        "[intermittent] every_k_frames   integ|roll_right| ON   v16   \n");
+    for (int k : {1, 2, 3, 5, 10}) {
+        double integ[2] = {0.0, 0.0};
+        for (int arm = 0; arm < 2; ++arm) {
+            const control::ControllerParams cp = arm ? tr_on() : tr_off();
+            int frame = 0;
+            double sgn = 1.0;
+            const RtRun r = rt_run(
+                cp, 2.0 * kAp.sim_dt, 2.0, 0.0,
+                [&frame, &sgn, k](double, double, double& dx, double& dy) {
+                    if (frame % k == 0) {
+                        dx = sgn;
+                        dy = sgn;
+                        sgn = -sgn;
+                    }
+                    ++frame;
+                });
+            integ[arm] = r.integ_after_deg;
+        }
+        std::printf("[intermittent] %14d   %17.2f  %6.2f\n", k, integ[1],
+                    integ[0]);
+        // A HAIR of tolerance: at k = 10 the two arms land within a couple
+        // of degrees of each other (a tremor that sparse barely fills the
+        // window either way), so this pins "never WORSE than v16", not a
+        // strict ordering.
+        CHECK(integ[1] >= integ[0] - 3.0);
+    }
+}
+
+// The EXISTING apex leg (hand moving, wings stay put) is the second half of
+// this: it runs at the SHIPPED config, i.e. the dial live, and it must stay
+// green. It scripts aim_moved WITHOUT an aim rate, which is the unmeasurable
+// arm of the measure -- the one that fails to the veto by construction.
+
+// ===========================================================================
+// LEG 3 -- FRAME-RATE INVARIANCE (the AT-9 class, v15 red-team P1). The window
+// is measured in SECONDS of sim time through app::step_frame, never in ticks
+// or frames, so the tremor's verdict must not move with the frame rate -- or
+// through a 0.4 s hitch.
+//
+// MUTATION: integrate only on the aim_moved tick (dropping the ZOH smear) and
+// the low-fps arms under-count by N-1 of every N ticks -- that is where this
+// leg's teeth are, and it is the whole source of the invariance.
+// ⚠ CORRECTED 2026-09-16 (red-team P3-2, mechanism lens): this note used to
+// claim a second mutation, "measure the window in TICKS (leak := a fixed
+// per-tick constant)". That mutation CANNOT RED -- dt is ap.sim_dt at every
+// call site, so leak = dt/window ALREADY IS a fixed per-tick constant. The
+// invariance comes from aim_rate_world being rotation/(N*sim_dt) smeared
+// across the frame's N ticks, not from the units of the leak. A mutation note
+// that cannot fire is worse than none: it tells a later reader the leg is
+// guarding something it is not.
+// ===========================================================================
+TEST_CASE("S-tremor: the net window is frame-rate invariant") {
+    struct FpsArm {
+        const char* name;
+        double mult;
+        double hitch_at, hitch_dt;
+    };
+    const FpsArm arms[] = {
+        {"240 fps", 0.5, 0.0, 0.0},  {"120 fps", 1.0, 0.0, 0.0},
+        {" 60 fps", 2.0, 0.0, 0.0},  {" 30 fps", 4.0, 0.0, 0.0},
+        {" 10 fps", 12.0, 0.0, 0.0}, {" 30 fps + 0.4 s hitch", 4.0, 1.0, 0.4}};
+    for (const FpsArm& a : arms) {
+        const TremorRun on =
+            belly_up_run(tr_on(), a.mult * kAp.sim_dt, Hand::TREMOR_ALT, 0.0,
+                         2.0, a.hitch_at, a.hitch_dt);
+        char tag[64];
+        std::snprintf(tag, sizeof tag, "ON    tremor @ %s", a.name);
+        print_run(tag, on);
+        // The SAME verdict at every rate: the tremor reads as a resting hand
+        // and the righting is handed back in full.
+        // Under the 1 deg/s FLOOR at every frame rate, once the window has
+        // filled: the tremor is not a hand, and the measure says so in its
+        // own units.
+        CHECK(on.net_rate_settled < 1.0);
+        CHECK(on.gate_max > 0.99);
+        CHECK(deg(on.roll_right_peak) >= deg(kCp.inverted_rate) - 0.5);
+        CHECK(on.integ_right_deg > 20.0);
+    }
+    // ...and a hand that NEVER rests still never accumulates rest, at any
+    // rate (the v15 P1 leg, re-run through the new arithmetic).
+    for (const FpsArm& a : arms) {
+        const TremorRun sw =
+            belly_up_run(tr_on(), a.mult * kAp.sim_dt, Hand::SWEEP, 40.0, 2.0,
+                         a.hitch_at, a.hitch_dt);
+        std::printf(
+            "[tremor] 40 deg/s sweep @ %s: rest_max %.4f s gate_max "
+            "%.3f\n",
+            a.name, sw.hand_rest_max, sw.gate_max);
+        CHECK(sw.hand_rest_max < 0.02);
+        CHECK(sw.gate_max < 0.05);
+    }
+}
+
+// ===========================================================================
+// LEG 4 -- THE OFF ARM IS BIT-IDENTICAL, PINNED TWICE.
+//
+// THE METHOD (the same one LEG (i) at the top of this file documents): the
+// recorded hashes are the bit-mix of the emitted omega_des.z AND hand_gate on
+// every tick of two apex probes, captured by building this very tree against
+// `git show HEAD:control/controller.cpp` -- the PRE-CHANGE controller, same
+// config, same probe, same compiler -- before S-tremor existed. So this is the
+// pre-change binary's own trace; one changed ULP on one tick moves it.
+// Captured 2026-09-16 on feel/tremor-netwindow at d01cf4221.
+//
+//   off_arm() (EVERY lane dial off, the pre-v15 tree)  0x71176a88ee5d8a8f
+//   rh_on() with hand_net_window 0 (the v16 SHIPPED tree) 0x7102cf59b6460f33
+//
+// ⚠ NOT A NON-VACUITY LEG, deliberately, and it says so out loud: this probe
+// scripts aim_moved WITHOUT an aim rate (harness::ClosedLoop's shape), which
+// is the measure's unmeasurable arm -- fully live by construction -- so the
+// hash is the same at the SHIPPED window too, and that equality is asserted
+// here as the firewall it is, not mistaken for evidence. The dial's teeth are
+// graded by LEG 1, which drives real counts through app::step_frame.
+// ===========================================================================
+TEST_CASE("S-tremor: the off arm is the pre-change tree, tick for tick") {
+    constexpr std::uint64_t kPreOff = 0x71176a88ee5d8a8fULL;
+    constexpr std::uint64_t kPreV16 = 0x7102cf59b6460f33ULL;
+    const std::uint64_t h_off = apex_hash_pair(off_arm());
+    const std::uint64_t h_v16 = apex_hash_pair(tr_off());
+    const std::uint64_t h_on = apex_hash_pair(tr_on());
+    std::printf(
+        "[tremor] apex hash  off_arm %016llx (pre %016llx)  v16 %016llx (pre "
+        "%016llx)  shipped %016llx\n",
+        (unsigned long long)h_off, (unsigned long long)kPreOff,
+        (unsigned long long)h_v16, (unsigned long long)kPreV16,
+        (unsigned long long)h_on);
+    CHECK(h_off == kPreOff);
+    CHECK(h_v16 == kPreV16);
+    // The firewall on THIS probe (see the warning above): scripted aim_moved
+    // with no rate is unmeasurable, so the shipped dial changes nothing here.
+    CHECK(h_on == kPreV16);
+}
+
+// ===========================================================================
+// LEG 5 -- RAMP, NOT STEP, THROUGH A TREMOR. The v15 P2 lesson: an M3 mutant
+// (hand_gate := the bare predicate) survived every other leg. The tremor arm
+// must spend real time strictly inside (0.05, 0.95), not jump 0 -> 1.
+//
+// MUTATION: hand_gate := (hand_live_frac < 0.5) -- zero ticks in the middle.
+// ===========================================================================
+TEST_CASE("S-tremor: the authority still ramps through a tremor") {
+    const TremorRun on =
+        belly_up_run(tr_on(), 2.0 * kAp.sim_dt, Hand::TREMOR_ALT, 0.0, 2.0);
+    std::printf(
+        "[tremor] ramp through a tremor: %d ticks strictly inside "
+        "(0.05, 0.95), gate %.3f..%.3f\n",
+        on.mid_ticks, on.gate_min, on.gate_max);
+    CHECK(on.mid_ticks > 5);
+    CHECK(on.gate_max > 0.99);
+}
+
+// ===========================================================================
+// LEG 6 -- HANDS OFF IS UNCHANGED (the 2026-08-06 ruling). The window must add
+// NO delay to a genuinely still hand: the OUTER v16 hand-live gate is what
+// keeps that true, and this pins it as a NUMBER, not as an argument.
+//
+// MUTATION: drop the outer hand_live gate (score liveness every tick from the
+// window alone) and a hand that just stopped keeps the clock pinned for a
+// further `window` seconds -- the still arm's integrated righting falls.
+// ===========================================================================
+TEST_CASE("S-tremor: hands off is bit-unchanged (the 08-06 ruling)") {
+    const TremorRun v16 =
+        belly_up_run(tr_off(), 2.0 * kAp.sim_dt, Hand::STILL, 0.0, 2.0);
+    const TremorRun on =
+        belly_up_run(tr_on(), 2.0 * kAp.sim_dt, Hand::STILL, 0.0, 2.0);
+    print_run("v16   hands off", v16);
+    print_run("ON    hands off", on);
+    REQUIRE(v16.righting_ticks > 0);
+    CHECK(on.righting_ticks == v16.righting_ticks);
+    CHECK(on.integ_right_deg == v16.integ_right_deg);  // BIT-identical
+    CHECK(on.hand_rest_max == v16.hand_rest_max);
+    CHECK(on.gate_max > 0.99);
+    // The existing apex leg "hands OFF still rights him" covers the other
+    // geometry; this one covers the whole 2 s of it at the shipped dial.
+}
+
+// ===========================================================================
+// LEG 7 (the half that lives here) -- THE SHIPPED DIAL IS LIVE. A silent
+// walk-back of the toml to 0 would make every leg above vacuous, so it is
+// stated as a number. The RANGE PIN and the negative-value refusal live in
+// test_load_controller.cpp beside right_hand_rest's, against the REAL
+// committed table (the loader suite's mutation method).
+// ===========================================================================
+TEST_CASE("S-tremor: the shipped hand_net_window is live and in range") {
+    std::printf("[tremor] shipped [auto_level] hand_net_window = %.3f s\n",
+                kCp.hand_net_window);
+    CHECK(kCp.hand_net_window > 0.0);
+    CHECK(kCp.hand_net_window <= 1.0);
+}
+
+// ===========================================================================
+// THE RANDOM-WALK VARIANT -- a MEASURED RESIDUAL, graded honestly (§3
+// departure; the handoff carries the reasoning). The packet asked for a
+// second tremor shape: a zero-mean +/-1-count RANDOM WALK. It is NOT a
+// stationary tremor. At aim_sensitivity 0.14 deg/count a walk of N frames
+// wanders sqrt(N) counts, so over a 0.2 s window at 60 fps the aim genuinely
+// MOVES ~0.4 deg and reads as a ~2 deg/s hand. By the gun-director law that
+// IS a real hand movement and must keep vetoing; discounting it would require
+// eating deliberate inputs of the same size, which is exactly what the twice-
+// rejected deadband did. So this leg PRINTS the numbers and pins only the
+// direction: the walk sits between the alternating tremor and a real sweep.
+// ===========================================================================
+TEST_CASE("S-tremor: the random-walk residual, measured not hidden") {
+    const TremorRun alt =
+        belly_up_run(tr_on(), 2.0 * kAp.sim_dt, Hand::TREMOR_ALT, 0.0, 2.0);
+    const TremorRun walk =
+        belly_up_run(tr_on(), 2.0 * kAp.sim_dt, Hand::TREMOR_WALK, 0.0, 2.0);
+    const TremorRun sweep =
+        belly_up_run(tr_on(), 2.0 * kAp.sim_dt, Hand::SWEEP, 5.0, 2.0);
+    print_run("ON    tremor alternating", alt);
+    print_run("ON    tremor random walk", walk);
+    print_run("ON    sweep 5 deg/s     ", sweep);
+    // Graded on the BEHAVIOUR, not on net_rate_max: with the normalised
+    // measure every arm's first ticks read a large instantaneous rate (the
+    // window has not filled and cannot yet tell a tremor from a sweep), so a
+    // peak-of-the-measure comparison grades the transient, not the hand. The
+    // integrated righting is the felt quantity and it orders as the physics
+    // says it must: an alternating tremor is a resting hand, a real sweep is
+    // a vetoing hand, and the walk sits between them, nearer the sweep.
+    CHECK(alt.integ_right_deg > walk.integ_right_deg);
+    CHECK(walk.integ_right_deg > sweep.integ_right_deg);
+    CHECK(walk.integ_right_deg < 0.25 * alt.integ_right_deg);
+}
+
+// ===========================================================================
+// THE SWEEP THE SHIPPED VALUE WAS PICKED FROM. Not a tuning knob-twiddle
+// against harness numbers (the kernel law forbids that) -- a CHART of the two
+// walls the window sits between, printed into the gate output so the choice
+// can be re-derived by anyone, and re-run after any retune.
+//
+//   TOO SHORT and the tremor's own net rate (one frame's rotation / window)
+//   climbs over the 1 deg/s floor: the debt comes back.
+//   TOO LONG and the window outlives the hand-rest ramp it feeds -- it starts
+//   reporting history rather than the hand -- and the walk-back loses meaning.
+//
+// The shipped value is the one with headroom on BOTH walls at every frame
+// rate, nearest right_hand_rest's own 0.25 s without exceeding it.
+// ===========================================================================
+TEST_CASE("S-tremor: the window sweep the shipped value came from") {
+    std::printf(
+        "[sweep] window |  tremor: integ_right  gate_max  net@120  net@10 |"
+        "  5 deg/s sweep: integ_right  gate_max | walk: integ_right\n");
+    for (double w : {0.05, 0.10, 0.15, 0.20, 0.25, 0.30, 0.50}) {
+        control::ControllerParams c = tr_on();
+        c.hand_net_window = w;
+        const TremorRun tr =
+            belly_up_run(c, 2.0 * kAp.sim_dt, Hand::TREMOR_ALT, 0.0, 2.0);
+        const TremorRun t10 =
+            belly_up_run(c, 12.0 * kAp.sim_dt, Hand::TREMOR_ALT, 0.0, 2.0);
+        const TremorRun sw =
+            belly_up_run(c, 2.0 * kAp.sim_dt, Hand::SWEEP, 5.0, 2.0);
+        const TremorRun wk =
+            belly_up_run(c, 2.0 * kAp.sim_dt, Hand::TREMOR_WALK, 0.0, 2.0);
+        std::printf(
+            "[sweep] %6.2f |        %7.2f    %6.3f   %5.2f   %5.2f |"
+            "          %7.2f    %6.3f |      %7.2f\n",
+            w, tr.integ_right_deg, tr.gate_max, tr.net_rate_settled,
+            t10.net_rate_settled, sw.integ_right_deg, sw.gate_max,
+            wk.integ_right_deg);
+        // The 5 deg/s deliberate drift is vetoed at EVERY window in the
+        // sweep -- the gun-director law never depends on the tuning.
+        CHECK(sw.gate_max < 0.05);
+    }
+    // ...and the shipped value is on the right side of both walls.
+    const TremorRun ship =
+        belly_up_run(tr_on(), 2.0 * kAp.sim_dt, Hand::TREMOR_ALT, 0.0, 2.0);
+    CHECK(ship.net_rate_settled < 1.0);
+    CHECK(ship.integ_right_deg > 20.0);
+}
+
+// ===========================================================================
+// THE TAPE PIN. S-tremor adds two DIAGNOSTIC columns (hand_net_rate,
+// hand_live_frac -- the measure's own reading and the liveness it produced)
+// and four REPLAY-STATE ones (aim_net x/y/z and its normaliser aim_net_w,
+// because a leaky integral with a window of memory cannot be seeded from
+// zero mid-tape without scoring the first window as a still hand). 160 (v16)
+// -> 166. The v5 launch banner grew the dial beside right_hand_rest in the
+// same commit, so a tape can never be replayed against the wrong dials.
+//
+// MUTATION: add a column to kFeelTapeColumns without extending the writer's
+// format string (or the reverse) and the emitter/reader divergence that cost
+// 2026-09-13 a night comes straight back -- test_tape_roundtrip.cpp catches
+// the count end to end; this pins the NUMBER, so a silent growth is a
+// decision someone had to make, not a diff nobody read.
+// ===========================================================================
+TEST_CASE("S-tremor: the feel tape carries the measure (column-count pin)") {
+    std::printf("[tremor] feel tape columns: %d (v16 shipped 160)\n",
+                app::kFeelTapeColumnCount);
+    CHECK(app::kFeelTapeColumnCount == 166);
 }

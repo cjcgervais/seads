@@ -707,7 +707,8 @@ int main(int argc, char** argv) {
                 "%.1f..%.1f deg | horizon_recovery rate %.1f deg/s "
                 "straight_max %.1f deg/s\n"
                 "[config] regime: wings_level_band %.3f\n"
-                "[config] auto_level: right_hand_rest %.3f s (0 = off)\n"
+                "[config] auto_level: right_hand_rest %.3f s (0 = off) | "
+                "hand_net_window %.3f s (0 = off)\n"
                 "[config] coordination: yaw_vert_budget %.2f (0 = off) gap %.1f..%.1f deg\n",
                 SEADS_CONFIG_DIR "/controller.toml", cparams.lean_lead,
                 int(cparams.lean_lead_lateral), cparams.lean_lead_lat_lo,
@@ -722,7 +723,7 @@ int main(int argc, char** argv) {
                 cparams.horizon_recovery_straight_max * 180.0 /
                     3.14159265358979323846,
                 cparams.wings_level_band, cparams.right_hand_rest,
-                cparams.yaw_vert_budget,
+                cparams.hand_net_window, cparams.yaw_vert_budget,
                 std::asin(std::clamp(cparams.yaw_vert_gap_lo, -1.0,
                                      1.0)) * 180.0 /
                     3.14159265358979323846,

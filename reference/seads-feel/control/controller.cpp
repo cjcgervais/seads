@@ -36,6 +36,43 @@ double smoothstep(double lo, double hi, double x) {
     return t * t * (3.0 - 2.0 * t);
 }
 
+// S-tremor (kernel v17 candidate): the two walls of the windowed NET-rate
+// liveness measure, in rad/s. DELIBERATELY NOT DIALS -- the kernel ships ONE
+// dial per version ([auto_level] hand_net_window, the WINDOW); these are the
+// measure's own units, fixed by what they mean:
+//
+//   FLOOR 1 deg/s -- the v16 session's "lying instrument" trap made
+//   structural (a probe armed on yv ~ 1e-17 and the verdict was void).
+//   Nothing under a degree a second is a hand; it is roundoff, the ZOH's
+//   residue, or the leak's own tail. MEASURED: a +/-1-count tremor at
+//   aim_sensitivity 0.14 and the shipped 0.20 s window settles at
+//   0.52..0.59 deg/s across 240/120/60/30/10 fps and through a 0.4 s hitch,
+//   so it sits UNDER this wall at every frame rate the game runs.
+//
+//   SATURATION 3 deg/s -- below the slowest deliberate input anybody has
+//   named (Chad's fly card: "a slow 5 deg/s lateral drift while belly-up must
+//   NOT right him"), so a real hand of ANY size reads fully live and the
+//   gun-director veto is untouched. Between the two walls the smoothstep is
+//   continuous: there is no threshold here that can chatter.
+//
+// ⚠ THE FELT WALL IS NOT 3 deg/s -- IT IS ~1.3 (red-team P1-1, 2026-09-16,
+// folded as a NUMBER because the argument above read the wrong one). The
+// clock's reset is MULTIPLICATIVE (hand_rest <- min(rest+dt, cap)*(1-live)),
+// whose equilibrium is hand_rest* = dt*(1-live)/live, so the gate is already
+// HALVED at live = 0.0625 -- a sixteenth of the way up the smoothstep, not
+// half. Derived at the shipped sim_dt 1/120 and right_hand_rest 0.25:
+//   gate 0.5  <=>  hand_rest* = 0.125 s  <=>  live = 1/16  <=>  net rate
+//   1 + 2*0.152 = ~1.30 deg/s.
+// So the decision happens at ~1.3 deg/s, x2.2 the MEASURED tremor rate
+// (0.52..0.59 deg/s), not the x5.2 the saturation implies -- and the wall
+// MOVES with sim_dt and right_hand_rest, neither of which is this dial:
+// retuning either silently retunes this. A sustained deliberate drift under
+// ~1.2 deg/s is therefore NOT vetoed at all (v16 vetoed it 100 %); that is a
+// ruling for Chad, written on the fly card, and pinned as a number by the
+// boundary leg in test/unit/test_loop_rollover.cpp.
+constexpr double kNetFloorRate = 1.0 * 3.14159265358979323846 / 180.0;
+constexpr double kNetLiveRate = 3.0 * 3.14159265358979323846 / 180.0;
+
 // Seek law (§7 Chad 2026-07-06): the NOSE pursuit rate vs pointing error. Same
 // shape as sqrt_law (sign-preserving, braking-capped) but the near-zero LINEAR
 // branch — which vanishes as e->0 and makes the nose CREEP lazily into the
@@ -229,10 +266,104 @@ Output step(const sim::SimState& s, const Input& in, const Internal& internal,
     const bool hand_live =
         in.aim_moved ||
         glm::dot(in.aim_rate_world, in.aim_rate_world) > 0.0;
-    ns.hand_rest = hand_live
-                       ? 0.0
-                       : std::min(internal.hand_rest + dt,
-                                  std::max(cp.right_hand_rest, 0.0));
+    // S-tremor (kernel v17 candidate, [auto_level] hand_net_window): HOW LIVE
+    // is the hand, as a continuous [0,1] -- the WINDOWED NET aim displacement.
+    // params.h carries the derivation, the debt it pays and the rulings it
+    // respects; the short of it: a +/-1-count-per-frame tremor NETS TO
+    // NOTHING over a short window and must not cap the righting, while a real
+    // sweep of ANY size nets to its own rate and must still veto (the
+    // gun-director law). window == 0 is the STRUCTURAL OFF ARM: the else
+    // branch below is the v16 expression, character for character, and
+    // nothing above it is evaluated.
+    double hand_live_frac = hand_live ? 1.0 : 0.0;
+    double hand_net_rate = 0.0;
+    if (cp.hand_net_window > 0.0) {
+        // The leaky window integral of the aim's OWN world-frame rotation
+        // vector, in SECONDS of sim time (never ticks or frames -- the AT-9 /
+        // red-team-P1 law). in.aim_rate_world is the ZOH-smeared reading:
+        // its integral over a frame is EXACTLY the rotation apply_mouse
+        // applied that frame, on the consuming tick and the N-1 smeared ones
+        // alike, so this counts every frame once at any frame rate. The leak
+        // is clamped like aim_ff_tau's low-pass so a tiny window can never
+        // overshoot into a sign-flipping oscillation.
+        const double leak = std::clamp(dt / cp.hand_net_window, 0.0, 1.0);
+        ns.aim_net =
+            internal.aim_net + in.aim_rate_world * dt - leak * internal.aim_net;
+        // The NORMALISER: the identical leak run on dt alone, and the dt is
+        // added ONLY ON A LIVE TICK. ⚠ SCAR (red-team 2026-09-16, P0-1, found
+        // by BOTH lenses independently): the first cut added dt on EVERY tick,
+        // so the normaliser was not a normaliser at all -- its recurrence
+        // w <- w(1-dt/W)+dt has the fixed point W and does not depend on the
+        // hand, reaching 99 % of W in 5*W = 1 s of sim time and staying there
+        // for the rest of the process. The ratio was then |aim_net|/W, the
+        // UN-NORMALISED form, for every flight after its first second: a sweep
+        // beginning from a hand that had been RESTING (the only state in which
+        // the gate is nonzero, i.e. the only state this law is about) divided
+        // by a full window the signal had not had, read r*(1-exp(-t/W)), and
+        // the veto arrived LATE -- measured through app::step_frame, belly-up
+        // at a full gate, integrated |roll_right| after the hand goes on:
+        // 14.42 deg / 0.100 s at 5 deg/s, 25.94 deg at 3 deg/s, and at or
+        // below 1.5 deg/s it never arrived at all (61.5 deg: the whole
+        // remaining righting handed to a pilot who was deliberately sweeping).
+        // That broke the gun-director law (Chad 2026-09-12) at the exact
+        // instant the law is about, and it broke Chad's own fly card row
+        // ("a slow 5 deg/s lateral drift while belly-up must NOT right him").
+        // Counting LIVE time makes both accumulators decay together through a
+        // rest -- their RATIO is preserved, so a hand that stops mid-sweep is
+        // still read at its own rate, conservatively (fail to the veto) -- and
+        // on the first live tick after any real rest both are one tick old
+        // again, so the ratio is the true instantaneous rate and the veto is
+        // on the NEXT TICK, exactly as v16. MEASURED with this fold: 1.50 deg
+        // / 0.008 s at 3 / 5 / 10 / 40 deg/s == v16 to the digit. Its price is
+        // written down, not hidden: the discount must now be EARNED by one
+        // window of continuous motion, so an INTERMITTENT tremor keeps less of
+        // the cure (the residual leg prints it).
+        ns.aim_net_w = internal.aim_net_w + (hand_live ? dt : 0.0) -
+                       leak * internal.aim_net_w;
+        if (hand_live) {
+            // THE MEASURE: the sweep rate the window's motion adds up to.
+            // aim_net_w >= dt > 0 on a live tick by construction (it was just
+            // incremented from a non-negative value) for every caller that
+            // passes a positive dt -- which app::step_frame and the harness
+            // both do. The max() is the belt for a DIRECT caller of
+            // control::step with dt == 0 (red-team P3): 0/0 would put a NaN
+            // into the liveness, the clock, the gate and the roll demand.
+            hand_net_rate =
+                glm::length(ns.aim_net) / std::max(ns.aim_net_w, 1e-12);
+            // A FLOOR, then a saturation -- continuous, no boolean to
+            // chatter (CLAUDE.md). The floor is the v16 session's "lying
+            // instrument" lesson made structural: roundoff (1e-17) can never
+            // read as a moving hand. The saturation sits BELOW the slowest
+            // deliberate input anyone has named (Chad's fly card: a 5 deg/s
+            // belly-up drift must NOT right him), so a real hand saturates.
+            hand_live_frac =
+                smoothstep(kNetFloorRate, kNetLiveRate, hand_net_rate);
+            // A hand that moved but reported NO rate is unmeasurable, so it
+            // cannot be proven to net to nothing: it stays fully live (fail
+            // to the veto, never to the righting). Structurally unreachable
+            // in the app -- app::tick sets aim_moved and aim_rate_world from
+            // the SAME apply_mouse rotation, so a moved aim always carries a
+            // rate -- but harness scenarios and direct callers script the bit
+            // alone, and this is the arm they must keep flying.
+            if (glm::dot(in.aim_rate_world, in.aim_rate_world) <= 0.0)
+                hand_live_frac = 1.0;
+        }
+        // The clock decays by the liveness instead of being slammed by a
+        // boolean. hand_live_frac == 1 reproduces the v16 reset EXACTLY
+        // (a 0.0 clock); == 0 is the full hands-off accumulation. The OUTER
+        // hand_live gate above is what keeps the 2026-08-06 ruling intact:
+        // the tick the hand stops, liveness is 0 and the clock climbs -- the
+        // window adds NO delay to the hands-off path.
+        ns.hand_rest = std::min(internal.hand_rest + dt,
+                                std::max(cp.right_hand_rest, 0.0)) *
+                       (1.0 - hand_live_frac);
+    } else {
+        ns.hand_rest = hand_live ? 0.0
+                                 : std::min(internal.hand_rest + dt,
+                                            std::max(cp.right_hand_rest, 0.0));
+    }
+    out.telem.hand_net_rate = hand_net_rate;
+    out.telem.hand_live_frac = hand_live_frac;
 
     // Regime hysteresis + heldBank capture on FINE entry (SPEC §9.3). The
     // latch gates ONLY the capture edge + telemetry; commands blend

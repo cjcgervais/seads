@@ -96,6 +96,27 @@
     XB(i_cap_inbound, S.internal.cap_inbound)                                 \
     XD(i_cap_rim_t, S.internal.cap_rim_t)
 
+// --- REPLAY STATE A PRE-EXISTING TAPE CANNOT CARRY -------------------------
+// Written like every other state field, so a tape recorded from HERE ON seeds
+// them exactly -- but NOT REQUIRED by the reader, because the tapes of Chad's
+// flights that the gate replays were recorded before these columns existed and
+// re-recording them is not possible: they are HIS hand, not a fixture.
+//
+// This is a narrow, NAMED exception to the throwing reader, and it is only
+// legitimate for SHORT-MEMORY state that the recorded INPUT reconstructs:
+// aim_net / aim_net_w are a hand_net_window (0.2 s) leaky integral of the aim
+// rotation, and aim_dx / aim_dy ARE recorded columns -- so a seed that starts
+// them at 0 re-converges within one window, and the only error is that the
+// replay's first ~0.2 s scores the hand as stiller than it was. Nothing with a
+// LONG memory (the rate-PI integral) or a LATCHED sign (roll_latch) may ever be
+// added here: those cannot be reconstructed, a zero seed flies a different
+// aeroplane, and that is the whole reason the reader throws.
+#define SEADS_TAPE_OPT_FIELDS(XD, XB, XI, XE)                                 \
+    XD(i_aim_netx, S.internal.aim_net.x)                                      \
+    XD(i_aim_nety, S.internal.aim_net.y)                                      \
+    XD(i_aim_netz, S.internal.aim_net.z)                                      \
+    XD(i_aim_net_w, S.internal.aim_net_w)
+
 // --- the AIM FRAME + the app-side state that steers the recorded deltas ----
 // apply_mouse rotates about the frame's OWN axes, and rest_horizon_tick ROLLS
 // that frame -- so without these the recorded mouse steers along a different
@@ -128,9 +149,13 @@
     XD(a_spawn_fwdy, S.spawn_fwd.y)                                           \
     XD(a_spawn_fwdz, S.spawn_fwd.z)
 
+// Order IS the wire format. OPT sits between INT and APP; the column names,
+// the writer and the seeder all walk THIS list, so the three can never
+// disagree about where the new columns are.
 #define SEADS_TAPE_STATE_FIELDS(XD, XB, XI, XE)                               \
     SEADS_TAPE_SIM_FIELDS(XD, XB, XI, XE)                                     \
     SEADS_TAPE_INT_FIELDS(XD, XB, XI, XE)                                     \
+    SEADS_TAPE_OPT_FIELDS(XD, XB, XI, XE)                                     \
     SEADS_TAPE_APP_FIELDS(XD, XB, XI, XE)
 
 namespace app {
@@ -147,7 +172,16 @@ static_assert(sizeof(sim::SimState) == 168,
               "SEADS_TAPE_SIM_FIELDS, then update this size. A tape that does "
               "not carry every plant field seeds a DIFFERENT aeroplane "
               "(throttle/flap/gear cost a night on 2026-09-13).");
-static_assert(sizeof(control::Internal) == 248,
+// 248 -> 280 (2026-09-16, S-tremor): + glm::dvec3 aim_net and its scalar
+// normaliser aim_net_w, the windowed NET aim-displacement accumulator. It is
+// REPLAY STATE (a leaky integral with a window of memory), so both are
+// WRITTEN like any other internal field and carried in SEADS_TAPE_OPT_FIELDS
+// above -- OPT, not INT (red-team P3, 2026-09-16: that distinction is the
+// whole exception, see the rulebook comment there) -- because a mid-tape seed
+// that started them at zero would score the replay's first window as a still
+// hand, and because REQUIRING the columns would refuse the six S-yawbudget
+// tapes of Chad's own 2026-09-13 dives, which cannot be re-recorded.
+static_assert(sizeof(control::Internal) == 280,
               "control::Internal changed -- add/remove the member in "
               "SEADS_TAPE_INT_FIELDS, then update this size.");
 static_assert(sizeof(input::AimFrame) == 32,

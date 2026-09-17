@@ -1,13 +1,13 @@
 # reference/seads-feel/ — PRIMARY reference: the active kernel
 
-These files are **copies**, re-snapshotted **2026-09-15 (23:35)**, from `D:\flight_sim2\seads-feel`'s
+These files are **copies**, re-snapshotted **2026-09-16 (22:55)**, from `D:\flight_sim2\seads-feel`'s
 shared repository (`D:\flight_sim2\seads`, remote `github.com/cjcgervais/seads_sandbox1`) at
-**`354f6df3a`** = tag **`kernel-v16-yawbudget-signed`** (annotated, landed on `main`
-2026-09-15 23:2x through this repo's sentinel; `origin/main` = `66036b98e`, a LANES-only follow-up). This is the kernel on `main`; at the
-time of writing the `seads-recon` fly tree (`sandbox/r4a-phase0` @ `5d38ed150`, exe 22:17:44)
-still carried v15 + AS-5 and the v16 recon merge + rebuild was in flight — check the exe mtime.
+**`3a95a4d08`** = tag **`kernel-v17-tremor-signed`** (annotated, landed on `main` 2026-09-16 22:47
+as a pure fast-forward from `edfc60ee8` through this repo's sentinel; `origin/main` == the tag).
+This is the kernel on `main`. The `seads-recon` fly tree (`sandbox/r4a-phase0`) merged it as
+`4b8c68698` and rebuilt `build-play/seads.exe` at 2026-09-16 22:50:12 (the kernel lane's report).
 
-**Snapshot method:** `git archive 354f6df3a app config control docs input render sim test`.
+**Snapshot method:** `git archive 3a95a4d08 app config control docs input render sim test`.
 **Purity exceptions, stated (all reproducible from the tag, none touch the kernel):**
 
 - `render/*.gen.h` — the 26 MB generated Sudbury GIS header, omitted.
@@ -65,6 +65,30 @@ line + `docs/flight-log.md` row in the same landing). See this repo's `docs/DECI
 controller; the writer and reader both derive from one column list after the "void battery"
 defect (a reader that defaulted a missing column to 0.0 graded a dial against a non-dive for
 a night). `app/rest_horizon.h` (extracted from `instructor_tick.h` by the cam-smooth lane).
+
+## KERNEL v17 (`kernel-v17-tremor-signed`, `3a95a4d08`, 2026-09-16) — S-tremor, IN THIS SNAPSHOT
+
+ONE dial: `[auto_level] hand_net_window = 0.20` s (0 = the v16 tree bit-identically, three hash
+pins). Cures the v15 red-team P2 debt: "hand is live" was ANY nonzero aim motion, so a ±1-count
+per-frame mouse tremor while belly-up reset the hand-rest clock every frame and the aeroplane
+never righted. The cure is a windowed NET aim-rate measure (leaky integral of `aim_rate_world`
+over the window, divided by an identically-leaked accumulator of LIVE dt) feeding a continuous
+liveness `smoothstep(1, 3 °/s)` that SCALES the clock reset instead of slamming it. Built,
+gated, red-teamed and folded by the overnight autonomous run (Chad's word: *"establish it as a
+workflow that runs automatically overnight"*); two fresh-context lenses converged on the same
+P0 (the veto was late from a rested hand: the normaliser must count LIVE time), folded in
+`4a6248c80`. Gate on `4a6248c80` twice = 6 of 2116 == baseline six by name. Chad, 22:44:
+*"okay I flew the tremor tape, I think we are good I am satisfied, the pause at the top of a
+loop made it want to right it self and threw me off a bit, split s is good, and the belly up
+small movements kept me inverted for the most part"*. Accepted named exception: a sustained
+deliberate drift under ~1.3 °/s is no longer vetoed (v16 vetoed it 100 %). Kernel delta
+v16→v17: `control/controller.cpp` +139, `controller.h` +37, `params.h` +80,
+`config/controller.toml` +51, `load_controller.cpp` +15, plus tape fields (160→166 columns,
+new fields OPTIONAL on read via `SEADS_TAPE_OPT_FIELDS`). `docs/SESSION_HANDOFF_20260916_tremor_netwindow.md`
+and the two `REDTEAM_20260916_tremor_netwindow_*.md` are in this snapshot. This repo's entry:
+`docs/cascade/hand-tremor-net-window.md`. NOT in this snapshot (not on main):
+`docs/KNIFE_EDGE_RINGING_DIAG_20260916.md` on `feel/knife-edge-diag` — its proposed dial
+`lean_vert_purge` (kernel v18 candidate) was opened for build on Chad's word the same evening.
 
 ## KERNEL v16 (`kernel-v16-yawbudget-signed`, `354f6df3a`, 2026-09-15) — S-yawbudget, IN THIS SNAPSHOT
 

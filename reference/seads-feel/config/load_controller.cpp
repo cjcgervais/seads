@@ -164,6 +164,11 @@ control::ControllerParams load_controller_toml(const std::string& path,
     // (absent => 0 => the structural OFF arm, bit-identical legacy tree).
     c.right_hand_rest =
         optional_double(root, "auto_level", "right_hand_rest", 0.0);
+    // S-tremor: SECONDS of sim time, NOT an angle -- never rad() it (the
+    // right_hand_rest shape). OPTIONAL (absent => 0 => the structural OFF
+    // arm, bit-identical v16 tree).
+    c.hand_net_window =
+        optional_double(root, "auto_level", "hand_net_window", 0.0);
     c.wings_level_band =
         require(root, "regime", "wings_level_band");  // cos units
     // S-maninvert: the maneuver limb's inversion fade band, cos units like
@@ -562,6 +567,16 @@ control::ControllerParams load_controller_toml(const std::string& path,
     check(c.right_hand_rest >= 0.0 && c.right_hand_rest <= 2.0,
           "0 <= right_hand_rest <= 2 (seconds of hand-rest before MB-right "
           "has full authority; 0 = off)");
+    // S-tremor: the net-displacement window. 0 is LEGAL (the OFF arm) and a
+    // NEGATIVE value is refused -- it would invert the leak into a divergent
+    // accumulator. The upper wall is the felt one and the same family as
+    // right_hand_rest's: past ~1 s the window outlives the hand-rest ramp it
+    // feeds, so a deliberate sweep that ENDED would still be scored live
+    // after the clock has already begun climbing -- the measure would be
+    // reporting history rather than the hand.
+    check(c.hand_net_window >= 0.0 && c.hand_net_window <= 1.0,
+          "0 <= [auto_level] hand_net_window <= 1 (seconds of NET aim "
+          "displacement window; 0 = off)");
     check(c.wings_level_band > 0.0 && c.wings_level_band < 1.0,
           "0 < wings_level_band < 1 (fade band around the 90 deg knife-edge)");
     check(c.push_gate_bank > c.push_gate_bank_lo && c.push_gate_bank_lo > 0.0,

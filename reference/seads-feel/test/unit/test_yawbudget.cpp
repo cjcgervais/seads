@@ -252,6 +252,16 @@ struct Fix {
         const std::string& v = rows[r][size_t(idx(n))];
         return v.empty() ? 0.0 : std::atof(v.c_str());
     }
+    // ONLY for SEADS_TAPE_OPT_FIELDS (app/feel_tape_fields.h carries the rule
+    // and the reason). These fixtures are Chad's OWN dives, recorded
+    // 2026-09-13 under kernel v15 -- they cannot carry a column added after
+    // the flight, and they can never be re-recorded. Every other column stays
+    // a hard throw, which is the point of this reader.
+    double at_or(size_t r, const std::string& n, double dflt) const {
+        for (size_t i = 0; i < names.size(); ++i)
+            if (names[i] == n) return at(r, n);
+        return dflt;
+    }
 };
 
 Fix load_fix(const char* path) {
@@ -290,14 +300,26 @@ FixRes fly_fix(const Fix& f, const control::ControllerParams& cp) {
 #define SEED_I(name, expr) (expr) = int(f.at(0, #name));
 #define SEED_E(name, expr) \
     (expr) = control::CaptureState(int(f.at(0, #name)));
+#define SEED_OPT_D(name, expr) (expr) = f.at_or(0, #name, 0.0);
+#define SEED_OPT_B(name, expr) (expr) = f.at_or(0, #name, 0.0) > 0.5;
+#define SEED_OPT_I(name, expr) (expr) = int(f.at_or(0, #name, 0.0));
+#define SEED_OPT_E(name, expr) \
+    (expr) = control::CaptureState(int(f.at_or(0, #name, 0.0)));
     {
         app::LoopState& S = st;
-        SEADS_TAPE_STATE_FIELDS(SEED_D, SEED_B, SEED_I, SEED_E)
+        SEADS_TAPE_SIM_FIELDS(SEED_D, SEED_B, SEED_I, SEED_E)
+        SEADS_TAPE_INT_FIELDS(SEED_D, SEED_B, SEED_I, SEED_E)
+        SEADS_TAPE_OPT_FIELDS(SEED_OPT_D, SEED_OPT_B, SEED_OPT_I, SEED_OPT_E)
+        SEADS_TAPE_APP_FIELDS(SEED_D, SEED_B, SEED_I, SEED_E)
     }
 #undef SEED_D
 #undef SEED_B
 #undef SEED_I
 #undef SEED_E
+#undef SEED_OPT_D
+#undef SEED_OPT_B
+#undef SEED_OPT_I
+#undef SEED_OPT_E
     st.curr.orientation = glm::normalize(st.curr.orientation);
     st.aim.q = glm::normalize(st.aim.q);
     st.prev = st.curr;
@@ -445,14 +467,26 @@ ScaleStats fix_scale(const Fix& f, const control::ControllerParams& cp) {
 #define SEED_I(name, expr) (expr) = int(f.at(0, #name));
 #define SEED_E(name, expr) \
     (expr) = control::CaptureState(int(f.at(0, #name)));
+#define SEED_OPT_D(name, expr) (expr) = f.at_or(0, #name, 0.0);
+#define SEED_OPT_B(name, expr) (expr) = f.at_or(0, #name, 0.0) > 0.5;
+#define SEED_OPT_I(name, expr) (expr) = int(f.at_or(0, #name, 0.0));
+#define SEED_OPT_E(name, expr) \
+    (expr) = control::CaptureState(int(f.at_or(0, #name, 0.0)));
     {
         app::LoopState& S = st;
-        SEADS_TAPE_STATE_FIELDS(SEED_D, SEED_B, SEED_I, SEED_E)
+        SEADS_TAPE_SIM_FIELDS(SEED_D, SEED_B, SEED_I, SEED_E)
+        SEADS_TAPE_INT_FIELDS(SEED_D, SEED_B, SEED_I, SEED_E)
+        SEADS_TAPE_OPT_FIELDS(SEED_OPT_D, SEED_OPT_B, SEED_OPT_I, SEED_OPT_E)
+        SEADS_TAPE_APP_FIELDS(SEED_D, SEED_B, SEED_I, SEED_E)
     }
 #undef SEED_D
 #undef SEED_B
 #undef SEED_I
 #undef SEED_E
+#undef SEED_OPT_D
+#undef SEED_OPT_B
+#undef SEED_OPT_I
+#undef SEED_OPT_E
     st.curr.orientation = glm::normalize(st.curr.orientation);
     st.aim.q = glm::normalize(st.aim.q);
     st.prev = st.curr;

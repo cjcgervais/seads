@@ -36,8 +36,18 @@ class FeelTape {
     static std::vector<std::string> seed_columns() {
         std::vector<std::string> v;
 #define SEADS_TAPE_NEED_ONE(name, expr) v.push_back(#name);
-        SEADS_TAPE_STATE_FIELDS(SEADS_TAPE_NEED_ONE, SEADS_TAPE_NEED_ONE,
-                                SEADS_TAPE_NEED_ONE, SEADS_TAPE_NEED_ONE)
+        // SIM + INT + APP, but NOT SEADS_TAPE_OPT_FIELDS: those are the
+        // columns a tape recorded before they existed cannot carry, and
+        // feel_tape_fields.h states the narrow rule for what may live there.
+        // They are still WRITTEN, still named, and still seeded when present
+        // (seed() below) -- they are simply not grounds to refuse a tape of a
+        // flight that predates them.
+        SEADS_TAPE_SIM_FIELDS(SEADS_TAPE_NEED_ONE, SEADS_TAPE_NEED_ONE,
+                              SEADS_TAPE_NEED_ONE, SEADS_TAPE_NEED_ONE)
+        SEADS_TAPE_INT_FIELDS(SEADS_TAPE_NEED_ONE, SEADS_TAPE_NEED_ONE,
+                              SEADS_TAPE_NEED_ONE, SEADS_TAPE_NEED_ONE)
+        SEADS_TAPE_APP_FIELDS(SEADS_TAPE_NEED_ONE, SEADS_TAPE_NEED_ONE,
+                              SEADS_TAPE_NEED_ONE, SEADS_TAPE_NEED_ONE)
 #undef SEADS_TAPE_NEED_ONE
         return v;
     }
@@ -128,21 +138,45 @@ class FeelTape {
             throw std::runtime_error("feel tape: short row for '" + n + "'");
         return rows_[row][size_t(i)];
     }
+    // The value of column `n`, or `dflt` if the tape has no such column.
+    // ONLY for SEADS_TAPE_OPT_FIELDS -- feel_tape_fields.h carries the rule
+    // for what is allowed to be optional and why. Never reach for this to
+    // silence a missing column: that is the bug this file was written for.
+    double at_or(size_t row, const std::string& n, double dflt) const {
+        return index_of(n) < 0 ? dflt : at(row, n);
+    }
     // Restores the COMPLETE replay state into `S` from row `row`. Every
     // field of SEADS_TAPE_STATE_FIELDS, generated -- so a member added to
     // sim::SimState or control::Internal cannot be forgotten here either.
+    // The OPT block reads through at_or, so a tape older than those columns
+    // seeds them at their fresh-start value instead of refusing to load.
     void seed(size_t row, app::LoopState& S) const {
 #define SEADS_TAPE_READ_D(name, expr) (expr) = at(row, #name);
 #define SEADS_TAPE_READ_B(name, expr) (expr) = at(row, #name) > 0.5;
 #define SEADS_TAPE_READ_I(name, expr) (expr) = int(at(row, #name));
 #define SEADS_TAPE_READ_E(name, expr) \
     (expr) = control::CaptureState(int(at(row, #name)));
-        SEADS_TAPE_STATE_FIELDS(SEADS_TAPE_READ_D, SEADS_TAPE_READ_B,
-                                SEADS_TAPE_READ_I, SEADS_TAPE_READ_E)
+#define SEADS_TAPE_READ_OPT_D(name, expr) (expr) = at_or(row, #name, 0.0);
+#define SEADS_TAPE_READ_OPT_B(name, expr) (expr) = at_or(row, #name, 0.0) > 0.5;
+#define SEADS_TAPE_READ_OPT_I(name, expr) (expr) = int(at_or(row, #name, 0.0));
+#define SEADS_TAPE_READ_OPT_E(name, expr) \
+    (expr) = control::CaptureState(int(at_or(row, #name, 0.0)));
+        SEADS_TAPE_SIM_FIELDS(SEADS_TAPE_READ_D, SEADS_TAPE_READ_B,
+                              SEADS_TAPE_READ_I, SEADS_TAPE_READ_E)
+        SEADS_TAPE_INT_FIELDS(SEADS_TAPE_READ_D, SEADS_TAPE_READ_B,
+                              SEADS_TAPE_READ_I, SEADS_TAPE_READ_E)
+        SEADS_TAPE_OPT_FIELDS(SEADS_TAPE_READ_OPT_D, SEADS_TAPE_READ_OPT_B,
+                              SEADS_TAPE_READ_OPT_I, SEADS_TAPE_READ_OPT_E)
+        SEADS_TAPE_APP_FIELDS(SEADS_TAPE_READ_D, SEADS_TAPE_READ_B,
+                              SEADS_TAPE_READ_I, SEADS_TAPE_READ_E)
 #undef SEADS_TAPE_READ_D
 #undef SEADS_TAPE_READ_B
 #undef SEADS_TAPE_READ_I
 #undef SEADS_TAPE_READ_E
+#undef SEADS_TAPE_READ_OPT_D
+#undef SEADS_TAPE_READ_OPT_B
+#undef SEADS_TAPE_READ_OPT_I
+#undef SEADS_TAPE_READ_OPT_E
         // The quaternions are stored as components; renormalise once (a tape
         // round-trip is exact to max_digits10, but normalise anyway so a
         // hand-edited or interpolated row can never feed a non-unit rotation

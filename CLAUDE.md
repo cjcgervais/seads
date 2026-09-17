@@ -31,19 +31,24 @@ kernel v5. The live risk is now the other direction: the feel branch **moves pas
 seal**. `D:\flight_sim2\seads-feel` (a worktree of `D:\flight_sim2\seads`, on whichever
 `feel/<name>` lane is checked out) is where new feel work lands first.
 
-**Tip as of 2026-09-15 23:35, re-derived this session — RE-DERIVE IT AGAIN BEFORE CITING IT:**
-`origin/main` = **`66036b98e`** (a LANES-only follow-up on top of **`354f6df3a`** = tag
-**`kernel-v16-yawbudget-signed`**, landed 2026-09-15 through this sentinel). Seal chain
-v5→…→v12→v13→v13g→v14→v15→**v16**. v16 = ONE dial `[coordination] yaw_vert_budget` 1.0
-(gap −5..10°, budget floor 1 °/s), the lateral nose-down answer; the unload dial was REMOVED
-at Chad's ruling *"no deck save unload keep the yaw budget"*. His word on the landing exe:
-*"I didnt notice a difference, I can fly it fine"*. The feel branch is NO LONGER
+**Tip as of 2026-09-16 22:55, re-derived this session — RE-DERIVE IT AGAIN BEFORE CITING IT:**
+`origin/main` = **`3a95a4d08`** = tag **`kernel-v17-tremor-signed`** (pure fast-forward from
+`edfc60ee8`, landed 2026-09-16 22:47 through this sentinel). Seal chain
+v5→…→v12→v13→v13g→v14→v15→v16→**v17**. v17 = ONE dial `[auto_level] hand_net_window` 0.20 s,
+a windowed NET hand-live measure so a mouse tremor no longer blocks belly-up righting; 0 = v16
+bit-identically. Built by the overnight autonomous run, two red-team lenses folded. His word:
+*"okay I flew the tremor tape, I think we are good I am satisfied ... the belly up small
+movements kept me inverted for the most part"*. v16 (`354f6df3a`) = `[coordination]
+yaw_vert_budget` 1.0, the lateral nose-down answer. The feel branch is NO LONGER
 `feel/kernel-v5` (dead at `15571a5f4`): feel work lands on short-lived `feel/<name>` lanes
 through the SENTINEL protocol and is tagged at the pushed `main` tip.
-**`reference/seads-feel/` is snapshotted at the v16 tip `354f6df3a`** (four stated purity
-exceptions in its README). `docs/cascade/lateral-nose-down-unload.md` is the v16 entry.
-The fly tree `D:\flight_sim2\seads-recon` (`sandbox/r4a-phase0`) carried v15 + AS-5 at the time of
-writing (exe 22:17:44); the v16 recon merge + rebuild was in flight — check the exe mtime.
+**`reference/seads-feel/` is snapshotted at the v17 tip `3a95a4d08`** (four stated purity
+exceptions in its README). `docs/cascade/hand-tremor-net-window.md` is the v17 entry,
+`docs/cascade/lateral-nose-down-unload.md` the v16 one. In flight on Chad's word ("yes on the
+knife edge for after the push"): the knife-edge ringing dial `lean_vert_purge`, kernel v18
+candidate, on `feel/knife-edge-diag`, lane only until the sentinel GO.
+The fly tree `D:\flight_sim2\seads-recon` (`sandbox/r4a-phase0`) merged v17 as `4b8c68698`,
+exe `build-play/seads.exe` 2026-09-16 22:50:12 (the kernel lane's report) — check the exe mtime.
 
 **THIS AGENT IS THE SENTINEL for pushes into flight_sim2 (Chad, 2026-09-15).** The SOP, the
 queue and the dated ledger are in **`docs/SENTINEL_LEDGER.md`**. Read-only in the live trees

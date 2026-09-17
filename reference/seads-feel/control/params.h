@@ -31,7 +31,8 @@ namespace control {
 // X(member, off_value)
 #define SEADS_FEEL_DIALS(X)                                                   \
     X(right_hand_rest, 0.0)   /* S-righthand (kernel v15) */                  \
-    X(yaw_vert_budget, 0.0)   /* S-yawbudget (TARGET 2)   */
+    X(yaw_vert_budget, 0.0)   /* S-yawbudget (TARGET 2)   */                  \
+    X(hand_net_window, 0.0)   /* S-tremor    (kernel v17) */
 #define SEADS_FEEL_DIALS_OFF_ONE(member, off) (seads_feel_dials_obj_).member = (off);
 // (red-team P1-2) The macro used to IGNORE its argument and write to
 // whatever variable happened to be named `c` -- so SEADS_FEEL_DIALS_OFF(cp)
@@ -334,6 +335,83 @@ struct ControllerParams {
     // deferred rather than bodged with a deadband here.
     double right_hand_rest = 0.0;  // [s] hand-at-rest before MB-right has
                                    //     full authority; 0 = off
+
+    // S-tremor (kernel v17 candidate, feel/tremor-netwindow 2026-09-16) -- the
+    // WINDOWED NET aim displacement. THE CURE for the debt recorded directly
+    // above, built as the v15 red-team's own recorded cure shape.
+    //
+    // THE DEFECT. right_hand_rest's clock resets on "the hand is live" ==
+    // ANY nonzero aim motion this tick. A +/-1-count-per-frame mouse tremor
+    // (wireless mouse, shaky hand, a desk the fan shakes) therefore resets it
+    // EVERY FRAME, the ramp never climbs, and a belly-up aeroplane is never
+    // righted: integrated righting 1.76 deg against 117.75 with a still hand.
+    // From the seat that reads "it will not right me" -- the 2026-08-06 ruling
+    // ("inverted righting carries NO added delay -- as soon as the rest
+    // condition is met") broken by a hand that is resting but not still.
+    //
+    // WHY NOT A DEADBAND. A count deadband just moves the threshold and eats
+    // small deliberate inputs; the aim is UNCAPPED by ruling (S-aimclamp /
+    // S-retclamp rejected twice). The discriminator has to be the SHAPE of the
+    // motion, not its size: a tremor NETS TO NOTHING over a short window, a
+    // real sweep -- of any size -- does not.
+    //
+    // THE MECHANISM. A leaky window integral of the aim's own world-frame
+    // rotation vector (in.aim_rate_world, the ZOH-smeared frame-rate-invariant
+    // reading apply_mouse produced), time constant hand_net_window SECONDS of
+    // sim time, divided by the IDENTICAL leak run on dt alone. That ratio is
+    //     net_rate = |aim_net| / aim_net_w   [rad/s]
+    // -- the sweep rate the window's motion ADDS UP TO, and it equals a
+    // constant sweep rate EXACTLY, from the first LIVE tick after any rest
+    // (controller.h carries why the un-normalised |aim_net|/window was wrong,
+    // and the scar: the normaliser must count LIVE time, or it is a constant
+    // and the veto is late by its whole rise time). A tremor's net_rate
+    // is (one frame's rotation)/window regardless of frame rate -- 0.52..0.59
+    // deg/s measured at 240/120/60/30/10 fps and through a 0.4 s hitch, for a
+    // +/-1-count tremor at aim_sensitivity 0.14 -- while a deliberate 5 deg/s
+    // drift reads exactly 5. Liveness is the CONTINUOUS smoothstep of that
+    // rate between a 1 deg/s FLOOR (the v16 "lying instrument" lesson:
+    // roundoff, 1e-17, must never count as motion) and a 3 deg/s saturation,
+    // and it scales the clock's reset instead of flipping a boolean -- no new
+    // threshold to chatter (CLAUDE.md: every gate hysteretic or continuous).
+    //
+    // THE GUN-DIRECTOR LAW (Chad 2026-09-12, the aim IS the guns), STATED
+    // HONESTLY AS A BOUNDED EXCEPTION -- red-team P1-2, 2026-09-16, folded as
+    // WORDS because no net-window measure can do better and the difference is
+    // a RULING, not a patch. What this dial actually says is:
+    //     any hand motion whose NET travel over the last hand_net_window is
+    //     under ~0.2 deg (floor x window) is treated as NO HAND, and under
+    //     ~0.6 deg (saturation x window) as a FRACTIONAL hand -- whether it
+    //     is a tremor or a deliberate wobble. The measure is blind to the
+    //     difference BY DESIGN; that blindness is the cure.
+    // Everything else about the law is untouched: a sustained deliberate
+    // sweep above the felt wall (~1.3 deg/s -- controller.cpp derives it; it
+    // is NOT the 3 deg/s saturation) still vetoes, on the FIRST LIVE TICK
+    // after a rest, and the moment the hand stops the OUTER v16 hand-live
+    // gate falls to 0 and the clock climbs immediately, so the 08-06
+    // no-added-delay ruling stands (the window adds NOTHING to the hands-off
+    // path -- pinned bit-identical).
+    //
+    // THE TWO RESIDUALS CHAD MUST RULE ON (both measured, both on the fly
+    // card, neither asserted away):
+    //   1. A sustained deliberate drift UNDER ~1.2 deg/s is not vetoed at all
+    //      (v16 vetoed it 100 %). 2.4 deg of reticle travel over two seconds.
+    //   2. A deliberate TRACKING WOBBLE that nets to nothing is discounted:
+    //      +/-0.5 deg at 1 Hz (about seven counts each way) draws ~98 deg of
+    //      instructor roll where v16 drew 0.0. The wobble residual leg prints
+    //      the table.
+    //
+    // MEASURED (belly-up theta 170, 2 s, integrated |roll_right| through the
+    // shipped app::step_frame): hands off 110.25 deg both arms; a +/-1-count
+    // tremor 0.00 deg with the dial OFF (the debt) against ~109.7 ON; a
+    // 5 / 12 / 40 deg/s deliberate sweep 0.00 deg at either -- and, from a
+    // FULL gate (hand off 0.4 s, then the sweep: the state the pilot is
+    // actually in), the veto lands in 0.008 s at 1.50 deg, v16 to the digit.
+    //
+    // 0.0 = the STRUCTURAL OFF arm: every expression is guarded, so the
+    // golden path evaluates the v16 tree and nothing else (hash-pinned in
+    // test/unit/test_loop_rollover.cpp, at dial 0 with right_hand_rest BOTH
+    // off and at its shipped 0.25).
+    double hand_net_window = 0.0;  // [s] the net-displacement window; 0 = off
 
     // Wings-leveling fade band (S7-loop-invert): the wings-leveling roll fades
     // over smoothstep(-band, +band, cos_phi_theta) — 1 upright (bit-identical

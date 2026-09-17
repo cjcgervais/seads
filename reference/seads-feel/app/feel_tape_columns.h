@@ -84,6 +84,11 @@ inline constexpr const char* kFeelTapeColumns[] = {
     "aoa_ceil", "w_max_p",
     // S-yawbudget: the factor the digging yaw was scaled by (1 = untouched).
     "yaw_budget_scale",
+    // S-tremor: the windowed NET aim rate [rad/s] and the continuous liveness
+    // it produced (0 = the motion netted to nothing, 1 = fully live). Read
+    // them BESIDE hand_rest/hand_gate -- a tremor shows a live hand_dx with a
+    // near-zero hand_net_rate, which is the whole signature.
+    "hand_net_rate", "hand_live_frac",
 // --- THE FULL REPLAY STATE, generated from SEADS_TAPE_STATE_FIELDS so the
 //     names can never drift from the members. Everything above this line is
 //     DIAGNOSTIC (what an analysis reads); everything below is what a SEED

@@ -193,8 +193,32 @@ struct Internal {
     double roll_latch = 0.0;
     double elev_latch = 0.0;
     // S-righthand: seconds the pilot's hand has been OFF the aim. Feeds the
-    // MB-right authority ramp; reset by any aim-moved tick.
+    // MB-right authority ramp; reset by any aim-moved tick (S-tremor scales
+    // that reset by how much the motion NETS to).
     double hand_rest = 0.0;
+    // S-tremor (kernel v17): the LEAKY WINDOW INTEGRAL of the aim's world-frame
+    // rotation vector [rad], time constant cp.hand_net_window. Steady state
+    // under a constant sweep rate r is r*window, so |aim_net|/window is the
+    // net sweep rate of the last window. A tremor nets to ~one frame's
+    // rotation; a real sweep nets to its own rate. Frozen (never written) when
+    // the dial is 0 -- the structural OFF arm evaluates nothing.
+    glm::dvec3 aim_net{0.0};
+    // ...and its NORMALISER: the SAME leak run on dt alone, counting LIVE
+    // TIME ONLY, so it converges to window*(1 - exp(-t_live/window)) -- the
+    // amount of time the integral above has actually had to fill. Because
+    // both accumulators leak together through a rest, their RATIO survives a
+    // pause and |aim_net| / aim_net_w is EXACTLY the constant rate that
+    // produced it, from the first live tick after any rest -- not after a
+    // window of settling. Dividing by the window instead (the obvious form)
+    // made the measure read low for its whole rise time. ⚠ SCAR: the first
+    // cut of this normaliser added dt on EVERY tick, which made it a CONSTANT
+    // (fixed point = window) and therefore the obvious form again after one
+    // second of any flight -- the veto was 0.100 s / 14.4 deg late on Chad's
+    // own 5 deg/s fly-card row and never arrived at or below 1.5 deg/s. Both
+    // red-team lenses found it independently (2026-09-16 P0-1); the fold is
+    // the `hand_live ? dt : 0.0` in controller.cpp. Frozen at 0 when the dial
+    // is off.
+    double aim_net_w = 0.0;
     // Keyboard override (§9.5). ovr_ramp per body axis [pitch,yaw,roll], in
     // [0,1]: climbs by dt/ovr_ramp_time while the axis is held, reset to 0 the
     // tick it releases (the release transient is caught by the cascade
@@ -353,6 +377,17 @@ struct Telemetry {
     double roll_maneuver = 0.0;  // the MANEUVER bank-to-turn limb's emission
     double roll_right = 0.0;     // the MB-right inverted-righting emission
     double hand_gate = 1.0;      // S-righthand's hand-rest authority ramp
+    // S-tremor: the windowed NET aim rate this tick [rad/s] and the LIVENESS
+    // it produced (0 = the motion netted to nothing, 1 = fully live). Pure
+    // REPORT fields, assigned on EVERY tick (unlike the roll limbs above), so
+    // a tape answers "was the hand netting to anything?" by reading. ⚠ The
+    // MEASURE only runs while the hand is live, so hand_net_rate reads 0 BOTH
+    // when the hand netted to nothing and when the hand was off the mouse
+    // entirely: read it beside hand_live_frac and hand_rest, never alone.
+    // With the dial off they read 0 and 1 respectively == the v16 boolean's
+    // own meaning on a live tick.
+    double hand_net_rate = 0.0;
+    double hand_live_frac = 0.0;
     // S-yawbudget: the factor the digging yaw was scaled BY this tick.
     // 1.0 = untouched (the dial off, the gate shut, or the rudder already
     // inside its budget). READ IT, never infer it: reconstructing the trim

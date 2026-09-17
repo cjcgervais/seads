@@ -4,6 +4,42 @@ Standing decisions for the flight kernel. Each entry: date, decision, why, statu
 
 ---
 
+## 2026-09-16 — ⭐ KERNEL v17 (S-tremor) LANDED; the overnight autonomous run is a sanctioned path; the knife-edge dial (v18 candidate) is OPEN on Chad's word
+
+**Dated observation, re-derived this session (read-only in `D:\flight_sim2\seads-feel` and
+`D:\seads_sandboxes\tremor`). Re-derive before citing.**
+
+- **`origin/main` = `3a95a4d08` = tag `kernel-v17-tremor-signed`**, a pure fast-forward from
+  `edfc60ee8` at 22:47 on this sentinel's GO. ONE dial `[auto_level] hand_net_window` 0.20 s;
+  0 = v16 bit-identically. Chad's word verbatim is in the tag, `docs/flight-log.md` and the
+  `CLAUDE.md` kernel line of the live tree. Recon `sandbox/r4a-phase0` merged it as `4b8c68698`,
+  `build-play/seads.exe` 22:50:12 (the kernel lane's step and report). `reference/seads-feel/`
+  re-snapshotted at the tag (same four purity exceptions). Entry:
+  `docs/cascade/hand-tremor-net-window.md`.
+- **Process decision, Chad's word 2026-09-15:** *"establish it as a workflow that runs
+  automatically overnight and that is cheaper on tokens BY USING OPUS"*. The v17 candidate was
+  built, gated twice, red-teamed by two fresh-context lenses, folded and re-gated while he was
+  away, with **nothing on main and no tag** until he flew. The definition of done for such a
+  run is "BUILT + GATED + RED-TEAMED + FOLDED + HANDOFF on the lane"; the landing is a separate
+  session after his fly. Two independent lenses converging on the same P0 (the veto was late
+  from a rested hand: every sweep leg started with the gate already at zero, grading only half
+  the gun-director law) is the strongest evidence yet that the two-lens red-team earns its cost.
+- **Named accepted exception, written in the code not the docs:** the felt wall is ~1.3 °/s,
+  coupled to `sim_dt` and `right_hand_rest`; a sustained deliberate drift under it is no longer
+  vetoed (v16 vetoed it 100 %). His fly word accepts it. Retuning either coupled value silently
+  retunes this.
+- **Knife-edge ringing: DIAGNOSED, and the dial build OPENED.** `feel/knife-edge-diag` @
+  `45adefe3f` (docs only): the ring is one term, `target_body.y · sin(phi)` in MB-lean's `az_lat`
+  numerator, which reads a pure pull/push as lateral aim at the knife edge; measured growing 37 %
+  per cycle at bank 92. Proposed dial `[auto_level] lean_vert_purge` 0..1 (0 = bit-identical,
+  inert at wings level by construction). Chad, 2026-09-16 after the v17 push, to the kernel lane:
+  *"yes on the knife edge for after the push"* — the lane merges `3a95a4d08` and builds it as the
+  v18 candidate, lane only, no main push without the sentinel GO. The fly it cannot pre-measure
+  is a genuinely lateral aim at bank.
+- **Sentinel practice confirmed:** the recon merge + play rebuild belongs to the landing lane
+  (v16 and v17 precedent); the sentinel stays read-only in every live tree and reports the exe
+  mtime the lane gives it.
+
 ## 2026-09-15 — ⭐ KERNEL v15 IS THE FLOWN KERNEL; THE SENTINEL ROLE MOVES HERE; v16 (the lateral nose-down) IS ON HOLD FOR CHAD
 
 **Dated observation, re-derived this session from the live tree (read-only `git fetch` +

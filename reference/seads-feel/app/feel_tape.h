@@ -93,7 +93,7 @@ inline void feel_tape_hook(const app::TickInput& in, const app::LoopState& st,
         "%.17g,%.17g,%.17g,%.17g,%.17g,%.17g,"
         "%.17g,%.17g,%.17g,%.17g,%.17g,%.17g,%.17g,%.9g,%d,"
         "%.17g,%.17g,%.17g,"
-        "%.17g,%.17g,%.17g,%.17g,%.9g,%.9g,%.9g,%.9g,%.9g,%.9g,%d,%d,%d,%d,%.9g,%.9g,%d,%.9g,%.9g,%.9g",
+        "%.17g,%.17g,%.17g,%.17g,%.9g,%.9g,%.9g,%.9g,%.9g,%.9g,%d,%d,%d,%d,%.9g,%.9g,%d,%.9g,%.9g,%.9g,%.9g,%.9g",
         c->tick, c->tick * c->sim_dt, in.frame_ticks, in.aim_dx, in.aim_dy,
         in.aim_rate_ff.x, in.aim_rate_ff.y, in.aim_rate_ff.z, aim.x, aim.y,
         aim.z, tb.x, tb.y, tb.z, telem.e, telem.blend, telem.extracted.phi,
@@ -136,7 +136,9 @@ inline void feel_tape_hook(const app::TickInput& in, const app::LoopState& st,
         // the pitch clamps, so a tape answers "was the channel bounded?"
         // by reading (the AoA pushback is what binds -- measured 112-333 of
         // 720 ticks on his lateral dives, against 0-3 for the G ceiling)
-        aoa_ceil, w_max_p, telem.yaw_budget_scale);
+        aoa_ceil, w_max_p, telem.yaw_budget_scale,
+        // S-tremor: the windowed NET aim rate and the liveness it produced.
+        telem.hand_net_rate, telem.hand_live_frac);
     // THE FULL REPLAY STATE -- one "%.17g," per field of
     // SEADS_TAPE_STATE_FIELDS, in the same order kFeelTapeColumns names them.
     // max_digits10: at |p| = R a float ulp is one tick of gravity (S1).

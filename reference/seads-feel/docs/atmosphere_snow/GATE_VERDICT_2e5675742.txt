@@ -25,8 +25,9 @@ GATE_EXIT=0
 # THE LANDING GATE DID NOT RUN THESE 16: air_field domeround 1-6,
 # cpu_air_optical_depth x3, cpu_air_sky_max_dist, disabled-AirField-reads-1.0,
 # kAirFieldGLSL-contains, render::air_at-vs-sim::atm_frac_at, air_march_range x3
-# incl "the defect Chad flew". Verdict comes from the kernel gate on b4fbea3d4;
-# any red is an AS-5 finding on main and this lane owns it.
+# incl "the defect Chad flew". CLOSED GREEN 2026-09-15: the kernel gate on
+# b4fbea3d4 registered 2101 including all 16 -- "6 tests failed out of 2101",
+# baseline member for member. NO AS-5 FINDING ON MAIN.
 # Verified here: CMakeLists dropped nothing (comm -23 vs main's 135 test files
 # EMPTY); every v15 instrument registered by name (test_loop_rollover 6/6,
 # test_tape_roundtrip 3/3, test_yawbank_balance 7/7); this lane's three files

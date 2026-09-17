@@ -666,8 +666,57 @@ inverted_rate  = 180.0  # [deg/s] the righting roll rate clamp (a 180 in ~1 s)
 # test_loop_rollover.cpp is the SOLE instrument that exercises it with a moving
 # hand. A green gate says nothing about this dial; that probe does.
 right_hand_rest = 0.25  # [s] hand-at-rest before MB-right has full authority
+# S-tremor (kernel v17 candidate, 2026-09-16) -- THE WINDOWED NET HAND-LIVE
+# MEASURE. Pays the debt recorded in the block above.
+#
+# THE DEFECT, measured by the v15 red-team and deferred as P2. right_hand_rest
+# above resets its clock whenever "the hand is live", and "live" was ANY
+# nonzero aim motion this tick. A +/-1-count-per-frame mouse tremor -- a
+# wireless mouse, a shaky hand, a desk the case fan shakes -- resets it EVERY
+# FRAME, so the ramp never climbs and a belly-up aeroplane is never righted:
+# integrated righting 1.76 deg against 117.75 with a still hand. From the seat
+# that is "it will not right me", and it breaks the 2026-08-06 ruling
+# ("inverted righting carries NO added delay -- as soon as the rest condition
+# is met") for a pilot who is resting but not perfectly still.
+#
+# WHY NOT A DEADBAND: a count deadband only moves the threshold and eats small
+# deliberate inputs. The aim is UNCAPPED by ruling (S-aimclamp / S-retclamp
+# were rejected twice). So the discriminator is the SHAPE of the motion, not
+# its size -- a tremor NETS TO NOTHING over a short window; a real sweep, of
+# any size, does not.
+#
+# WHAT IT IS: seconds of a leaky window integral of the aim's own rotation.
+# |net| / window is the sweep rate the last window's motion ADDS UP TO; that
+# rate is smoothstepped between a 1 deg/s floor (roundoff is not a hand) and a
+# 3 deg/s saturation into a CONTINUOUS liveness in [0,1] which scales how hard
+# the hand-rest clock is reset. No new boolean, nothing to chatter.
+#
+# WHAT IT DOES NOT TOUCH: the moment the hand actually stops, the v16
+# hand-live gate falls and the clock climbs on the same tick -- the window
+# adds ZERO delay to the hands-off path, so the 08-06 ruling stands.
+# A sustained 5 deg/s drift reads 5 deg/s, saturates the liveness and holds
+# the gate under 0.05 -- from a rested hand too, in 0.008 s, which is v16's
+# own number (that took the red-team fold of 2026-09-16: the normaliser must
+# count LIVE time or the veto is late by its rise time).
+#
+# THE EXCEPTION, STATED (red-team P1-2 -- it is a RULING, not a detail):
+# any hand motion whose NET travel over the last window is under ~0.2 deg is
+# treated as NO hand, and under ~0.6 deg as a fractional hand, DELIBERATE OR
+# NOT. So (1) a sustained deliberate drift under ~1.2 deg/s is no longer
+# vetoed -- the FELT wall is ~1.3 deg/s, set jointly by the 1 deg/s floor,
+# sim_dt and right_hand_rest, NOT by the 3 deg/s saturation -- and (2) a
+# deliberate half-degree tracking wobble at 1 Hz is discounted (~98 deg of
+# righting where v16 gave 0.0). Both are on Chad's fly card.
+#
+# MEASURED (test_loop_rollover.cpp, the S-tremor block; +/-1-count tremor at
+# 60 fps, belly-up at theta 170):
+#   window  tremor gate  tremor righting  5 deg/s sweep gate  40 deg/s gate
+#   see docs/SESSION_HANDOFF_20260916_tremor_netwindow.md for the sweep table.
+# 0.0 = the STRUCTURAL OFF arm (bit-identical v16 tree, hash-pinned twice).
+# THE WALK-BACK IS THIS LINE -> 0.
+hand_net_window = 0.20  # [s] net-displacement window; 0 = off
 
-[regime]             # blend smoothstep(lo,hi,e); latch gates heldBank + telem
+[regime]           # blend smoothstep(lo,hi,e); latch gates heldBank + telem
 blend_lo = 5.0       # [deg]
 blend_hi = 9.0       # [deg] §7 2026-07-06: 12->9 — full bank-to-turn (roll) kicks
                      #   in a bit SOONER on a lateral deflection (Chad: "roll a

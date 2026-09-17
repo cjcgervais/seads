@@ -630,3 +630,42 @@ TEST_CASE("loader: right_hand_rest is shipped live and walled") {
     CHECK(cp.right_hand_rest >= 0.0);
     CHECK(cp.right_hand_rest <= 2.0);
 }
+
+// S-tremor (kernel v17 candidate): the net-displacement window, walled like
+// right_hand_rest above and mutated against the REAL committed table. A
+// NEGATIVE window would invert the leak into a divergent accumulator (the
+// measure would run away instead of forgetting); past ~1 s the window outlives
+// the hand-rest ramp it feeds and would score a sweep that ENDED as still
+// live. 0 is legal -- it is the structural OFF arm.
+TEST_CASE("loader: hand_net_window is shipped live and walled (S-tremor)") {
+    const sim::AircraftParams ap =
+        cfg::load_aircraft_toml(SEADS_CONFIG_DIR "/aircraft.toml");
+    const std::string shipped = slurp(SEADS_CONFIG_DIR "/controller.toml");
+    REQUIRE(shipped.find("hand_net_window = 0.20") != std::string::npos);
+    const control::ControllerParams cp =
+        cfg::load_controller_toml(SEADS_CONFIG_DIR "/controller.toml", ap);
+    CHECK(cp.hand_net_window == 0.20);
+    CHECK(cp.hand_net_window >= 0.0);
+    CHECK(cp.hand_net_window <= 1.0);
+    // MUTATION: delete the check() in load_controller.cpp and both of these
+    // stop throwing.
+    CHECK_THROWS(cfg::load_controller_toml(
+        write_temp(replace_all(shipped, "hand_net_window = 0.20",
+                               "hand_net_window = -0.05"),
+                   "netwin_neg"),
+        ap));
+    CHECK_THROWS(cfg::load_controller_toml(
+        write_temp(replace_all(shipped, "hand_net_window = 0.20",
+                               "hand_net_window = 1.5"),
+                   "netwin_big"),
+        ap));
+    // The OFF arm must still LOAD (0 is the walk-back, not an error), and it
+    // must land as a structural zero, not as the default of a missing key.
+    const control::ControllerParams off = cfg::load_controller_toml(
+        write_temp(replace_all(shipped, "hand_net_window = 0.20",
+                               "hand_net_window = 0.0"),
+                   "netwin_off"),
+        ap);
+    CHECK(off.hand_net_window == 0.0);
+    CHECK(off.right_hand_rest == 0.25);  // the v16 dial is untouched by it
+}
