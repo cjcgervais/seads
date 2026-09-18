@@ -32,7 +32,9 @@ seal**. `D:\flight_sim2\seads-feel` (a worktree of `D:\flight_sim2\seads`, on wh
 `feel/<name>` lane is checked out) is where new feel work lands first.
 
 **Tip as of 2026-09-16 22:55, re-derived this session — RE-DERIVE IT AGAIN BEFORE CITING IT:**
-`origin/main` = **`ed0a43ce8`** (road-repair E2/F3/AA/F1 landed 2026-09-17 20:48 on Chad's word
+`origin/main` = **`533c86409`** = tag `terrain-clip-t2-facet-signed` (T2 `[ground] facet_contact` 1.0,
+three sim files, landed 2026-09-17 23:27 BY THIS SENTINEL on Chad's word after he closed the lane
+session) on top of `ed0a43ce8` (road-repair E2/F3/AA/F1 landed 2026-09-17 20:48 on Chad's word
 "push it", a world lane, kernel proof empty) on top of `4208c392e` (LANES-only: kernel lane CLOSED
 at Chad's word 2026-09-17, second knife-edge ring ruled NOT-JUSTIFIED) on top of **`3a95a4d08`** =
 tag **`kernel-v17-tremor-signed`** (pure fast-forward from `edfc60ee8`, landed 2026-09-16 22:47
@@ -52,10 +54,10 @@ exceptions in its README). `docs/cascade/hand-tremor-net-window.md` is the v17 e
 **SCRAPPED at Chad's ruling 2026-09-17** (tag `scrapped/s-leanfade-20260917`); the second ring was
 ruled NOT-JUSTIFIED; Chad: *"I actually find the flight kernel very good, lets close the lane
 until further notice"* — **no kernel lane is open.**
-The fly tree `D:\flight_sim2\seads-recon` (`sandbox/r4a-phase0`) is at `7b377c6f0` (= main
-`ed0a43ce8` merged), exe `build-play/seads.exe` 2026-09-17 21:19:08 — check the exe mtime. In the
-queue: terrain-clip T2 (`[ground] facet_contact` 1.0, three sim files, Chad's fly PASS on the hills
-and the Errington strip, Onaping apron unflown), merging past road-repair for its landing gate.
+The fly tree `D:\flight_sim2\seads-recon` (`sandbox/r4a-phase0`) is at `77e19792c` (= main
+`533c86409` merged), exe `build-play/seads.exe` 2026-09-17 23:29:48 — check the exe mtime. Chad's
+word 2026-09-17: a **snowmachine kernel lane** is underway with a workflow; it lands only after merging
+`533c86409`, a full gate on the merged tip, a red-team record, his fly word, and a sentinel GO.
 
 **THIS AGENT IS THE SENTINEL for pushes into flight_sim2 (Chad, 2026-09-15).** The SOP, the
 queue and the dated ledger are in **`docs/SENTINEL_LEDGER.md`**. Read-only in the live trees
