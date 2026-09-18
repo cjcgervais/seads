@@ -32,8 +32,10 @@ seal**. `D:\flight_sim2\seads-feel` (a worktree of `D:\flight_sim2\seads`, on wh
 `feel/<name>` lane is checked out) is where new feel work lands first.
 
 **Tip as of 2026-09-16 22:55, re-derived this session — RE-DERIVE IT AGAIN BEFORE CITING IT:**
-`origin/main` = **`3a95a4d08`** = tag **`kernel-v17-tremor-signed`** (pure fast-forward from
-`edfc60ee8`, landed 2026-09-16 22:47 through this sentinel). Seal chain
+`origin/main` = **`4208c392e`** (a LANES-only line: kernel lane CLOSED at Chad's word 2026-09-17,
+second knife-edge ring ruled NOT-JUSTIFIED) on top of **`3a95a4d08`** = tag
+**`kernel-v17-tremor-signed`** (pure fast-forward from `edfc60ee8`, landed 2026-09-16 22:47
+through this sentinel). Seal chain
 v5→…→v12→v13→v13g→v14→v15→v16→**v17**. v17 = ONE dial `[auto_level] hand_net_window` 0.20 s,
 a windowed NET hand-live measure so a mouse tremor no longer blocks belly-up righting; 0 = v16
 bit-identically. Built by the overnight autonomous run, two red-team lenses folded. His word:
@@ -44,9 +46,11 @@ yaw_vert_budget` 1.0, the lateral nose-down answer. The feel branch is NO LONGER
 through the SENTINEL protocol and is tagged at the pushed `main` tip.
 **`reference/seads-feel/` is snapshotted at the v17 tip `3a95a4d08`** (four stated purity
 exceptions in its README). `docs/cascade/hand-tremor-net-window.md` is the v17 entry,
-`docs/cascade/lateral-nose-down-unload.md` the v16 one. In flight on Chad's word ("yes on the
-knife edge for after the push"): the knife-edge ringing dial `lean_vert_purge`, kernel v18
-candidate, on `feel/knife-edge-diag`, lane only until the sentinel GO.
+`docs/cascade/lateral-nose-down-unload.md` the v16 one. The knife-edge rung was tried twice on
+`feel/knife-edge-diag` (`lean_vert_purge`, then `lean_upright_fade`), refused by its red-teams and
+**SCRAPPED at Chad's ruling 2026-09-17** (tag `scrapped/s-leanfade-20260917`); the second ring was
+ruled NOT-JUSTIFIED; Chad: *"I actually find the flight kernel very good, lets close the lane
+until further notice"* — **no kernel lane is open.**
 The fly tree `D:\flight_sim2\seads-recon` (`sandbox/r4a-phase0`) merged v17 as `4b8c68698`,
 exe `build-play/seads.exe` 2026-09-16 22:50:12 (the kernel lane's report) — check the exe mtime.
 
