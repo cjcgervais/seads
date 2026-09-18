@@ -173,5 +173,8 @@ Grounded in `reference/seads-feel/` at `3a95a4d08` (`kernel-v17-tremor-signed`).
 Not in this snapshot's `main`: the knife-edge ringing diagnosis
 (`docs/KNIFE_EDGE_RINGING_DIAG_20260916.md`, lane `feel/knife-edge-diag` @ `45adefe3f`), whose
 proposed `lean_vert_purge` dial is the other half of this rung. Chad opened its build the same
-evening (*"yes on the knife edge for after the push"*) as the v18 candidate. See
+evening (*"yes on the knife edge for after the push"*) as the v18 candidate; both shapes tried
+(`lean_vert_purge`, then `lean_upright_fade`) were refused by their red-teams and **SCRAPPED at
+Chad's ruling 2026-09-17** (tag `scrapped/s-leanfade-20260917`); the second-ring investigation is
+handed off gated on a justification ruling. The kernel stays v17. See
 `docs/cascade/push-gate-knife-edge.md` for the knife-edge background.

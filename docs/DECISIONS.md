@@ -36,6 +36,16 @@ Standing decisions for the flight kernel. Each entry: date, decision, why, statu
   *"yes on the knife edge for after the push"* — the lane merges `3a95a4d08` and builds it as the
   v18 candidate, lane only, no main push without the sentinel GO. The fly it cannot pre-measure
   is a genuinely lateral aim at bank.
+  **OUTCOME 2026-09-17 — SCRAPPED.** Two shapes built and red-teamed on the lane: `lean_vert_purge`
+  (axis swap, killed by both lenses: at 1.0 it invents a ~14° uncommanded lean) and `lean_upright_fade`
+  (authority fade, mechanism lens LAND-WITH-FIX, law/feel lens DO-NOT-LAND: on the pilot's real hand
+  axis 0 of 24 directions cured, louder than v17 in 13 of 24, a second ring untouched, dive gun pass
+  3.13→2.00 g against the 07-06 low-G ruling). Chad, verbatim: *"well I say scrap it and write
+  thhandoff for the3 next agent to taker up investigation of the second ring, currently as I fly I
+  have not seen the issue but I t should still be investigated if red team says it is justified"*.
+  Tag `scrapped/s-leanfade-20260917` @ `867b97282`; the next launch is
+  `docs/SESSION_HANDOFF_20260917_second_ring.md` in the live tree, gated on a red-team ruling that the
+  investigation is justified before any build. The diagnosis of the first ring stands unrefuted.
 - **Sentinel practice confirmed:** the recon merge + play rebuild belongs to the landing lane
   (v16 and v17 precedent); the sentinel stays read-only in every live tree and reports the exe
   mtime the lane gives it.
