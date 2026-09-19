@@ -114,6 +114,39 @@ struct BankBuildParams {
     double apron_m = 0.0;
     double apron_tol_m = 0.25;
     double apron_min_drop_m = 0.5;
+    // ★ ROAD-REPAIR F1 (2026-09-12) -- THE BANK YIELDS TO THE DECK.
+    // Chad, after the Onaping landing: "alot of eyesores in the intersections
+    // and corners of roads, weird cut angles and verticies, z flashing all
+    // over." Measured (docs/road_repair/onaping_eyesores.md §3.1): the road
+    // stack has NO junction cut anywhere, and the bank foot is placed inside
+    // the DRAWN asphalt at 75.6 % of stations near Valley (p95 +1.72 m, max
+    // +7.46 m at the mitered corners) and past the junction fade on 95.1 % of
+    // the 9,368 junction legs. That was always true; rung 8's longitudinal
+    // subdivision dropped the deck off its 53 m floating chord (up to +7.2 m
+    // in the air) onto the drawn terrain and stopped hiding it.
+    //
+    // A station whose bank rings land more than `deck_yield_m` INSIDE a drawn
+    // road deck -- its own mitered corner, or a neighbouring way's -- is
+    // demoted from FULL to CAP: it is emitted as a taper cap and the strip
+    // BREAKS there, which is R1's machinery with a second predicate, not a
+    // second mechanism.
+    //
+    // ★ WHY A CAP IS NOT A WALL HERE, which is the whole reason this is legal.
+    // The SnowpackField already has no bank at a point inside a foreign
+    // corridor: bank_profile rides e = dist - half_w of the NEAREST corridor,
+    // and inside road B the nearest corridor IS B, so e < 0 and the profile is
+    // zero. The rings over foreign asphalt are therefore already flat, and the
+    // cap the strip ends on is flat by the field's own law -- no amplitude is
+    // invented, no amplitude is removed, and the anti-fork line is untouched.
+    // What is removed is COVERAGE: snow-coloured, gravel-speckled triangles
+    // lying coincident with the asphalt, which is both the white wedge Chad
+    // sees and the surface the depth buffer cannot separate.
+    //
+    // ⚠ deck_yield_m == 0.0 is the IDENTITY: the predicate is never evaluated
+    // (one branch), not one vertex moves, and no query is paid for. The value
+    // is a TOLERANCE, so bigger is MORE permissive: it is the depth of deck
+    // overlap the bank is allowed to keep before it yields.
+    double deck_yield_m = 0.0;
     // The apron's ring count is DERIVED, not a fourth dial: the apron rings
     // are laid at the skirt's own ring spacing (skirt_m / skirt_rings), so an
     // apron quad is the same size as a skirt quad. Clamped to [1, 6].
@@ -221,6 +254,32 @@ double bank_apron_reach_m(const world::SnowpackField& snow,
 // The apron's ring count for a given dial set -- derived from the skirt's own
 // ring spacing, never a dial of its own. See BankBuildParams::max_apron_rings.
 int bank_apron_ring_count(const BankBuildParams& p);
+
+// ★ ROAD-REPAIR F1 -- WHAT THE YIELD COST, read off the build that just ran
+// rather than re-derived. `stations` is the number of FULL bank stations the
+// predicate was asked about (it is not asked when deck_yield_m is 0, so a zero
+// here is also how you tell the identity apart from a clear map); `capped` is
+// how many of those were demoted to a taper cap. The penetration percentiles
+// are over ALL `stations`, bucketed at 5 cm, so one armed run at any value
+// reports the whole distribution and the dial can be chosen from it instead of
+// guessed. Thread-safe (relaxed atomics), and order-independent: the numbers
+// do not depend on how the run pool happened to schedule.
+struct BankDeckYieldStat {
+    long long stations = 0;
+    long long capped = 0;
+    double pen_p50 = 0.0, pen_p90 = 0.0, pen_p99 = 0.0, pen_max = 0.0;
+};
+BankDeckYieldStat bank_deck_yield_stat();
+void reset_bank_deck_yield_stat();
+
+// ★ ROAD-REPAIR F1 -- THE DIAL SWEEP, off ONE armed run. The share of measured
+// stations whose penetration exceeds `thresh_m`, i.e. the share that WOULD
+// yield at that dial value. The histogram is independent of the value the
+// build actually ran at (every FULL station is measured, then compared), so a
+// single armed build answers "what does 0.10 cost, what does 1.00 cost" for
+// every candidate -- which is how the shipped value was chosen rather than
+// guessed. Returns 0 when nothing was measured.
+double bank_deck_yield_fraction_over(double thresh_m);
 
 // ★ THE INJECTABLE CORE (the test seam). One continuous RUN of one road:
 // per-station centerline dirs + arc s (m) + half-width (m), already resampled.

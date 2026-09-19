@@ -37,6 +37,33 @@ struct RibbonLook {
     // count is forced EVEN so v = 0 is a real vertex row and the dashed
     // centreline still lands on the centreline. 0.0 == the identity.
     double max_tr_m = 0.0;
+    // ★ ROAD-REPAIR F2 -- THE JUNCTION CUT radius (m). At a node where 3 or
+    // more drawn ways end, every leg's deck is trimmed back to this radius and
+    // ONE cap polygon is emitted over the node, so the crossing is a single
+    // surface instead of N overlapping ones. Floored per node at that node's
+    // widest leg half-width (a cut inside the widest deck cannot separate the
+    // legs). 0.0 == the identity, BY AN EXPLICIT BRANCH: no plan is built, no
+    // trim exists and not one vertex moves. See render/ribbon_junction.h.
+    double junction_cut_m = 0.0;
+    // ★ ROAD-REPAIR F3 -- THE OVER-BANK BIAS, in units of the shipped
+    // (-2, -4) deck polygon offset. draw_ribbon_surfaces multiplies its own
+    // pair by (1 + b); draw_bank_strips keeps (-2, -4). b > 0 is the only
+    // relative depth bias the deck-vs-bank tie has ever had. 0.0 == the
+    // identity BY AN EXPLICIT BRANCH -- the shipped call, verbatim.
+    double over_bank_bias = 0.0;
+    // ★ ROAD-REPAIR rung AA -- the centreline anti-alias width
+    // multiplier. The dashed white line is one ternary in the deck FS on the
+    // deck's own interpolated (s, v) with no derivative anywhere; once its
+    // 0.312 m band is sub-pixel its hard edge is re-decided by 2 cm of eye
+    // travel (F3 6.4 -- Chad's "the white line"). ⚠ That happens at ~292 m
+    // (935 px/rad at screen centre, kChaseFovyDeg 60 at 1080p), NOT at the
+    // rig's 70 m where the stripe is ~4 px wide, and a graze does not narrow
+    // the stripe's transverse width -- the red-team fold corrected that claim.
+    // This scales the screen-space footprint the stripe and the dash are box-
+    // filtered over (an L2 gradient length, not fwidth's L1 sum, so the onset
+    // does not swing with the view orientation).
+    // 0.0 == the identity BY AN EXPLICIT BRANCH in the FS.
+    float line_aa = 0.0f;
     glm::vec3 road_bed{0.10f};   // dark road surface (mono)
     glm::vec3 road_line{0.80f};  // light dashed centerline (mono)
     float road_center_frac =
@@ -91,7 +118,7 @@ struct RibbonSurfaces {
     // INV-6 discipline world/linework.h uses for the physics corridor.
     std::vector<float> half_w_m;
     RibbonLook look;
-    int loc_bed = -1, loc_line = -1, loc_center = -1;
+    int loc_bed = -1, loc_line = -1, loc_center = -1, loc_line_aa = -1;
     int loc_dash = -1, loc_gap = -1, loc_trail = -1;
     int loc_mottle = -1, loc_mottle_frac = -1, loc_fade = -1;
     int loc_tcolor = -1, loc_tmottle = -1;
@@ -139,6 +166,12 @@ struct BankLook {
     float speckle_density = 0.22f;  // fraction of ~22 cm grains showing gravel
     float speckle_dark = 0.55f;     // how dark a gravel fleck bites [0,1]
     float crest_smudge = 1.2f;      // extra fleck density at the crest band
+    // ★ ROAD-REPAIR rung AA -- the gravel-speckle anti-alias width
+    // multiplier. The oreo is a hash of 0.22 m grains in surface metres; past
+    // one grain per pixel it is a hash of the EYE POSITION, which is 13.5-16.4
+    // pp of the road-mask flicker (F3 6.3). This scales the grain footprint the
+    // Nyquist gate is taken on. 0.0 == the identity BY AN EXPLICIT BRANCH.
+    float speckle_aa = 0.0f;
 };
 
 // ★ ROAD-REPAIR: the light the bank strips are shaded and sparkled by. Every
@@ -169,6 +202,7 @@ struct BankSurfaces {
     float crest_v = 0.4f;   // ring-normalized crest position (from the knots)
     float width_m = 9.0f;   // rise + fall (metres across, for grain scale)
     int loc_base = -1, loc_density = -1, loc_dark = -1, loc_smudge = -1;
+    int loc_speckle_aa = -1;
     int loc_crest = -1, loc_width = -1;
     // ★ ROAD-REPAIR: the lit path.
     int loc_eye = -1, loc_sun = -1, loc_moon = -1, loc_moon_fill = -1;

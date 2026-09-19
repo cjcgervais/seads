@@ -13,6 +13,7 @@
 
 #include "config/load_aircraft.h"
 #include "config/load_scenario.h"
+#include "sim/sled.h"
 
 #ifdef NDEBUG
 #error "SEADS gate requires an assert-live build (SPEC 6.1)"
@@ -74,6 +75,14 @@ TEST_CASE("scenario_sled_comfort_matches_kernel_defaults") {
     // equality on purpose: these are doubles copied through toml, not
     // computed; any drift means the toml and the kernel defaults have
     // forked, which is the silent-fork risk this leg exists to catch.
+    //
+    // ⚠ CHAD TURNED TWO DIALS ON 2026-09-18 (SLED KERNEL v2), and this leg has
+    // never covered either of them: `right_assist_max_ms` (1.3889 -> 4.0) and
+    // `right_stand_shift_frac` (1.0 -> 0.5) are NOT in the list below and must
+    // NOT be added to it — their struct defaults stay at the pre-v2 identity on
+    // purpose, because that default doubles as the tape-absent reconstruction
+    // (test/harness/sled_tape.h). The leg that pins those two is
+    // `sled_kernel_v2_defaults_are_the_driven_values`, below.
     const cfg::ScenarioParams s =
         cfg::load_scenario_toml(SEADS_CONFIG_DIR "/scenario.toml", kAp);
     const sim::SledComfort d;
@@ -99,6 +108,108 @@ TEST_CASE("scenario_sled_comfort_matches_kernel_defaults") {
     CHECK(s.sled_comfort.side_right_gain_nm == d.side_right_gain_nm);
     CHECK(s.sled_comfort.side_right_vmin_ms == d.side_right_vmin_ms);
     CHECK(s.sled_comfort.side_right_vref_ms == d.side_right_vref_ms);
+}
+
+TEST_CASE("sled_kernel_v2_defaults_are_the_driven_values") {
+    // ★★★ SLED KERNEL v2 (Chad, 2026-09-18): "yes tyo all 7  and all 3 of
+    // these reccomendations I concurr I want this all in a v2". Five dials he
+    // drove and approved -- runs 2..7 of
+    // docs/SESSION_HANDOFF_20260918_sled_firstbuild_DRIVEN.md -- became the
+    // SHIPPED DEFAULTS in one version. THIS LEG PINS ALL FIVE BY NAME, in the
+    // one place that can see both halves of where they ship from.
+    //
+    // KILLED BY: any of the five moving. That is the whole job: a driven value
+    // that can be walked back without a red is not a landed value.
+    const cfg::ScenarioParams s =
+        cfg::load_scenario_toml(SEADS_CONFIG_DIR "/scenario.toml", kAp);
+    // (i) THE THREE THAT SHIP FROM THE STRUCT. `SledParams` has no TOML bridge
+    // at all, and `rolled_throttle_frac` is a `SledComfort` field with no TOML
+    // key -- so for these three sim/sled.h IS the shipped table.
+    const sim::SledParams p;
+    CHECK(p.traction_mu == 3.0);                      // run 2, "2 is approved"
+    CHECK(p.track_lat_slip_shed == 1.4);              // run 6c, "okay good"
+    CHECK(p.comfort.rolled_throttle_frac == 0.15);    // run 3, "3 IS APPROVED"
+    // (ii) THE TWO THAT SHIP FROM [sled_comfort]. These keys are `require`d by
+    // the loader, so the TOML line is the value the game runs.
+    CHECK(s.sled_comfort.right_assist_max_ms == 4.0);      // run 4, "4 is approved"
+    CHECK(s.sled_comfort.right_stand_shift_frac == 0.5);   // run 5, "5 is approved"
+    // (iii) AND THE DELIBERATE DIVERGENCE, STATED SO NOBODY "REPAIRS" IT. The
+    // struct defaults for those two stay at the PRE-v2 identity on purpose:
+    // test/harness/sled_tape.h reconstructs a dial ABSENT from an old tape at
+    // its identity, and the goldens in test/golden/sled are absent all five.
+    // Moving these two lines to match the toml would silently re-drive every
+    // tape in the corpus -- and the replay would still say "bit-exact".
+    const sim::SledComfort d;
+    CHECK(d.right_assist_max_ms == 5.0 / 3.6);
+    CHECK(d.right_stand_shift_frac == 1.0);
+    // (iv) THE THREE FIXTURE PRECONDITIONS
+    // `sled_kernel_v2_defaults_equal_the_env_arm` LEANS ON, PINNED HERE.
+    //
+    // ⭐ `right_assist_nm`: at the struct default of 0.0 the whole self-right
+    // block is a no-op and BOTH of the v2 comfort dials are dark in ANY
+    // fixture -- MEASURED. The toml's 2400 N m is what makes the assist exist,
+    // so phase 2 of that leg is only non-vacuous while this line holds.
+    CHECK(s.sled_comfort.right_assist_nm == 2400.0);
+    // ⚠⚠ AND THE TWO THE LANDING RED-TEAM'S P1-1 NAMED (folded 2026-09-19).
+    // app/main.cpp:2478 assigns the WHOLE `scen.sled_comfort` struct. FIVE of
+    // its doubles diverge toml-vs-struct, and the kernel leg's ARM A used to
+    // reproduce three of them by hand -- these two were the miss:
+    // `right_charge_push_s` (struct 1.0, the pusher's fatigue tau) and
+    // `right_dir_eps` (struct 0.1736). Both live INSIDE the self-right block
+    // that leg's phase 2 exists to exercise, and correcting them moved the
+    // fixture materially (rolled_ticks 70 -> 79, final assist_nm 12.7308 ->
+    // 7.15826, 44 %).
+    //
+    // THE FOLD REMOVED THE HAND-COPY ENTIRELY: that leg now reads
+    // config/scenario.toml through the loader, the way test_sled_selfright's
+    // `shipped()` does, so no list of fields can be short again. These two
+    // lines survive for a DIFFERENT reason -- they are the only thing standing
+    // over two toml rows that the (b) proof can no longer defend by itself
+    // (both of its arms read them from the same file, so a walk-back moves
+    // both arms equally and cannot red there). The self-right block's fatigue
+    // tau and direction epsilon are load-bearing for a mechanic Chad drove;
+    // they get a pin of their own.
+    CHECK(s.sled_comfort.right_charge_push_s == 0.6);
+    CHECK(s.sled_comfort.right_dir_eps == 0.04);
+}
+
+TEST_CASE("scenario_sled_comfort_rejects_a_v2_dial_out_of_band") {
+    // The loader's own net on the two v2 keys (the six-touch landing path owes
+    // a range check per landed dial). Mutation-proven on the REAL table.
+    const std::string base = slurp(SEADS_CONFIG_DIR "/scenario.toml");
+    {
+        REQUIRE(base.find("right_assist_max_ms      = 4.0") !=
+                std::string::npos);
+        const std::string bad = replace_all(base,
+                                            "right_assist_max_ms      = 4.0",
+                                            "right_assist_max_ms      = -1.0");
+        CHECK_THROWS(cfg::load_scenario_toml(write_temp(bad, "v2maxspd"), kAp));
+    }
+    {
+        // ⚠⚠ LANDING RED-TEAM P2-2, FOLDED 2026-09-19. The check shipped as
+        // `>= 0` and so ADMITTED 0.0 -- which disarms the righting assist
+        // everywhere exactly as a negative does (sim/sled.cpp:1847-1852: armed
+        // goes false once right_gs_lp > gate_hi and back true only once
+        // right_gs_lp < gate_hi * rearm_frac; at gate_hi == 0 the first is
+        // true at any speed and the second never is). A zero here is the
+        // failure the loader's own comment names, dressed as a valid table.
+        // KILLED BY: relaxing config/load_scenario.cpp back to `>= 0.0`.
+        REQUIRE(base.find("right_assist_max_ms      = 4.0") !=
+                std::string::npos);
+        const std::string bad = replace_all(base,
+                                            "right_assist_max_ms      = 4.0",
+                                            "right_assist_max_ms      = 0.0");
+        CHECK_THROWS(
+            cfg::load_scenario_toml(write_temp(bad, "v2maxspd0"), kAp));
+    }
+    {
+        REQUIRE(base.find("right_stand_shift_frac   = 0.5") !=
+                std::string::npos);
+        const std::string bad = replace_all(
+            base, "right_stand_shift_frac   = 0.5",
+            "right_stand_shift_frac   = 1.5");
+        CHECK_THROWS(cfg::load_scenario_toml(write_temp(bad, "v2shift"), kAp));
+    }
 }
 
 TEST_CASE("scenario_sled_comfort_rejects_an_inverted_release_band") {

@@ -2085,7 +2085,16 @@ lean_sat_gain_rad = 0.15
 right_assist_nm          = 2400.0
 # His 5 km/h, in m/s. Hysteretic: releases here, re-arms at 0.8x, so a machine
 # hovering at the threshold cannot chatter the assist on and off.
-right_assist_max_ms      = 1.3888888888888888
+# ★ SLED KERNEL v2, Chad-driven 2026-09-18, identity = 1.3888888888888888.
+# He raised his own 5 km/h himself, in the seat: "4 is approved I can land
+# upright more often" (drive run 4). The measured blocker was that the righting
+# pump only armed below 1.3889 m/s and was open 13-20 % of the time he was over.
+# `SEADS_SLED_RIGHT_MAXSPD` still overrides this line (kill switch + A/B).
+# ⚠ This key now DIVERGES from sim::SledComfort{}.right_assist_max_ms on
+# purpose: that struct default is the TAPE-ABSENT reconstruction and stays at
+# the identity. scenario_sled_comfort_matches_kernel_defaults does not and must
+# not cover the two v2 keys.
+right_assist_max_ms      = 4.0
 right_assist_rearm_frac  = 0.8
 # "MACHINE NEEDS TO BE TIPPING OVER" -- 0.35 rad = 20 deg. Below this the assist
 # does nothing, so it can never be free roll stiffness in ordinary riding. The
@@ -2112,7 +2121,14 @@ right_speed_lp_s         = 0.5
 right_pump_omega_eps     = 0.35
 # Standing commands its own weight shift toward the push -- his ruling,
 # and the state the leg-push animation is posed from. 1.0 = full reach.
-right_stand_shift_frac   = 1.0
+# ★ SLED KERNEL v2, Chad-driven 2026-09-18, identity = 1.0. "5 is approved"
+# (drive run 5) at 0.5: the brace commands HALF the reach, so his own rocking is
+# live and the TIMING of the press starts to matter (measured: the timed-rock
+# advantage grows as this falls -- 0.29 s at 1.0, 0.58 s at 0.5, and at 0.25 and
+# 0.0 a mistimed rock never rights her from inversion at all).
+# `SEADS_SLED_STAND_SHIFT` still overrides this line. Same divergence note as
+# right_assist_max_ms: the struct default stays at the identity 1.0.
+right_stand_shift_frac   = 0.5
 assist_hull_frac     = 0.5
 roll_stiff_vgain     = 1.0
 release_floor_frac   = 0.3

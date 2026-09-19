@@ -732,6 +732,46 @@ skirt_m             = 6.0       # outer burial ramp run (F3: no terrace edge)
 skirt_bury_m        = 0.5       # skirt ring sinks below the drawn terrain
 speckle_density     = 0.22      # fraction of ~22 cm grains showing gravel
 speckle_dark        = 0.55      # how dark a gravel fleck bites [0,1]
+# ROAD-REPAIR rung AA -- THE FLASH, RETIRED AT THE ALBEDO. The oreo speckle
+# above is a deterministic hash of ~22 cm grains in SURFACE METRES. At 70 m and
+# a 6-11 degree graze one grain is far under one pixel ALONG THE ROAD -- the
+# graze foreshortens s by sin(graze), so a 0.22 m cell that would be ~3 px wide
+# head-on collapses to ~0.3 px in that axis (this is the term a graze really
+# does shrink, unlike the centreline's transverse width -- red-team fold)
+# -- so which grain a pixel
+# samples is decided by where the EYE is, and 2 cm of eye travel re-samples the
+# whole field. F3 6.3 measured that by zeroing the speckle contrast with one
+# uniform: bank-only flicker fell from 49.0/42.0/53.5 % to 2.2/1.9/1.3 %. It is
+# 13.5-16.4 pp of an 18.6-19.6 pp flash -- about 86 % of what Chad sees -- and
+# it is not a depth decision, so no polygon offset and no reverse-Z can touch
+# it. The FS already had a SOFT rational fade; at this range it still passed
+# ~30-40 % of the binary speckle through.
+#
+# speckle_aa scales the GRAIN FOOTPRINT (grains per pixel, fwidth) the Nyquist
+# gate is taken on: at 1.0 the binary term is gated off across a grain period of
+# 2 px down to 1 px and `cover` lands on its own MEAN, so the bank keeps its
+# dirty-grey plow read and stops shimmering. Below a 2 px period nothing
+# changes, so the near look is untouched BY CONSTRUCTION -- this rung changes
+# sub-pixel behaviour only, never the design Chad signed.
+# The gate's footprint is the ISOTROPIC one: the Frobenius norm of the
+# grain-per-pixel Jacobian, sqrt(|d(grain)/dx|^2 + |d(grain)/dy|^2), which is
+# invariant under a rotation of the screen axes. The pre-AA fade above keeps
+# its old fwidth L1 sum untouched BECAUSE that sum IS the identity at dial 0.
+# (Red-team fold; the L1 form over-read the footprint up to ~4x compounded and
+# made the onset depend on the VIEW ORIENTATION.)
+# {0} or (0, 4] at the loader. SEADS_SPECKLE_AA REPLACES this value, exactly
+# like SEADS_OVER_BANK_BIAS -- the env value IS the dial (clamped to [0, 4]),
+# and SEADS_SPECKLE_AA=0 is the seat kill (identity by branch).
+# See docs/road_repair/onaping_flash_AA.md.
+# THE ONSET IS A LOOK RULING, AND THE SWEEP IS ON THE DIAL. `sp` is a step() on
+# a per-cell hash, so every cell BOUNDARY carries full contrast and the oreo
+# shimmers well below Nyquist. Measured at J2 (18.53 % unarmed, 4.78 % with the
+# speckle removed outright): 1.0 -> 10.11 %, 2.0 -> 6.62 %, 3.0 -> 5.11 % (at the
+# floor). 1.0 IS SHIPPED because it is the value that leaves the look alone; at
+# 3.0 the near A/B erases the oreo crumb from ~7 m outward and the mid-field
+# banks read plain white. Chad signed that crumb -- raising this past ~1.5 is HIS
+# ruling. Picture to rule on: docs/road_repair/AA_near_speckle_aa3.png.
+speckle_aa          = 1.0       # grain-footprint multiplier for the Nyquist gate
 crest_smudge        = 1.2       # extra fleck density at the crest band (the
                                 # plow's dirtiest throw = the oreo crumb line)
 min_amp_m           = 0.20      # CLEAR THE INTERSECTIONS (Chad's street
@@ -795,6 +835,41 @@ apron_min_drop_m    = 0.50      # a station's own side needs this much terrain
                                 # fall across the skirt before it gets an
                                 # apron at all -- flat ground pays ZERO
                                 # vertices
+# *** ROAD-REPAIR F1 (2026-09-12) -- THE BANK YIELDS TO THE DECK.
+# Chad, after the Onaping landing: "alot of eyesores in the intersections and
+# corners of roads, weird cut angles and verticies, z flashing all over."
+# MEASURED (docs/road_repair/onaping_eyesores.md): the road stack has NO
+# junction cut anywhere, the bank foot is placed INSIDE the drawn asphalt at
+# 75.6 % of stations near Valley (max +7.46 m at a mitered corner), and the
+# bank-over-deck overlap out-reaches the only mitigation ([snowpack]
+# bank_gap_m = 14 m) on 95.1 % of 9,368 junction legs. That was always true;
+# rung 8's [ribbons] max_seg_m dropped the deck off its 53 m floating chord
+# and stopped hiding it.
+# A bank station whose rings lie more than this far INSIDE a drawn road deck
+# is emitted as a taper CAP and the strip breaks there -- the R1 machinery,
+# a new predicate. It is a TOLERANCE, so BIGGER IS MORE PERMISSIVE.
+# 0.0 is the IDENTITY: the predicate is never evaluated and not one vertex
+# moves. SEADS_NO_DECK_YIELD=1 forces it to 0 for a seat A/B without a
+# rebuild -- the SEADS_NO_APRON pattern exactly.
+deck_yield_m        = 0.25      # CHOSEN FROM THE BUILD'S OWN SWEEP, not
+                                # guessed: 95 % of the map's 500,169 bank
+                                # stations read under 0.05 m (the foot sits ON
+                                # its own drawn edge), so the whole yielding
+                                # population is 5.06 % at the 0.05 m noise
+                                # floor, 3.87 % here and 2.76 % at 1.00 m.
+                                # 0.25 is 5 bins clear of that floor and 3.5x
+                                # the measured drawn-vs-placement residual on
+                                # straights (+0.07 m p50), so a straight road
+                                # cannot fire it; and at the site-B junction
+                                # 0.10 / 0.25 / 1.00 are PIXEL-IDENTICAL, so
+                                # nothing visible is bought by going lower
+                                # while 1.00 would leave 28 % of the
+                                # overlapping stations still drawing snow on
+                                # asphalt. It is also the cheapest of the
+                                # three meshes (8.077 M bank verts vs 8.099 M
+                                # at both 0.10 and 1.00 -- a break duplicates
+                                # its cap station, so verts are not monotone
+                                # in the yield).
 chord_tol_m         = 0.05      # the cross-section ring set is refined by
                                 # bisection until no chord of the composed
                                 # profile misses the curve by more than this.
@@ -926,6 +1001,116 @@ max_seg_m        = 8.0            # see docs/road_repair/onaping_sink.md §2
 # single span (a 5 m trail gets no centre row; a 15 m road gets four columns).
 # 0.0 = identity; SEADS_RIBBON_MAXTR=<m> overrides it live (the OFF arm).
 max_tr_m         = 5.0            # see docs/road_repair/onaping_sink.md §3
+# ★ ROAD-REPAIR F2 -- THE JUNCTION CUT (Chad, 2026-09-12: "alot of eyesores in
+# the intersections and corners of roads, weird cut angles and verticies, z
+# flashing all over"). E1 answered the structural question: THERE IS NO JUNCTION
+# CUT ANYWHERE IN THE ROAD STACK. build_ribbon_surfaces drapes each baked way as
+# its own quad strip and nothing clips one deck against another -- 14,076
+# overlapping drawn segment pairs, 4,646 intersection sites, deck-on-deck
+# overlap p50 11.1 m out from the node. So one way's SQUARE-CUT END stands
+# across its neighbour's pavement, and two near-coplanar decks share one
+# glPolygonOffset(-2,-4). Rung 8 did not draw that; it stopped hiding it.
+#
+# At a node where 3 OR MORE drawn ways END, every leg's deck is trimmed back to
+# this radius and ONE cap polygon is emitted over the node, so the crossing is a
+# SINGLE surface. A 2-leg node is a colinear continuation and is NEVER cut. The
+# cap shares its boundary vertices with the trimmed leg ends by construction
+# (render/ribbon_subdiv.h ribbon_rung_at is called by both), so the seam gap is
+# identically ZERO -- a crack showing terrain through the road would be a worse
+# eyesore than the flicker. The cap is ringed by max_seg_m and its corner spans
+# split by max_tr_m, because a junction cap is exactly the big flat polygon that
+# would re-open the Onaping sink.
+#
+# It is a RADIUS, so BIGGER CUTS MORE ROAD AWAY, floored per node at that node's
+# widest leg half-width. 0.0 = the IDENTITY by an explicit branch: no plan is
+# built and not one vertex moves. SEADS_NO_JUNCTION_CUT=1 forces it to 0 for a
+# seat A/B on one exe; SEADS_JUNCTION_CUT=<m> overrides it live for a sweep.
+junction_cut_m   = 0.0            # DISARMED 2026-09-15 (Chad: F2 is GO, but it is
+                                  # ungated WIP -- identity until tests+gate+3 sites
+                                  # land; the sweep value to restore is 12.0).
+                                  # 12.0 was CHOSEN FROM THE BUILD'S OWN SWEEP over the
+                                  # 2,273 three-or-more-leg nodes, not guessed.
+                                  # The metric that matters is whether a leg's
+                                  # square-cut END still lands inside another
+                                  # leg's deck: 8 m clears 77.7 % of leg pairs,
+                                  # 10 m 83.6 %, 12 m 95.0 %, and past that it
+                                  # is flat (14 m 95.6 %, 20 m 96.3 %). The same
+                                  # knee shows in full deck-on-deck separation
+                                  # (10 m 14.4 %, 12 m 66.5 %) and it is where a
+                                  # radius first clears the widest deck on the
+                                  # planet (max recovered half-width 11.0 m).
+                                  # Above 12 the cap stops reading as a crossing
+                                  # and starts reading as a plaza -- 16 m is
+                                  # +78 % cap area for +0.8 pts of ends-clear --
+                                  # and the share of ways shorter than two cut
+                                  # radii (which hit the 40 % length clamp
+                                  # instead of the dial) climbs 5.3 -> 7.7 %.
+                                  # See docs/road_repair/onaping_eyesores.md §8.
+# ★ ROAD-REPAIR F3 -- THE OVER-BANK BIAS (Chad, 2026-09-12: "z flashing is
+# happening all over"). E2 MEASURED that flash: on a frozen world, with nothing
+# moving but 2 cm of eye travel, 18.6-19.6 % of the drawn road's own pixels
+# change by more than 8 luma levels at the three densest census junctions
+# (docs/road_repair/onaping_flash_E2.md §3). The mechanism is in §1: the deck
+# pass (render/ribbons.cpp draw_ribbon_surfaces) and the bank pass
+# (draw_bank_strips, 368 lines below it in the same file) set the IDENTICAL
+# glPolygonOffset(-2, -4). Two surfaces with the same offset have ZERO relative
+# depth bias, so which one survives the depth test is decided by the last bit of
+# a 24-bit fixed-point depth value -- stable in a still frame, flipping as the
+# eye moves. That is the flash.
+#
+# over_bank_bias scales the DECK pass's pair to (-2(1+b), -4(1+b)) and leaves
+# the BANK pass alone, so b > 0 puts the deck on top everywhere the two tie. It
+# is in units of the shipped pair; the loader bounds it to {0} or (0, 4].
+#
+# 0.5 IS MEASURED, NOT GUESSED. E2's positive control ran the same magnitude of
+# relative bias in the OPPOSITE direction (deck halved to (-1, -2) against the
+# bank's (-2, -4), |delta| = half the shipped pair) and that re-decided the
+# ENTIRE contested deck-versus-bank set at every site -- 0.39-1.04 % of the road
+# mask flipped which surface won, with no geometry moved. Half the shipped
+# offset is therefore the measured SUFFICIENT bias, and nothing in the sweep
+# supports a larger number (a larger one buys deck peel at the kerb for free).
+#
+# ⚠ STATE THE CEILING WITH THE DIAL, now MEASURED at 0.5: it re-decides
+# 0.39-1.53 % of the road mask in the still frame (the whole deck-versus-bank
+# contested set) and buys 0.07-0.36 pp of an 18.6-19.6 pp flash. F3 §6
+# attributes the rest by experiment, and it is NOT depth: ~86 % of the flash is
+# the bank oreo's gravel-speckle albedo ALIASING and most of the rest is the
+# road centreline stripe aliasing. The rung that retires it is an anti-alias
+# rung on those two albedos, not another polygon offset.
+# SEADS_OVER_BANK_BIAS=0 is the seat kill (identity by branch); any other value
+# sweeps it live. See docs/road_repair/onaping_flash_F3.md.
+over_bank_bias   = 0.5            # units of the shipped (-2, -4) deck offset
+# ROAD-REPAIR rung AA -- THE WHITE LINE, Chad's own words (2026-09-16, flying
+# Chelmsford: "there were a few flashing spots in the road, the white line").
+# The dashed centreline is NOT a second pass and NOT geometry: it is one hard
+# ternary in the deck FS on the deck's own interpolated (s, v), with a step()
+# dash on top and not one fwidth anywhere -- while the trail corduroy in the
+# SAME shader has had the analytic fade all along. Once its 0.312 m band is
+# sub-pixel the ternary is re-decided by 2 cm of eye travel.
+# ⚠ CORRECTED BY THE RED-TEAM FOLD: this used to say "at 70 m and an 8 degree
+# graze". That is wrong. At kChaseFovyDeg = 60 and 1080p the scale at screen
+# centre is (H/2)/tan(fovy/2) = 935 px/rad, so 0.312 m crosses ONE pixel only
+# at ~292 m (~322 m on the looser H/fovy = 1031 px/rad convention); at the
+# rig's 70 m the stripe is ~4 px wide. And a graze foreshortens the road ALONG
+# s -- it never narrows the stripe ACROSS v. The flashing stripe pixels are the
+# ones hundreds of metres down the road where the whole deck is 1-2 px across,
+# which is what the per-pixel traces showed (AA doc 3.2). The defect and the
+# fix stand; only the stated range was wrong.
+# Worth 0.39/1.77/3.18 pp at B/J1/J2 (F3 6.5), and it is the term he can NAME.
+#
+# line_aa scales the screen-space footprint the stripe and the dash are BOX-
+# FILTERED over (an exact difference of clamped ramps, energy-preserving: once
+# the stripe is narrower than a pixel its coverage falls off as width/footprint
+# and it fades toward the asphalt mean instead of saturating at half contrast).
+# The footprint is the L2 gradient length, length(vec2(dFdx, dFdy)), NOT
+# fwidth's L1 sum: fwidth over-reads an axis-aligned feature by up to sqrt(2)x
+# when it lies diagonally on screen, which would make the fade onset depend on
+# the VIEW ORIENTATION. (Red-team fold.)
+# {0} or (0, 4] at the loader. SEADS_LINE_AA REPLACES this value, exactly like
+# SEADS_OVER_BANK_BIAS above -- the env value IS the dial (clamped to [0, 4]),
+# and SEADS_LINE_AA=0 is the seat kill (identity by branch -- the old ternary
+# verbatim). See docs/road_repair/onaping_flash_AA.md.
+line_aa          = 1.0            # screen-footprint multiplier for the stripe + dash
 # Roads = WEATHERED asphalt ("less perfect"): a global light fade + lighter mottled
 # patches over ~mottle_frac of the length, with a thin dashed light centerline. Mono.
 road_bed         = [0.10, 0.10, 0.10]   # dark asphalt (mono)

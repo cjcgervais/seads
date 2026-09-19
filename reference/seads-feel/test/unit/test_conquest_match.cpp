@@ -91,6 +91,7 @@
 #include "config/load_scenario.h"
 #include "config/load_world.h"
 #include "drone/drone.h"
+#include "render/sphere_param.h"  // T2b: render::facet_radius_at
 #include "sim/environment.h"
 #include "sim/fields.h"
 #include "sim/world.h"
@@ -289,6 +290,15 @@ world::HeightField load_real_dem() {
     }();
     return cached;
 }
+
+// ★ terrain-clip T2b — THE SHIPPED MESH RESOLUTION, read from the same
+// world.toml the game builds the planet at. NEVER a hand copy: the whole facet
+// defect IS the mesh resolution, so a fixture that guessed it would measure a
+// world nobody flies.
+const cfg::WorldParams kWorldCfg =
+    cfg::load_world_toml(SEADS_CONFIG_DIR "/world.toml");
+const int kFacetSubdiv = kWorldCfg.planet.subdiv;
+const int kFacetTiles = kWorldCfg.planet.tiles;
 
 // ★ THE SHIPPED [tunnel] TABLE, not the stope probe's test values. P-B may
 // pick its own arena because it is measuring the strike mechanism; P-H is
@@ -1103,6 +1113,13 @@ void arm_strike(drone::DroneState& d, const MatchWorld& w,
 // One arm. `dp`/`cq_over` are the dials under test; `live_backfill` selects
 // the E12.1 raider designation (nullptr mask = today's static table).
 struct ArmCfg {
+    // ★★★ terrain-clip T2b (red-team P1-1) — THE CRASH SURFACE IS PART OF THE
+    // ARM. <0 = the shipped [ground] facet_contact with NO facet injected,
+    // i.e. every pre-existing arm in this file flies the DEM field it always
+    // flew, bit for bit. >=0 pins the dial AND injects render::facet_radius_at
+    // at the shipped subdiv/tiles, so the AI's AGL / deck window / avoidance
+    // net and the kernel's own crash predicate read ONE surface.
+    double facet_contact = -1.0;
     bool raider_backfill = false;
     double raid_dps_frac = -1.0;   // <0 = the shipped value
     int reinforce_pool_n = -999;   // -999 = the shipped value
@@ -1248,6 +1265,16 @@ MatchResult fly_match(const Replay& rep, const ArmCfg& cfg) {
 
     MatchWorld w;
     build_world(w, dp);
+    // T2b: the facet injection, done exactly where app/main.cpp does it --
+    // from w.env.ground itself (the H1 anti-fork: never a second height
+    // source) at the SHIPPED [planet] subdiv/tiles.
+    if (cfg.facet_contact >= 0.0) {
+        w.env.ground_params.facet_contact = cfg.facet_contact;
+        const world::HeightField* fhf = w.env.ground;
+        w.env.ground_facet_fn = [fhf](glm::dvec3 d) {
+            return render::facet_radius_at(*fhf, d, kFacetSubdiv, kFacetTiles);
+        };
+    }
     if (cfg.deck_terrain_relative >= 0)
         w.af.deck_terrain_relative = cfg.deck_terrain_relative != 0;
     if (cfg.raid_dps_frac >= 0.0) w.cq.params.raid_dps_frac = cfg.raid_dps_frac;
@@ -2118,6 +2145,74 @@ TEST_CASE("probe P-H: the shipped conquest match reproduces the signed tape") {
 // ---------------------------------------------------------------------------
 // P-H.1 — ★★★ RUNG E12.1, THE RAIDER BACKFILL. Chad's ruling 2026-08-23.
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// ★★★ terrain-clip T2b (red-team P1-1) — AI ATTRITION A/B ON THE CRASH SURFACE.
+//
+// THE QUESTION. T2 moved the aeroplane's crash surface from the DEM field to
+// the drawn mesh facet. The AI's AGL, its six-sample deck window and its
+// terrain-avoidance latch were routed onto the same surface in T2b. Does the
+// enemy wing fly WORSE against the facet -- i.e. did T2 hand the AI a harder
+// world it cannot cope with?
+//
+// THE ARMS are the shipped table in every other respect. OFF pins the dial to
+// 0.0 WITH the facet function injected, so the two arms differ ONLY in the
+// branch inside sim::air_ground_radius -- not in whether a render layer exists.
+// (Leaving facet_contact unset would be the third, pre-T2 arm; it is the same
+// arithmetic as OFF by the identity proof in test_facet_contact.cpp.)
+//
+// HONEST LIMIT: the replay is open loop (see LIMIT 1 at the top of this file).
+// Any AI change moves every trajectory, so this is attrition under a FIXED
+// player record, not a rematch prediction. It answers "does the wing auger in
+// more", which is the red-team's question.
+//
+// Hidden ([.facetai]): two full 22-minute matches, ~6 min in Debug.
+// ---------------------------------------------------------------------------
+TEST_CASE("FACETAI: AI attrition against the field vs the drawn facet",
+          "[.facetai]") {
+    const Replay rep = load_replay(kReplayPath);
+    if (!rep.ok) {
+        WARN("replay track absent (" << kReplayPath
+                                     << ") -- FACETAI skipped, not failed");
+        SUCCEED();
+        return;
+    }
+    REQUIRE(kFacetSubdiv > 1);
+    REQUIRE(kFacetTiles >= 1);
+
+    ArmCfg off;   // shipped table, dial 0 (the pre-T2 DEM-field surface)
+    off.facet_contact = 0.0;
+    ArmCfg on;    // shipped table, dial 1 (collision == what the eye is shown)
+    on.facet_contact = 1.0;
+
+    const MatchResult a = fly_match(rep, off);
+    const MatchResult b = fly_match(rep, on);
+    report("FACET 0.0 (DEM field)", a);
+    report("FACET 1.0 (drawn facet)", b);
+
+    std::printf(
+        "\n===== T2b AI ATTRITION A/B (subdiv %d, tiles %d) =====\n"
+        "  arm            crashes  per-min  deck-crash  wrecks<60m AGL  "
+        "avoid-ticks  plane-s\n"
+        "  facet 0.0      %7d  %7.2f  %10d  %14d  %11ld  %7.0f\n"
+        "  facet 1.0      %7d  %7.2f  %10d  %14d  %11ld  %7.0f\n",
+        kFacetSubdiv, kFacetTiles, a.enemy_crashes,
+        a.enemy_crashes / std::max(1e-9, a.minutes), a.deck_crashes,
+        a.wreck_agl_bin[0], static_cast<long>(a.avoid_ticks_enemy),
+        a.enemy_alive_s, b.enemy_crashes,
+        b.enemy_crashes / std::max(1e-9, b.minutes), b.deck_crashes,
+        b.wreck_agl_bin[0], static_cast<long>(b.avoid_ticks_enemy),
+        b.enemy_alive_s);
+
+    // THE ARM MUST BE LIVE. A bit-identical pair here would mean the injection
+    // never reached the AI (a blind fixture, this file's own recurring law).
+    CHECK(b.hash_enemy != a.hash_enemy);
+    // THE FINDING, not a tuning target: the facet must not multiply attrition.
+    // 2x the OFF arm (plus 5 wrecks of slack on a 28-crash baseline) is the
+    // line -- past it the AI is augering into a world it cannot see and the
+    // rung owes a fix, not a looser bound.
+    CHECK(b.enemy_crashes <= 2 * a.enemy_crashes + 5);
+}
+
 TEST_CASE("E12.1: the raider backfill keeps a faction's pump offense alive") {
     const Replay rep = load_replay(kReplayPath);
     if (!rep.ok) {

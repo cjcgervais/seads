@@ -15,7 +15,7 @@ of its table and by `docs/DECISIONS.md`'s 2026-09-15 entry.
    `docs/SENTINEL_LEDGER.md` — the SOP packet, the queue and the dated ledger. Arm ONE watch on
    `origin/main` of `D:\flight_sim2\seads` (read-only `git fetch` + `rev-parse`). `ListAgents`
    and send every live lane session one packet. Silence is never a go.
-2. **The kernel is v17** (`3a95a4d08` = tag `kernel-v17-tremor-signed`, S-tremor `[auto_level] hand_net_window` 0.20 s, landed 2026-09-16 22:47 as a pure ff; built by the overnight autonomous run). `reference/seads-feel/` is at that tip. v16 (`354f6df3a`, S-yawbudget) is the rung before it. Entry: `docs/cascade/hand-tremor-net-window.md`. Next: the knife-edge dial `lean_vert_purge` (v18 candidate) opened on Chad's word 2026-09-16.
+2. **The kernel is v17** (`3a95a4d08` = tag `kernel-v17-tremor-signed`, S-tremor `[auto_level] hand_net_window` 0.20 s, landed 2026-09-16 22:47 as a pure ff; built by the overnight autonomous run). `reference/seads-feel/` is at `4acac47a2` (`sled-kernel-v2-signed`, 2026-09-19; the flight kernel inside is v17; above v17 main carries the kernel-lane closure, road-repair, terrain-clip T2 and sled kernel v2). v16 (`354f6df3a`, S-yawbudget) is the rung before it. Entry: `docs/cascade/hand-tremor-net-window.md`. Next: the knife-edge dial `lean_vert_purge` (v18 candidate) opened on Chad's word 2026-09-16.
 3. **v16 LANDED.** Chad ruled the unload dial OUT ("no deck save unload keep the yaw budget");
    v16 is the yaw budget alone. See `docs/cascade/lateral-nose-down-unload.md` and the
    2026-09-15 ledger rows in `docs/SENTINEL_LEDGER.md` (the whole two-landing night is there).

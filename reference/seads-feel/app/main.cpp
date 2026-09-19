@@ -19,6 +19,7 @@
 //                                 flight), optionally TakeScreenshot(shot).
 
 #include <algorithm>
+#include <cctype>   // std::isspace -- env dial validation (sled first build)
 #include <chrono>  // smoke-only per-frame timing readout (perf measurement)
 #include <cmath>
 #include <cstdint>
@@ -44,6 +45,7 @@
 #include "app/player_mount.h"  // ★ L1: THE mount seam -- grip + man, one place
 #include "app/spawn_menu.h"    // ★ L3: the spawn overlay (the one screen)
 #include "app/spawn_policy.h"  // ★ L3: player_spawn -- the ONE place a player is born
+#include "app/flash_cam.h"  // ★ ROAD-REPAIR E2: the FLASH INSTRUMENT camera
 #include "app/flak_walkup.h"  // ★ L5: the gun's approach mark, one copy
 #include "app/walker_place.h"  // ★ L1: putting the man down (stub until R4e)
 #include "combat/pump_repair.h"  // ★ L2: the wrench -- the SECOND writer of pump hp
@@ -536,6 +538,52 @@ void apply_onaping_smoke_env() {
         "(CENSUS_FINAL.md §1 rung 1). Any of the five set by hand wins.\n");
 }
 
+// ★ ROAD-REPAIR E2 -- THE FLASH INSTRUMENT (docs/road_repair/onaping_flash_E2.md).
+//
+// `SEADS_FLASH_SMOKE=<site>` pins a GRAZING camera on a census junction node
+// and renders SEADS_FLASH_FRAMES frames of it with the eye walked
+// SEADS_FLASH_JITTER_M metres along the view each frame.  Nothing in the world
+// moves (the frame dt is forced to 0 in the loop below), so every pixel that
+// CHANGES between those frames changed because a depth tie was broken the
+// other way -- the flicker docs/road_repair/onaping_eyesores.md §3.4 could
+// not capture and the F3/F2 rungs must be graded on.
+//
+// It BUILDS NOTHING and MOVES NO GEOMETRY. The one dial it can touch is the
+// deliberate POSITIVE CONTROL, `SEADS_FLASH_POSCTL` (render/ribbons.cpp), which
+// scales the road deck's polygon offset and defaults to 1.0 = the shipped
+// number = OFF.
+bool flash_smoke_armed() {
+    const char* v = std::getenv("SEADS_FLASH_SMOKE");
+    return v != nullptr && v[0] != '\0' && std::strcmp(v, "0") != 0;
+}
+
+double flash_env_d(const char* name, double dflt) {
+    const char* v = std::getenv(name);
+    if (v == nullptr || v[0] == '\0') return dflt;
+    return std::atof(v);
+}
+
+// The player body must never be IN the frame: a plane crossing the shot would
+// be counted as flash. So the flash rig spawns it at the ANTIPODE of the site
+// -- half a planet (47 km) away, far over a R = 15 km horizon -- through the
+// EXISTING SEADS_SMOKE_SPAWN_DIR reader. No new spawn logic; a caller-set dir
+// still wins.
+void apply_flash_smoke_env(const app::FlashSite& site) {
+    char dir[128];
+    std::snprintf(dir, sizeof dir, "%.9f,%.9f,%.9f", -site.dir.x, -site.dir.y,
+                  -site.dir.z);
+    const char* names[2] = {"SEADS_SMOKE_SPAWN_DIR", "SEADS_SPAWN_ALT"};
+    const char* vals[2] = {dir, "2000"};
+    for (int i = 0; i < 2; ++i) {
+        if (std::getenv(names[i]) != nullptr) continue;  // his override wins
+#ifdef _WIN32
+        ::_putenv_s(names[i], vals[i]);
+#else
+        ::setenv(names[i], vals[i], 0);
+#endif
+    }
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -553,6 +601,59 @@ int main(int argc, char** argv) {
     // BEFORE anything reads one of them. It writes the environment and
     // nothing else, so every reader below is untouched.
     apply_onaping_smoke_env();
+    // Declared here (not with the other --smoke args below) because the FLASH
+    // rig's SEADS_FLASH_CEL_S seeds it during arming; the `--smoke` 4th
+    // argument still overwrites it, so the argument wins.
+    double smoke_cel_offset = 0.0;
+    // ★ ROAD-REPAIR E2 -- THE FLASH INSTRUMENT, armed here for the same
+    // reason: it WRITES the environment (the antipode spawn) and every reader
+    // below must already see it. Unarmed, not one branch of this file moves.
+    app::FlashSite flash_scratch{};
+    const app::FlashSite* flash_site = nullptr;
+    app::FlashCamParams flash_p;
+    const char* flash_out = "flash";
+    if (flash_smoke_armed()) {
+        flash_site =
+            app::flash_site_by_name(std::getenv("SEADS_FLASH_SMOKE"),
+                                    &flash_scratch);
+        if (flash_site == nullptr) {
+            int nsite = 0;
+            const app::FlashSite* all = app::flash_sites(&nsite);
+            std::fprintf(stderr, "SEADS_FLASH_SMOKE: unknown site. Known:");
+            for (int i = 0; i < nsite; ++i)
+                std::fprintf(stderr, " %s", all[i].name);
+            std::fprintf(stderr, " (or \"x,y,z\")\n");
+            return 2;
+        }
+        flash_p.dist_m = flash_env_d("SEADS_FLASH_DIST_M", flash_p.dist_m);
+        flash_p.eye_h_m = flash_env_d("SEADS_FLASH_EYE_H_M", flash_p.eye_h_m);
+        flash_p.az_deg = flash_env_d("SEADS_FLASH_AZ_DEG", flash_p.az_deg);
+        flash_p.target_h_m =
+            flash_env_d("SEADS_FLASH_TARGET_H_M", flash_p.target_h_m);
+        flash_p.jitter_m = flash_env_d("SEADS_FLASH_JITTER_M", flash_p.jitter_m);
+        flash_p.frames = static_cast<int>(
+            flash_env_d("SEADS_FLASH_FRAMES", flash_p.frames));
+        if (flash_p.frames < 1) flash_p.frames = 1;
+        if (const char* o = std::getenv("SEADS_FLASH_OUT")) flash_out = o;
+        // THE LIGHT IS A DIAL TOO. [celestial] day_period_s is 300 s, so the
+        // sun angle at a site is a function of when in that 300 s the frame
+        // lands -- and a site rendered at local midnight grades its own
+        // shadows, not the depth buffer. SEADS_FLASH_CEL_S seeds the SAME
+        // render-only cel_time_offset the `--smoke` 4th argument seeds; the
+        // per-site value in docs/road_repair/onaping_flash_E2.md is the one
+        // that measured the brightest road, swept, not guessed.
+        smoke_cel_offset = flash_env_d("SEADS_FLASH_CEL_S", smoke_cel_offset);
+        apply_flash_smoke_env(*flash_site);
+        std::printf(
+            "[FLASH] site=%s dir=%.9f,%.9f,%.9f pairs=%d deck_overlap_max=%.1f m "
+            "valley=%.3f km\n[FLASH] %s\n[FLASH] dist=%.1f m eye_h=%.1f m "
+            "az=%.1f deg jitter=%.4f m frames=%d out=%s_f##.png\n",
+            flash_site->name, flash_site->dir.x, flash_site->dir.y,
+            flash_site->dir.z, flash_site->pairs,
+            flash_site->deck_overlap_max_m, flash_site->valley_km,
+            flash_site->note, flash_p.dist_m, flash_p.eye_h_m, flash_p.az_deg,
+            flash_p.jitter_m, flash_p.frames, flash_out);
+    }
     // ★ R3 SATURATION SWEEP -- the live value, owned HERE so there is ONE
     // authority and the on-screen readout can never disagree with what the
     // shader got. Seeded from SEADS_R3_FULLDEPTH (or the SnowParams ship value
@@ -568,7 +669,6 @@ int main(int argc, char** argv) {
     // without a clock (Fable-after P1-4: the green gate is blind to seads.exe,
     // so the nightscape needs pinned visual cells). Seam-safe: render-time
     // offset only.
-    double smoke_cel_offset = 0.0;
     // v5 HUD RESTYLE VERIFY (Chad 2026-07-23, DEBUG-ONLY smoke args): two
     // further optional trailing args drive a ONE-SHOT direct nudge of loop.aim
     // at frame 30 (see the application site below) so a screenshot can show
@@ -587,6 +687,10 @@ int main(int argc, char** argv) {
         if (argc >= 6) smoke_offset_aim_deg = std::atof(argv[5]);
         if (argc >= 7) smoke_aim_down_deg = std::atof(argv[6]);
     }
+    // The flash rig needs every determinism property the --smoke path already
+    // has, so it IS one: an explicit `--smoke N` still wins the frame count.
+    if (flash_site != nullptr && smoke_frames == 0)
+        smoke_frames = flash_p.frames;
 
     // Target-visibility probe (docs/world_build_plan.md §4; little_planet Stage
     // 0): a deterministic screenshot rig that spawns high, places ONE bandit at
@@ -734,14 +838,10 @@ int main(int argc, char** argv) {
         }
         std::fputs(g_config_banner.c_str(), stderr);
         write_launch_log();
-        // S-lapguard FEEL TAPE: opened iff SEADS_FEEL_TAPE names a path.
-        // The banner goes in as CSV comment lines, so a tape can never be
-        // replayed against the wrong dials.
-        if (const char* tp = std::getenv("SEADS_FEEL_TAPE")) {
-            if (app::feel_tape_open(g_feel_tape, tp, g_config_banner,
-                                    params))
-                std::fprintf(stderr, "[feel-tape] recording to %s\n", tp);
-        }
+        // (The S-lapguard FEEL TAPE used to be opened here. T2b red-team P1-5
+        // moved it PAST the ground/facet resolve -- see the [config] ground
+        // line further down -- because the crash surface is a dial a tape must
+        // be replayed against, and it is not known yet at this point.)
         // (the four [config] fprintf blocks that stood here are now the
         // ONE g_config_banner above -- stderr, <exe_dir>/seads_launch.log
         // and the feel-tape header must never be able to disagree.)
@@ -1843,6 +1943,13 @@ int main(int argc, char** argv) {
     // before/after table is taken with one exe and one build.
     const bool no_apron = std::getenv("SEADS_NO_APRON") != nullptr;
     const double apron_m_live = no_apron ? 0.0 : world.bank_mesh.apron_m;
+    // ★ ROAD-REPAIR F1 -- THE DECK-YIELD KILL, the apron kill's exact shape
+    // and for the same reason: ONE env, read ONCE, so the A/B Chad flies and
+    // the numbers the build logs are the same switch. 0.0 is the identity, so
+    // SEADS_NO_DECK_YIELD=1 is bit-for-bit the pre-F1 bank mesh.
+    const bool no_deck_yield = std::getenv("SEADS_NO_DECK_YIELD") != nullptr;
+    const double deck_yield_m_live =
+        no_deck_yield ? 0.0 : world.bank_mesh.deck_yield_m;
     // ★ ROAD-REPAIR ONAPING SINK -- THE SUBDIVISION DIAL, read ONCE, the
     // apron kill's exact shape. Both consumers in this process take this
     // value: the drawn drape (via the render POD just below) and the
@@ -1855,6 +1962,26 @@ int main(int argc, char** argv) {
     double ribbon_max_tr_live = world.ribbons.max_tr_m;
     if (const char* e = std::getenv("SEADS_RIBBON_MAXTR"))
         ribbon_max_tr_live = std::max(0.0, std::atof(e));
+    // ★ ROAD-REPAIR F2 -- THE JUNCTION-CUT KILL, the apron kill's exact shape
+    // and for the same reason: ONE env, read ONCE, so the A/B Chad flies and
+    // the numbers the build logs are the same switch. 0.0 is the identity by
+    // an explicit branch in render/ribbon_junction.h, so
+    // SEADS_NO_JUNCTION_CUT=1 is bit-for-bit the pre-F2 drape.
+    const bool no_junction_cut =
+        std::getenv("SEADS_NO_JUNCTION_CUT") != nullptr;
+    double ribbon_junction_cut_live =
+        no_junction_cut ? 0.0 : world.ribbons.junction_cut_m;
+    if (!no_junction_cut)
+        if (const char* e = std::getenv("SEADS_JUNCTION_CUT"))
+            ribbon_junction_cut_live = std::max(0.0, std::atof(e));
+    // ★ ROAD-REPAIR F3 -- THE OVER-BANK BIAS, the SEADS_RIBBON_MAXSEG
+    // pattern: read ONCE here so the seat A/B and any instrument in this
+    // process take the same value. SEADS_OVER_BANK_BIAS=0 is the KILL
+    // (bit-for-bit the pre-F3 deck pass, by the branch in
+    // render/ribbons.cpp); any other value sweeps it.
+    double ribbon_over_bank_bias_live = world.ribbons.over_bank_bias;
+    if (const char* e = std::getenv("SEADS_OVER_BANK_BIAS"))
+        ribbon_over_bank_bias_live = std::max(0.0, std::atof(e));
     // SF2-BANKS [bank_mesh] -> the render POD (§3.6c).
     render::set_bank_build_params(
         {.enabled = world.bank_mesh.enabled,
@@ -1863,6 +1990,7 @@ int main(int argc, char** argv) {
          .skirt_bury_m = world.bank_mesh.skirt_bury_m,
          .speckle_density = world.bank_mesh.speckle_density,
          .speckle_dark = world.bank_mesh.speckle_dark,
+         .speckle_aa = world.bank_mesh.speckle_aa,
          .crest_smudge = world.bank_mesh.crest_smudge,
          .min_amp_m = world.bank_mesh.min_amp_m,
          .skirt_rings = world.bank_mesh.skirt_rings,
@@ -1870,7 +1998,8 @@ int main(int argc, char** argv) {
          .junction_station_m = world.bank_mesh.junction_station_m,
          .apron_m = apron_m_live,
          .apron_tol_m = world.bank_mesh.apron_tol_m,
-         .apron_min_drop_m = world.bank_mesh.apron_min_drop_m});
+         .apron_min_drop_m = world.bank_mesh.apron_min_drop_m,
+         .deck_yield_m = deck_yield_m_live});
     // S3 draped linework ribbons (stereoscope-sudbury). [ribbons] look dials ->
     // the render POD; the geometry is baked (render/sudbury_gis.gen.h). Roads
     // mono, the snowmobile trail the one sanctioned world-chroma.
@@ -1879,6 +2008,9 @@ int main(int argc, char** argv) {
          .lift_m = world.ribbons.lift_m,
          .max_seg_m = ribbon_max_seg_live,
          .max_tr_m = ribbon_max_tr_live,
+         .junction_cut_m = ribbon_junction_cut_live,
+         .over_bank_bias = ribbon_over_bank_bias_live,
+         .line_aa = world.ribbons.line_aa,
          .road_bed = world.ribbons.road_bed,
          .road_line = world.ribbons.road_line,
          .road_center_frac = world.ribbons.road_center_frac,
@@ -2356,6 +2488,177 @@ int main(int argc, char** argv) {
     // never disagree with its own tape about what it was flown at.
     if (const char* e = std::getenv("SEADS_GRIP_CAPACITY"))
         sled_params.grip.capacity = std::atof(e);
+    // ★★★ THE SLED FIRST BUILD (docs/sled_audit/ladder_v2.md §4, the
+    // 2026-09-18 addendum §D). FIVE dials Chad arms one at a time from the
+    // launch line, in the SEADS_GRIP_CAPACITY shape above and for the same
+    // reason: TOML IS THE LANDING PATH, NOT THE DRIVE PATH. A require()'d TOML
+    // key is strict -- it would mean editing config/scenario.toml, the loader
+    // twice and test_load_scenario, and it would make each dial part of the
+    // shipped game on the FIRST build, before he has felt any of them.
+    //
+    // ★★★ SLED KERNEL v2, 2026-09-18 -- THE LANDING PATH IS NOW TAKEN AND THE
+    // PARAGRAPH ABOVE IS HISTORY, KEPT BECAUSE IT IS THE RECORD OF WHY THE
+    // DRIVE WENT THROUGH ENV. He drove all five and ruled: "yes tyo all 7 and
+    // all 3 of these reccomendations I concurr I want this all in a v2". The
+    // DRIVEN VALUES ARE THE SHIPPED DEFAULTS now --
+    //   traction_mu 3.0 and track_lat_slip_shed 1.4 in sim/sled.h (SledParams
+    //     has no TOML bridge; the struct default IS the shipped value),
+    //   rolled_throttle_frac 0.15 in sim/sled.h (a SledComfort field with no
+    //     TOML key, so the struct default survives `comfort = scen.sled_
+    //     comfort` above and is likewise the shipped value),
+    //   right_assist_max_ms 4.0 and right_stand_shift_frac 0.5 in
+    //     config/scenario.toml [sled_comfort] (those two ARE loaded keys, so
+    //     the TOML line wins and the struct defaults stay at the identity for
+    //     the tape-absent rule).
+    //
+    // ★ SO "NO ENV SET" NO LONGER MEANS "IDENTITY". It means SHIPPED v2. Every
+    // one of these five assignments is now an OVERRIDE of a live value, and
+    // that is exactly what they are kept for (the SEADS_GRIP_CAPACITY shape):
+    // a kill switch back to the pre-v2 machine
+    //   SEADS_SLED_TRACTION_MU=0 SEADS_SLED_TAILSHED=0
+    //   SEADS_SLED_ROLLED_THROTTLE=0 SEADS_SLED_RIGHT_MAXSPD=1.3888888888888888
+    //   SEADS_SLED_STAND_SHIFT=1
+    // and the A/B for the next lane that wants to move one.
+    //
+    // ★ THE OLD TAPES ARE STILL SAFE, and not by luck: the tape-absent rule in
+    // test/harness/sled_tape.h reconstructs an ABSENT dial at its IDENTITY, not
+    // at these defaults, and the proof is in docs/SLED_KERNEL_V2_LANDING.md §2
+    // (all three goldens and all six of his 09-17 tapes replay byte-identically
+    // before and after this change).
+    //
+    // ★ PLACED BEFORE `sim::SledState sled;` ON PURPOSE -- the tape writer
+    // records `sled_params`, so the value the tape names is the value that was
+    // flown. A drive can never disagree with its own tape about what it was
+    // driven at. Both NEW fields are in the tape roster
+    // (test/harness/sled_tape.h) in this same commit, which is the law that
+    // makes this env route safe at all.
+    //
+    // ⚠ A NON-NUMERIC VALUE IS A WARNING AND A KEPT DEFAULT, never a silent
+    // zero: std::atof("abc") is 0.0, and 0.0 is the IDENTITY for three of
+    // these five -- so a typo would look exactly like "the dial did nothing"
+    // on the one run that was supposed to answer a question.
+    //
+    // ★★ FOLDED RED-TEAM P2-7 / P2-3 / P3-10 (2026-09-18). Three defects lived
+    // in the first draft of this block and all three end in the same place --
+    // a banner that says a dial is armed when it is not:
+    //   ORDER. The trailing-space skip ran BEFORE the no-conversion test, so
+    //     `SEADS_SLED_STAND_SHIFT=" "` (a stray space from `set VAR= `, a
+    //     pasted launch line or a .bat) advanced `end` past `e`, passed
+    //     validation and wrote 0.0 -- and 0.0 is NOT the identity for
+    //     right_stand_shift_frac (1.0) or right_assist_max_ms (1.3889). That is
+    //     the exact silent zero the note above says this code prevents. The
+    //     no-conversion test runs FIRST now.
+    //   NON-FINITE. `strtod` accepts "nan" and "inf" and both passed the
+    //     full-string check. `SEADS_SLED_TRACTION_MU=nan` poisons every contact
+    //     force in the kernel. Rejected.
+    //   ACCEPTANCE, NOT PRESENCE. The banner built its armed list from
+    //     `getenv` alone, so a REJECTED value ("0,15") and an EMPTY one both
+    //     printed as armed on the one line whose whole job is "a run's own log
+    //     says what it was flown at". `env_dial` returns a bool now and the
+    //     banner is built from the RETURN VALUE.
+    // ★ AND A BAND WARNING (FOLDED P1-4): an out-of-band value WARNS AND STILL
+    // APPLIES. The SEADS_GRIP_CAPACITY precedent is explicit that a huge value
+    // is the kill switch and the A/B, so a refusal would be wrong -- the
+    // warning is the fix, not a veto.
+    {
+        auto env_dial = [](const char* name, double* dst, double lo,
+                           double hi) -> bool {
+            const char* e = std::getenv(name);
+            if (!e) return false;
+            auto keep = [&](const char* why) {
+                std::fprintf(stderr,
+                             "[config] %s='%s' %s -- KEEPING the default %.10g "
+                             "(the dial is OFF, not zero-by-accident)\n",
+                             name, e, why, *dst);
+                return false;
+            };
+            if (!*e) return keep("is empty");
+            char* end = nullptr;
+            const double v = std::strtod(e, &end);
+            if (end == e) return keep("is not a number");  // FIRST, always
+            while (*end != '\0' &&
+                   std::isspace(static_cast<unsigned char>(*end)))
+                ++end;
+            if (*end != '\0') return keep("is not a number");
+            if (!std::isfinite(v)) return keep("is not finite");
+            if (v < lo || v > hi)
+                std::fprintf(stderr,
+                             "[config] %s=%.10g is OUTSIDE the sane band "
+                             "[%.10g, %.10g] -- APPLYING IT ANYWAY (a huge "
+                             "value is the kill switch and the A/B), but read "
+                             "that run as an out-of-band run\n",
+                             name, v, lo, hi);
+            *dst = v;
+            return true;
+        };
+        bool armed_ok[5] = {false, false, false, false, false};
+        // B0 -- the contact ceiling (rung 7, promoted: it is B1's
+        // precondition). A track cannot push harder than the snow it stands
+        // on. Shipped 0.0 = OFF through the drive; SHIPS 3.0 SINCE v2, so this
+        // env var is now the way back to the pre-v2 machine.
+        armed_ok[0] =
+            env_dial("SEADS_SLED_TRACTION_MU", &sled_params.traction_mu, 0.0,
+                     100.0);
+        // B1 -- "if I key press throttle should ramp up" while rolled.
+        // SHIPS 0.15 SINCE v2 (sim/sled.h; no TOML key).
+        armed_ok[1] =
+            env_dial("SEADS_SLED_ROLLED_THROTTLE",
+                     &sled_params.comfort.rolled_throttle_frac, 0.0, 1.0);
+        // B2a -- the measured blocker. The righting pump only armed below
+        // 1.3889 m/s and was open 13-20 % of the time he was over, so the gate
+        // was driven BEFORE the rung it blocks. SHIPS 4.0 SINCE v2
+        // (config/scenario.toml); this env var overrides that line.
+        armed_ok[2] =
+            env_dial("SEADS_SLED_RIGHT_MAXSPD",
+                     &sled_params.comfort.right_assist_max_ms, 0.0, 30.0);
+        // B2b -- the pendulum. 1.0 WAS shipped: the automatic brace commanded
+        // the whole shift, so his own rocking was drowned. Below 1.0 his body
+        // is live and the TIMING starts to matter -- he drove 0.5 and SHIPS
+        // 0.5 since v2 (config/scenario.toml).
+        armed_ok[3] =
+            env_dial("SEADS_SLED_STAND_SHIFT",
+                     &sled_params.comfort.right_stand_shift_frac, 0.0, 1.0);
+        // B3 -- the tail swing. Driven ALONE up its own ladder; SHIPS 1.4
+        // SINCE v2 (sim/sled.h).
+        // BAND [0, 5], not [0, 1]: after the red-team fold this dial multiplies
+        // the ROOST (|trk_slip| * avail), and `avail` runs ~0.23 at WOT on
+        // 0.30 m snow -- so the useful ladder is 0.4 / 0.8 / 1.4, not
+        // 0.15 / 0.3 / 0.5. It stopped being a fraction when it started
+        // reading a fraction. Handoff SS5 carries the arithmetic.
+        armed_ok[4] = env_dial("SEADS_SLED_TAILSHED",
+                               &sled_params.track_lat_slip_shed, 0.0, 5.0);
+        // ★ THE BANNER. One line, always printed, naming every value in force
+        // and which of them an env var actually moved -- so a run's own log
+        // says what it was flown at and "did you have it armed?" is never a
+        // question anybody has to answer from memory.
+        const char* const kNames[5] = {
+            "SEADS_SLED_TRACTION_MU", "SEADS_SLED_ROLLED_THROTTLE",
+            "SEADS_SLED_RIGHT_MAXSPD", "SEADS_SLED_STAND_SHIFT",
+            "SEADS_SLED_TAILSHED"};
+        // ★ BUILT FROM ACCEPTANCE, NEVER FROM PRESENCE (FOLDED P2-3/P3-10):
+        // a value this block REJECTED is not armed, and the one line he will
+        // skim must not say it is.
+        std::string armed;
+        for (int k = 0; k < 5; ++k) {
+            if (!armed_ok[k]) continue;
+            const char* e = std::getenv(kNames[k]);
+            if (!armed.empty()) armed += " ";
+            armed += kNames[k];
+            armed += "=";
+            armed += (e ? e : "");
+        }
+        std::printf(
+            "[config] sled first-build: traction_mu %.10g "
+            "rolled_throttle_frac %.10g right_assist_max_ms %.10g "
+            "right_stand_shift_frac %.10g track_lat_slip_shed %.10g "
+            "(env: %s)\n",
+            sled_params.traction_mu, sled_params.comfort.rolled_throttle_frac,
+            sled_params.comfort.right_assist_max_ms,
+            sled_params.comfort.right_stand_shift_frac,
+            sled_params.track_lat_slip_shed,
+            armed.empty() ? "none -- SLED KERNEL v2 shipped defaults"
+                          : armed.c_str());
+    }
     sim::SledState sled, sled_prev;
     // ★★★ R4c §7.3 STAGES 4-7 -- THE MAN, ONCE HE IS OFF THE MACHINE. Kernel
     // state, stepped beside the sled and off the SAME snowpack (§R5+: "a foot
@@ -2696,6 +2999,41 @@ int main(int argc, char** argv) {
             game.ground.noseover_full_speed_ms;
         // T3: the deep-penetration wall-strike floor (tunnel-wall collision).
         env.ground_params.deep_penetration_m = game.ground.deep_penetration_m;
+        // ★ terrain-clip T2 — the ONE dial, and its kill. SEADS_FACET_CONTACT
+        // REPLACES the config value (the SEADS_OVER_BANK_BIAS pattern), so
+        // `SEADS_FACET_CONTACT=0` returns the shipped exe to the pre-T2 DEM-
+        // field crash surface with the facet fn never called, without editing
+        // config/game.toml — the honest OFF arm of the A/B and the kill.
+        // Clamped to the loader's own [0, 1] so a typo in the environment can
+        // never hand the kernel a surface nothing is drawn on.
+        //
+        // ★ T2b (red-team P1-4): A NON-NUMERIC VALUE IS IGNORED, LOUDLY.
+        // std::atof("off") is 0.0 -- it would SILENTLY DISARM the fix and
+        // nothing would say so. The pattern chosen is WARN-AND-KEEP (not
+        // error-and-exit): a fly session must never die because of a typo in
+        // the environment, and the resolved value is printed in the [config]
+        // banner below, so "which surface did I just fly?" stays answerable
+        // from the launch log whatever the environment said. Stricter than the
+        // SEADS_RIBBON_MAXSEG / SEADS_CORNER_BLEND atof neighbours on purpose:
+        // this one decides the CRASH SURFACE.
+        env.ground_params.facet_contact = game.ground.facet_contact;
+        if (const char* fc_env = std::getenv("SEADS_FACET_CONTACT")) {
+            char* fc_end = nullptr;
+            const double fc_val = std::strtod(fc_env, &fc_end);
+            const bool fc_ok = fc_end != nullptr && fc_end != fc_env &&
+                               *fc_end == '\0' && std::isfinite(fc_val);
+            if (fc_ok) {
+                env.ground_params.facet_contact = fc_val;
+            } else {
+                std::fprintf(stderr,
+                             "[config] WARNING: SEADS_FACET_CONTACT=\"%s\" is "
+                             "not a number -- IGNORED, keeping game.toml "
+                             "[ground] facet_contact %.2f\n",
+                             fc_env, game.ground.facet_contact);
+            }
+        }
+        env.ground_params.facet_contact =
+            std::clamp(env.ground_params.facet_contact, 0.0, 1.0);
         // R4f building collision: prisms from the SAME bake as the rendered
         // massing, based on the SAME height field (one crash surface). Gated
         // on ground being live (the base radius needs the field) + the
@@ -2835,6 +3173,24 @@ int main(int argc, char** argv) {
             return render::facet_radius_at(*facet_hf, dir, facet_subdiv,
                                            facet_tiles);
         };
+        // ★ terrain-clip T2: THE SAME SEAM, THE SAME FUNCTION, for the
+        // AIRCRAFT. sim/ is render-free by law (the same law world/ obeys
+        // three lines up), so sim::Environment cannot call
+        // render::facet_radius_at either — the app injects it, from the SAME
+        // env.ground (== snow_field.hf, the H1 anti-fork: never a second
+        // height source) and the SAME shipped subdiv/tiles the mesh was built
+        // at. Not the DRAWN facet (drawn_radius_at, below): the aircraft's
+        // base is the TERRAIN facet, exactly as the sled's is, so the ambient
+        // snow fold is never counted into the crash surface.
+        //
+        // Always injected (a captured pointer + two ints). [ground]
+        // facet_contact is the only thing that decides whether the kernel ever
+        // calls it — 0 leaves the pre-T2 field arithmetic untouched.
+        env.ground_facet_fn = [facet_hf, facet_subdiv,
+                               facet_tiles](glm::dvec3 dir) {
+            return render::facet_radius_at(*facet_hf, dir, facet_subdiv,
+                                           facet_tiles);
+        };
         // ★ ROAD-REPAIR (drawn == driven on road decks): the DRAWN facet, the
         // same injection, from the same three values. render::drawn_radius_at
         // reads the fold provider render/draw.cpp bound at load_planet -- the
@@ -2861,6 +3217,36 @@ int main(int argc, char** argv) {
     // way the corridors do -- bound HERE because the mask needs the same
     // HeightField the snowpack drives (one function, two consumers).
     render::set_tree_snowhill(snow_field.hill, snow_field.hf);
+    // ★★★ terrain-clip T2b (red-team P1-4) -- THE CRASH SURFACE, ON THE
+    // RECORD. The ONE dial that decides whether the aeroplane collides with the
+    // DEM field or with the mesh facet the eye is shown resolves from three
+    // places (config/game.toml, SEADS_FACET_CONTACT, and whether a render layer
+    // existed to inject render::facet_radius_at at all), and until this line
+    // none of them appeared in the launch log. "injected: no" with a non-zero
+    // dial is the HALF-ARMED state the identity-by-branch fallback produces --
+    // it reads the pre-T2 field, and now it says so out loud.
+    //
+    // It is appended to g_config_banner (not fprintf'd on its own) so stderr,
+    // <exe_dir>/seads_launch.log and the feel-tape header can never disagree --
+    // the same law the four old [config] blocks were folded into one for.
+    {
+        char gb[256];
+        std::snprintf(gb, sizeof gb,
+                      "[config] ground: facet_contact %.2f (injected: %s)\n",
+                      env.ground_params.facet_contact,
+                      env.ground_facet_fn ? "yes" : "no");
+        g_config_banner += gb;
+        std::fputs(gb, stderr);
+        write_launch_log();  // rewrite the log with the complete banner
+    }
+    // S-lapguard FEEL TAPE: opened iff SEADS_FEEL_TAPE names a path. The banner
+    // goes in as CSV comment lines, so a tape can never be replayed against the
+    // wrong dials -- which is why it is opened HERE, after the ground line
+    // above joined the banner (T2b P1-5).
+    if (const char* tp = std::getenv("SEADS_FEEL_TAPE")) {
+        if (app::feel_tape_open(g_feel_tape, tp, g_config_banner, params))
+            std::fprintf(stderr, "[feel-tape] recording to %s\n", tp);
+    }
     // ★ SF2-BANKS (§3.6c): the bank strips sample THIS field at build -- bind
     // the pointer here, the same late site, so the drawn bank can never fork
     // from the driven one.
@@ -5902,8 +6288,14 @@ int main(int argc, char** argv) {
 
     while (!WindowShouldClose()) {
         if (g_prof.on) g_prof.begin();
+        // ★ ROAD-REPAIR E2: the flash rig FREEZES the world. Zero dt means no
+        // tick, no drift, no animation -- so the ONLY thing that differs
+        // between two flash frames is the centimetre the eye moved, and any
+        // pixel that changes changed because a depth tie flipped.
         const double frame_dt =
-            smoke_frames > 0 ? params.sim_dt : GetFrameTime();
+            flash_site != nullptr
+                ? 0.0
+                : (smoke_frames > 0 ? params.sim_dt : GetFrameTime());
         const double clamped_dt = std::clamp(frame_dt, 0.0, kMaxFrameDt);
 
         // v5 HUD RESTYLE VERIFY: at frame 30 (frames==29, 0-indexed, before
@@ -12591,6 +12983,28 @@ int main(int argc, char** argv) {
             };
             info.overlay_ctx = &spawn_menu;
         }
+        // ★ ROAD-REPAIR E2 -- THE GRAZING CAMERA, last word on the pose.
+        // Every earlier pose path (chase, instructor, sled, walker, freelook)
+        // has already run and is simply overwritten: the flash camera is a
+        // FIXED station on a census junction node, not a body's camera, and it
+        // must not inherit one metre of any body's motion. The ground radius
+        // is the SAME drawn surface the census measured (snow_field's own
+        // binding), never a second one.
+        if (flash_site != nullptr) {
+            const world::SnowpackField& sf = snow_field;
+            const std::function<double(glm::dvec3)> gr =
+                [&sf](glm::dvec3 d) -> double {
+                if (sf.drawn_radius_fn) return sf.drawn_radius_fn(d);
+                if (sf.facet_radius_fn) return sf.facet_radius_fn(d);
+                return sf.hf != nullptr ? sf.hf->radius_at(d) : 15000.0;
+            };
+            pose = app::flash_camera(flash_site->dir, flash_p, frames, gr);
+            if (frames == 0)
+                std::printf("[FLASH] graze=%.3f deg eye_alt=%.2f m range=%.2f m\n",
+                            app::flash_graze_deg(pose),
+                            glm::length(pose.eye) - gr(glm::normalize(pose.eye)),
+                            glm::length(pose.target - pose.eye));
+        }
         // AS-1 EVIDENCE LINE (atmosphere rung, smoke-only). A screenshot of
         // a dark cavern cannot by itself prove "zero flakes" -- a --smoke
         // run is not bit-reproducible run to run -- so the rig also PRINTS
@@ -12609,6 +13023,25 @@ int main(int argc, char** argv) {
                 info.precip_intensity);
         const auto t_draw0 = std::chrono::steady_clock::now();
         render::draw_frame(draw_state, params, pose, info, env_ptr);
+        // ★ ROAD-REPAIR E2: one PNG per frame. TakeScreenshot reads the
+        // presented framebuffer, and draw_frame ends with EndDrawing, so this
+        // is the frame that was just shown -- the same call the --smoke shot
+        // makes, made N times.
+        if (flash_site != nullptr) {
+            char fp[512];
+            std::snprintf(fp, sizeof fp, "%s_f%02d.png", flash_out, frames);
+            // raylib's TakeScreenshot drops any directory and writes the BASE
+            // name into the working directory, so a prefix with a path in it
+            // silently lands in the repo root. Shoot the base name, then move
+            // it -- one rename, no new file writer.
+            const char* base = fp;
+            for (const char* q = fp; *q != '\0'; ++q)
+                if (*q == '/' || *q == '\\') base = q + 1;
+            TakeScreenshot(base);
+            if (base != fp && std::rename(base, fp) != 0)
+                std::fprintf(stderr, "[FLASH] could not move %s -> %s\n", base,
+                             fp);
+        }
         if (g_prof.on) g_prof.end();
         // Smoke-only per-frame timing (perf measurement, no gameplay change): a
         // steady-state average over the run (past a warm-up that excludes the

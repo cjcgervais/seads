@@ -1,0 +1,132 @@
+# GATE VERDICT -- terrain-clip, tip dba79e46b, SOP 5b RE-RUN (clean reconfigure, gate alone)
+# Trimmed to header + verdict + the red set, per the lane precedent
+# (docs/road_repair/GATE_VERDICT_b659a119d.txt): the raw ctest log is NOT
+# committed for repo weight. THE LOG LIVES AT build/gate_dba79e46b.log IN THIS
+# WORKTREE, UNTRACKED (.gitignore:1 "build/") -- the sentinel's new rule; it is
+# NOT in a scratchpad, so an auditor on this box can read the raw run.
+#
+# WHY THIS FILE EXISTS. GATE_VERDICT_a18fc9b1c.txt recorded a gate that SHARED
+# THE BOX with another lane's gate, and disclosed it. The sentinel required
+# SOP 5b before this lane's verdict may be quoted: reconfigure from clean,
+# rebuild, re-count, and run the full gate ALONE. This is that run.
+#
+# Tree:   sandbox/terrain-clip @ dba79e46b (T2c gate verdict) -- the code is
+#         a18fc9b1c; dba79e46b adds only the previous verdict file.
+#
+# 5b(1) RECONFIGURE FROM CLEAN. build/CMakeCache.txt and build/CMakeFiles/ were
+#         DELETED, then reconfigured with the generator/compilers/flags read off
+#         the old cache before deleting it (a copy was kept aside):
+#           cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug \
+#             -DCMAKE_C_COMPILER=<winlibs mingw64>/bin/gcc.exe \
+#             -DCMAKE_CXX_COMPILER=<winlibs mingw64>/bin/c++.exe \
+#             -DCMAKE_MAKE_PROGRAM=<winlibs mingw64>/bin/ninja.exe \
+#             -DFETCHCONTENT_SOURCE_DIR_RAYLIB=D:/seads_sandboxes/cam-smooth/build/_deps/raylib-src
+#         Generator Ninja, Debug, MinGW GCC (BrechtSanders WinLibs POSIX UCRT),
+#         CMAKE_CXX_FLAGS empty, CMAKE_CXX_FLAGS_DEBUG=-g -- identical to the old
+#         cache. The raylib pointer is the SAME staged tree the old cache named
+#         (it already lived outside build/, so nothing had to be copied aside);
+#         build/_deps kept, no re-fetch.
+# 5b(2) BUILD. "cmake --build build -j 8" -> 236/236, exit 0, both seads.exe and
+#         seads_tests.exe relinked from this tip. No warnings-as-errors trip.
+# 5b(3) COUNT. "ctest --test-dir build -C Debug -N | tail -1" -> Total Tests: 2130
+#         = main 4208c392e's 2116 + 14. The fourteen, by name:
+#           FACETCONTACT L1 dial: shipped 1.0, bounded [0,1], read by the app
+#           FACETCONTACT L1 identity BY BRANCH: at 0 the facet fn is not called
+#           FACETCONTACT L1 identity: a full ground_contact tick is unmoved at 0
+#           FACETCONTACT L2 an airframe inside the drawn ground is graded at 1.0
+#           FACETCONTACT L3 the clip census closes at dial 1 (raw and blurred)
+#           FACETCONTACT L4 the landing gap at the Sudbury spawn and the pump apron
+#           FACETCONTACT L5 cost: facet_radius_at per tick at 120 Hz
+#           FACETCONTACT L6 the drawn-above-facet residual, measured
+#           FACETCONTACT L7 building prisms are based on the contact surface
+#           FACETCONTACT L8 the prism base follows the facet through sim::step
+#           CLIPPROBE drawn-vs-crash surface at the reported sites
+#           CLIPPROBE cadence: the contact test is a POINT sample, not swept
+#           CLIPPROBE below-surface: what happens to an airframe under ground
+#           TAPE T2b: facet_contact is stamped, read back, and mismatch warns
+#         FACETCONTACT L6-STRICT ([.t3-strict]) and FACETAI ([.facetai]) are
+#         HIDDEN, are NOT among the fourteen, and are deliberately not graded here.
+# 5b(4) RUN. "ctest --test-dir build -C Debug --output-on-failure", launched
+#         DETACHED in a hidden process from this worktree, stdout to
+#         build/gate_dba79e46b.log. Before launch "tasklist" was read for
+#         ctest.exe / seads_tests / seads.exe. NO game was launched by this
+#         session, NO build-play smoke, NO second ctest.
+#
+# (!) ONE DISCLOSURE ON THE BOX, so nobody finds it later and calls it hidden.
+#   At launch (20:07:48) and for most of the run, ONE process matched the sweep:
+#   seads.exe PID 6892, started 2026-09-17 20:04:09, image path
+#   D:\flight_sim2\seads-recon\build-play\seads.exe -- that is CHAD'S OWN FLY
+#   TREE, i.e. Chad was playing the game. It was not started by this session and
+#   was not killed by it (memory "r4a-grip-release-rung": never a machine-wide
+#   kill). It had exited by the time the gate finished.
+#   NO ctest.exe but this gate's own, and NO other lane's gate, appeared at any
+#   poll (polled every ~20 s for the whole run). The contamination signature of
+#   the a18fc9b1c run -- a second gate competing for the box -- is ABSENT, and
+#   the wall clock shows it: 3654.02 s here vs 4152.52 s there, i.e. this run is
+#   ~500 s FASTER and sits in the ~3790 s band a solo gate of this size takes.
+#   A GPU game sharing the box can only inflate wall clock; no leg here grades
+#   wall clock, and the red SET is what this file is evidence for.
+#
+# CLOCKS, so nobody has to take "it was run on this tip" on faith:
+#   tip dba79e46b committed  2026-09-17T06:33:50-0700  (epoch 1789652030)
+#   gate launched            2026-09-17T20:07:48-0700  (epoch 1789700868, 48,838 s after the commit)
+#   gate log last written    2026-09-17T21:08:44-0700  (epoch 1789704524)
+#   total test time (real)   3654.02 s
+#   => log mtime - launch = 3,656 s, which is the run's own 3654.02 s plus 2 s of
+#      ctest startup/teardown: the gate ran end to end inside the window that
+#      opens at the launch, which itself opens long after the tip's commit. No
+#      part of this gate predates the tree it claims to describe, and no part of
+#      it was carried over from the a18fc9b1c run (different log, different file).
+#   raw log (UNTRACKED, in this worktree): build/gate_dba79e46b.log
+
+=== THE RED SET ===
+
+  79/2130 Test   #79: probe P-F: the relentless raider keeps the pump and shoots back ........................................................................................***Failed    0.50 sec
+ 119/2130 Test  #119: E12.1: the raider backfill keeps a faction's pump offense alive ........................................................................................***Failed  324.92 sec
+1287/2130 Test #1287: sled_slides_before_it_tips_on_flat_snow ................................................................................................................***Failed    1.88 sec
+1288/2130 Test #1288: sled_grip_ceiling_stays_below_the_tip_threshold ........................................................................................................***Failed   10.52 sec
+1326/2130 Test #1326: sled_assist_reference_plane_is_load_weighted ...........................................................................................................***Failed    0.40 sec
+1329/2130 Test #1329: sled_debug_sink_is_write_only ..........................................................................................................................***Failed    1.21 sec
+
+=== ctest trailer (the failed list, by name) ===
+99% tests passed, 6 tests failed out of 2130
+
+Total Test time (real) = 3654.02 sec
+
+The following tests FAILED:
+	 79 - probe P-F: the relentless raider keeps the pump and shoots back (Failed)
+	119 - E12.1: the raider backfill keeps a faction's pump offense alive (Failed)
+	1287 - sled_slides_before_it_tips_on_flat_snow (Failed)
+	1288 - sled_grip_ceiling_stays_below_the_tip_threshold (Failed)
+	1326 - sled_assist_reference_plane_is_load_weighted (Failed)
+	1329 - sled_debug_sink_is_write_only (Failed)
+
+=== tools/gate/gate_baseline.py check (THE RUNNER WROTE THIS, not a hand grade) ===
+gate: 6 failed of 2130
+baseline: 6 known reds
+
+OK -- the red set is EXACTLY the baseline, member for member.
+GATE_EXIT=0
+
+# ---------------------------------------------------------------------------
+# WHAT THIS GATE IS EVIDENCE FOR, AND WHAT IT IS NOT.
+# The six reds are the committed baseline in generated/gate/known_reds.txt --
+# two enemy-AI probes and four sled legs, all older than this lane and untouched
+# by it. EXACTLY the baseline, member for member, by the runner's own verdict:
+# no new red, no fixed red, no count-matched-while-members-moved. Member for
+# member it is also the SAME set the a18fc9b1c run found, from a build that
+# shares no CMake cache and no object file with it.
+#
+# It proves the T2c tree survives a from-clean reconfigure and rebuild, and that
+# the eight FACETCONTACT legs (L1..L8), the three CLIPPROBE legs and the T2b tape
+# leg are green on the shipped dial [ground] facet_contact 1.0.
+#
+# It does NOT grade:
+#   * FACETCONTACT L6-STRICT -- hidden behind [.t3-strict], RED by measurement and
+#     by design; Chad's ruling (T2 doc section 7), not a gate failure.
+#     Run it deliberately:  build/seads_tests.exe "[.t3-strict]"
+#   * FACETAI -- hidden behind [.facetai], a MANUAL leg (two 22-minute matches),
+#     UNMOVED from T2b because its harness binds no BuildingColliders.
+#   * anything on a GPU, and anything about FEEL. Chad's fly is recorded in
+#     docs/terrain_clip/PREAUDIT_PACKET_*.md, not here; his ruling on the snow
+#     residual is still owed.

@@ -1,13 +1,16 @@
 # reference/seads-feel/ — PRIMARY reference: the active kernel
 
-These files are **copies**, re-snapshotted **2026-09-16 (22:55)**, from `D:\flight_sim2\seads-feel`'s
+These files are **copies**, re-snapshotted **2026-09-19 (02:40)**, from `D:\flight_sim2\seads-feel`'s
 shared repository (`D:\flight_sim2\seads`, remote `github.com/cjcgervais/seads_sandbox1`) at
-**`3a95a4d08`** = tag **`kernel-v17-tremor-signed`** (annotated, landed on `main` 2026-09-16 22:47
-as a pure fast-forward from `edfc60ee8` through this repo's sentinel; `origin/main` == the tag).
-This is the kernel on `main`. The `seads-recon` fly tree (`sandbox/r4a-phase0`) merged it as
-`4b8c68698` and rebuilt `build-play/seads.exe` at 2026-09-16 22:50:12 (the kernel lane's report).
+**`4acac47a2`** = tag **`sled-kernel-v2-signed`** (landed on `main` 2026-09-19 02:24 through this repo's
+sentinel; `origin/main` == the tag). The FLIGHT kernel in this snapshot is still **v17**
+(`kernel-v17-tremor-signed` = `3a95a4d08`); above it main carries `4208c392e` (LANES: kernel lane closed),
+`ed0a43ce8` (road-repair E2/F3/AA/F1), `533c86409` (`terrain-clip-t2-facet-signed`, `[ground]
+facet_contact` 1.0, three sim files) and `4acac47a2` (SLED KERNEL v2). The `seads-recon` fly tree
+(`sandbox/r4a-phase0`) merged it as `a97cf0f85` and rebuilt `build-play/seads.exe` at 2026-09-19 02:29:18
+(the kernel lane's report, verified) — check the exe mtime.
 
-**Snapshot method:** `git archive 3a95a4d08 app config control docs input render sim test`.
+**Snapshot method:** `git archive 4acac47a2 app config control docs input render sim test`.
 **Purity exceptions, stated (all reproducible from the tag, none touch the kernel):**
 
 - `render/*.gen.h` — the 26 MB generated Sudbury GIS header, omitted.
@@ -15,6 +18,7 @@ This is the kernel on `main`. The `seads-recon` fly tree (`sandbox/r4a-phase0`) 
   goldens, omitted. `test/golden/felt/` and `test/golden/controller_golden.h` are KEPT.
 - `docs/road_repair/` — 28 MB of road census TSVs and PNGs from a world lane, omitted.
 - PNGs over 200 KB anywhere in `docs/`, omitted.
+- JSON files over 1 MB anywhere in `docs/` (sled-audit raw artefacts), omitted.
 
 Everything else is byte-for-byte the tagged tree. The previous snapshot (v12, `e362df289`)
 was the complete eight-directory tree; the omissions above are the only difference in scope.
@@ -65,6 +69,27 @@ line + `docs/flight-log.md` row in the same landing). See this repo's `docs/DECI
 controller; the writer and reader both derive from one column list after the "void battery"
 defect (a reader that defaulted a missing column to 0.0 graded a dial against a non-dive for
 a night). `app/rest_horizon.h` (extracted from `instructor_tick.h` by the cam-smooth lane).
+
+## SLED KERNEL v2 (`sled-kernel-v2-signed`, `4acac47a2`, 2026-09-19) — S-facetcontact's neighbour, the SLED, IN THIS SNAPSHOT
+
+NOT the flight kernel (which stays v17). Five Chad-driven sled dials shipped as DEFAULTS, landed
+together as one version at his ruling (*"yes tyo all 7 and all 3 of these reccomendations I concurr I
+want this all in a v2"*): `sim/sled.h` defaults `traction_mu` 3.0 / `track_lat_slip_shed` 1.4 /
+`rolled_throttle_frac` 0.15, and `config/scenario.toml` `[sled_comfort]` `right_assist_max_ms` 4.0 /
+`right_stand_shift_frac` 0.5; the `SEADS_SLED_*` env vars kept as overrides (one launch line
+reproduces the pre-v2 machine). Driven by Chad on 2026-09-18 in seven launcher runs (run 7, all five:
+*"yes very good"*; the tail-shed walked 0.4 → 0.8 → 1.4 *"okay good"*). Landing red-team LAND-WITH-FIX
+folded (the transfer proof rebuilt on the REAL machine, loader check fixed); one obsolete test pin
+re-barred at his word *"1 re bar the test"*; a known-red sled debt moving the wrong way under 1.4
+accepted at his word *"accept 1.4"*. Gate on the fold tip `3990cde63` = 6 of 2152 == baseline six by
+name. Records: `docs/SLED_KERNEL_V2_LANDING.md`, `docs/REDTEAM_20260918_sled_kernel_v2.md`,
+`docs/SESSION_HANDOFF_20260918_sled_firstbuild*.md`, `docs/DRIVE_WORDS_20260918_sled_firstbuild.md`.
+Also in this snapshot: **TERRAIN-CLIP T2** (`terrain-clip-t2-facet-signed`, `533c86409`): `[ground]
+facet_contact` 1.0 — the aircraft lands on the facet the eye sees (`sim/environment.h`, `sim/ground.h`,
+`sim/step.cpp`); Chad: *"terrain hills killed me about 4x so im not going in ... wheels about 2 inches
+at the errington mine nearby landing strip"*, lane tag by his ruling *"its own lane tag is fine"*.
+And **road-repair** E2/F3/AA/F1 (`ed0a43ce8`, render/world only). Knife-edge cures SCRAPPED
+(`scrapped/s-leanfade-20260917`), second ring ruled NOT-JUSTIFIED, kernel lane CLOSED at his word.
 
 ## KERNEL v17 (`kernel-v17-tremor-signed`, `3a95a4d08`, 2026-09-16) — S-tremor, IN THIS SNAPSHOT
 

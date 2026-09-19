@@ -7,7 +7,10 @@
 #include <glm/gtc/quaternion.hpp>
 #include <vector>
 
+#include "config/load_aircraft.h"
+#include "config/load_scenario.h"
 #include "sim/sled.h"
+#include "test/harness/sled_tape.h"  // SLEDTAPE_PIN_D: the SledState roster
 #include "world/cold.h"
 #include "world/heightfield.h"
 #include "world/linework.h"
@@ -3771,22 +3774,123 @@ TEST_CASE("snowbank_inner_face_still_launches", "[sled][gi][snowbank]") {
                 after.air_start * dt, after.air_end * dt, dur_after,
                 static_cast<int>(after.rolled));
 
-    // ★ CHOICE AT AMBIGUITY: the spec's literal "airtime within +-10% of
-    // pre-W2" assumes a comparable pre-W2 baseline. MEASURED, it is not one:
-    // pre-W2 (cap off) the ~1.3 m loose reported bank pile BURIES and TRIPS
-    // the machine on the way up the rise (rolled=true, a fraction of a
-    // second) instead of producing a comparable jump, so a percentage
-    // comparison against a broken baseline would not be a meaningful gate --
-    // reported here, not silently forced to fit. The claim actually gated is
-    // the leg's own name: AFTER, the crossing still launches -- cleanly,
-    // which pre-W2 did not. This goes to Chad/Fable alongside the other
-    // §PHASE W2 findings, same as every other STOP-class divergence this
-    // rung has recorded rather than absorbed.
-    REQUIRE(before.rolled);  // the regression W2 closes, pinned as a fact
+    // ★ CHOICE AT AMBIGUITY (RE-BARRED 2026-09-18, SLED KERNEL v2): the
+    // spec's literal "airtime within +-10% of pre-W2" assumes a comparable
+    // pre-W2 baseline. MEASURED, it is not one: with the cap off the ~1.3 m
+    // loose reported bank pile eats the ramp instead of producing a
+    // comparable jump, so a percentage comparison against a broken baseline
+    // would not be a meaningful gate -- reported here, not silently forced to
+    // fit. The claim actually gated is the leg's own name: AFTER, the
+    // crossing still launches -- cleanly, which the cap-off pile does not.
+    // This goes to Chad/Fable alongside the other §PHASE W2 findings, same as
+    // every other STOP-class divergence this rung has recorded rather than
+    // absorbed.
+    //
+    // ⚠ THE OLD BAR WAS REQUIRE(before.rolled) -- "the regression W2 closes,
+    // pinned as a fact". THAT PREMISE IS STALE. The `before` arm takes its
+    // dials from sim::SledParams(), i.e. the SHIPPED struct default, and SLED
+    // KERNEL v2 moved that default: traction_mu 0.0 -> 3.0 is the SOLE owner
+    // by measurement (track_lat_slip_shed 1.4 and rolled_throttle_frac 0.15
+    // are inert here; green at mu <= 1.0, red from 1.2 -- the attribution
+    // table is docs/SLED_KERNEL_V2_LANDING.md §3.6). With v2's contact
+    // ceiling the buried machine PLOWS THROUGH the loose pile instead of
+    // tripping on it (rolled 1 -> 0, air 0.358 -> 0.371 s), so a leg written
+    // to pin a PRE-v2 incident was re-running on a kernel that no longer has
+    // that incident. Chad's ruling, 2026-09-18, verbatim: "1 re bar the test"
+    // -- keep traction_mu 3.0 and re-bar this leg, do not walk the dial back.
+    // before.rolled is therefore REPORTED as a fact line, never asserted.
+    //
+    // ★ WHAT IS BARRED INSTEAD -- the positive statement the leg is named
+    // for: with the W2 bank treatment ON, the crossing still launches, and its
+    // airtime DOMINATES the cap-off pile's. MEASURED 2.608 s vs 0.371 s ==
+    // 7.0x, and robust across the traction_mu sweep (0.0 .. 3.0), so the bar
+    // sits at 3x with better than 2x of headroom.
+    //
+    // ⚠⚠ WHAT THAT DOMINANCE BAR ACTUALLY RESPONDS TO -- LANDING RED-TEAM
+    // P1-3, FOLDED 2026-09-19, AND THE CORRECTION IS TO THIS COMMENT'S OWN
+    // CLAIM. `bank_pack_skin_m` is ONE SWITCH FOR TWO MECHANISMS by design:
+    // the reported-depth cap (world/snowpack.cpp:358-365) AND the W2.2 crest
+    // class branch (world/snowpack.cpp:795 -- crest classifies TrailMain,
+    // mu_lat 0.70, instead of Bush). A negative value disables BOTH. The
+    // airtime ratio below responds to the SENTINEL'S SIGN, not to the cap
+    // VALUE. MEASURED, sweeping the AFTER arm's skin across nine orders of
+    // magnitude (dur_before 0.3708 s throughout):
+    //     skin= 0.065 -> dur_after 2.6083  dom 7.03x   <- SHIPPED
+    //     skin= 1.300 -> dur_after 2.7375  dom 7.38x
+    //     skin=10.000 -> dur_after 2.7375  dom 7.38x
+    //     skin= 1e9   -> dur_after 2.7375  dom 7.38x   (cap totally inert)
+    //     skin=-1.000 -> dur_after 0.3708  dom 1.00x   (sentinel crossed)
+    // So the OLD trailing comment "the cap DOMINATES the loose pile" named
+    // something this bar cannot see: walk `world/snowpack.h` bank_pack_skin_m
+    // from 0.065 to 1e9 -- every bank then reports its full ~1.3 m pile as
+    // sinkage and the W2.1 mechanic is gone in all but name -- and the airtime
+    // bar reports 7.38x and PASSES. The bar is honest about the W2 bank
+    // treatment AS A WHOLE and is stated that way now.
+    //
+    // KILLING MUTATION for the dominance bar (RUN in both directions, evidence
+    // in docs/SLED_KERNEL_V2_LANDING.md §3.6): hand the AFTER arm the cap-off
+    // field as well -- f_after.p.bank_pack_skin_m = -1.0 -- and dur_after
+    // collapses from 2.608 s to the pile's own fraction of a second, failing
+    // BOTH dur_after > 1.0 and the 3x bar. Restored, the leg is green.
+    std::printf("[GI W2] inner-face launch: FACT (reported, not barred) "
+                "before.rolled=%d | dominance dur_after/dur_before=%.2fx\n",
+                static_cast<int>(before.rolled),
+                dur_before > 0.0 ? dur_after / dur_before : -1.0);
     REQUIRE_FALSE(after.rolled);
     REQUIRE(after.air_start >= 0);
     REQUIRE(after.air_end > after.air_start);
-    REQUIRE(dur_after > 1.0);  // a real jump, not a stumble
+    REQUIRE(dur_after > 1.0);   // a real jump, not a stumble
+    REQUIRE(dur_before > 0.0);  // the denominator is a real launch too
+    // The W2 bank treatment as a whole (the `bank_pack_skin_m >= 0` sentinel
+    // gates the reported-depth cap and the W2.2 crest class together)
+    // DOMINATES the pre-W2 loose pile. This bar responds to the sentinel's
+    // SIGN -- it is blind to the cap value, measured above. The cap VALUE is
+    // barred separately, immediately below.
+    REQUIRE(dur_after > 3.0 * dur_before);
+
+    // ★★ THE CAP VALUE'S OWN TEETH (P1-3 fix (2)). Airtime is provably blind
+    // to `bank_pack_skin_m`, so the bar on the cap's NUMBER has to be taken on
+    // the quantity the cap computes: the CREST SINKAGE. A third arm at a large
+    // FINITE skin keeps the sentinel positive -- so the W2.2 class branch is
+    // untouched and this is a clean one-variable test of the cap alone -- and
+    // asks the crest how deep the machine sits. The cap's arithmetic is
+    // `min(bank_full, bank_pack_skin_m)` (world/snowpack.cpp:358-365, pinned
+    // numerically at test/unit/test_snowpack.cpp:442); what is pinned HERE is
+    // that the MACHINE feels it, in this leg's own fixture, so that
+    // `snowbank_inner_face_still_launches` no longer claims a guard it does
+    // not carry.
+    //
+    // KILLED BY: walking `world/snowpack.h` bank_pack_skin_m up (the mutation
+    // the airtime bar sleeps through), or by the cap ceasing to bind the
+    // reported depth at the crest.
+    const double crest_off = 6.0 + f.p.bank_rise_m;  // half_w + rise == peak
+    const sim::SledParams pp;
+    world::SnowpackField f_uncapped = f;
+    f_uncapped.p.bank_pack_skin_m = 1.0e9;  // sentinel still POSITIVE
+    const sim::SledState crest_capped = at_speed_shoulder(pp, f, crest_off, 15.0);
+    const sim::SledState crest_uncapped =
+        at_speed_shoulder(pp, f_uncapped, crest_off, 15.0);
+    std::printf("[GI W2] inner-face launch: CAP VALUE arm -- crest sink track "
+                "capped(%.4g m)=%.4f  uncapped(1e9)=%.4f  surf %s / %s\n",
+                f.p.bank_pack_skin_m, crest_capped.sink_m[kTrack],
+                crest_uncapped.sink_m[kTrack],
+                world::surface_name(crest_capped.surface),
+                world::surface_name(crest_uncapped.surface));
+    // ONE VARIABLE: the class branch did NOT move (TRAIL MAIN in both arms),
+    // so nothing below is the sentinel talking -- which is exactly the
+    // confound that makes the airtime bar above blind.
+    REQUIRE(crest_uncapped.surface == crest_capped.surface);
+    // AND THE CAP BINDS: raising its VALUE alone sinks the machine materially
+    // deeper into the crest. MEASURED here: 0.03125 m capped at the shipped
+    // 0.065, 0.08050 m at 1e9 -- 2.58x, so the bar sits at 2x. (The capped
+    // figure is above the 0.065 cap's own arithmetic only because this leg's
+    // fixture carries a 0.30 m AMBIENT, whose edge-to-ambient feather W2 never
+    // caps and never claimed to; `snowbank_crest_sinkage_bounded` runs the
+    // thin 0.02 m ambient precisely so the cap's own number is readable there.
+    // The 0.05 bar is the cap-plus-feather ceiling for THIS fixture, measured,
+    // and it reds long before the cap goes inert.)
+    REQUIRE(crest_capped.sink_m[kTrack] < 0.05);
+    REQUIRE(crest_uncapped.sink_m[kTrack] > 2.0 * crest_capped.sink_m[kTrack]);
 }
 
 // -------------------------------------------------- GI S3 (comfort C-block)
@@ -4457,4 +4561,1012 @@ TEST_CASE("sled_gyro_reaction_obeys_its_own_momentum_LEDGER", "[sled][gyro]") {
     // 3. And no sustained rate survives a completed cycle: whatever the ledger
     //    still owes is small beside the transient it came from.
     REQUIRE(std::abs(borrowed) < 0.35 * std::abs(peak));
+}
+
+
+// ===========================================================================
+// THE SLED FIRST BUILD -- B0/B1/B2/B3, the kernel half.
+// docs/sled_audit/ladder_v2.md §4, SLED_RIDE_AUDIT_20260918_ADDENDUM.md §D.
+//
+// Every leg names the mutation that kills it, because a leg that cannot be
+// killed is not a gate (this file's banner, and this project has shipped a leg
+// that survived the mutation written to kill it).
+// ===========================================================================
+
+namespace {
+
+// A machine dropped past her tip point, hands still on the bars. 110 deg is the
+// same drop `sled_onside_recovery_is_momentum_not_magnetism` uses, so these
+// legs and THE WALL are talking about the same machine.
+sim::SledState downed(const sim::SledParams& p, const world::SnowpackField& f,
+                      const sim::SledInputs& in, int ticks, double tilt_deg,
+                      double v_side, bool hands_off) {
+    sim::SledState s = settle(p, f, 0.0);
+    const glm::dvec3 up = glm::normalize(s.position);
+    const glm::dmat3 R = glm::mat3_cast(s.orientation);
+    const glm::dvec3 fwd = R * glm::dvec3(0, 0, -1);
+    const glm::dvec3 right = glm::cross(fwd, up);
+    s.orientation = glm::normalize(
+        glm::angleAxis(glm::radians(tilt_deg), fwd) * s.orientation);
+    s.position = up * (glm::length(s.position) + 0.35);
+    s.velocity = right * v_side;
+    if (hands_off) s.grip.attached = false;  // one-way latch
+    for (int i = 0; i < ticks; ++i) s = sim::step_sled(s, in, p, f, 1.0 / 60.0);
+    return s;
+}
+
+double tilt_deg_of(const sim::SledState& s) {
+    return std::acos(std::clamp(
+               glm::dot(glm::dmat3(glm::mat3_cast(s.orientation)) *
+                            glm::dvec3(0, 1, 0),
+                        glm::normalize(s.position)),
+               -1.0, 1.0)) *
+           57.2958;
+}
+
+double body_fwd_speed(const sim::SledState& s) {
+    return glm::dot(s.velocity, glm::dmat3(glm::mat3_cast(s.orientation)) *
+                                    glm::dvec3(0, 0, -1));
+}
+
+bool same_state(const sim::SledState& a, const sim::SledState& b) {
+    return a.position == b.position && a.velocity == b.velocity &&
+           a.orientation.w == b.orientation.w &&
+           a.orientation.x == b.orientation.x &&
+           a.orientation.y == b.orientation.y &&
+           a.orientation.z == b.orientation.z &&
+           a.angular_vel == b.angular_vel;
+}
+
+}  // namespace
+
+// --- B1 · rolled_throttle_frac ---------------------------------------------
+
+TEST_CASE("sled_rolled_throttle_frac_zero_is_the_identity", "[sled][b1]") {
+    // ⚠ RENAMED AT SLED KERNEL v2 (2026-09-18), AND THE RENAME IS THE POINT.
+    // It was `..._zero_is_the_shipped_zero` and it read the zero out of
+    // `sim::SledParams{}` -- true only while the shipped value happened to BE
+    // the identity. Chad drove 0.15 and 0.15 ships, so the old name was a lie
+    // and the old REQUIRE was a red. The identity is now CONSTRUCTED here as an
+    // explicit literal: this leg is about what the branch does at zero, which
+    // is a permanent fact about the arithmetic, not about what ships.
+    // ★ THE IDENTITY, WRITTEN ON AN OBSERVABLE THAT EXISTS. "Bit-identical to
+    // the shipped kernel" cannot be asserted from a unit leg once the kernel is
+    // edited -- there is no pre-edit kernel in this build -- and `SledState` has
+    // NO readout of the commanded throttle. What DOES exist is `engine_rpm` and
+    // `belt_speed_ms`, both computed from `throttle` OUTSIDE the contact block.
+    //
+    // ⚠ THE <= 3.0 m/s CLAUSE IS LOAD-BEARING. Above clutch_engage_ms - 0.25
+    // (3.25 - 0.25 = 3.0) the clutch blend is non-zero and a COASTING machine
+    // reports rpm above idle at zero throttle, so a leg asserting a flat 1700
+    // would red on a machine still sliding. The leg ASSERTS the clause rather
+    // than assuming it.
+    //
+    // KILLED BY: writing the branch as `(1 - frac) * thr_in` instead of
+    // `frac * thr_in`. At the identity 0.0 the complement form delivers FULL
+    // throttle -- rpm 8000, belt 46 m/s. That sign/complement slip is the one
+    // mistake the split invites, and this leg exists for it.
+    const world::HeightField hf = flat_field();
+    const world::SnowpackField f = field_at_depth(hf, 0.30);
+    sim::SledParams p;
+    p.comfort.rolled_throttle_frac = 0.0;  // THE IDENTITY, constructed
+    REQUIRE(p.comfort.rolled_throttle_frac == 0.0);  // non-vacuity: identity
+    // and the shipped value is NOT it any more -- pinned here so this leg reds
+    // if somebody "restores" the default and quietly re-flattens v2.
+    REQUIRE(sim::SledComfort{}.rolled_throttle_frac == 0.15);
+    sim::SledInputs in;
+    in.throttle = 1.0f;  // he is HOLDING W the whole time
+    const sim::SledState s = downed(p, f, in, 240, 110.0, 0.0, false);
+    REQUIRE(s.rolled);         // she really is over ...
+    REQUIRE(s.grip.attached);  // ... and he really is still on the bars
+    const double v_bf = body_fwd_speed(s);
+    REQUIRE(v_bf <= 3.0);      // the clause, asserted not assumed
+    std::printf("[B1 identity] rpm=%.10g belt=%.10g v_bf=%.10g\n",
+                s.engine_rpm, s.belt_speed_ms, v_bf);
+    REQUIRE(s.engine_rpm == 1700.0);  // EXACT: idle, silence
+    // The belt is DRAGGED by the ground here, not commanded, and `rep_belt` is
+    // written on the LAST SUBSTEP -- so it reads the body speed a twelfth of a
+    // tick before the state this leg can see. Hence a band, not `==`. Under the
+    // complement mutation this reads 46.0 and the band is not close.
+    REQUIRE(s.belt_speed_ms < 1.0);
+    REQUIRE(std::abs(s.belt_speed_ms - std::max(v_bf, 0.0)) < 1e-3);
+}
+
+TEST_CASE("sled_rolled_throttle_never_reaches_a_handless_rider", "[sled][b1]") {
+    // ★ R4a §7.4, AND IT IS NOT THIS DIAL'S BUSINESS. A man thrown off the bars
+    // has no thumb on the lever. The `!hands_on` zero is UNCONDITIONAL and stays
+    // unconditional at ANY value of the new dial -- including 1.0, where the
+    // rolled branch passes his thumb through in full.
+    //
+    // The observable is the WHOLE trajectory: with the grip broken, a held W and
+    // a closed W must produce the same machine bit for bit, because
+    // `in.throttle` reaches nothing else in the kernel (grep: it appears exactly
+    // once, in `thr_in`).
+    //
+    // KILLED BY: collapsing the two statements back into one ternary --
+    // `s.rolled ? frac * clamp01(in.throttle) : clamp01(in.throttle)` -- which
+    // drops the `hands_on` guard. At frac 1.0 the riderless machine then drives
+    // itself and both REQUIREs below go red at once.
+    const world::HeightField hf = flat_field();
+    const world::SnowpackField f = field_at_depth(hf, 0.30);
+    sim::SledParams p;
+    p.comfort.rolled_throttle_frac = 1.0;  // the dial WIDE OPEN
+    sim::SledInputs open_in, shut_in;
+    open_in.throttle = 1.0f;
+    shut_in.throttle = 0.0f;
+    const sim::SledState open =
+        downed(p, f, open_in, 240, 110.0, 0.0, true);
+    const sim::SledState shut =
+        downed(p, f, shut_in, 240, 110.0, 0.0, true);
+    REQUIRE_FALSE(open.grip.attached);   // non-vacuity: the latch really is off
+    REQUIRE(open.rolled);                // and she really is over
+    REQUIRE(open.engine_rpm == 1700.0);  // idle, at frac 1.0, on a held W
+    REQUIRE(same_state(open, shut));     // bit for bit the same machine
+}
+
+TEST_CASE("sled_rolled_throttle_is_clamped_at_use", "[sled][b1]") {
+    // ★★ FOLDED RED-TEAM P1-4 (law+feel): THE PRODUCT IS CLAMPED. The env
+    // route this build drives on has no range check the TOML route has -- a
+    // `require`'d TOML key gets one, `std::getenv` does not -- and this is the
+    // one dial of the five whose name says FRACTION. Before the fold,
+    // `SEADS_SLED_ROLLED_THROTTLE=1.5` (a plausible fat-finger, or a deliberate
+    // "give me more") put `throttle = 1.5` into `v_cmd`, `engine_rpm` (11150),
+    // `drive_t`, the weight-transfer moment arm, the HUD and the engine sound
+    // -- outside the kernel's documented [0,1] domain for `throttle`, reachable
+    // only while rolled, with the app banner printing it as legitimate.
+    //
+    // The app still APPLIES an out-of-band value and warns (the
+    // SEADS_GRIP_CAPACITY precedent: a huge value is the kill switch and the
+    // A/B, so a refusal would be wrong). The KERNEL is what refuses to leave
+    // its own domain.
+    //
+    // ⚠ IDENTITY IS UNTOUCHED BY THE CLAMP and the first REQUIRE says so:
+    // `clamp01` is the identity function for every `frac <= 1.0` with `thr_in`
+    // in [0,1], and at 0.0 `clamp01(0.0)` is the same +0.0 the shipped literal
+    // produced. The tape corpus replays unchanged.
+    //
+    // KILLED BY: dropping the `clamp01` from the product -- rpm then reads
+    // 1700 + 2.5*6300 = 17450 at frac 2.5 and the ceiling REQUIRE reds.
+    const world::HeightField hf = flat_field();
+    const world::SnowpackField f = field_at_depth(hf, 0.30);
+    sim::SledInputs wot;
+    wot.throttle = 1.0f;
+    // In band: every value up to 1.0 maps straight through -- the clamp has
+    // changed nothing a sane launch line can reach.
+    for (double frac : {0.0, 0.15, 0.5, 1.0}) {
+        sim::SledParams p;
+        p.comfort.rolled_throttle_frac = frac;
+        const sim::SledState s = downed(p, f, wot, 240, 110.0, 0.0, false);
+        REQUIRE(s.rolled);
+        REQUIRE(s.engine_rpm == 1700.0 + frac * 6300.0);
+    }
+    // Out of band: the kernel refuses to leave [0,1]. The observable is the
+    // WHOLE machine against the frac == 1.0 arm -- `engine_rpm` alone CANNOT
+    // carry this leg, because `rpm_frac` re-applies `clamp01` of its own and a
+    // 2.5 still reports 8000. MEASURED: written on rpm alone, this leg PASSED
+    // its own killing mutation, which is the shape this file exists to refuse.
+    // `belt_speed_ms` is where an unclamped product actually escapes -- `v_cmd
+    // = throttle * track_speed_max_ms` has no clamp of its own.
+    sim::SledParams at_wot;
+    at_wot.comfort.rolled_throttle_frac = 1.0;
+    const sim::SledState ref = downed(at_wot, f, wot, 240, 110.0, 0.0, false);
+    for (double frac : {1.5, 2.5, 100.0}) {
+        sim::SledParams p;
+        p.comfort.rolled_throttle_frac = frac;
+        const sim::SledState s = downed(p, f, wot, 240, 110.0, 0.0, false);
+        std::printf("[B1 clamp] frac=%.2f rpm=%.1f belt=%.6f (wot belt %.6f)\n",
+                    frac, s.engine_rpm, s.belt_speed_ms, ref.belt_speed_ms);
+        REQUIRE(s.rolled);
+        REQUIRE(s.engine_rpm == 8000.0);  // the WOT ceiling, not 1700+frac*6300
+        REQUIRE(s.belt_speed_ms == ref.belt_speed_ms);
+        REQUIRE(same_state(s, ref));  // past 1.0 she IS the WOT machine, exactly
+    }
+}
+
+TEST_CASE("sled_rolled_throttle_is_dark_on_flat_ground",
+          "[sled][b1][wall]") {
+    // ★★ THIS LEG IS NOT A WALL, AND ITS NAME SAYS SO NOW (FOLDED RED-TEAM
+    // P0-1 law+feel / P1-1 mechanism, 2026-09-18). It was written as
+    // `sled_rolled_throttle_the_wall_at_the_driven_value` and a ruling was
+    // written on it -- "NO CEILING WAS REACHED; 0.15 needs no reduction, nor
+    // does 1.0". THAT RULING WAS STRUCK. The arms of this fixture CANNOT
+    // DIFFER:
+    //
+    //   MEASURED, all nine cells, the assertion expansions at full precision:
+    //     106.21816119284737567  106.21708989882516505  106.20226219859530659
+    //   -- three distinct numbers, ONE PER v_side, ZERO PER frac, identical to
+    //   the 17th digit. `thrust_n` is 0.00 N and `roost_flux` is 0.00000 in
+    //   every cell.
+    //
+    // WHY: on flat ground a downed machine's track has NO GROUND CONTACT, so
+    // the whole `if (g.is_track)` thrust block never runs. The dial reaches
+    // `engine_rpm` -- which is computed OUTSIDE that block -- and nothing else.
+    // The old name indicted `:2649` for vacuity (its thumb is closed) and then
+    // committed the same error one fixture over: opening the thumb changed
+    // which readout moved, not whether the engine could reach the ground.
+    //
+    // ⚠ AND THE WALL WAS HUNTED. The mechanism red-team looked for any
+    // fixture that arms it -- `cross_slope_field` at 0.30 and 0.60 (thrust
+    // 0.00, roost 0.00000, slip +0.0000 at frac 0/0.15/1.0) and a side-slide
+    // recovery window at 15/20/25/30 m/s over 1800 ticks (max|T| = 0.00, ZERO
+    // ticks with `rolled` && |thrust| > 1 N). 24 cells; the track patch never
+    // once entered the thrust block while `rolled`.
+    //
+    // SO: NO CEILING HAS BEEN MEASURED. The candidate stands on ladder_v2
+    // §D's arithmetic, not on a wall, and UNTIL A WALL EXISTS THIS VALUE'S
+    // CEILING IS CHAD'S SEAT. What this leg still earns its place for: it
+    // PINS THE DARKNESS, so the day a fixture or a kernel change gives that
+    // track a face to push on, the thrust REQUIRE below goes red and somebody
+    // has to come back and write the wall.
+    //
+    // KILLED BY: any change that lets a rolled machine's track develop thrust
+    // on flat ground (then `thrust_n == 0.0` reds and the ruling above must be
+    // re-taken), or by the dial failing to reach the engine at all (the rpm
+    // REQUIRE -- the non-vacuity that says the dial was live).
+    const world::HeightField hf = flat_field();
+    const world::SnowpackField f = field_at_depth(hf, 0.30);
+    sim::SledInputs wot;
+    wot.throttle = 1.0f;  // ⚠ the thumb HELD -- this is what :2649 never does
+    for (double frac : {0.0, 0.15, 1.0}) {
+        sim::SledParams p;
+        p.comfort.rolled_throttle_frac = frac;
+        for (double v : {0.0, 5.0, 15.0}) {
+            const sim::SledState s = downed(p, f, wot, 240, 110.0, v, false);
+            std::printf("[B1 DARK] frac=%.2f v_side=%4.1f  final_tilt=%7.2f "
+                        "rpm=%7.1f thrust=%9.2f roost=%.5f\n",
+                        frac, v, tilt_deg_of(s), s.engine_rpm, s.thrust_n,
+                        s.roost_flux);
+            REQUIRE(s.rolled);               // non-vacuity: she IS over
+            REQUIRE(tilt_deg_of(s) > 45.0);  // and she STAYS over
+            // ★ THE DARKNESS, PINNED. Not a wall -- a tripwire on the claim.
+            REQUIRE(s.thrust_n == 0.0);
+            REQUIRE(s.roost_flux == 0.0);
+        }
+        // And the dial really is armed on this run -- otherwise everything
+        // above is the same vacuous pass :2649 gives.
+        const sim::SledState armed = downed(p, f, wot, 240, 110.0, 0.0, false);
+        REQUIRE(armed.engine_rpm == 1700.0 + frac * 6300.0);
+    }
+}
+
+// --- B3 · track_lat_slip_shed ----------------------------------------------
+
+TEST_CASE("sled_tail_shed_hoist_is_a_pure_refactor", "[sled][b3]") {
+    // ★ THE HERMETIC SURROGATE FOR THE CORPUS REPLAY (ladder_v2 §4.3, FOLDED
+    // P0-5). The real hoist proof is a human command against Chad's six v17
+    // tapes -- `seads_sled_probe tape <abs path>` -- and it can NEVER be a ctest
+    // leg, because those files live outside the repo. THIS is the thing a hoist
+    // bug reds inside the gate: a synthetic 600-tick drive with the dial absent,
+    // final state pinned as a golden.
+    //
+    // The fixture deliberately exercises BOTH sites at once: steered, leaned and
+    // part-throttle, so the track is developing real longitudinal slip (the
+    // hoisted lines) while the lateral bite (where they are now read) is doing
+    // real work.
+    //
+    // ⚠⚠ KILLED BY -- RESTATED HONESTLY (FOLDED RED-TEAM P2-2, mechanism).
+    // The first draft named "leaving a second copy of the slip formula at the
+    // old site". IT DOES NOT RED ON THAT: MEASURED, the red-team re-added
+    // `trk_slip = clamp((v_track - v_fwd)/max(v_track,1), -1, 1)` inside the
+    // old `if (g.is_track)` block, rebuilt, and this golden printed
+    // CHARACTER-IDENTICAL -- it had to, because the recompute reads the same
+    // `const` inputs and lands on the same bits. The other half ("hoisting past
+    // anything that writes `throttle` or `v_fwd`") is unreachable by
+    // construction: both are `const double`.
+    //
+    // SO WHAT IS THIS LEG FOR, HONESTLY: it is a FORWARD REGRESSION NET on the
+    // hoisted region, not the hoist proof. THE HOIST PROOF IS THE SIX-TAPE
+    // DIFFERENTIAL in the handoff §2.1 -- the hoist-only build reproducing all
+    // six of Chad's v17 probe outputs byte-identically, including the
+    // divergence tick and field of the three already divergent on the base.
+    // It reds on: a real reordering that changes an input to the hoisted block,
+    // the shed leaking into the identity, or the roost hoist (bury/loose/avail,
+    // folded 2026-09-18) picking up a value that moved between the two sites.
+    //
+    // ⚠ IT IS THE ONLY 17-DIGIT ABSOLUTE-TRAJECTORY GOLDEN IN THIS SUITE (every
+    // other identity leg compares two arms), so it is pinned to THIS toolchain:
+    // measured on Windows 11 / GCC via Ninja, CMAKE_BUILD_TYPE=Debug, the
+    // vendored GLM in build/_deps. If it reds after a compiler or GLM move
+    // rather than a code move, re-measure with the printf below and SAY SO IN
+    // THE COMMIT -- do not relax it to a tolerance.
+    //
+    const world::HeightField hf = flat_field();
+    const world::SnowpackField f = field_at_depth(hf, 0.30);
+    // ⚠⚠ SLED KERNEL v2 (2026-09-18): THE PRE-v2 MACHINE IS CONSTRUCTED HERE,
+    // EXPLICITLY. This golden is 17 digits of an ABSOLUTE trajectory and it was
+    // measured on the kernel the hoist was performed on -- `track_lat_slip_shed
+    // 0.0` AND `traction_mu 0.0`. Both now SHIP non-zero (1.4 / 3.0), so the
+    // leg can no longer read its own baseline out of `sim::SledParams{}`; it
+    // must name it. This is not relaxing the leg -- the numbers below are
+    // unchanged and still 17 digits. It is the hoist's baseline stated instead
+    // of inherited, which is the only form that survives a default moving.
+    sim::SledParams p;
+    p.track_lat_slip_shed = 0.0;  // the dial ABSENT: the hoist's own baseline
+    p.traction_mu = 0.0;          // the contact ceiling OFF, as when measured
+    sim::SledState s = settle(p, f, 8.0);
+    sim::SledInputs in;
+    in.throttle = 0.55f;
+    in.steer = 0.60f;
+    in.lean_lat = 0.70f;
+    for (int i = 0; i < 600; ++i) s = sim::step_sled(s, in, p, f, 1.0 / 60.0);
+    std::printf("[B3 hoist golden] %.17g %.17g %.17g  %.17g %.17g %.17g  "
+                "%.17g %.17g %.17g %.17g\n",
+                s.position.x, s.position.y, s.position.z, s.velocity.x,
+                s.velocity.y, s.velocity.z, s.orientation.w, s.orientation.x,
+                s.orientation.y, s.orientation.z);
+    REQUIRE(s.position.x == 11.608485367342661);
+    REQUIRE(s.position.y == 95.131302276142279);
+    REQUIRE(s.position.z == 6371000.7899927627);
+    REQUIRE(s.velocity.x == -15.838927151392182);
+    REQUIRE(s.velocity.y == 1.6720623283595666);
+    REQUIRE(s.velocity.z == -3.8460078991829262e-06);
+    REQUIRE(s.orientation.w == 0.50208358300441014);
+    REQUIRE(s.orientation.x == 0.47823483683606721);
+    REQUIRE(s.orientation.y == 0.53566174536643474);
+    REQUIRE(s.orientation.z == 0.48194399162643226);
+}
+
+TEST_CASE("sled_tail_shed_is_track_only", "[sled][b3]") {
+    // ★ `g.is_track`: lean buys ski plate, never track plate.
+    //
+    // ⚠⚠ FOLDED RED-TEAM P1-3 (law+feel) / P2-1 (mechanism), AND THE FOLD IS
+    // AN ADMISSION. This leg's first draft named its killing mutation as
+    // "dropping the `g.is_track` guard". IT CANNOT RED ON THAT. MEASURED by
+    // the red-team: delete `g.is_track &&` from the shed, rebuild, this leg
+    // still reports "All tests passed". The reason is scope, not luck --
+    // `trk_slip` and `trk_flux` are per-patch locals initialised to 0.0 and
+    // written ONLY inside `if (g.is_track)`, so on a ski patch the mutant
+    // evaluates `mu_l *= max(0, 1 - shed*0*...) == mu_l * 1.0`, bit-identical
+    // for every finite `mu_l`. The guard is REDUNDANT BY SCOPE today. It stays
+    // -- it is the only thing protecting the ski plate the day somebody hoists
+    // those locals to substep scope as an "optimisation" -- but no gate
+    // watches it and this comment no longer pretends one does.
+    //
+    // WHAT THIS LEG DOES PROVE, and it needed a positive control to mean
+    // anything at all: with `track_lat_mu = 0.0` the TRACK's `mu_l` is exactly
+    // +0.0 and `0.0 * factor == 0.0` for every finite non-negative factor, so
+    // the dial is ARITHMETICALLY INERT on the track and any trajectory
+    // difference can only have come from a SKI. Without the control below,
+    // both arms were inert and a dial wired to a field nobody reads would have
+    // passed this leg smiling.
+    //
+    // KILLED BY (the REAL mutations, named honestly):
+    //   • the dial not reaching the kernel at all -- an app override writing a
+    //     field nobody reads, or the term deleted. THE POSITIVE CONTROL reds.
+    //   • replacing the patch-local `trk_slip`/`trk_flux` with a machine-level
+    //     slip (`s.track_slip`, non-zero on every patch), or hoisting the slip
+    //     block out of its own `if (g.is_track)`. Either makes the guard
+    //     load-bearing and reds the inertness half.
+    const world::HeightField hf = flat_field();
+    const world::SnowpackField f = field_at_depth(hf, 0.30);
+    sim::SledInputs in;
+    in.throttle = 1.0f;  // WOT: the track develops all the slip it can
+    in.steer = 0.60f;    // and the skis carry a real slip angle
+    in.lean_lat = 0.70f;
+    auto drive300 = [&](const sim::SledParams& p) {
+        sim::SledState s = settle(p, f, 10.0);
+        for (int i = 0; i < 300; ++i) s = sim::step_sled(s, in, p, f, 1.0 / 60.0);
+        return s;
+    };
+    // ★ THE POSITIVE CONTROL FIRST: at the SHIPPED track_lat_mu the dial must
+    // move this machine, or nothing below means anything.
+    {
+        sim::SledParams ctl_off, ctl_on;
+        ctl_off.track_lat_slip_shed = 0.0;  // v2: the OFF arm, constructed
+        ctl_on.track_lat_slip_shed = 0.5;
+        REQUIRE(ctl_off.track_lat_mu == 0.70);  // the shipped value, not 0
+        const sim::SledState a = drive300(ctl_off), b = drive300(ctl_on);
+        std::printf("[B3 track-only posctl] sep=%.6g m\n",
+                    glm::length(a.position - b.position));
+        REQUIRE_FALSE(same_state(a, b));
+    }
+    // ... and THEN the inertness, on the tree where the track cannot feel it.
+    sim::SledParams off, on;
+    off.track_lat_mu = 0.0;
+    on.track_lat_mu = 0.0;
+    on.track_lat_slip_shed = 0.5;  // a LOUD value: this is a guard leg
+    // ★ v2: the OFF arm is CONSTRUCTED, not inherited. `SledParams{}` ships 1.4
+    // since 2026-09-18, so reading the identity off the default is exactly the
+    // mistake the tape-absent rule exists to stop, committed in a leg.
+    off.track_lat_slip_shed = 0.0;
+    REQUIRE(off.track_lat_slip_shed == 0.0);
+    REQUIRE(same_state(settle(off, f, 10.0), settle(on, f, 10.0)));  // same start
+    REQUIRE(same_state(drive300(off), drive300(on)));
+}
+
+TEST_CASE("sled_tail_shed_keeps_the_slide_before_the_tip", "[sled][b3]") {
+    // ★★ FOLDED RED-TEAM P0-2 (law+feel): B3'S WORST CASE HAD NO GREEN LEG AT
+    // ANY ARMED VALUE. `sled_slides_before_it_tips_on_flat_snow` (:1074) is the
+    // leg that pins Chad's signed feel -- a real snowmobile on flat snow SLIDES
+    // OUT before it TIPS OVER -- and its own KILLED BY line names "restoring
+    // the old mu_lat/track_lat_mu", which is EXACTLY what this dial does by
+    // hand. That leg is (a) in generated/gate/known_reds.txt, so the gate
+    // cannot speak to it either way, and (b) blind to the dial anyway, because
+    // it builds `const sim::SledParams p;`.
+    //
+    // So this leg is hermetic and does NOT reuse the silenced one: a green leg
+    // must never depend on a red. Same sweep, same inputs, three ARMS of the
+    // dial, and a DIFFERENTIAL claim rather than :1074's absolute bound --
+    // because :1074's 0.35 bound is the thing that is already red on main
+    // (MEASURED 0.42257279222223798 at depth 0.77 / 25 m/s, byte-identical with
+    // every change stashed). This leg asks the question that is actually B3's:
+    // DOES ARMING THE DIAL MAKE THE ROLL WORSE.
+    //
+    // MEASURED ANSWER, and it is the good one: across 12 cells and three arms
+    // the worst armed/unarmed max-roll ratio is 1.0090 (depth 0.30, 20 m/s) and
+    // several cells get BETTER. Nothing latches `rolled` at any value. That is
+    // run 6's second owed answer -- "DID SHE ROLL MORE" -- answered by the gate
+    // on flat snow BEFORE he spends a tank of fuel on it. ⚠ IT IS NOT AN ANSWER
+    // ABOUT BANKS: this fixture is flat, and a ski-on-a-bank strike is a
+    // TRIPPED rollover, which no flat fixture reaches. His drive still owes it.
+    //
+    // KILLED BY: any shed value that lets the track's lateral mu fall far
+    // enough to trip her (the `rolled` REQUIRE), or a dial that quietly makes
+    // the flat-snow roll worse (the ratio REQUIRE). Also killed by a fixture
+    // that stops turning -- the yaw REQUIRE is the anti-"does nothing" clause
+    // :1074 carries for the same reason.
+    const world::HeightField hf = flat_field();
+    double worst_ratio = 0.0;
+    for (double depth : {0.30, 0.77}) {
+        const world::SnowpackField f = field_at_depth(hf, depth);
+        for (double v0 : {4.0, 8.0, 12.0, 16.0, 20.0, 25.0}) {
+            double base_roll = 0.0;
+            for (double shed : {0.0, 0.4, 1.4}) {
+                sim::SledParams p;
+                p.track_lat_slip_shed = shed;
+                sim::SledState s = settle(p, f, v0);
+                sim::SledInputs in;
+                in.throttle = 0.45f;
+                in.steer = 1.0f;
+                double max_roll = 0.0, yaw_rad = 0.0;
+                for (int i = 0; i < 480; ++i) {
+                    s = sim::step_sled(s, in, p, f, 1.0 / 60.0);
+                    const glm::dvec3 up = glm::normalize(s.position);
+                    const glm::dmat3 R = glm::mat3_cast(s.orientation);
+                    max_roll = std::max(max_roll, std::abs(std::asin(std::clamp(
+                        glm::dot(R * glm::dvec3(1, 0, 0), up), -1.0, 1.0))));
+                    yaw_rad += std::abs(glm::dot(s.angular_vel, up)) / 60.0;
+                    REQUIRE_FALSE(s.rolled);  // she SLIDES, she does not tip
+                }
+                REQUIRE(yaw_rad > 0.2);  // and she is visibly turning while she refuses
+                if (shed == 0.0) {
+                    base_roll = max_roll;
+                    REQUIRE(base_roll > 0.0);  // non-vacuity: she does lean
+                } else {
+                    const double ratio = max_roll / base_roll;
+                    worst_ratio = std::max(worst_ratio, ratio);
+                    std::printf("[B3 slide] depth=%.2f v0=%4.1f shed=%.2f "
+                                "roll=%.6f base=%.6f ratio=%.4f\n",
+                                depth, v0, shed, max_roll, base_roll, ratio);
+                    // 3 %: twice the worst measured (1.0090) and far under the
+                    // 1.21x it would take to push the worst cell past :1074's
+                    // own 0.35 bound. A shed that genuinely traded roll for
+                    // drift on flat snow would blow this by a wide margin.
+                    REQUIRE(ratio < 1.03);
+                }
+            }
+        }
+    }
+    std::printf("[B3 slide] WORST armed/unarmed roll ratio = %.4f\n",
+                worst_ratio);
+}
+
+TEST_CASE("sled_tail_shed_is_dark_where_there_is_no_roost", "[sled][b3]") {
+    // ★★ FOLDED RED-TEAM P1-3 (mechanism): THE DIAL IS NAMED FOR THE ROOST AND
+    // NOW READS IT. His sentence is "throttle should also be able to swing my
+    // tail around ON ACCOUNT OF THE ROOST". The first build read `|trk_slip|`,
+    // which is surface-BLIND: on a plowed road -- "just going down the road",
+    // his words, and the surface his loudest OLD complaint lives on -- it
+    // stripped the track's lateral grip at full strength while
+    // `sled_road_sinkage_is_exactly_zero` already pins `roost_flux == 0.0`
+    // there. The shed reads `trk_flux` now, and `avail` is identically 0 on
+    // every non-sinkable row (Road, LakeIce, RockOutcrop, MineWorks).
+    //
+    // MEASURED on this fixture: on the road the track carries a real
+    // longitudinal slip (`track_slip` 0.38673) with `roost_flux` exactly
+    // 0.00000, so the OLD form would have cut the track's lateral mu to zero at
+    // shed 3.0 while the new one is bit-identical.
+    //
+    // KILLED BY: writing the shed on `std::abs(trk_slip)` instead of
+    // `trk_flux`. The road arms then diverge and the first REQUIRE reds. The
+    // SNOW control below is the non-vacuity: on snow, same inputs, same dial,
+    // the arms must separate -- otherwise a dial that stopped working
+    // altogether would pass this leg.
+    constexpr double kSmallR = 15000.0;
+    world::HeightField rhf;
+    rhf.w = 64;
+    rhf.h = 32;
+    rhf.R = kSmallR;
+    rhf.relief_scale = 400.0;
+    rhf.u_offset = 0.0;
+    rhf.px.assign(static_cast<std::size_t>(rhf.w) * rhf.h, 0);
+    // ⚠ A WIDE ribbon (60 m half-width) on purpose: this leg's claim is about
+    // the SURFACE CLASS, not about road width, and it needs a real commanded
+    // steer for 5 s without her leaving the deck -- a lateral force that is
+    // identically zero in a straight line cannot tell the two forms apart.
+    const Ribbon rb = straight_ribbon(-0.03, 0.03, 40, 60.0, kSmallR);
+    world::LineNetwork net;
+    net.add_path(rb.v.data(), rb.s.data(), rb.v.size(),
+                 world::LineKind::RoadMinor, kSmallR);
+    net.build_index();
+    world::SnowpackField road = field_at_depth(rhf, 0.77);
+    road.lines = &net;
+    road.p.deck_lift_m = 0.45;  // shipped [ribbons] lift_m, exercised live
+
+    sim::SledInputs in;
+    in.throttle = 1.0f;  // WOT: the track is spending everything forwards
+    in.steer = 0.35f;    // and a real slip angle, or `mu_l` buys nothing
+    auto drive = [&](const world::SnowpackField& f, double shed, bool* on_road) {
+        sim::SledParams p;
+        p.track_lat_slip_shed = shed;
+        sim::SledState s = settle(p, f, 12.0);
+        for (int i = 0; i < 300; ++i) {
+            s = sim::step_sled(s, in, p, f, 1.0 / 60.0);
+            if (on_road && s.surface != world::Surface::Road) *on_road = false;
+        }
+        return s;
+    };
+    bool on_road = true;
+    const sim::SledState a = drive(road, 0.0, &on_road);
+    const sim::SledState b = drive(road, 3.0, &on_road);
+    std::printf("[B3 road] on_road=%d slip=%.5f roost=%.5f\n", on_road ? 1 : 0,
+                a.track_slip, a.roost_flux);
+    REQUIRE(on_road);                            // non-vacuity: she stayed on it
+    REQUIRE(a.roost_flux == 0.0);                // there IS no roost here
+    REQUIRE(std::abs(a.track_slip) > 0.2);       // and there IS a real slip
+    REQUIRE(same_state(a, b));                   // so the dial must be dark
+
+    const world::HeightField hf = flat_field();
+    const world::SnowpackField snow = field_at_depth(hf, 0.30);
+    const sim::SledState c = drive(snow, 0.0, nullptr);
+    const sim::SledState d = drive(snow, 3.0, nullptr);
+    std::printf("[B3 road] snow control sep=%.6g m (roost=%.5f)\n",
+                glm::length(c.position - d.position), c.roost_flux);
+    REQUIRE(c.roost_flux > 0.0);       // the same inputs DO make a roost here
+    // ★ AND IT IS LOUD THERE -- metres, not float noise. Without this bound
+    // the control would pass on a 1e-15 crab and the leg would prove nothing.
+    REQUIRE(glm::length(c.position - d.position) > 0.5);
+}
+
+TEST_CASE("sled_tail_shed_is_dark_with_the_thumb_shut", "[sled][b3]") {
+    // ★★ FOLDED RED-TEAM P1-2 (mechanism): THE SHED USED TO FIRE AT FULL
+    // STRENGTH WITH THE THUMB CLOSED. Thumb shut means `drive == 0`; below
+    // `clutch_engage_ms - 0.25 = 3.0 m/s` the clutch blend is 0 too, so
+    // `v_track == 0` and `trk_slip` clamps to exactly -1 -- THE LARGEST VALUE
+    // THIS DIAL CAN EVER SEE, reached at ZERO throttle. MEASURED on this
+    // fixture: |track_slip| peaks at 1.00000 and `roost_flux` at 0.16-0.20 with
+    // `in.throttle = 0`.
+    //
+    // The kernel already decouples THRUST there (`T *= drive + (1-drive) *
+    // clutch_blend`); the shed had no such decouple, so closing the throttle
+    // did NOT hook the tail back up below ~3.3 m/s -- the opposite of the
+    // sentence the dial is built from, and precisely the regime a bank strike
+    // slows into. The shed carries the SAME factor now.
+    //
+    // KILLED BY: deleting the `(drive + (1.0 - drive) * clutch_blend)` factor
+    // from the shed. The closed-thumb arms then diverge and the first REQUIRE
+    // reds. The OPEN-thumb control is the non-vacuity -- with the drivetrain
+    // connected the same dial on the same fixture must still bite.
+    const world::HeightField hf = flat_field();
+    const world::SnowpackField f = field_at_depth(hf, 0.30);
+    auto coast = [&](double v0, double shed, float thr, double* worst_slip,
+                     double* worst_flux) {
+        sim::SledParams p;
+        p.track_lat_slip_shed = shed;
+        sim::SledState s = settle(p, f, v0);
+        sim::SledInputs in;
+        in.throttle = thr;
+        in.lean_lat = 1.0f;  // a full lean, so (1 + align_m) is live too
+        for (int i = 0; i < 120; ++i) {
+            s = sim::step_sled(s, in, p, f, 1.0 / 60.0);
+            if (worst_slip)
+                *worst_slip = std::max(*worst_slip, std::abs(s.track_slip));
+            if (worst_flux) *worst_flux = std::max(*worst_flux, s.roost_flux);
+        }
+        return s;
+    };
+    for (double v0 : {1.5, 2.0, 3.0}) {
+        double worst_slip = 0.0, worst_flux = 0.0;
+        const sim::SledState a = coast(v0, 0.0, 0.0f, &worst_slip, &worst_flux);
+        const sim::SledState b = coast(v0, 3.0, 0.0f, nullptr, nullptr);
+        std::printf("[B3 coast] v0=%.1f worst|slip|=%.5f worst_flux=%.5f\n", v0,
+                    worst_slip, worst_flux);
+        REQUIRE(worst_slip > 0.7);   // non-vacuity: the slip really is huge ...
+        REQUIRE(worst_flux > 0.05);  // ... and there really IS a roost to read
+        REQUIRE(same_state(a, b));   // and still the dial is dark
+    }
+    // THE CONTROL: same speed, same dial, thumb OPEN -- it must bite.
+    const sim::SledState c = coast(2.0, 0.0, 1.0f, nullptr, nullptr);
+    const sim::SledState d = coast(2.0, 3.0, 1.0f, nullptr, nullptr);
+    std::printf("[B3 coast] open-thumb control sep=%.6g m\n",
+                glm::length(c.position - d.position));
+    REQUIRE_FALSE(same_state(c, d));
+}
+
+TEST_CASE("sled_tail_shed_is_inert_in_a_straight_line", "[sled][b3]") {
+    // ★★ FOLDED P1-5 (ladder_v2), AND THEN A REPORT AGAINST THE FOLD ITSELF.
+    //
+    // FIRST, WHAT THE NAME DOES NOT MEAN. The straight-line shed is REAL: at
+    // `align_m == 0` the factor is `1 - shed*flux*decouple`, NOT 1, so this
+    // dial takes lateral grip off the track with no lean at all -- and that is
+    // exactly the part that can make a ski-on-a-bank strike worse, which is
+    // Chad's loudest OLD complaint. This leg does not say otherwise.
+    //
+    // SECOND, THE REPORT. §4.4 requires this leg "only on a hermetic flat
+    // fixture, zero commanded steer, zero lean, where `slip_ang == 0`" and
+    // says: if the fixture crabs, REPORT THE CRAB, do not relax the leg. IT
+    // CRABS, AND NO FIXTURE REACHABLE THROUGH `step_sled` DOES NOT. MEASURED:
+    // zero steer, zero lean, WOT, the arms separate on TICK ONE by ~3e-20 m,
+    // reaching 1.9e-15 m at 600 ticks. The track patch's `v_lat` is ~1e-17 m/s,
+    // not 0, because `fwd_t`, `right_t` and `v_patch` are built by normalise
+    // and cross at a radius of 6.371e6 m -- an exactly-zero slip angle is not
+    // representable there. So `slip_ang == 0` is an unreachable fixture, and an
+    // exact-identity leg on it would be a permanently red gate.
+    //
+    // THIRD, WHAT IS ASSERTED INSTEAD, and why it is not an epsilon hiding a
+    // force. The leg asserts a SEPARATION measured against arms that really do
+    // differ: straight-line 1.9e-15 m against 10.77 m with a lean of 1.0 at the
+    // ladder's last step, on the identical fixture. Fifteen orders of
+    // magnitude. The bound below is 1e-12 m -- twelve orders under the smallest
+    // real effect measured, so no real lateral force can hide there.
+    //
+    // ★ FOURTH, FOLDED RED-TEAM P2-5 (mechanism): NOTHING PINNED `align_m`
+    // INSIDE THE NEW TERM. `sled_wrong_way_lean_is_never_a_penalty` (:2546)
+    // runs at default params, so the shed is 0.0 in both its arms and the
+    // branch never executes there. The last two REQUIREs below are the pins:
+    // a WRONG-WAY lean must buy the shed exactly nothing (raw signed lean
+    // instead of `align_m` makes that arm's factor `1 + (-1) = 0`, the shed
+    // vanishes on that arm alone and the equality breaks), and the `1.0 +`
+    // form must shed with NO lean as well as more WITH lean (which is what
+    // separates the shipped form from the lean-gated fallback `align_m`).
+    //
+    // KILLED BY: applying the shed as an additive term on the bite rather than
+    // a multiplier on `mu_l` -- an additive form survives a zero slip angle and
+    // moves the straight arm by metres. Also killed by the raw signed lean, by
+    // the lean-gated fallback form, and by a shed that silently stopped working
+    // (the leaned non-vacuity).
+    const world::HeightField hf = flat_field();
+    const world::SnowpackField f = field_at_depth(hf, 0.30);
+    auto run = [&](float steer, float lean, double shed) {
+        sim::SledParams p;
+        p.track_lat_slip_shed = shed;
+        sim::SledState s = settle(p, f, 10.0);
+        sim::SledInputs in;
+        in.throttle = 1.0f;  // WOT, so the roost is large and the shed is armed
+        in.steer = steer;
+        in.lean_lat = lean;
+        for (int i = 0; i < 600; ++i) s = sim::step_sled(s, in, p, f, 1.0 / 60.0);
+        return s;
+    };
+    auto sep = [&](float steer, float lean) {
+        return glm::length(run(steer, lean, 0.0).position -
+                           run(steer, lean, 1.4).position);
+    };
+    const double straight = sep(0.0f, 0.0f);
+    const double leaned = sep(0.0f, 1.0f);
+    std::printf("[B3 straight] crab=%.6g m   leaned=%.6g m   ratio=%.3g\n",
+                straight, leaned, leaned / straight);
+    REQUIRE(run(0.0f, 0.0f, 0.0).ground_speed_ms > 5.0);  // she really drove
+    REQUIRE(straight < 1e-12);  // the crab, twelve orders under the real effect
+    REQUIRE(leaned > 1.0);      // non-vacuity: the dial DOES bite when leaned
+    // ★ THE align_m PIN (P2-5), AND A REPORT AGAINST THE RED-TEAM'S OWN FORM.
+    // P2-5 proposed `sep(0.15, -1.0) == sep(0.15, 0.0)`. THAT IS NOT AN
+    // IDENTITY and it reds on a correct kernel: `align_m` is 0 in BOTH, so the
+    // shed FACTOR matches, but the two arms fly different trajectories (the
+    // lean moves `lean_bite_gain`, the ski plate and the weight transfer), so
+    // their separations are different numbers. MEASURED and reported rather
+    // than asserted.
+    //
+    // ⚠ AND A SECOND REPORT, MEASURED TWICE, BECAUSE THE FIRST TWO FORMS OF
+    // THIS PIN BOTH SURVIVED THEIR OWN KILLING MUTATION.
+    //   (a) A WRONG-WAY LEAN IS NOT REACHABLE ON A LIGHTLY-STEERED FIXTURE. At
+    //       steer 0.15 the LEAN drives the yaw, so `wy` takes the lean's own
+    //       sign, `lean_frac * sign(wy)` comes out POSITIVE, and the machine is
+    //       always leaning into the turn it is causing. Only a FULL-LOCK steer
+    //       owns the yaw sign -- the construction :2546 already uses.
+    //   (b) A SHORT WINDOW CANNOT SEE IT EITHER. `align_m`'s ramp needs
+    //       |w_up| > 0.02 rad/s and saturates at 0.07, and `lean_frac` slews;
+    //       inside 20 ticks BOTH forms are still at `align == 0` and agree, so
+    //       the mutation changes nothing there. MEASURED: the 20-tick form
+    //       passed the raw-signed mutation.
+    // So the pin is a RATIO over a developed corner. Under the shipped form a
+    // wrong-way lean sheds exactly as hard as NO lean (`align_m` clamps to 0 in
+    // both, factor `1 - shed*flux*decouple`). Under the raw-signed mutation the
+    // wrong-way factor becomes `1 + (-1) = 0` -- the shed SWITCHES OFF once the
+    // lean saturates -- and under the lean-gated fallback (`(1.0 + align_m)` ->
+    // `align_m`) it switches off for both. Either way the wrong-way separation
+    // collapses against the no-lean one.
+    {
+        auto locked = [&](float lean, double shed) {
+            sim::SledParams p;
+            p.track_lat_slip_shed = shed;
+            sim::SledState st = settle(p, f, 12.0);
+            sim::SledInputs in;
+            in.throttle = 1.0f;
+            in.steer = 1.0f;  // LEFT, full lock: the steer owns the yaw sign
+            in.lean_lat = lean;
+            for (int i = 0; i < 300; ++i)
+                st = sim::step_sled(st, in, p, f, 1.0 / 60.0);
+            return st;
+        };
+        auto lsep = [&](float lean) {
+            return glm::length(locked(lean, 0.0).position -
+                               locked(lean, 1.4).position);
+        };
+        const double flat_lean = lsep(0.0f);
+        const double wrong_way = lsep(-1.0f);  // leaning RIGHT in a LEFT turn
+        std::printf("[B3 straight] full lock: no-lean sep=%.6g m   wrong-way "
+                    "sep=%.6g m   ratio=%.4f\n",
+                    flat_lean, wrong_way, wrong_way / flat_lean);
+        REQUIRE(flat_lean > 0.1);  // non-vacuity: the dial bites in this corner
+        REQUIRE(wrong_way > 0.25 * flat_lean);
+    }
+    // ... and the shipped `1.0 +` form sheds MORE with a right-way lean, which
+    // is the other half the fallback would remove.
+    REQUIRE(straight < leaned);
+}
+
+// --- SLED KERNEL v2 · the driven values ARE the shipped defaults ------------
+//
+// Chad, 2026-09-18, on the seven drive runs and the three landing
+// recommendations: "yes tyo all 7  and all 3 of these reccomendations I
+// concurr I want this all in a v2". Five dials, driven and approved one at a
+// time and then together (run 7, "yes very good"), landed together as one
+// kernel version. These two legs are what make that irreversible by accident.
+
+namespace {
+
+// The full-state comparator. `same_state` above compares the six rigid-body
+// fields, which is the right instrument for a "does this dial move her" leg
+// and the WRONG one here: the v2 dials write the drivetrain and the rider
+// readouts too (engine_rpm, belt_speed_ms, track_slip, roost_flux, thrust_n,
+// rider_lat_m, assist_nm ...), and a leg that claims BITWISE EQUALITY has to
+// look at all of it. SLEDTAPE_PIN_D is the roster the tape already keeps for
+// exactly this, so new SledState fields join this comparison by construction
+// rather than by somebody remembering.
+bool same_pin(const sim::SledState& a, const sim::SledState& b) {
+#define SEADS_V2_CMP(f)                                                       \
+    if (!(a.f == b.f)) return false;
+    SLEDTAPE_PIN_D(SEADS_V2_CMP)
+#undef SEADS_V2_CMP
+    return a.surface == b.surface && a.rolled == b.rolled;
+}
+
+// THE DRIVE, one fixture for both arms: 300 ticks of a leaned, steered,
+// throttled carve on 0.30 m snow (this is where traction_mu and
+// track_lat_slip_shed live), then she is PUT OVER at 110 deg, then 300 ticks
+// with W HELD and STAND PRESSED (rolled_throttle_frac, right_assist_max_ms and
+// right_stand_shift_frac). 600 ticks, every one of the five dials on the path.
+// What one arm of the v2 drive leaves behind. The final `SledState` is not
+// enough on its own and the reason is MEASURED, not guessed: on flat ground a
+// downed machine's track has no contact, so `rolled_throttle_frac` reaches
+// `engine_rpm` and `belt_speed_ms` AND NOTHING ELSE (handoff 2.3's sweep --
+// thrust 0.00 N, roost 0.00000, identical tilt at 0.00 / 0.15 / 1.00). Those
+// two readouts are recomputed every tick and integrate into nothing, so by the
+// time she is upright again the final state has forgotten the dial entirely.
+// The rolled-window rpm sum is therefore part of the observable, not decoration.
+struct V2Drive {
+    sim::SledState s;
+    double rpm_rolled_sum = 0.0;
+    long rolled_ticks = 0;
+};
+
+V2Drive drive_v2(const sim::SledParams& p,
+                        const world::SnowpackField& f) {
+    // PHASE 1 -- THE PLANING CARVE, 300 ticks at WOT from 40 m/s, steered and
+    // leaned. The speed is MEASURED, not chosen for looks: `traction_mu` only
+    // binds where the contact normal has already collapsed, and in this fixture
+    // it is DARK at v0 = 5, 10 and 20 (separation exactly 0.0 between mu = 0.0
+    // and mu = 3.0), 0.918 mm at v0 = 30 and 8.87 m at v0 = 40. A leg that
+    // drove this at 10 m/s would pass its equality while being blind to one of
+    // the five dials it claims to cover -- the vacuity this lane's red-team
+    // caught twice (handoff 2.2b). `track_lat_slip_shed` rides the same phase.
+    sim::SledState s = settle(p, f, 40.0);
+    sim::SledInputs ride;
+    ride.throttle = 1.0f;
+    ride.steer = 0.35f;
+    ride.lean_lat = 0.7f;
+    V2Drive out;
+    for (int i = 0; i < 300; ++i) {
+        s = sim::step_sled(s, ride, p, f, 1.0 / 60.0);
+        if (s.rolled) {
+            out.rpm_rolled_sum += s.engine_rpm;
+            ++out.rolled_ticks;
+        }
+    }
+    // PHASE 2 -- SHE GOES OVER, HE HOLDS W AND STANDS ON THE BOARD. Put over
+    // the same way `downed` does it, and set to a slow side slide so the drive
+    // is INSIDE the righting gate's speed band (phase 1 ends near 22 m/s, where
+    // the gate is shut at either value and both dials would be dark). The
+    // attitude, suspension, creep and sink phase 1 built are carried in, so the
+    // phase-1 dials are still on the path to the final state.
+    const glm::dvec3 up = glm::normalize(s.position);
+    const glm::dvec3 fwd =
+        glm::dmat3(glm::mat3_cast(s.orientation)) * glm::dvec3(0, 0, -1);
+    s.orientation =
+        glm::normalize(glm::angleAxis(glm::radians(110.0), fwd) * s.orientation);
+    s.velocity = glm::cross(fwd, up) * 1.0;
+    sim::SledInputs over;
+    over.throttle = 1.0f;  // W held while she is down
+    over.stand = 1.0f;     // and he stands on the board to heave her up
+    over.lean_lat = 0.6f;
+    for (int i = 0; i < 300; ++i) {
+        s = sim::step_sled(s, over, p, f, 1.0 / 60.0);
+        if (s.rolled) {
+            out.rpm_rolled_sum += s.engine_rpm;
+            ++out.rolled_ticks;
+        }
+    }
+    out.s = s;
+    return out;
+}
+
+// ★★★ THE SHIPPED COMFORT BLOCK, READ FROM THE SAME config/scenario.toml THE
+// GAME READS -- the second half of `app/main.cpp:2476-2478`, verbatim:
+//
+//     sim::SledParams sled_params;                  // struct defaults
+//     sled_params.comfort = scen.sled_comfort;      // the WHOLE toml table
+//
+// ⚠⚠ THIS FILE USED TO REFUSE TO READ CONFIG, AND THAT REFUSAL IS WHAT LANDING
+// RED-TEAM P1-1 (2026-09-19) BROKE IN. The (b) proof's ARM A reproduced the
+// bridge by hand and reproduced THREE comfort fields; `scen.sled_comfort` is a
+// WHOLE struct and FIVE of its doubles diverge from `sim::SledComfort{}`. The
+// two it missed, `right_charge_push_s` (the pusher's fatigue tau, sim/sled.cpp
+// `tau_push`, run 67 % long) and `right_dir_eps` (4.3x the shipped value), both
+// live inside the self-right block the fixture's phase 2 exists to exercise --
+// so the leg named "the shipped-default exe is the machine he drove" was
+// measuring a machine nobody builds. Correcting them moved the fixture
+// materially: rolled_ticks 70 -> 79, rpm_rolled_sum 185150 -> 208955, final
+// assist_nm 12.7308 -> 7.15826 (44 %). The EQUALITY claim was never harmed --
+// both arms were equally unfaithful -- what was harmed was the leg's own name.
+//
+// A HAND-PATCHED LIST FIXES TODAY'S TWO AND LEAVES TOMORROW'S. READING THE
+// TABLE REMOVES THE CLASS. This is the SAME fix, for the SAME reason, that
+// test/unit/test_sled_selfright.cpp's `shipped()` was written for -- that
+// suite's banner records what the alternative costs: "v1's suite was GREEN
+// while the drive failed completely ... every outcome leg proved the mechanism
+// at 4000 N m while config/scenario.toml SHIPPED 900. The tests certified a
+// kernel nobody ran." There is now no duplicate of the toml in this leg, so
+// there is nothing left to drift.
+const sim::SledComfort& shipped_comfort() {
+    static const sim::SledComfort c = [] {
+        const sim::AircraftParams ap =
+            cfg::load_aircraft_toml(SEADS_CONFIG_DIR "/aircraft.toml");
+        return cfg::load_scenario_toml(SEADS_CONFIG_DIR "/scenario.toml", ap)
+            .sled_comfort;
+    }();
+    return c;
+}
+
+bool same_drive(const V2Drive& a, const V2Drive& b) {
+    return same_pin(a.s, b.s) && a.rpm_rolled_sum == b.rpm_rolled_sum &&
+           a.rolled_ticks == b.rolled_ticks;
+}
+
+}  // namespace
+
+TEST_CASE("sled_kernel_v2_defaults_equal_the_env_arm", "[sled][v2]") {
+    // ★★★ THE LANDING PROOF, (b) IN THE SENTINEL'S TERMS: the SHIPPED-DEFAULT
+    // exe is the SAME MACHINE as the env-armed exe Chad actually drove, bit for
+    // bit, on a drive that touches all five dials. Without this leg "the driven
+    // values are the shipped defaults" is a claim about source text; with it,
+    // it is a claim about the kernel.
+    //
+    // KILLED BY: any one of the five defaults moving by 1e-9 -- measured below,
+    // per dial, in the same fixture, so the leg's own sensitivity is reported
+    // and not assumed.
+    const world::HeightField hf = flat_field();
+    const world::SnowpackField f = field_at_depth(hf, 0.30);
+
+    // ★ ARM A -- THE MACHINE THE GAME BUILDS, CONSTRUCTED EXACTLY AS
+    // app/main.cpp:2476-2478 CONSTRUCTS IT, TWO LINES FOR TWO LINES:
+    //
+    //     sim::SledParams sled_params;               <-- struct defaults
+    //     sled_params.comfort = scen.sled_comfort;   <-- the WHOLE toml table
+    //
+    // `SledParams` has no TOML bridge, so its own fields carry the struct
+    // defaults -- which is where `traction_mu 3.0` and `track_lat_slip_shed
+    // 1.4` ship from. The ENTIRE comfort block is then replaced by what
+    // `config/scenario.toml [sled_comfort]` LOADED, through the real loader
+    // (`shipped_comfort()` above, and see the banner there for why it reads
+    // config instead of copying it). `rolled_throttle_frac` has no toml key, so
+    // it SURVIVES the assignment at its struct default of 0.15 -- exactly as it
+    // does in the game, and that is the third v2 dial.
+    //
+    // ⚠⚠ LANDING RED-TEAM P1-1 (2026-09-19), FOLDED HERE. This arm used to
+    // patch three comfort fields onto a default `SledComfort` and call the
+    // result "the machine the game builds". Five diverge. Full account in the
+    // `shipped_comfort()` banner; the short of it is that the two missed dials
+    // (`right_charge_push_s`, `right_dir_eps`) live inside the self-right block
+    // phase 2 exists to exercise, and the corrected fixture moves 70 -> 79
+    // rolled ticks and 12.7308 -> 7.15826 N m of final assist. The EQUALITY
+    // claim was never harmed -- both arms were equally unfaithful -- what was
+    // harmed was the sentence this leg is NAMED for.
+    sim::SledParams shipped;
+    shipped.comfort = shipped_comfort();
+
+    // ★ ARM B -- THE MACHINE HE DROVE, on the run-7 launch line. It starts
+    // from the SAME two lines, because he drove the shipped toml too, and then
+    // applies the five SEADS_SLED_* assignments on top exactly as
+    // app/main.cpp's env block applies them -- but built the long way ROUND ON
+    // PURPOSE: each of the five is first put BACK to its pre-v2 identity by
+    // hand and then armed to its driven value as a LITERAL.
+    //
+    // THAT DETOUR IS THE WHOLE TEETH OF THE LEG. For the five dials this arm
+    // reads nothing from any struct default and nothing from the toml, so if a
+    // struct default is walked back (traction_mu, track_lat_slip_shed,
+    // rolled_throttle_frac) OR a toml row is walked back (right_assist_max_ms,
+    // right_stand_shift_frac), arm A moves, arm B does not, and the claim below
+    // reds. MEASURED, both directions, in docs/SLED_KERNEL_V2_LANDING.md §7.
+    sim::SledParams env;
+    env.comfort = shipped_comfort();
+    env.traction_mu = 0.0;                        // identity
+    env.track_lat_slip_shed = 0.0;                // identity
+    env.comfort.rolled_throttle_frac = 0.0;       // identity
+    env.comfort.right_assist_max_ms = 5.0 / 3.6;  // identity
+    env.comfort.right_stand_shift_frac = 1.0;     // identity
+    env.traction_mu = 3.0;                        // SEADS_SLED_TRACTION_MU
+    env.track_lat_slip_shed = 1.4;                // SEADS_SLED_TAILSHED
+    env.comfort.rolled_throttle_frac = 0.15;      // SEADS_SLED_ROLLED_THROTTLE
+    env.comfort.right_assist_max_ms = 4.0;        // SEADS_SLED_RIGHT_MAXSPD
+    env.comfort.right_stand_shift_frac = 0.5;     // SEADS_SLED_STAND_SHIFT
+
+    const V2Drive a = drive_v2(shipped, f);
+    const V2Drive b = drive_v2(env, f);
+    std::printf("[v2 defaults==env] pos=%.17g %.17g %.17g rolled_ticks=%ld "
+                "rpm_rolled_sum=%.10g assist=%.6g\n",
+                a.s.position.x, a.s.position.y, a.s.position.z, a.rolled_ticks,
+                a.rpm_rolled_sum, a.s.assist_nm);
+    // NON-VACUITY FIRST: the fixture really did go over and really did hold W
+    // while she was down. 79 rolled ticks at 1700 + 0.15*6300 = 2645 rpm each
+    // is 208955 exactly -- the same 2645 the drive tape showed when Chad held
+    // the throttle rolled over (handoff 2.3), arrived at independently here.
+    // ⚠ These two numbers were 70 / 185150 until the P1-1 fold above put the
+    // two missing toml comfort dials into both arms; the rolled-throttle
+    // ARITHMETIC survived the correction intact (79 x 2645 = 208955 exactly),
+    // only the tick count moved. The 2645 is the claim; the tick count is the
+    // fixture.
+    REQUIRE(a.rolled_ticks == 79);
+    REQUIRE(a.rpm_rolled_sum == 208955.0);
+    REQUIRE(a.s.assist_nm > 0.0);  // ... and the righting assist really armed
+
+    // THE CLAIM.
+    REQUIRE(same_drive(a, b));
+
+    // THE KILLING MUTATIONS, ONE PER DIAL, WITH THEIR MEASURED SENSITIVITY.
+    // Four of the five are continuous in this fixture and break at 1e-9.
+    {
+        const double d = 1e-9;
+        sim::SledParams m = shipped;
+        m.traction_mu += d;  // MEASURED live: dark below ~30 m/s, 8.87 m at 40
+        REQUIRE_FALSE(same_drive(drive_v2(m, f), b));
+    }
+    {
+        sim::SledParams m = shipped;
+        m.track_lat_slip_shed += 1e-9;
+        REQUIRE_FALSE(same_drive(drive_v2(m, f), b));
+    }
+    {
+        sim::SledParams m = shipped;
+        m.comfort.rolled_throttle_frac += 1e-9;
+        // Caught by the rpm sum, NOT by the final state -- see V2Drive.
+        REQUIRE_FALSE(same_drive(drive_v2(m, f), b));
+    }
+    {
+        sim::SledParams m = shipped;
+        m.comfort.right_stand_shift_frac += 1e-9;
+        REQUIRE_FALSE(same_drive(drive_v2(m, f), b));
+    }
+    // ★ AND THE FIFTH IS REPORTED HONESTLY RATHER THAN DRESSED UP.
+    // `right_assist_max_ms` is a THRESHOLD on a low-passed speed, not a gain: a
+    // 1e-9 nudge moves the gate by a nanometre per second and the speed never
+    // lands in that window, so the 1e-9 mutation is DARK here BY CONSTRUCTION
+    // and is not asserted (MEASURED: it does not change a single bit of this
+    // drive). Its real killing mutation is the one that matters -- walking the
+    // key back to the pre-v2 5 km/h -- and the fixture sees that one loudly.
+    {
+        sim::SledParams m = shipped;
+        m.comfort.right_assist_max_ms = 5.0 / 3.6;  // the pre-v2 gate
+        REQUIRE_FALSE(same_drive(drive_v2(m, f), b));
+    }
 }

@@ -88,6 +88,7 @@ GameParams load_game_toml(const std::string& path,
     g.ground.noseover_full_speed_ms =
         require(root, "ground", "noseover_full_speed_ms");
     g.ground.deep_penetration_m = require(root, "ground", "deep_penetration_m");
+    g.ground.facet_contact = require(root, "ground", "facet_contact");
 
     g.buildings.collide = require_bool(root, "buildings", "collide");
     g.buildings.inflate_m = require(root, "buildings", "inflate_m");
@@ -298,6 +299,13 @@ GameParams load_game_toml(const std::string& path,
           "ground deep_penetration_m in (contact_height_m + 5, 500] (a wall-"
           "strike floor: unreachable by a legit landing, well below tunnel "
           "depth so a wall graze always fires it)");
+    // ★ terrain-clip T2: the facet-contact blend is a FRACTION, not a length.
+    // Outside [0, 1] it would either subtract the drawn surface from the field
+    // (negative) or extrapolate past the mesh chord (> 1) — neither is a
+    // surface anything is drawn on. Bounded here so the kernel needs no clamp.
+    check(g.ground.facet_contact >= 0.0 && g.ground.facet_contact <= 1.0,
+          "ground facet_contact in [0, 1] (0 = the pre-T2 DEM-field crash "
+          "surface, 1 = collision == the drawn mesh facet)");
     check(g.fx.touchdown_ref_speed_ms > 0.0, "fx touchdown_ref_speed_ms > 0");
     check(g.fx.touchdown_intensity >= 0.0 && g.fx.touchdown_intensity <= 2.0,
           "fx touchdown_intensity in [0, 2] (the render caps effect at 2 — "

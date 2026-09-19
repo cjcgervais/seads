@@ -9,6 +9,15 @@
 // Members are pointers, so this header only forward-declares the field types —
 // the ground query dereferences world::HeightField in the .cpp (Phase 1/R4);
 // the atmosphere/gravity/tunnel fields are Phase 2/3 and don't exist yet.
+//
+// ★ terrain-clip T2: the ONE exception to "members are pointers" is
+// ground_facet_fn below — a std::function, because the thing it carries lives
+// in render/ and the kernel may not include render/ (the same reason
+// world::SnowpackField::facet_radius_fn is a std::function, world/snowpack.h).
+
+#include <functional>
+
+#include <glm/glm.hpp>
 
 namespace world {
 struct HeightField;  // Phase 1 — null = the bare sphere at R (today's crash
@@ -97,6 +106,31 @@ struct GroundParams {
     // well under contact_height_m + a few metres. Loaded range-checked in
     // config/load_game.cpp against contact_height_m.
     double deep_penetration_m = 0.0;
+    // ★ terrain-clip T2 — THE ONE DIAL: how much of the aircraft's crash
+    // surface is the surface the EYE is shown.
+    //
+    //   r_s = mix(hf.radius_at(up), facet(up), facet_contact) + contact_height_m
+    //
+    // 0.0 = IDENTITY BY BRANCH: Environment::ground_facet_fn is not called and
+    // the arithmetic is literally `hf.radius_at(up) + gp.contact_height_m` —
+    // bit-identical to the pre-T2 kernel (the frozen-kernel law; every golden,
+    // every headless test, every null-env path is on this arm by default).
+    // 1.0 = THE SLED'S LAW: collision == what is drawn, the same pinning
+    // [snowpack] hf_faceted_ground already gives the snowmachine.
+    //
+    // WHY (docs/terrain_clip/CLIP_INSTRUMENT.md, T1): the crash surface is the
+    // bilinear DEM FIELD (~11.5 m texel) while the drawn planet is a ~59 m mesh
+    // facet. Where terrain is steeper than one mesh cell the drawn chord rides
+    // ABOVE the field — measured +66.7 m inside the Onaping pump area, 3.8 % of
+    // the ground within 3 km of it — and the airframe is legally airborne
+    // INSIDE visible rock (Chad: "I was able to fly into the small earth and
+    // fly inside it"). The mirror sign (crash shell above the drawn ground =
+    // the invisible wall) dies with the same dial.
+    //
+    // NOT a second height source: the facet is the SAME field read through the
+    // mesh's own interpolation (the H1 anti-fork). Loader-bounded [0, 1];
+    // SEADS_FACET_CONTACT replaces the config value (the kill, app/main.cpp).
+    double facet_contact = 0.0;
 };
 
 struct Environment {
@@ -109,6 +143,22 @@ struct Environment {
     // surface, never a fork). Null = buildings are ghosts (pre-R4f).
     const world::BuildingColliders* obstacles = nullptr;
     GroundParams ground_params{};  // consumed iff ground != nullptr
+
+    // ★ terrain-clip T2: the DRAWN mesh-facet radius sampler —
+    // render::facet_radius_at(*ground, dir, planet.subdiv, planet.tiles).
+    // INJECTED by the app layer (app/main.cpp), exactly the seam and exactly
+    // the function world::SnowpackField::facet_radius_fn already carries for
+    // the sled: sim/ is render-free by law, and app/ is the one place holding
+    // both env.ground and the shipped subdiv/tiles the mesh was actually built
+    // at. NOT a second height source — the same HeightField, the mesh's own
+    // interpolation (the H1 anti-fork).
+    //
+    // EMPTY (every headless test, every golden, every env built without a
+    // render layer) = ABSENT: sim/ground.h falls back to hf.radius_at, i.e.
+    // the pre-T2 field crash surface, whatever ground_params.facet_contact
+    // says. So a test that never injects can never accidentally be on the
+    // armed arm.
+    std::function<double(glm::dvec3)> ground_facet_fn;
 
     // R5 (Fable-BEFORE P2-1): the app gates its env pointer on THIS, never
     // on any single field — the R4 gate on ground alone would have silently

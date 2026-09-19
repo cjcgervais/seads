@@ -431,6 +431,8 @@ WorldParams load_world_toml(const std::string& path) {
         b.skirt_bury_m = require(root, "bank_mesh", "skirt_bury_m");
         b.speckle_density = require(root, "bank_mesh", "speckle_density");
         b.speckle_dark = require(root, "bank_mesh", "speckle_dark");
+        // ★ ROAD-REPAIR rung AA.
+        b.speckle_aa = require(root, "bank_mesh", "speckle_aa");
         b.crest_smudge = require(root, "bank_mesh", "crest_smudge");
         b.min_amp_m = require(root, "bank_mesh", "min_amp_m");
         b.skirt_rings =
@@ -438,6 +440,8 @@ WorldParams load_world_toml(const std::string& path) {
         b.chord_tol_m = require(root, "bank_mesh", "chord_tol_m");
         b.junction_station_m =
             require(root, "bank_mesh", "junction_station_m");
+        // ★ ROAD-REPAIR F1 -- the bank yields to the drawn deck.
+        b.deck_yield_m = require(root, "bank_mesh", "deck_yield_m");
         // ★ ROAD-REPAIR ONAPING RUNG 2 -- the drawn apron.
         b.apron_m = require(root, "bank_mesh", "apron_m");
         b.apron_tol_m = require(root, "bank_mesh", "apron_tol_m");
@@ -493,6 +497,10 @@ WorldParams load_world_toml(const std::string& path) {
     w.ribbons.lift_m = require(root, "ribbons", "lift_m");
     w.ribbons.max_seg_m = require(root, "ribbons", "max_seg_m");
     w.ribbons.max_tr_m = require(root, "ribbons", "max_tr_m");
+    w.ribbons.junction_cut_m = require(root, "ribbons", "junction_cut_m");
+    w.ribbons.over_bank_bias = require(root, "ribbons", "over_bank_bias");
+    // ★ ROAD-REPAIR rung AA.
+    w.ribbons.line_aa = require(root, "ribbons", "line_aa");
     w.ribbons.road_bed = require_vec3(root, "ribbons", "road_bed");
     w.ribbons.road_line = require_vec3(root, "ribbons", "road_line");
     w.ribbons.road_center_frac = require(root, "ribbons", "road_center_frac");
@@ -1137,6 +1145,22 @@ WorldParams load_world_toml(const std::string& path) {
     check(w.ribbons.lift_m > 0.0, "ribbons lift_m > 0");
     check(w.ribbons.max_seg_m >= 0.0, "ribbons max_seg_m >= 0 (0 = identity)");
     check(w.ribbons.max_tr_m >= 0.0, "ribbons max_tr_m >= 0 (0 = identity)");
+    // ★ ROAD-REPAIR F2. A RADIUS, so bigger cuts MORE road away. The ceiling
+    // is 60 m because the widest recovered deck half-width on the planet is
+    // 11.0 m: past ~5x that the cap stops being an intersection and starts
+    // being a parking lot, and the 40 %-of-length clamp would be doing all the
+    // work instead of the dial.
+    check(w.ribbons.junction_cut_m >= 0.0 && w.ribbons.junction_cut_m <= 60.0,
+          "ribbons junction_cut_m == 0 (identity) or in (0, 60] m");
+    // ★ ROAD-REPAIR F3. In units of the shipped (-2, -4) pair, so 4.0 is a
+    // deck offset of (-10, -20) -- five times the shipped pull. Past that a
+    // deck stops arbitrating against the bank and starts peeling off the
+    // kerb toward the eye. 0.0 == the identity by an explicit branch.
+    check(w.ribbons.over_bank_bias >= 0.0 && w.ribbons.over_bank_bias <= 4.0,
+          "ribbons over_bank_bias == 0 (identity) or in (0, 4]");
+    // ★ ROAD-REPAIR rung AA.
+    check(w.ribbons.line_aa >= 0.0 && w.ribbons.line_aa <= 4.0,
+          "ribbons line_aa == 0 (identity) or in (0, 4]");
     check(w.ribbons.road_center_frac > 0.0 && w.ribbons.road_center_frac <= 1.0,
           "ribbons road_center_frac in (0,1]");
     check(w.ribbons.road_dash_m + w.ribbons.road_gap_m > 0.0,
@@ -1389,6 +1413,11 @@ WorldParams load_world_toml(const std::string& path) {
         check(b.speckle_density >= 0.0 && b.speckle_density <= 1.0 &&
                   b.speckle_dark >= 0.0 && b.speckle_dark <= 1.0,
               "bank_mesh speckle dials in [0,1]");
+        // ★ ROAD-REPAIR rung AA: 0 is the identity, above that a
+        // footprint multiplier; 4 is five times the shipped onset and already
+        // absurd.
+        check(b.speckle_aa >= 0.0 && b.speckle_aa <= 4.0,
+              "bank_mesh speckle_aa == 0 (identity) or in (0, 4]");
         check(b.crest_smudge >= 0.0, "bank_mesh crest_smudge >= 0");
         check(b.min_amp_m >= 0.0,
               "bank_mesh min_amp_m >= 0 -- the clear-the-intersections "
@@ -1419,6 +1448,15 @@ WorldParams load_world_toml(const std::string& path) {
         // the bank mesh) says the same thing.
         check(b.apron_m >= 0.0 && b.apron_m <= 4.0 * b.skirt_m,
               "bank_mesh apron_m == 0 (off) or in (0, 4*skirt_m]");
+        // ★ ROAD-REPAIR F1. 0.0 is the IDENTITY (the deck predicate is never
+        // evaluated). The ceiling is the widest drawn deck on the bake
+        // (half-width ~9.6 m, up to 2x at a mitered corner): a tolerance
+        // larger than that can never be exceeded by any station, so the dial
+        // would silently mean "off" while reading armed -- the one failure
+        // mode a tolerance dial must not have.
+        check(b.deck_yield_m >= 0.0 && b.deck_yield_m <= 20.0,
+              "bank_mesh deck_yield_m == 0 (off) or in (0, 20] m -- the deck "
+              "overlap the bank keeps before it yields");
         check(b.apron_tol_m > 0.0,
               "bank_mesh apron_tol_m > 0 -- the drawn-vs-driven agreement "
               "tolerance the apron stops at, in metres");

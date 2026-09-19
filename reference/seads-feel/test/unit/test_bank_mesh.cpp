@@ -1135,3 +1135,236 @@ TEST_CASE("bank_apron_is_free_on_flat_ground") {
     REQUIRE(a.size() == b.size());
     for (const render::BankStripCPU& s : b) REQUIRE_FALSE(s.is_apron);
 }
+
+// ------------------------------------------------------- ROAD-REPAIR F1 -----
+//
+// ★ THE BANK YIELDS TO THE DECK (2026-09-12, Chad: "alot of eyesores in the
+// intersections and corners of roads, weird cut angles and verticies, z
+// flashing all over"). A bank station whose rings lie more than
+// `[bank_mesh] deck_yield_m` INSIDE a drawn road deck is demoted to R1's taper
+// CAP and the strip breaks there. Three legs, and the middle one is the whole
+// argument:
+//
+//   F1a  deck_yield_m == 0.0 is the IDENTITY -- the predicate is never
+//        evaluated (the ledger proves it: ZERO stations measured) and the
+//        emitted geometry is bit-for-bit the pre-F1 mesh.
+//   F1b  a station inside a foreign deck CAPS and BREAKS the strip.
+//   F1c  a station clear of every deck is UNTOUCHED -- arming the dial on a
+//        lone road changes not one vertex.
+//
+// ⚠ EVERY LEG HERE SETS min_amp_m = 0.0, deliberately. A deck wide enough to
+// swallow a bank station is, by LineNetwork::build_index's own crossing rule
+// (two segments closer than the sum of their half-widths), also a JUNCTION --
+// so the amplitude fade would cull those same stations to a cap on its own and
+// the leg would pass while testing nothing. With min_amp_m off, the ONLY thing
+// in the builder that can turn a station into a cap is F1's predicate, and a
+// cap in the armed build is therefore F1's cap or the leg fails.
+
+namespace {
+
+// A second drawn road CROSSING the fixture's run at mid-length, of half-width
+// `cross_half_w_m`, added to the LineNetwork as a RoadMajor. The ribbon runs
+// along the MERIDIAN through the crossing point (the fixture's own run is
+// equatorial), so the two decks meet at a right angle -- the ordinary
+// crossroads of the 4,646 measured intersection sites.
+Ribbon crossing_ribbon(double t_cross, double len_m, double half_w_m,
+                       int stations) {
+    Ribbon r;
+    const glm::dvec3 P = eq_dir(t_cross);
+    const glm::dvec3 N(0.0, 1.0, 0.0);
+    const glm::dvec3 E = glm::normalize(glm::cross(N, P));  // local "east"
+    const double off = half_w_m / kR;
+    for (int i = 0; i < stations; ++i) {
+        const double arc = -0.5 * len_m + len_m * i / (stations - 1.0);
+        const double phi = arc / kR;
+        const glm::dvec3 c =
+            glm::normalize(P * std::cos(phi) + N * std::sin(phi));
+        r.v.push_back(glm::normalize(c + E * off));
+        r.v.push_back(glm::normalize(c - E * off));
+        const float s = static_cast<float>(arc + 0.5 * len_m);
+        r.s.push_back(s);
+        r.s.push_back(s);
+    }
+    return r;
+}
+
+// The fixture, plus that crossing deck in the SAME LineNetwork -- so the snow
+// field the strip samples and the deck index F1 queries are one network, which
+// is the invariant F1 is built on (INV-6: one recovered width, one reader).
+Fixture make_crossed_fixture(double cross_half_w_m) {
+    Fixture f;
+    f.hf = make_hf(256, 128, flat_half);
+
+    const double t0 = 0.10;
+    const double dtheta = kRunLenM / (2.0 * 3.14159265358979323846 * kR);
+    const double t1 = t0 + dtheta;
+
+    const Ribbon rb = straight_ribbon(t0, t1, 60, kHalfW);
+    f.net.add_path(rb.v.data(), rb.s.data(), rb.v.size(),
+                   world::LineKind::RoadMinor, kR);
+    const Ribbon cx =
+        crossing_ribbon(0.5 * (t0 + t1), 200.0, cross_half_w_m, 40);
+    f.net.add_path(cx.v.data(), cx.s.data(), cx.v.size(),
+                   world::LineKind::RoadMajor, kR);
+    f.net.build_index();
+
+    for (int i = 0; i < kStations; ++i) {
+        const double t = t0 + (t1 - t0) * i / (kStations - 1.0);
+        f.ctr.push_back(eq_dir(t));
+        f.s_arc.push_back(
+            static_cast<float>(kRunLenM * i / (kStations - 1.0)));
+        f.half_w.push_back(kHalfW);
+    }
+    return f;
+}
+
+// Every emitted vertex of a strip set, as a flat float list -- the bit-for-bit
+// comparison an identity claim has to be graded on.
+std::vector<float> all_pos(const std::vector<render::BankStripCPU>& s) {
+    std::vector<float> v;
+    for (const render::BankStripCPU& c : s)
+        v.insert(v.end(), c.pos.begin(), c.pos.end());
+    return v;
+}
+
+}  // namespace
+
+TEST_CASE("bank_deck_yield_zero_is_the_identity") {
+    // F1a. On a fixture where the yield DEMONSTRABLY bites (the armed build
+    // below caps stations and loses vertices), deck_yield_m = 0.0 must leave
+    // the mesh exactly where it was -- and must not even ASK the question:
+    // BankDeckYieldStat::stations is 0, which is the "no query is paid for"
+    // half of the claim that a comment alone could not carry.
+    const Fixture f = make_crossed_fixture(12.0);
+    world::SnowpackField snow;
+    snow.hf = &f.hf;
+    snow.lines = &f.net;
+    snow.p = shipped_bank_params();
+
+    render::BankBuildParams p;
+    p.min_amp_m = 0.0;  // see the block comment: F1 must be the only capper
+
+    render::reset_bank_deck_yield_stat();
+    std::vector<render::BankStripCPU> off;
+    render::build_bank_run(f.ctr, f.s_arc, f.half_w, f.hf, kSubdiv, kTiles,
+                           snow, p, {}, off);
+    const render::BankDeckYieldStat s_off = render::bank_deck_yield_stat();
+    REQUIRE(!off.empty());
+    REQUIRE(s_off.stations == 0);  // the predicate was never evaluated
+    REQUIRE(s_off.capped == 0);
+
+    // The same build again: the identity is also a determinism claim.
+    std::vector<render::BankStripCPU> off2;
+    render::build_bank_run(f.ctr, f.s_arc, f.half_w, f.hf, kSubdiv, kTiles,
+                           snow, p, {}, off2);
+    REQUIRE(all_pos(off2) == all_pos(off));
+
+    // ...and the fixture really does bite, or the identity above is vacuous.
+    p.deck_yield_m = 0.30;
+    render::reset_bank_deck_yield_stat();
+    std::vector<render::BankStripCPU> armed;
+    render::build_bank_run(f.ctr, f.s_arc, f.half_w, f.hf, kSubdiv, kTiles,
+                           snow, p, {}, armed);
+    const render::BankDeckYieldStat s_on = render::bank_deck_yield_stat();
+    REQUIRE(s_on.stations > 0);
+    REQUIRE(s_on.capped > 0);
+    REQUIRE(all_pos(armed).size() < all_pos(off).size());
+}
+
+TEST_CASE("bank_station_inside_a_deck_caps_and_breaks") {
+    // F1b -- THE CUT ITSELF. The crossing deck is 12 m of half-width; the
+    // fixture's own road is 3 m. Every bank station whose rings land inside
+    // that 12 m must cap, and the strip must BREAK there: more strips out than
+    // in, and a real longitudinal HOLE in the emitted arc coverage centred on
+    // the crossing -- the junction hole Chad is owed, in place of a snowbank
+    // lying across the other road's asphalt.
+    const double kCrossHalfW = 12.0;
+    const Fixture f = make_crossed_fixture(kCrossHalfW);
+    world::SnowpackField snow;
+    snow.hf = &f.hf;
+    snow.lines = &f.net;
+    snow.p = shipped_bank_params();
+
+    render::BankBuildParams p;
+    p.min_amp_m = 0.0;
+
+    std::vector<render::BankStripCPU> off;
+    render::build_bank_run(f.ctr, f.s_arc, f.half_w, f.hf, kSubdiv, kTiles,
+                           snow, p, {}, off);
+
+    p.deck_yield_m = 0.30;
+    std::vector<render::BankStripCPU> armed;
+    render::build_bank_run(f.ctr, f.s_arc, f.half_w, f.hf, kSubdiv, kTiles,
+                           snow, p, {}, armed);
+
+    // ⚠ THE BREAK IS NOT NEW, AND SAYING SO IS THE POINT. A deck wide enough
+    // to swallow a station also makes the road BARE there, so the strip
+    // already broke at the crossing before F1 existed (`off` is split too).
+    // What F1 changes is HOW WIDE the hole is: min_amp_m only culls where the
+    // bank amplitude itself has collapsed, which is a band narrower than the
+    // asphalt. So the graded claim is the hole, not the split.
+    REQUIRE(armed.size() >= off.size());
+
+    // THE HOLE. The strip's u channel is arc length along the run and the
+    // crossing sits at the run's midpoint, so the distance from the midpoint
+    // to the NEAREST emitted station measures how far the bank pulls back from
+    // the other road's asphalt.
+    const double mid = 0.5 * kRunLenM;
+    // ⚠ NOT BankBuildParams::station_m. The injectable core is handed the
+    // fixture's OWN stations and never resamples, so the spacing that governs
+    // how finely the hole can be placed is the fixture's 5 m -- reading the
+    // resampler's 16 m here makes the bound negative and the leg vacuous.
+    const double station_m = kRunLenM / (kStations - 1.0);
+    const auto nearest_to_mid =
+        [&](const std::vector<render::BankStripCPU>& set) {
+            double best = 1e9;
+            for (const render::BankStripCPU& s : set)
+                for (std::size_t i = 0; i < s.uv.size() / 2; ++i)
+                    best = std::min(
+                        best,
+                        std::fabs(static_cast<double>(s.uv[2 * i]) - mid));
+            return best;
+        };
+    const double nearest_off = nearest_to_mid(off);
+    const double nearest_armed = nearest_to_mid(armed);
+
+    // The unarmed bank still stands INSIDE the other road's asphalt -- without
+    // this the number below could be a property of the fixture rather than of
+    // the fix.
+    REQUIRE(nearest_off < kCrossHalfW);
+    // ...and arming it pulls the strip back by at least one whole station.
+    REQUIRE(nearest_armed >= nearest_off + station_m);
+}
+
+TEST_CASE("bank_station_clear_of_every_deck_is_untouched") {
+    // F1c -- THE OVER-REACH GUARD, and the one that decides whether this rung
+    // is a fix or a deletion. On a LONE straight road the bank foot sits
+    // exactly ON its own drawn edge (ring offset 0 == half_w), so its own deck
+    // contributes a penetration of zero and nothing else is within reach.
+    // Arming the dial must therefore change NOT ONE VERTEX, and the ledger
+    // must record the stations as measured-and-kept rather than never asked.
+    const Fixture f = make_fixture();
+    world::SnowpackField snow;
+    snow.hf = &f.hf;
+    snow.lines = &f.net;
+    snow.p = shipped_bank_params();
+
+    render::BankBuildParams p;
+    p.min_amp_m = 0.0;
+
+    std::vector<render::BankStripCPU> off;
+    render::build_bank_run(f.ctr, f.s_arc, f.half_w, f.hf, kSubdiv, kTiles,
+                           snow, p, {}, off);
+
+    p.deck_yield_m = 0.30;
+    render::reset_bank_deck_yield_stat();
+    std::vector<render::BankStripCPU> armed;
+    render::build_bank_run(f.ctr, f.s_arc, f.half_w, f.hf, kSubdiv, kTiles,
+                           snow, p, {}, armed);
+    const render::BankDeckYieldStat st = render::bank_deck_yield_stat();
+
+    REQUIRE(st.stations > 0);  // it WAS asked -- the leg is not vacuous
+    REQUIRE(st.capped == 0);   // ...and it kept every one of them
+    REQUIRE(armed.size() == off.size());
+    REQUIRE(all_pos(armed) == all_pos(off));
+}

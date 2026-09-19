@@ -436,3 +436,74 @@ TEST_CASE("TAPE e2e: a stale tape throws instead of defaulting to zero") {
     CHECK_THROWS_AS(tp.load(path, harness::FeelTape::seed_columns()),
                     std::runtime_error);
 }
+
+// ---------------------------------------------------------------------------
+// ★★★ terrain-clip T2b (red-team P1-5) — THE CRASH SURFACE IS A TAPE FIELD.
+//
+// app/main.cpp appends "[config] ground: facet_contact %.2f (injected: %s)" to
+// g_config_banner AFTER the ground params and the render-side facet injection
+// both resolve, and feel_tape_open copies the whole banner into the tape as '#'
+// comment lines. A tape flown against the drawn mesh facet replayed against the
+// DEM field disagrees by up to 66.7 m of terrain, so the reader warns.
+//
+// Three legs: the field is READ off a written banner; a PRE-T2b tape without
+// the line reads as 0/absent and does not throw (backwards-readable); and the
+// mismatch warning fires on a disagreement and stays quiet on a match.
+// ---------------------------------------------------------------------------
+namespace {
+void write_tape(const std::string& path, const char* banner) {
+    std::FILE* f = std::fopen(path.c_str(), "wb");
+    REQUIRE(f != nullptr);
+    std::fprintf(f, "# SEADS feel tape\n");
+    if (banner != nullptr) std::fprintf(f, "# %s\n", banner);
+    for (int i = 0; i < app::kFeelTapeColumnCount; ++i)
+        std::fprintf(f, "%s%s", app::kFeelTapeColumns[i],
+                     i + 1 < app::kFeelTapeColumnCount ? "," : "\n");
+    for (int i = 0; i < app::kFeelTapeColumnCount; ++i)
+        std::fprintf(f, "0%s", i + 1 < app::kFeelTapeColumnCount ? "," : "\n");
+    std::fclose(f);
+}
+}  // namespace
+
+TEST_CASE("TAPE T2b: facet_contact is stamped, read back, and mismatch warns") {
+    const std::string armed =
+        std::string(SEADS_TEST_TMP_DIR) + "/tape_facet_armed.csv";
+    const std::string old =
+        std::string(SEADS_TEST_TMP_DIR) + "/tape_facet_pre_t2b.csv";
+
+    // 1. THE ARMED TAPE — the exact line app/main.cpp writes.
+    write_tape(armed, "[config] ground: facet_contact 1.00 (injected: yes)");
+    harness::FeelTape a;
+    a.load(armed, harness::FeelTape::seed_columns());
+    REQUIRE(a.has_facet_contact());
+    REQUIRE(a.facet_contact_or(-1.0) == 1.0);
+    REQUIRE(a.facet_injected());
+    // Agreement is silent and true; a disagreement is loud and false.
+    CHECK(a.warn_if_facet_mismatch(1.0, true) == true);
+    CHECK(a.warn_if_facet_mismatch(0.0, true) == false);   // the kill env arm
+    CHECK(a.warn_if_facet_mismatch(1.0, false) == false);  // no render layer
+
+    // 2. BACKWARDS-READABLE — a pre-T2b tape has no such line. It must load
+    //    clean, report absent, and read as the field arm (0/absent), which is
+    //    what it actually was.
+    write_tape(old, "[config] auto_level: lean_lead 0.300");
+    harness::FeelTape b;
+    b.load(old, harness::FeelTape::seed_columns());
+    REQUIRE(b.has_facet_contact() == false);
+    REQUIRE(b.facet_contact_or(0.0) == 0.0);
+    REQUIRE(b.facet_injected() == false);
+    CHECK(b.warn_if_facet_mismatch(0.0, false) == true);
+    CHECK(b.warn_if_facet_mismatch(1.0, true) == false);
+
+    // 3. THE DISARMED-BUT-INJECTED TAPE: the honest OFF arm of the A/B.
+    const std::string off =
+        std::string(SEADS_TEST_TMP_DIR) + "/tape_facet_off.csv";
+    write_tape(off, "[config] ground: facet_contact 0.00 (injected: yes)");
+    harness::FeelTape c;
+    c.load(off, harness::FeelTape::seed_columns());
+    REQUIRE(c.has_facet_contact());
+    REQUIRE(c.facet_contact_or(-1.0) == 0.0);
+    REQUIRE(c.facet_injected());
+    CHECK(c.warn_if_facet_mismatch(0.0, true) == true);
+    CHECK(c.warn_if_facet_mismatch(1.0, true) == false);
+}

@@ -12,7 +12,9 @@
 // Readers name columns; they never spell an index. The index comes from the
 // tape's own header, checked against app::kFeelTapeColumns.
 // ===========================================================================
+#include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <stdexcept>
 #include <string>
@@ -191,6 +193,79 @@ class FeelTape {
     size_t size() const { return rows_.size(); }
     size_t columns() const { return names_.size(); }
     const std::string& banner() const { return banner_; }
+
+    // ---------------------------------------------------------------------
+    // ★★★ terrain-clip T2b (red-team P1-5) -- THE CRASH SURFACE IS A TAPE
+    // FIELD. The aeroplane's collision surface is a DIAL now ([ground]
+    // facet_contact, plus whether the app injected render::facet_radius_at at
+    // all), and a tape flown on the drawn facet replayed against the DEM field
+    // diverges by up to 66.7 m of terrain. app/main.cpp writes
+    //     [config] ground: facet_contact 1.00 (injected: yes)
+    // into g_config_banner, and feel_tape_open copies the whole banner in as
+    // '#' comment lines -- so the field is already ON every tape written after
+    // T2b, and this is the reader for it.
+    //
+    // BACKWARDS-READABLE BY CONSTRUCTION: a pre-T2b tape has no such line, and
+    // facet_contact_or(0.0) then returns the caller's default -- absent reads
+    // as 0/absent exactly as the identity-by-branch fallback in sim/ground.h
+    // treats a missing injection. Nothing throws, nothing is required.
+    // ---------------------------------------------------------------------
+    // ★ T2c red-team P2: ANCHORED TO ITS OWN LINE. A bare
+    // banner_.find("facet_contact ") would match any other banner line that
+    // ever mentions the dial (a future [ground] block, a warning echo, a lane's
+    // own note), and "(injected: " is not even scoped to the ground line. Both
+    // now start from the "[config] ground: " anchor and read forward, so the
+    // field is the one app/main.cpp stamps and nothing else.
+    static constexpr const char* kGroundAnchor = "[config] ground: ";
+    std::size_t ground_line_() const { return banner_.find(kGroundAnchor); }
+
+    bool has_facet_contact() const {
+        const std::size_t g = ground_line_();
+        return g != std::string::npos &&
+               banner_.find("facet_contact ", g) != std::string::npos;
+    }
+    double facet_contact_or(double dflt) const {
+        const std::size_t g = ground_line_();
+        if (g == std::string::npos) return dflt;
+        const std::size_t k = banner_.find("facet_contact ", g);
+        if (k == std::string::npos) return dflt;
+        return std::atof(banner_.c_str() + k + 14);
+    }
+    bool facet_injected() const {
+        const std::size_t g = ground_line_();
+        if (g == std::string::npos) return false;
+        const std::size_t k = banner_.find("(injected: ", g);
+        return k != std::string::npos &&
+               banner_.compare(k + 11, 3, "yes") == 0;
+    }
+    // Warn (never throw) when the tape was flown on a different crash surface
+    // than the replay is about to use. Returns true iff they agree. `live_*`
+    // are what the replay's own Environment resolves to. A pre-T2b tape is
+    // treated as the field arm (0.0 / not injected), which is what it was.
+    bool warn_if_facet_mismatch(double live_contact, bool live_injected,
+                                const std::string& what = "replay") const {
+        const double tape_c = facet_contact_or(0.0);
+        const bool tape_i = has_facet_contact() ? facet_injected() : false;
+        const bool eff_tape = tape_i && tape_c > 0.0;
+        const bool eff_live = live_injected && live_contact > 0.0;
+        // ★ T2c red-team P1-9: the banner stamps the dial at %.2f, so the
+        // tape can never carry more than two decimals. A 1e-9 tolerance made
+        // every tape flown at, say, 0.333 a guaranteed false MISMATCH. Half a
+        // print unit is the right bar: it catches 1.00-vs-0.00 and lets
+        // round-tripping through %.2f through.
+        if (eff_tape == eff_live && std::fabs(tape_c - live_contact) < 5e-3)
+            return true;
+        std::fprintf(stderr,
+                     "[feel-tape] WARNING: %s CRASH-SURFACE MISMATCH -- tape "
+                     "facet_contact %.2f (injected: %s)%s vs live %.2f "
+                     "(injected: %s). Terrain disagrees by up to tens of "
+                     "metres on steep ground; every touchdown and every "
+                     "terrain crash in this replay is suspect.\n",
+                     what.c_str(), tape_c, tape_i ? "yes" : "no",
+                     has_facet_contact() ? "" : " [pre-T2b tape, assumed]",
+                     live_contact, live_injected ? "yes" : "no");
+        return false;
+    }
 
   private:
     std::vector<std::string> names_;

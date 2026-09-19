@@ -563,6 +563,18 @@ void draw_ribbons(const glm::dvec3& eye, float winter,
         look.lift_m = static_cast<float>(g_ribbon_cfg.lift_m);
         look.max_seg_m = g_ribbon_cfg.max_seg_m;
         look.max_tr_m = g_ribbon_cfg.max_tr_m;
+        // ★ ROAD-REPAIR F2: the junction cut. SEADS_NO_JUNCTION_CUT is honoured
+        // once in app/main.cpp (the SEADS_NO_APRON / SEADS_NO_DECK_YIELD
+        // pattern), so the value that arrives here is already the live one.
+        look.junction_cut_m = g_ribbon_cfg.junction_cut_m;
+        // ★ ROAD-REPAIR F3: the over-bank bias. SEADS_OVER_BANK_BIAS is
+        // honoured once in app/main.cpp (the SEADS_RIBBON_MAXSEG pattern),
+        // so the value that arrives here is already the live one.
+        look.over_bank_bias = g_ribbon_cfg.over_bank_bias;
+        // ★ ROAD-REPAIR rung AA: the centreline anti-alias. The
+        // SEADS_LINE_AA kill is honoured in render/ribbons.cpp beside
+        // SEADS_NO_LINE, the arm it replaces.
+        look.line_aa = static_cast<float>(g_ribbon_cfg.line_aa);
         look.road_bed = glm::vec3(g_ribbon_cfg.road_bed);
         look.road_line = glm::vec3(g_ribbon_cfg.road_line);
         look.road_center_frac =
@@ -608,9 +620,15 @@ void draw_ribbons(const glm::dvec3& eye, float winter,
         bp.apron_m = g_bank_cfg.apron_m;
         bp.apron_tol_m = g_bank_cfg.apron_tol_m;
         bp.apron_min_drop_m = g_bank_cfg.apron_min_drop_m;
+        // ★ ROAD-REPAIR F1: the deck yield. SEADS_NO_DECK_YIELD is honoured
+        // where the POD is FILLED (app/main.cpp), the apron kill's exact
+        // shape, so the seat A/B is ONE switch read ONCE.
+        bp.deck_yield_m = g_bank_cfg.deck_yield_m;
         BankLook bl;
         bl.speckle_density = static_cast<float>(g_bank_cfg.speckle_density);
         bl.speckle_dark = static_cast<float>(g_bank_cfg.speckle_dark);
+        // ★ ROAD-REPAIR rung AA: the speckle Nyquist gate.
+        bl.speckle_aa = static_cast<float>(g_bank_cfg.speckle_aa);
         bl.crest_smudge = static_cast<float>(g_bank_cfg.crest_smudge);
         g_banks = build_bank_surfaces(g_planet.height, g_planet_cfg.subdiv,
                                       g_planet_cfg.tiles, *g_bank_snow, bp, bl,

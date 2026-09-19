@@ -1,6 +1,8 @@
 #pragma once
 
+#include <cassert>
 #include <cmath>
+#include <functional>
 #include <glm/glm.hpp>
 
 #include "sim/environment.h"
@@ -45,10 +47,80 @@
 
 namespace sim {
 
+// ★ terrain-clip T2 — THE CONTACT SURFACE, one expression, one place.
+//
+// The pre-T2 kernel read `hf.radius_at(up) + gp.contact_height_m`: the bilinear
+// DEM FIELD. The eye is shown the render mesh, whose surface BETWEEN vertices
+// is render::facet_radius_at — a ~59 m chord over an ~11.5 m field. T1 measured
+// the consequence: where terrain outruns one mesh cell the chord rides above
+// the field and the airframe flies inside visible rock (+66.7 m at Onaping).
+// gp.facet_contact blends the crash surface onto the drawn one.
+//
+// IDENTITY BY BRANCH (the frozen-kernel law): at facet_contact <= 0, or with no
+// facet injected, `facet` is NEVER CALLED and the returned expression is
+// textually and bit-for-bit the pre-T2 one. At facet_contact >= 1 the result is
+// exactly the facet (no `fi + (fa - fi) * 1.0` rounding residue) — the sled's
+// law, [snowpack] hf_faceted_ground, applied to the aircraft.
+//
+// FALLBACK: `facet` is empty in every headless/test Environment (sim/ is
+// render-free; the function is injected by app/main.cpp). Absent => the FIELD,
+// stated here so a test that forgets the injection reads the old surface rather
+// than a silent half-armed one.
+//
+// The landing NORMAL stays hf.normal_at (the 60 m finite difference): slope
+// acceptance is a terrain question, the facet is a mesh-resolution artefact,
+// and giving the acceptance a piecewise-constant per-triangle normal would move
+// feel for a second reason in the same dial. Documented simplification, T2.
+// ★ T2b (red-team P1-1): THE GROUND RADIUS AN AIRFRAME READS — the surface
+// WITHOUT the gear/belly height. Split out of contact_radius so the AI can read
+// the SAME surface the kernel crashes on. contact_radius is this plus
+// contact_height_m and is bit-for-bit what it was before the split (same
+// operands, same single addition); every arm of the branch is unchanged.
+//
+// WHY THE AI NEEDS IT. The whole point of T2 is that the crash surface is the
+// drawn facet. An AI whose AGL, deck-band and terrain-avoidance pull-up still
+// measured against the DEM FIELD would be flying a surface the kernel no longer
+// grades it on — up to 66.7 m of disagreement at Onaping — and would auger into
+// hillsides it believed were 66 m below it. One surface, every reader.
+inline double air_ground_radius(const world::HeightField& hf,
+                                const GroundParams& gp,
+                                const std::function<double(glm::dvec3)>* facet,
+                                glm::dvec3 up) {
+    if (gp.facet_contact <= 0.0 || facet == nullptr || !*facet)
+        return hf.radius_at(up);
+    const double fi = hf.radius_at(up);
+    const double fa = (*facet)(up);
+    if (gp.facet_contact >= 1.0) return fa;
+    return fi + (fa - fi) * gp.facet_contact;
+}
+
+// The form every AI caller uses: pull the field, the dials and the injected
+// facet out of the ONE Environment the kernel itself is ticking, so an AI
+// reader can never be handed a different surface than sim::step got.
+// ⚠ env.ground MUST be non-null — every call site already guards on it (the
+// superset firewall: no ground => the AI branch is structurally skipped).
+inline double air_ground_radius(const Environment& env, glm::dvec3 up) {
+    // T2c red-team P2: the contract, armed. SPEC 6.1 builds are assert-live, so
+    // a caller that reaches here past its guard dies in the gate, not silently
+    // in Chad's fly.
+    assert(env.ground != nullptr);
+    return air_ground_radius(*env.ground, env.ground_params,
+                             &env.ground_facet_fn, up);
+}
+
+inline double contact_radius(const world::HeightField& hf,
+                             const GroundParams& gp,
+                             const std::function<double(glm::dvec3)>* facet,
+                             glm::dvec3 up) {
+    return air_ground_radius(hf, gp, facet, up) + gp.contact_height_m;
+}
+
 inline void ground_contact(const SimState& state, SimState& next,
                            const world::HeightField& hf, const GroundParams& gp,
                            const AircraftParams& p, double wheel_brake,
-                           double dt) {
+                           double dt,
+                           const std::function<double(glm::dvec3)>* facet =
+                               nullptr) {
     next.crashed = false;  // transient: re-derived every tick
     next.wing_strike = 0;  // transient consequence events (R4-FLY-5)
     next.prop_strike = false;
@@ -58,7 +130,12 @@ inline void ground_contact(const SimState& state, SimState& next,
     // position is the CG, and a CG constrained to the terrain buries half the
     // fuselage (Chad's first fly: "sunk into the road, only a part sticking
     // up"). The wheels meet the ground; the CG rides contact_height_m above.
-    const double r_s = hf.radius_at(up) + gp.contact_height_m;
+    // ★ T2: the ONE contact-surface query for this tick — the grounded snap,
+    // the fell-away tolerance, the airborne gate and the deep-penetration floor
+    // all read this single r_s, so the crash surface can never fork inside one
+    // tick. facet_contact 0 (the default, and SEADS_FACET_CONTACT=0) makes this
+    // the old `hf.radius_at(up) + gp.contact_height_m`, unevaluated facet.
+    const double r_s = contact_radius(hf, gp, facet, up);
 
     if (state.on_ground) {
         // GROUNDED regime. Release iff the airborne integration produced net
@@ -203,18 +280,37 @@ inline void ground_contact(const SimState& state, SimState& next,
 // R4f — building collision (Chad's fly ask, 2026-07-15: "I go right through
 // houses"). A position inside any building prism is a crash, airborne OR
 // rolling (consistent with the rising-wall crash above: you flew/taxied into
-// a structure). The prism base is hf.radius_at(center_dir) — the SAME field
-// as terrain contact, one crash surface. Gated by the caller on env->ground
+// a structure). The prism base is sim::air_ground_radius(center_dir) — the
+// SAME SURFACE terrain contact uses, one crash surface, whatever the dial says
+// (T2b red-team P1-2: before this the base was hf.radius_at while the terrain
+// under it had moved to the facet, so a hillside house's foot could sit a
+// facet-gap below the rock the eye is shown and the prism's lower band would
+// miss an airframe that is visibly inside it). Gated by the caller on env->ground
 // AND env->obstacles both live; the null path never reaches here. The
 // equiv-area radius under-covers long buildings (clipping a warehouse corner
 // may not register) — inflate_m is the dial, documented, Chad's on-sight.
 inline void obstacle_contact(SimState& next,
                              const world::BuildingColliders& obs,
                              const world::HeightField& hf,
-                             const GroundParams& gp) {
+                             const GroundParams& gp,
+                             const std::function<double(glm::dvec3)>* facet =
+                                 nullptr) {
     if (next.crashed) return;  // already dead this tick
+    // IDENTITY BY BRANCH, the T2 law: dial 0 / no injection takes the verbatim
+    // pre-T2 call, and no std::function is built at all.
+    if (gp.facet_contact <= 0.0 || facet == nullptr || !*facet) {
+        if (obs.hit(next.position, hf, gp.obstacle_inflate_m,
+                    gp.obstacle_base_margin_m)) {
+            next.crashed = true;
+        }
+        return;
+    }
+    const std::function<double(glm::dvec3)> base_r =
+        [&hf, &gp, facet](glm::dvec3 d) {
+            return air_ground_radius(hf, gp, facet, d);
+        };
     if (obs.hit(next.position, hf, gp.obstacle_inflate_m,
-                gp.obstacle_base_margin_m)) {
+                gp.obstacle_base_margin_m, &base_r)) {
         next.crashed = true;
     }
 }

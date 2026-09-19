@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include <glm/geometric.hpp>
@@ -11,6 +12,7 @@
 #include "external/glad.h"  // glPolygonOffset / glEnable (glad decls; impl in raylib)
 #include "raymath.h"        // MatrixTranslate
 #include "render/ribbon_clip.h"  // T24 excavation clip (pure, test-pinned)
+#include "render/ribbon_junction.h"  // ★ ROAD-REPAIR F2: the junction cut (pure)
 #include "render/ribbon_subdiv.h"  // ★ ROAD-REPAIR: the subdivided drape (pure)
 #include "render/snow_light_glsl.h"  // ROAD-REPAIR: the shared sparkle
 #include "render/sudbury_gis.gen.h"
@@ -49,6 +51,11 @@ in vec2 vSV;              // (s metres, v transverse in [-1,1])
 uniform vec3 uBed;        // road asphalt (mono)
 uniform vec3 uLine;       // road centerline (mono)
 uniform float uCenterFrac;
+// ★ ROAD-REPAIR AA -- the centreline anti-alias width multiplier.
+// 0.0 == the identity BY AN EXPLICIT BRANCH (the old hard ternary,
+// verbatim); > 0 scales the screen-space footprint the stripe and the
+// dash are box-filtered over. See docs/road_repair/onaping_flash_AA.md.
+uniform float uLineAA;
 uniform float uDashM;
 uniform float uGapM;
 uniform float uTrail;     // 0 road / 1 snowmobile trail
@@ -136,8 +143,74 @@ void main() {
     vec3 asphalt = mix(uBed, vec3(0.30), lighten);       // toward a DARK worn grey (mono)
     // light duty-cycle dashed centerline (Fable P1-3).
     float period = max(uDashM + uGapM, 1.0e-3);
-    float lit = 1.0 - step(uDashM / period, fract(s / period));
-    vec3 c = (abs(v) < uCenterFrac && lit > 0.5) ? uLine : asphalt;
+    float u = s / period;
+    float duty = uDashM / period;
+    vec3 c;
+    if (uLineAA > 0.0) {
+        // ANALYTIC ANTI-ALIAS (ROAD-REPAIR rung AA). The stripe is a ~0.312 m
+        // band (|v| < 0.06 of a ~2.6 m half-width) with a step() dash on top
+        // and, until this rung, not one derivative anywhere -- while the trail
+        // corduroy forty lines up had the fwidth fade all along.
+        //
+        // ⚠ CORRECTED BY THE RED-TEAM FOLD. This comment used to say the band
+        // is sub-pixel "at 70 m and an 8 deg graze". IT IS NOT. At
+        // kChaseFovyDeg = 60 and 1080p the scale at screen centre is
+        // (H/2)/tan(fovy/2) = 935 px/rad, so 0.312 m crosses ONE pixel only at
+        // ~292 m (~322 m on the looser H/fovy = 1031 px/rad convention); at
+        // 70 m the stripe is ~4 px wide. And a graze foreshortens the road
+        // ALONG its length -- it does not narrow the stripe's TRANSVERSE
+        // width at all. The flashing stripe pixels the rig grades are
+        // therefore the ones HUNDREDS of metres down the road, where the whole
+        // deck is 1-2 px across; that is exactly what the per-pixel traces
+        // showed (AA doc 3.2). The defect is real and the fix is the same one;
+        // only the range at which it bites was misstated
+        // (docs/road_repair/onaping_flash_F3.md 6.4).
+        //
+        // Both terms below are the EXACT box filter of a rectangular pulse over
+        // the pixel's own footprint -- a difference of two clamped ramps, not a
+        // smoothstep pair -- so they are energy-preserving by construction: once
+        // the feature is narrower than a pixel the coverage falls off as
+        // width/footprint and the stripe fades toward the asphalt mean instead
+        // of saturating at half contrast. That single expression IS both the
+        // "smoothstep edge" and the "contrast fade below 1 px" the rung asks
+        // for. uLineAA scales the footprint (the strength dial).
+        //
+        // ⚠ THE FOOTPRINT IS THE L2 GRADIENT, NOT fwidth (red-team fold).
+        // fwidth(x) is |dFdx| + |dFdy|, an L1 sum: for the SAME footprint it
+        // reads 1x when the feature's gradient is axis-aligned in screen space
+        // and up to sqrt(2)x when it is diagonal -- so an fwidth-driven fade
+        // onset moves with the VIEW ORIENTATION. length(vec2(dFdx, dFdy)) is
+        // the true gradient magnitude, the rate of change of the coordinate
+        // per pixel in its steepest screen direction; it is invariant under
+        // screen rotation, which is what "isotropic" means here, and it is the
+        // exact box-filter width this coverage expression assumes.
+        //
+        // The derivatives here sit inside a branch on a UNIFORM, i.e.
+        // dynamically uniform control flow -- the same rule the uTrail branch
+        // above and the bank FS's lit path already keep.
+        float wv = max(length(vec2(dFdx(v), dFdy(v))) * uLineAA, 1.0e-6);
+        float cov = clamp((uCenterFrac - abs(v)) / wv + 0.5, 0.0, 1.0)
+                  - clamp((-uCenterFrac - abs(v)) / wv + 0.5, 0.0, 1.0);
+        // The dash, along the road: the pulse [0, duty) of the unit period,
+        // plus its next copy, so a pixel straddling the wrap reads half.
+        float wd = max(length(vec2(dFdx(u), dFdy(u))) * uLineAA, 1.0e-6);
+        float p = fract(u);
+        float dcov = clamp((duty - p) / wd + 0.5, 0.0, 1.0)
+                   - clamp((0.0 - p) / wd + 0.5, 0.0, 1.0)
+                   + clamp((1.0 + duty - p) / wd + 0.5, 0.0, 1.0)
+                   - clamp((1.0 - p) / wd + 0.5, 0.0, 1.0);
+        // Past half a period per pixel the dash is unresolvable in principle;
+        // hand over to its own duty cycle (the mean) rather than to a ramp.
+        dcov = mix(clamp(dcov, 0.0, 1.0), duty, smoothstep(0.25, 0.5, wd));
+        c = mix(asphalt, uLine, clamp(cov * dcov, 0.0, 1.0));
+    } else {
+        // The identity, VERBATIM. `lit` lives HERE and only here: the AA arm
+        // above computes its own analytic coverage and never reads it (the
+        // red-team's dead-store finding -- it was declared above the branch
+        // and used in one arm).
+        float lit = 1.0 - step(duty, fract(u));
+        c = (abs(v) < uCenterFrac && lit > 0.5) ? uLine : asphalt;
+    }
     finalColor = vec4(c, 1.0);
 }
 )GLSL";
@@ -164,6 +237,7 @@ std::vector<Mesh> build_path_meshes(const GisRibbonPath& P,
                                     int subdiv, int tiles, double max_seg_m,
                                     double max_tr_m,
                                     const std::vector<unsigned short>& kept,
+                                    const std::vector<RibbonQuadTrim>* trim,
                                     long* verts_out) {
     std::vector<Mesh> out;
     const std::vector<RibbonBatchCPU> batches = build_ribbon_batches(
@@ -172,7 +246,7 @@ std::vector<Mesh> build_path_meshes(const GisRibbonPath& P,
             return drawn_radius_at(hf, d, subdiv, tiles);  // the RENDERED
                                                            // surface
         },
-        lift, hf.R, max_seg_m, max_tr_m);
+        lift, hf.R, max_seg_m, max_tr_m, trim);
     for (const RibbonBatchCPU& b : batches) {
         if (b.idx.empty()) continue;
         Mesh m{};
@@ -242,6 +316,25 @@ RibbonSurfaces build_ribbon_surfaces(const HeightField& hf,
     RibbonSurfaces r;
     r.look = look;
     const double t0 = GetTime();
+    // ★ ROAD-REPAIR F2 -- THE JUNCTION CUT. The plan is built BEFORE any mesh
+    // because a junction is a property of the whole network, not of one path:
+    // it needs every path's T24-clipped index list at once to know which ways
+    // end where. `junction_cut_m <= 0` returns an empty plan by an explicit
+    // branch -- nothing is measured, nothing is allocated, and every
+    // `trim_for()` below is nullptr, which is the pre-F2 drape vertex for
+    // vertex.
+    std::vector<std::vector<unsigned short> > kept_all(kSudburyRibbonPathCount);
+    for (std::size_t pi = 0; pi < kSudburyRibbonPathCount; ++pi) {
+        const GisRibbonPath& P = kSudburyRibbonPaths[pi];
+        if (P.vtx_count < 3 || P.idx_count < 3) continue;
+        if (P.kind == 3) continue;
+        kept_all[pi] = ribbon_indices_outside_cuts(pi, cuts, hf.R);
+    }
+    const double tj0 = GetTime();
+    const JunctionPlan plan =
+        build_junction_plan(kept_all, hf.R, look.junction_cut_m,
+                            look.max_seg_m, look.max_tr_m);
+    const double junction_ms = (GetTime() - tj0) * 1000.0;
     for (std::size_t pi = 0; pi < kSudburyRibbonPathCount; ++pi) {
         const GisRibbonPath& P = kSudburyRibbonPaths[pi];
         if (P.vtx_count < 3 || P.idx_count < 3)
@@ -250,13 +343,12 @@ RibbonSurfaces build_ribbon_surfaces(const HeightField& hf,
             continue;  // rivers are MIRROR water — drawn by
                        // render/river_surfaces
         // T24: clip the drape at the excavation cuts (the terrain's own rule).
-        const std::vector<unsigned short> kept =
-            ribbon_indices_outside_cuts(pi, cuts, hf.R);
+        const std::vector<unsigned short>& kept = kept_all[pi];
         if (kept.empty()) continue;  // fully swallowed by a cut
         const std::vector<Mesh> built =
             build_path_meshes(P, hf, look.lift_m, subdiv, tiles,
                               look.max_seg_m, look.max_tr_m, kept,
-                              &r.vert_count);
+                              plan.trim_for(pi), &r.vert_count);
         if (built.empty()) continue;
         // ★ ROAD-REPAIR: a path can now be several meshes (the u16 index
         // limit), so kind and half-width are pushed PER MESH -- they are
@@ -299,6 +391,223 @@ RibbonSurfaces build_ribbon_surfaces(const HeightField& hf,
                 r.half_w_m.push_back(hw1);
         }
     }
+    // ★ F2: THE CAPS. One polygon per cut node, draped by the SAME radius_fn +
+    // lift the legs are, with its boundary ring taken verbatim from the trimmed
+    // leg ends -- so the seam is a shared position, not a near miss. Pushed as
+    // ordinary road meshes (kind 0): they go through the same shader, the same
+    // polygon offset and the same draw loop, because a junction cap IS road.
+    long cap_verts = 0;
+    // ★ F2 SEAM INSTRUMENT. The claim "the cap shares the trimmed leg end's
+    // vertices" is a code property (one `ribbon_rung_at`, one `place`), and a
+    // code property is exactly the kind of claim that rots. So it is MEASURED
+    // on the mesh that ships: every leg vertex within 40 m of a cut node goes
+    // into a 2 m spatial hash, and every cap BOUNDARY vertex is then asked for
+    // its distance to the nearest one. A seam that is shared reads 0.000 m; a
+    // seam that has drifted reads the crack, in metres, before Chad does.
+    double seam_max_gap_m = 0.0;
+    long seam_checked = 0, seam_exact = 0;
+    if (!plan.caps.empty()) {
+        const double cell = 2.0;
+        std::vector<glm::dvec3> nodes_xyz;
+        nodes_xyz.reserve(plan.caps.size());
+        for (const JunctionCapCPU& c : plan.caps)
+            nodes_xyz.push_back(
+                c.centre * (drawn_radius_at(hf, c.centre, subdiv, tiles) +
+                            look.lift_m));
+        std::unordered_map<long long, std::vector<int> > ngrid;
+        auto key3 = [&](double x, double y, double z, double cs) {
+            const long long i = static_cast<long long>(std::floor(x / cs));
+            const long long j = static_cast<long long>(std::floor(y / cs));
+            const long long k = static_cast<long long>(std::floor(z / cs));
+            return (i * 73856093LL) ^ (j * 19349663LL) ^ (k * 83492791LL);
+        };
+        for (int i = 0; i < static_cast<int>(nodes_xyz.size()); ++i)
+            ngrid[key3(nodes_xyz[i].x, nodes_xyz[i].y, nodes_xyz[i].z, 64.0)]
+                .push_back(i);
+        std::unordered_map<long long, std::vector<glm::vec3> > vgrid;
+        for (const Mesh& m : r.meshes)
+            for (int v = 0; v < m.vertexCount; ++v) {
+                const glm::vec3 p(m.vertices[v * 3], m.vertices[v * 3 + 1],
+                                  m.vertices[v * 3 + 2]);
+                bool near = false;
+                for (int dx = -1; dx <= 1 && !near; ++dx)
+                    for (int dy = -1; dy <= 1 && !near; ++dy)
+                        for (int dz = -1; dz <= 1 && !near; ++dz) {
+                            std::unordered_map<
+                                long long, std::vector<int> >::const_iterator
+                                it = ngrid.find(key3(p.x + dx * 64.0,
+                                                     p.y + dy * 64.0,
+                                                     p.z + dz * 64.0, 64.0));
+                            if (it == ngrid.end()) continue;
+                            for (int ci : it->second)
+                                if (glm::length(glm::dvec3(p) - nodes_xyz[ci]) <
+                                    40.0) {
+                                    near = true;
+                                    break;
+                                }
+                        }
+                if (near) vgrid[key3(p.x, p.y, p.z, cell)].push_back(p);
+            }
+        for (const JunctionCapCPU& c : plan.caps)
+            for (std::size_t i = 0; i < c.ring.size(); ++i) {
+                // ONLY the leg columns are a seam. The corner-span points
+                // between two legs belong to no leg -- grading them would
+                // measure the WIDTH of the intersection and call it a crack.
+                if (i >= c.ring_on_leg.size() || !c.ring_on_leg[i]) continue;
+                const double rr = drawn_radius_at(hf, c.ring[i], subdiv, tiles) +
+                                  look.lift_m;
+                const glm::vec3 p(static_cast<float>(c.ring[i].x * rr),
+                                  static_cast<float>(c.ring[i].y * rr),
+                                  static_cast<float>(c.ring[i].z * rr));
+                double best = 1.0e30;
+                for (int dx = -1; dx <= 1; ++dx)
+                    for (int dy = -1; dy <= 1; ++dy)
+                        for (int dz = -1; dz <= 1; ++dz) {
+                            std::unordered_map<
+                                long long,
+                                std::vector<glm::vec3> >::const_iterator it =
+                                vgrid.find(key3(p.x + dx * cell, p.y + dy * cell,
+                                                p.z + dz * cell, cell));
+                            if (it == vgrid.end()) continue;
+                            for (const glm::vec3& q : it->second)
+                                best = std::min(
+                                    best, static_cast<double>(glm::length(q - p)));
+                        }
+                ++seam_checked;
+                if (best <= 1.0e29) {
+                    if (best == 0.0) ++seam_exact;
+                    seam_max_gap_m = std::max(seam_max_gap_m, best);
+                }
+            }
+    }
+    double cap_sag_max_m = 0.0, cap_sag_valley_max_m = 0.0;
+    long cap_sag_tris = 0, cap_sag_gt10 = 0, cap_sag_valley_tris = 0,
+         cap_sag_valley_gt10 = 0;
+    if (!plan.caps.empty()) {
+        std::vector<std::vector<int> > vert_cap;
+        const std::vector<RibbonBatchCPU> cb = build_junction_cap_batches(
+            plan.caps,
+            [&hf, subdiv, tiles](const glm::dvec3& d) {
+                return drawn_radius_at(hf, d, subdiv, tiles);
+            },
+            look.lift_m, &vert_cap);
+        // ★ F2 SAG RE-CHECK -- the STOP condition of this rung. Rung 8 exists
+        // because a 53 m flat chord floated up to +7.224 m above the ground the
+        // machine stands on ("I went into the road"), and a junction cap is by
+        // nature a BIGGER flat polygon than a subdivided road quad -- exactly
+        // the shape that re-opens that sink. So the cap's own triangles are
+        // measured the way the SEADS_RIBBON_SAG ruler measures a chord: the
+        // centroid and the three edge midpoints of every cap triangle against
+        // drawn_radius_at + lift, the surface the machine drives.
+        // ⚠ Valley is kPumpValleySurface (world/faction_bubbles.h), the same
+        // anchor onaping_sink.md's 2.5 km slice uses.
+        const glm::dvec3 valley(-0.9174656105010327, 0.3714782345902696,
+                                0.14234034836849382);
+        for (std::size_t bi = 0; bi < cb.size(); ++bi) {
+            const RibbonBatchCPU& b = cb[bi];
+            for (std::size_t k = 0; k + 2 < b.idx.size(); k += 3) {
+                const unsigned short i0 = b.idx[k], i1 = b.idx[k + 1],
+                                     i2 = b.idx[k + 2];
+                const glm::dvec3 A(b.pos[i0 * 3], b.pos[i0 * 3 + 1],
+                                   b.pos[i0 * 3 + 2]);
+                const glm::dvec3 B(b.pos[i1 * 3], b.pos[i1 * 3 + 1],
+                                   b.pos[i1 * 3 + 2]);
+                const glm::dvec3 C(b.pos[i2 * 3], b.pos[i2 * 3 + 1],
+                                   b.pos[i2 * 3 + 2]);
+                const glm::dvec3 smp[4] = {(A + B + C) / 3.0, 0.5 * (A + B),
+                                           0.5 * (B + C), 0.5 * (C + A)};
+                double worst = 0.0;
+                for (int q = 0; q < 4; ++q) {
+                    const double rr = glm::length(smp[q]);
+                    if (rr < 1.0) continue;
+                    const glm::dvec3 d = smp[q] / rr;
+                    worst = std::max(rr - (drawn_radius_at(hf, d, subdiv,
+                                                           tiles) +
+                                           look.lift_m),
+                                     worst);
+                }
+                ++cap_sag_tris;
+                cap_sag_max_m = std::max(cap_sag_max_m, worst);
+                if (worst > 0.10) ++cap_sag_gt10;
+                const int ci =
+                    (bi < vert_cap.size() && i0 < vert_cap[bi].size())
+                        ? vert_cap[bi][i0]
+                        : -1;
+                if (ci >= 0 &&
+                    hf.R * std::acos(std::min(
+                               1.0, std::max(-1.0,
+                                             glm::dot(plan.caps[ci].centre,
+                                                      valley)))) <= 2500.0) {
+                    ++cap_sag_valley_tris;
+                    cap_sag_valley_max_m =
+                        std::max(cap_sag_valley_max_m, worst);
+                    if (worst > 0.10) ++cap_sag_valley_gt10;
+                }
+            }
+        }
+        for (const RibbonBatchCPU& b : cb) {
+            if (b.idx.empty()) continue;
+            Mesh m{};
+            m.vertexCount = static_cast<int>(b.pos.size() / 3);
+            m.triangleCount = static_cast<int>(b.idx.size()) / 3;
+            m.vertices =
+                static_cast<float*>(MemAlloc(sizeof(float) * b.pos.size()));
+            m.texcoords =
+                static_cast<float*>(MemAlloc(sizeof(float) * b.uv.size()));
+            m.indices = static_cast<unsigned short*>(
+                MemAlloc(sizeof(unsigned short) * b.idx.size()));
+            std::copy(b.pos.begin(), b.pos.end(), m.vertices);
+            std::copy(b.uv.begin(), b.uv.end(), m.texcoords);
+            std::copy(b.idx.begin(), b.idx.end(), m.indices);
+            r.vert_count += m.vertexCount;
+            cap_verts += m.vertexCount;
+            UploadMesh(&m, false);
+            r.meshes.push_back(m);
+            r.kinds.push_back(0);      // a junction cap is ROAD
+            r.half_w_m.push_back(6.0f);  // unused: the cap is |v| == 1, so the
+                                         // corduroy/dash never reads it
+        }
+    }
+    if (look.junction_cut_m > 0.0) {
+        TraceLog(LOG_INFO,
+                 "RIBBONS F2 junction cut: dial %.2f m, radius %.2f-%.2f m; "
+                 "%d ways / %d endpoints -> %d nodes (deg1 %d, deg2 %d, "
+                 "deg3+ %d)",
+                 look.junction_cut_m, plan.cut_radius_min_m,
+                 plan.cut_radius_max_m, plan.ways, plan.endpoints,
+                 plan.nodes_total, plan.nodes_deg1, plan.nodes_deg2,
+                 plan.nodes_deg3plus);
+        TraceLog(LOG_INFO,
+                 "RIBBONS F2 cut: %d nodes, %d legs (%d clamped by the 40%% "
+                 "length rule), %d quads dropped; SKIPPED %d trail, %d short; "
+                 "plan %.0f ms",
+                 plan.nodes_cut, plan.legs_cut, plan.legs_clamped,
+                 plan.quads_dropped, plan.nodes_skipped_trail,
+                 plan.nodes_skipped_short, junction_ms);
+        TraceLog(LOG_INFO,
+                 "RIBBONS F2 caps: %zu caps, %ld verts, area %.0f m2 (%.1f %% "
+                 "outside every leg corridor), ~%.0f m of deck removed",
+                 plan.caps.size(), cap_verts, plan.cap_area_m2,
+                 plan.cap_area_m2 > 0.0
+                     ? 100.0 * plan.cap_area_uncovered_m2 / plan.cap_area_m2
+                     : 0.0,
+                 plan.road_len_removed_m);
+        TraceLog(LOG_INFO,
+                 "RIBBONS F2 SEAM: %ld cap boundary verts checked, %ld matched "
+                 "a leg vertex EXACTLY, max gap %.6f m",
+                 seam_checked, seam_exact, seam_max_gap_m);
+        TraceLog(LOG_INFO,
+                 "RIBBONS F2 CAP SAG (vs drawn_radius_at + lift, the surface "
+                 "the machine drives): %ld tris, %ld over 0.10 m (%.2f %%), "
+                 "worst +%.3f m; within 2.5 km of Valley %ld tris, %ld over "
+                 "0.10 m, worst +%.3f m",
+                 cap_sag_tris, cap_sag_gt10,
+                 cap_sag_tris > 0 ? 100.0 * static_cast<double>(cap_sag_gt10) /
+                                        static_cast<double>(cap_sag_tris)
+                                  : 0.0,
+                 cap_sag_max_m, cap_sag_valley_tris, cap_sag_valley_gt10,
+                 cap_sag_valley_max_m);
+    }
     if (r.meshes.empty()) {
         TraceLog(LOG_INFO,
                  "RIBBONS: no baked paths — inert (roads-only bake?)");
@@ -308,6 +617,7 @@ RibbonSurfaces build_ribbon_surfaces(const HeightField& hf,
     r.loc_bed = GetShaderLocation(r.shader, "uBed");
     r.loc_line = GetShaderLocation(r.shader, "uLine");
     r.loc_center = GetShaderLocation(r.shader, "uCenterFrac");
+    r.loc_line_aa = GetShaderLocation(r.shader, "uLineAA");
     r.loc_dash = GetShaderLocation(r.shader, "uDashM");
     r.loc_gap = GetShaderLocation(r.shader, "uGapM");
     r.loc_trail = GetShaderLocation(r.shader, "uTrail");
@@ -326,8 +636,10 @@ RibbonSurfaces build_ribbon_surfaces(const HeightField& hf,
     r.ok = true;
     TraceLog(LOG_INFO,
              "RIBBONS: %zu draped meshes, %ld verts, max_seg_m %.2f, "
-             "max_tr_m %.2f, built in %.0f ms (roads + trails)",
+             "max_tr_m %.2f, over_bank_bias %.2f, built in %.0f ms "
+             "(roads + trails)",
              r.meshes.size(), r.vert_count, look.max_seg_m, look.max_tr_m,
+             look.over_bank_bias,
              (GetTime() - t0) * 1000.0);
     return r;
 }
@@ -355,8 +667,32 @@ void draw_ribbon_surfaces(RibbonSurfaces& r, const glm::dvec3& eye,
     // the water's -1 (Fable P1-2). Paired with the small facet-clearance lift
     // baked into the vertices (R4d: the drape sits on the rendered facet, so
     // the lift is clearance, not a burial-tail guess).
+    // ★ ROAD-REPAIR E2 -- THE FLASH INSTRUMENT'S POSITIVE CONTROL, and
+    // nothing else. The bank pass below uses the IDENTICAL (-2, -4), which is
+    // exactly why bank-over-deck has no arbitration at all; a flash grader
+    // that cannot MOVE this pair cannot prove it is reading depth arbitration
+    // rather than some other per-frame difference. SEADS_FLASH_POSCTL scales
+    // THIS pass's offset only, is read ONCE, and DEFAULTS TO 1.0 -- the
+    // shipped numbers, bit-identical, off.
+    static const float po_scale = [] {
+        const char* e = std::getenv("SEADS_FLASH_POSCTL");
+        if (e == nullptr || e[0] == '\0') return 1.0f;
+        return static_cast<float>(std::atof(e));
+    }();
+    // ★ ROAD-REPAIR F3 -- THE OVER-BANK BIAS. [ribbons] over_bank_bias
+    // scales THIS pass's pair by (1 + b) while draw_bank_strips below keeps
+    // (-2, -4), which is the only relative depth bias the deck-versus-bank tie
+    // has ever had. It COMPOSES with the E2 positive control: the deck draws
+    // at po_scale * (1 + b). 0.0 == the identity BY BRANCH -- the else arm is
+    // the shipped call, verbatim, not a multiply by 1.0.
+    const double over_bank_bias = r.look.over_bank_bias;
     glEnable(GL_POLYGON_OFFSET_FILL);
-    glPolygonOffset(-2.0f, -4.0f);
+    if (over_bank_bias > 0.0) {
+        const float b = static_cast<float>(1.0 + over_bank_bias);
+        glPolygonOffset(-2.0f * po_scale * b, -4.0f * po_scale * b);
+    } else {
+        glPolygonOffset(-2.0f * po_scale, -4.0f * po_scale);
+    }
     rlDisableBackfaceCulling();  // a road on a side-slope reads from either
                                  // side
 
@@ -364,13 +700,53 @@ void draw_ribbon_surfaces(RibbonSurfaces& r, const glm::dvec3& eye,
         MatrixTranslate(static_cast<float>(-eye.x), static_cast<float>(-eye.y),
                         static_cast<float>(-eye.z));
     const RibbonLook& L = r.look;
+    // ★ ROAD-REPAIR F3 §6 -- THE ATTRIBUTION ARM. The ribbon pass draws
+    // ROADS (kind 0/1) and snowmobile TRAILS (kind 2) as separate draped
+    // strips in ONE pass with ONE polygon offset, so a trail crossing a road
+    // is a deck-on-deck tie no per-pass offset can ever separate.
+    // SEADS_NO_TRAILS=1 skips the kind-2 meshes so that share can be MEASURED
+    // instead of argued. Read once; unarmed, not one branch moves.
+    static const bool no_trails = std::getenv("SEADS_NO_TRAILS") != nullptr;
     for (std::size_t i = 0; i < r.meshes.size(); ++i) {
+        if (no_trails && r.kinds[i] == 2) continue;
         const float uTrail =
             r.kinds[i] == 2 ? 1.0f : 0.0f;  // per-mesh kind selector
         SetShaderValue(r.shader, r.loc_trail, &uTrail, SHADER_UNIFORM_FLOAT);
         SetShaderValue(r.shader, r.loc_bed, &L.road_bed, SHADER_UNIFORM_VEC3);
         SetShaderValue(r.shader, r.loc_line, &L.road_line, SHADER_UNIFORM_VEC3);
-        SetShaderValue(r.shader, r.loc_center, &L.road_center_frac,
+        // ★ ROAD-REPAIR F3 §6 -- THE WHITE-LINE ARM (Chad, 2026-09-16, flying
+        // Chelmsford: "there were a few flashing spots in the road, the white
+        // line"). The dashed centreline is NOT a second coplanar pass and NOT
+        // its own geometry: it is one ternary in the ribbon FS on the deck's
+        // own interpolated v/s, so it shares the deck's single polygon offset
+        // BY CONSTRUCTION and cannot z-fight its own deck. SEADS_NO_LINE=1
+        // zeroes uCenterFrac, which paints the deck plain asphalt -- so the
+        // pixels that stop flashing are the ones whose flash was the LINE's
+        // contrast being re-decided against whatever else is drawn there.
+        // Read once; unarmed, the shipped value verbatim.
+        static const bool no_line = std::getenv("SEADS_NO_LINE") != nullptr;
+        const float center_frac = no_line ? 0.0f : L.road_center_frac;
+        SetShaderValue(r.shader, r.loc_center, &center_frac,
+                       SHADER_UNIFORM_FLOAT);
+        // ★ ROAD-REPAIR rung AA -- THE CENTRELINE ANTI-ALIAS, and its
+        // kill, read HERE beside SEADS_NO_LINE so the arm that MEASURED the
+        // line's share and the fix for it are one switch in one place.
+        // ⚠ SEMANTICS, UNIFIED BY THE RED-TEAM FOLD: this env REPLACES the
+        // config value, exactly like SEADS_OVER_BANK_BIAS does in
+        // app/main.cpp -- the env value IS the dial value, `=0` is the kill,
+        // and it is clamped to the loader's own [0, 4] so the seat can never
+        // ask for a value the config table would reject. It used to MULTIPLY
+        // the shipped 1.0, which read the same for the kill and for 2.0 but
+        // silently differed the moment the shipped value moved off 1.0.
+        // Read once.
+        static const float line_aa_env = [] {
+            const char* e = std::getenv("SEADS_LINE_AA");
+            if (e == nullptr || e[0] == '\0') return -1.0f;  // unset
+            const double v = std::atof(e);
+            return static_cast<float>(v < 0.0 ? 0.0 : (v > 4.0 ? 4.0 : v));
+        }();
+        const float line_aa = line_aa_env >= 0.0f ? line_aa_env : L.line_aa;
+        SetShaderValue(r.shader, r.loc_line_aa, &line_aa,
                        SHADER_UNIFORM_FLOAT);
         SetShaderValue(r.shader, r.loc_dash, &L.road_dash_m,
                        SHADER_UNIFORM_FLOAT);
@@ -468,6 +844,10 @@ out vec4 finalColor;
 uniform vec3 uBase;
 uniform float uDensity;   // fraction of grains showing gravel [0,1]
 uniform float uDark;      // fleck darkness bite [0,1]
+// ★ ROAD-REPAIR AA -- the speckle anti-alias width multiplier.
+// 0.0 == the identity BY AN EXPLICIT BRANCH (the pre-AA fade arithmetic,
+// verbatim); > 0 scales the grain footprint the Nyquist gate is taken on.
+uniform float uSpeckleAA;
 uniform float uSmudge;    // extra density at the crest band
 uniform float uCrestV;    // ring-normalized crest position
 uniform float uWidthM;    // rise + fall, metres across the strip
@@ -499,6 +879,58 @@ void main() {
     // the eye the term resolves to binary grains (the oreo crumb).
     float w = fwidth(grain.x) + fwidth(grain.y);
     float fade = 1.0 / (1.0 + w * w * 0.25);
+    // ★ ROAD-REPAIR rung AA -- THE GRAIN-PERIOD GATE. The fade above
+    // is a SOFT rational roll-off; at the flash rig's 70 m / 6-11 deg graze it
+    // still passes ~30-40 % of the BINARY speckle through, and that residue is
+    // 13.5-16.4 pp of the road-mask flicker Chad reported -- about 86 % of it
+    // (docs/road_repair/onaping_flash_F3.md 6.3).
+    //
+    // ⚠ THE GATE TAKES ITS OWN, ISOTROPIC FOOTPRINT (red-team fold). The `w`
+    // above is fwidth(grain.x) + fwidth(grain.y) -- an L1 sum of two L1 sums,
+    // which over-reads the true footprint by up to 2x per axis and up to ~4x
+    // compounded, and by an amount that depends on how the bank happens to be
+    // ORIENTED on screen. It is left EXACTLY as it was because it is the
+    // pre-AA fade, i.e. the identity at dial 0, and the identity is verbatim.
+    // The gate below instead uses the FROBENIUS NORM of the (grain <- pixel)
+    // Jacobian, sqrt(|d(grain)/dx|^2 + |d(grain)/dy|^2). That is invariant
+    // under a rotation of the screen axes (the Jacobian is right-multiplied by
+    // the rotation and the Frobenius norm is unchanged), which is what makes
+    // it isotropic, and it equals sqrt(s1^2 + s2^2) of the singular values --
+    // so it never UNDER-reads the worst-case grain-space step per pixel, s1.
+    // max(fwidth(grain.x), fwidth(grain.y)) was the other candidate and is
+    // NOT isotropic: both terms are still L1 norms, so it carries the same
+    // orientation-dependent up-to-sqrt(2) swing.
+    //
+    // wi is GRAINS PER PIXEL, so wi = 1 is the sampling limit: past it the field
+    // carries no recoverable signal, only a hash of the eye position. Gate the
+    // binary term off over wi in [0.5, 1.0] -- a grain period of 2 px down to
+    // 1 px -- and `cover` lands on `dens`, the EXACT mean coverage: the same
+    // energy-preserving destination the old fade aimed at, reached instead of
+    // merely approached.
+    //
+    // ⚠ THE ONSET IS THE LOOK/FLICKER TRADE, AND IT IS MEASURED. `sp` is a
+    // step() on a per-cell hash, so every cell BOUNDARY is a hard
+    // discontinuity carrying the full uDark contrast and no edge filter exists
+    // for a random cell field -- which means the oreo still shimmers WELL
+    // below Nyquist. Swept at J2 (road-mask flash; 18.53 % unarmed, 4.78 %
+    // with the speckle removed outright):
+    //
+    //     speckle_aa 1.0  gate 1-2 px period  ->  10.11 %   <-- SHIPPED
+    //     speckle_aa 2.0  gate 2-4 px         ->   6.62 %
+    //     speckle_aa 3.0  gate 3-6 px         ->   5.11 %   (at the floor)
+    //
+    // The shipped 1.0 is the value that leaves the LOOK alone: at 3.0 the near
+    // A/B (8 m, 12 deg graze) erases the oreo crumb from ~7 m outward and the
+    // mid-field banks read as plain white. Chad signed that crumb, and a dial
+    // that buys 5 pp by deleting it is a design change wearing an AA costume,
+    // so it is offered as a DIAL and not taken (AA doc 5 + 8). Raising this
+    // past ~1.5 is HIS ruling to make, not the grader's.
+    if (uSpeckleAA > 0.0) {
+        vec2 gdx = dFdx(grain);
+        vec2 gdy = dFdy(grain);
+        float wi = sqrt(dot(gdx, gdx) + dot(gdy, gdy));
+        fade *= 1.0 - smoothstep(0.5, 1.0, wi * uSpeckleAA);
+    }
     float cover = mix(dens, sp, fade);
     // The skirt is plain snow diving under the terrain -- no gravel there.
     float skirt = smoothstep(1.0, 1.2, vSV.y);
@@ -567,6 +999,33 @@ BankSurfaces build_bank_surfaces(const HeightField& hf, int subdiv, int tiles,
     long verts = 0;
     std::vector<BankStripCPU> strips =
         build_bank_strips(hf, subdiv, tiles, snow, p, cuts, &verts);
+    // ★ ROAD-REPAIR F1 -- WHAT THE YIELD COST, said out loud on every armed
+    // build. A bank that vanished planet-wide and a bank that yielded only at
+    // the junctions look identical from the seat at ONE intersection; this
+    // line is the difference between them, and it is the number the doc's
+    // over-reach check quotes. bank_mesh.cpp cannot print it (pure TU, zero
+    // raylib), so its caller does.
+    if (p.deck_yield_m > 0.0) {
+        const BankDeckYieldStat ys = bank_deck_yield_stat();
+        TraceLog(LOG_INFO,
+                 "ROAD-REPAIR F1 deck_yield_m %.2f: %lld of %lld bank stations "
+                 "yielded (%.2f %%); deck penetration p50 %.2f p90 %.2f p99 "
+                 "%.2f max %.2f m",
+                 p.deck_yield_m, ys.capped, ys.stations,
+                 ys.stations > 0 ? 100.0 * static_cast<double>(ys.capped) /
+                                       static_cast<double>(ys.stations)
+                                 : 0.0,
+                 ys.pen_p50, ys.pen_p90, ys.pen_p99, ys.pen_max);
+        // The sweep, so the dial can be re-chosen from any armed run without
+        // a second build (see bank_deck_yield_fraction_over).
+        const double sweep[14] = {0.05, 0.10, 0.15, 0.20, 0.25, 0.30, 0.40,
+                                  0.50, 0.75, 1.00, 1.50, 2.00, 3.00, 5.00};
+        for (const double t : sweep)
+            TraceLog(LOG_INFO,
+                     "ROAD-REPAIR F1 sweep: deck_yield_m %.2f would yield "
+                     "%.2f %% of bank stations",
+                     t, 100.0 * bank_deck_yield_fraction_over(t));
+    }
     if (strips.empty()) {
         TraceLog(LOG_INFO, "BANKS: no plowed-road strips -- inert");
         return b;  // ok=false
@@ -642,6 +1101,7 @@ BankSurfaces build_bank_surfaces(const HeightField& hf, int subdiv, int tiles,
     b.loc_base = GetShaderLocation(b.shader, "uBase");
     b.loc_density = GetShaderLocation(b.shader, "uDensity");
     b.loc_dark = GetShaderLocation(b.shader, "uDark");
+    b.loc_speckle_aa = GetShaderLocation(b.shader, "uSpeckleAA");
     b.loc_smudge = GetShaderLocation(b.shader, "uSmudge");
     b.loc_crest = GetShaderLocation(b.shader, "uCrestV");
     b.loc_width = GetShaderLocation(b.shader, "uWidthM");
@@ -696,8 +1156,21 @@ void draw_bank_surfaces(BankSurfaces& b, const glm::dvec3& eye,
     // against the coincident terrain at grazing angles; eye-relative xf keeps
     // world-absolute floats from jittering at speed; cull off because a bank
     // on a side-slope reads from either side.
+    // ★ ROAD-REPAIR F3 §6 -- THE BANK-OFFSET ARM, the SEADS_FLASH_POSCTL
+    // pattern exactly: read ONCE, DEFAULTS TO 1.0, scales THIS pass's pair and
+    // nothing else. It exists because the bank carries a 6 m BURIAL SKIRT that
+    // descends to skirt_bury_m BELOW the drawn terrain facet, and this
+    // negative offset pulls that buried band back toward the eye while the
+    // terrain pass has no offset at all. SEADS_BANK_POSCTL=0 lets the terrain
+    // win wherever the skirt is buried, which is how that tie gets MEASURED
+    // instead of argued. Instrument only -- unarmed, the shipped call.
+    static const float bank_po_scale = [] {
+        const char* e = std::getenv("SEADS_BANK_POSCTL");
+        if (e == nullptr || e[0] == '\0') return 1.0f;
+        return static_cast<float>(std::atof(e));
+    }();
     glEnable(GL_POLYGON_OFFSET_FILL);
-    glPolygonOffset(-2.0f, -4.0f);
+    glPolygonOffset(-2.0f * bank_po_scale, -4.0f * bank_po_scale);
     rlDisableBackfaceCulling();
     const Matrix xf =
         MatrixTranslate(static_cast<float>(-eye.x), static_cast<float>(-eye.y),
@@ -705,7 +1178,38 @@ void draw_bank_surfaces(BankSurfaces& b, const glm::dvec3& eye,
     SetShaderValue(b.shader, b.loc_base, &b.look.base, SHADER_UNIFORM_VEC3);
     SetShaderValue(b.shader, b.loc_density, &b.look.speckle_density,
                    SHADER_UNIFORM_FLOAT);
-    SetShaderValue(b.shader, b.loc_dark, &b.look.speckle_dark,
+    // ★ ROAD-REPAIR F3 §6 -- THE GRAVEL-SPECKLE ARM. The oreo albedo is a
+    // deterministic hash of ~22 cm grains in surface metres. At 70 m and a 6-11
+    // degree graze one grain is far under one pixel, so which grain a pixel
+    // samples is decided by where the eye is -- and 2 cm of eye travel
+    // re-samples the whole field. SEADS_BANK_SPECKLE=0 zeroes the speckle
+    // CONTRAST (uDark), leaving the same geometry, the same lighting and the
+    // same sparkle, so the aliasing hypothesis can be MEASURED against the
+    // depth one. Read once; unarmed, the shipped value verbatim.
+    static const float speckle_dark_scale = [] {
+        const char* e = std::getenv("SEADS_BANK_SPECKLE");
+        if (e == nullptr || e[0] == '\0') return 1.0f;
+        return static_cast<float>(std::atof(e));
+    }();
+    const float speckle_dark = b.look.speckle_dark * speckle_dark_scale;
+    SetShaderValue(b.shader, b.loc_dark, &speckle_dark,
+                   SHADER_UNIFORM_FLOAT);
+    // ★ ROAD-REPAIR rung AA -- THE SPECKLE NYQUIST GATE, and its kill,
+    // read HERE beside SEADS_BANK_SPECKLE so the arm that MEASURED the
+    // speckle's 13.5-16.4 pp and the fix for it are one switch in one place.
+    // ⚠ SEMANTICS, UNIFIED BY THE RED-TEAM FOLD: this env REPLACES the config
+    // value, exactly like SEADS_OVER_BANK_BIAS does in app/main.cpp -- the env
+    // value IS the dial value, `=0` is the kill, clamped to the loader's own
+    // [0, 4]. It used to MULTIPLY the shipped 1.0. Read once.
+    static const float speckle_aa_env = [] {
+        const char* e = std::getenv("SEADS_SPECKLE_AA");
+        if (e == nullptr || e[0] == '\0') return -1.0f;  // unset
+        const double v = std::atof(e);
+        return static_cast<float>(v < 0.0 ? 0.0 : (v > 4.0 ? 4.0 : v));
+    }();
+    const float speckle_aa =
+        speckle_aa_env >= 0.0f ? speckle_aa_env : b.look.speckle_aa;
+    SetShaderValue(b.shader, b.loc_speckle_aa, &speckle_aa,
                    SHADER_UNIFORM_FLOAT);
     SetShaderValue(b.shader, b.loc_smudge, &b.look.crest_smudge,
                    SHADER_UNIFORM_FLOAT);

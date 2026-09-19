@@ -70,14 +70,16 @@ inline constexpr const char* kMagic = "seads-sled-tape v1";
     X(plane_lat_load_frac) X(plane_lift_split_frac)                           \
     X(plane_draft_m) X(plan_area_m2) X(ski_rake_rad)                          \
     X(alpha_max_rad) X(plow_cd) X(air_cda) X(air_rho) X(steer_max_rad)        \
-    X(slip_ref_rad) X(track_lat_mu) X(plane_fit_load_weight)                  \
+    X(slip_ref_rad) X(track_lat_mu) X(track_lat_slip_shed)                 \
+    X(plane_fit_load_weight)                                              \
     X(inertia.x) X(inertia.y) X(inertia.z)                                    \
     X(grip.unseat_gain) X(grip.pose_hz) X(grip.capacity)                      \
     X(grip_buck.buck_gain) X(grip_buck.decay_per_s) X(grip_buck.g0)
 
 // Every double dial on SledComfort (sim/sled.h:109-257).
 #define SLEDTAPE_COMFORT_D(X)                                                 \
-    X(rolled_persist_s) X(rolled_grace_s) X(roll_stiff_nm) X(roll_ref_rad)    \
+    X(rolled_persist_s) X(rolled_grace_s) X(rolled_throttle_frac)          \
+    X(roll_stiff_nm) X(roll_ref_rad)                                       \
     X(right_assist_nm) X(right_assist_max_ms)                                \
     X(right_assist_rearm_frac) X(right_assist_min_tilt_rad)                  \
     X(right_charge_push_s) X(right_charge_rest_s) X(right_dir_eps)         \
@@ -389,6 +391,24 @@ inline bool load(std::istream& in, Tape& t, std::string* err) {
     // tape carries its own 0.25) and no airborne exchange.
     // ★ GI4 §9.7 item 2: the contact ceiling is OFF-by-absence. A tape cut
     // before this rung was driven by a kernel with no traction limit at all.
+    // ⚠⚠ THIS LINE STOPPED BEING FREE ON 2026-09-18. Until SLED KERNEL v2 the
+    // struct default was ALSO 0.0, so this preset and the default agreed and
+    // nothing could tell them apart. `SledParams{}.traction_mu` is 3.0 now.
+    // Deleting this line would silently re-drive every pre-v2 tape at 3.0 --
+    // and the replay would still print "bit-exact", because the pins were
+    // derived under the same wrong assumption. `sled_tape_absent_dials_replay_
+    // at_the_identity_not_the_v2_default` is the leg that reds on the delete.
+    // ★ LANDING RED-TEAM P1-2, 2026-09-19: WHEN THAT SENTENCE WAS FIRST
+    // WRITTEN THE LEG DID NOT EXIST -- `grep -rn "sled_tape_absent_dials_replay"
+    // test/` returned this comment and nothing else. A comment that ADVERTISES
+    // a guard is worse than no comment: it invites the tidy-up it claims to
+    // catch. The leg exists now (test/unit/test_sled_tape.cpp) and covers all
+    // five presets below. MEASURED, one preset deleted at a time with
+    // `ctest -R "tape|golden|replay"`: traction_mu is ALSO defended by
+    // tape_360_chad_repro and tape_chad_flip_fence, rolled_throttle_frac by
+    // tape_360_chad_repro, and track_lat_slip_shed by NOTHING ELSE AT ALL --
+    // 40/40 passed with its line deleted. That one is why this leg had to be
+    // written rather than the comment merely corrected.
     t.params.traction_mu = 0.0;
     t.params.aft_ceiling_curve = 0.0;
     t.params.k_air_shift = 0.0;
@@ -414,6 +434,29 @@ inline bool load(std::istream& in, Tape& t, std::string* err) {
     // roster, and the dial gap covers the params side as well.
     t.params.grip.unseat_gain = 0.0;
     t.params.grip_buck.buck_gain = 0.0;
+    // ★★★ SLED KERNEL v2 (Chad 2026-09-18), AND THE FIRST TIME THIS BLOCK HAS
+    // HAD TO DO ITS JOB FOR REAL. Five dials took his driven values as SHIPPED
+    // DEFAULTS. Every one of them is absent from the goldens in
+    // test/golden/sled (34-dial gap) and two of them are absent from his six
+    // 09-17 tapes, so without these five lines `load` would start from a
+    // default-constructed SledParams carrying 3.0 / 1.4 / 0.15 and replay
+    // drives that never happened -- the exact failure the paragraph at the top
+    // of this block was written about, arriving from the exact direction it
+    // predicted ("the first dial that ships a NON-INERT struct default").
+    //
+    // THE RULE, RESTATED: an ABSENT dial reconstructs at the IDENTITY -- the
+    // value the kernel that CUT the tape had -- never at today's struct
+    // default. The identity is written here as a LITERAL CONSTANT on purpose;
+    // reading it back out of `sim::SledParams{}` would re-import the bug.
+    t.params.track_lat_slip_shed = 0.0;         // v2 default 1.4
+    t.params.comfort.rolled_throttle_frac = 0.0;  // v2 default 0.15
+    // These two ship from `config/scenario.toml [sled_comfort]`, so the struct
+    // default still IS the identity and these lines change nothing today. They
+    // are here so the law does not rest on that coincidence a second time:
+    // the moment anybody moves the struct defaults to match the TOML, the
+    // corpus is already protected.
+    t.params.comfort.right_assist_max_ms = 5.0 / 3.6;  // shipped 4.0 (toml)
+    t.params.comfort.right_stand_shift_frac = 1.0;     // shipped 0.5 (toml)
     std::string line;
     std::uint64_t hash = kFnvBasis;
     auto fail = [&](const char* m, const std::string& l) {

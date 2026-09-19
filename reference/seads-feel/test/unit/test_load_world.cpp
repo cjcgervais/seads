@@ -1065,3 +1065,117 @@ TEST_CASE("load_world: a missing plane_legibility key throws (strict schema)") {
         replace_all(base, "enemy_tint_shift    = 1.0", "");
     CHECK_THROWS(cfg::load_world_toml(write_temp(bad, "legibility_missing")));
 }
+
+
+// ★ ROAD-REPAIR F3 -- THE OVER-BANK BIAS. One leg, three claims: the dial is
+// READ off the committed table (not left at a struct default), it is BOUNDED to
+// {0} or (0, 4], and 0.0 is the IDENTITY -- the loader accepts it, because the
+// draw branch on 0 is the pre-F3 glPolygonOffset call verbatim
+// (render/ribbons.cpp draw_ribbon_surfaces). See
+// docs/road_repair/onaping_flash_F3.md.
+TEST_CASE("load_world: [ribbons] over_bank_bias is read, bounded, 0 = identity") {
+    const cfg::WorldParams w =
+        cfg::load_world_toml(SEADS_CONFIG_DIR "/world.toml");
+    // READ: the shipped value reached the struct. The VALUE is a dial, so this
+    // pins the RANGE, not the number (the AT-15 lesson).
+    CHECK(w.ribbons.over_bank_bias > 0.0);
+    CHECK(w.ribbons.over_bank_bias <= 4.0);
+
+    const std::string base = slurp(SEADS_CONFIG_DIR "/world.toml");
+    const std::string ship = "over_bank_bias   = 0.5";
+    REQUIRE(base.find(ship) != std::string::npos);
+
+    // IDENTITY: 0.0 is legal. It is the kill (SEADS_OVER_BANK_BIAS=0) and the
+    // pre-F3 tree, so a loader that rejected it would make the A/B unbuildable.
+    const std::string off = replace_all(base, ship, "over_bank_bias   = 0.0");
+    const cfg::WorldParams w0 =
+        cfg::load_world_toml(write_temp(off, "over_bank_bias_zero"));
+    CHECK(w0.ribbons.over_bank_bias == Catch::Approx(0.0));
+
+    // BOUNDED ABOVE: 4 is the ceiling; 5x the shipped pull is a deck peeling
+    // off the kerb toward the eye, not an arbitration.
+    const std::string over = replace_all(base, ship, "over_bank_bias   = 4.5");
+    CHECK_THROWS(cfg::load_world_toml(write_temp(over, "over_bank_bias_over")));
+
+    // BOUNDED BELOW: a NEGATIVE bias would put the BANK on top of the deck --
+    // the defect, armed.
+    const std::string neg = replace_all(base, ship, "over_bank_bias   = -0.5");
+    CHECK_THROWS(cfg::load_world_toml(write_temp(neg, "over_bank_bias_neg")));
+
+    // STRICT SCHEMA: a world.toml that predates F3 must fail LOUD.
+    const std::string gone = replace_all(base, ship, "");
+    CHECK_THROWS(cfg::load_world_toml(write_temp(gone, "over_bank_bias_gone")));
+}
+
+// ★ ROAD-REPAIR rung AA -- THE TWO ANTI-ALIAS DIALS.
+// F3 6.7 attributed ~86 % of the road-mask flash to the bank gravel-speckle
+// albedo aliasing and most of the rest to the centreline stripe aliasing.
+// Neither is a depth decision, so the fix is a screen-space footprint filter on
+// each albedo, and each gets ONE dial: {0} or (0, 4], 0.0 the identity BY AN
+// EXPLICIT BRANCH in the fragment shader (the pre-AA arithmetic, verbatim), so
+// the A/B stays buildable. See docs/road_repair/onaping_flash_AA.md.
+TEST_CASE("load_world: [bank_mesh] speckle_aa is read, bounded, 0 = identity") {
+    const cfg::WorldParams w =
+        cfg::load_world_toml(SEADS_CONFIG_DIR "/world.toml");
+    // READ: the shipped value reached the struct. The VALUE is a dial, so this
+    // pins the RANGE, not the number (the AT-15 lesson).
+    CHECK(w.bank_mesh.speckle_aa > 0.0);
+    CHECK(w.bank_mesh.speckle_aa <= 4.0);
+
+    const std::string base = slurp(SEADS_CONFIG_DIR "/world.toml");
+    const std::string ship = "speckle_aa          = 1.0";
+    REQUIRE(base.find(ship) != std::string::npos);
+
+    // IDENTITY: 0.0 is legal -- it is the kill (SEADS_SPECKLE_AA=0) and the
+    // pre-AA tree, so a loader that rejected it would make the A/B unbuildable.
+    const std::string off = replace_all(base, ship, "speckle_aa          = 0.0");
+    const cfg::WorldParams w0 =
+        cfg::load_world_toml(write_temp(off, "speckle_aa_zero"));
+    CHECK(w0.bank_mesh.speckle_aa == Catch::Approx(0.0));
+
+    // BOUNDED ABOVE: 4 is the ceiling. The gate fires over a grain period of
+    // 2 px down to 1 px at 1.0; four times that footprint would start washing
+    // the oreo crumb out at ranges where the eye can still resolve it, which is
+    // the LOOK Chad signed.
+    const std::string over =
+        replace_all(base, ship, "speckle_aa          = 4.5");
+    CHECK_THROWS(cfg::load_world_toml(write_temp(over, "speckle_aa_over")));
+
+    // BOUNDED BELOW: a negative footprint has no meaning.
+    const std::string neg =
+        replace_all(base, ship, "speckle_aa          = -0.5");
+    CHECK_THROWS(cfg::load_world_toml(write_temp(neg, "speckle_aa_neg")));
+
+    // STRICT SCHEMA: a world.toml that predates the AA rung must fail LOUD.
+    const std::string gone = replace_all(base, ship, "");
+    CHECK_THROWS(cfg::load_world_toml(write_temp(gone, "speckle_aa_gone")));
+}
+
+TEST_CASE("load_world: [ribbons] line_aa is read, bounded, 0 = identity") {
+    const cfg::WorldParams w =
+        cfg::load_world_toml(SEADS_CONFIG_DIR "/world.toml");
+    CHECK(w.ribbons.line_aa > 0.0);
+    CHECK(w.ribbons.line_aa <= 4.0);
+
+    const std::string base = slurp(SEADS_CONFIG_DIR "/world.toml");
+    const std::string ship = "line_aa          = 1.0";
+    REQUIRE(base.find(ship) != std::string::npos);
+
+    // IDENTITY: 0.0 is the kill (SEADS_LINE_AA=0) and the old hard ternary.
+    const std::string off = replace_all(base, ship, "line_aa          = 0.0");
+    const cfg::WorldParams w0 =
+        cfg::load_world_toml(write_temp(off, "line_aa_zero"));
+    CHECK(w0.ribbons.line_aa == Catch::Approx(0.0));
+
+    // BOUNDED ABOVE: 1.0 box-filters the stripe over its own pixel footprint,
+    // which is the CORRECT filter; anything much larger is a deliberate blur of
+    // a line Chad signed the look of.
+    const std::string over = replace_all(base, ship, "line_aa          = 4.5");
+    CHECK_THROWS(cfg::load_world_toml(write_temp(over, "line_aa_over")));
+
+    const std::string neg = replace_all(base, ship, "line_aa          = -0.5");
+    CHECK_THROWS(cfg::load_world_toml(write_temp(neg, "line_aa_neg")));
+
+    const std::string gone = replace_all(base, ship, "");
+    CHECK_THROWS(cfg::load_world_toml(write_temp(gone, "line_aa_gone")));
+}

@@ -200,6 +200,61 @@ struct SledComfort {
     // makes the rider's legs NEVER trail, silently, with no red test. Move
     // this number and you are tuning two mechanisms.
     double rolled_grace_s = 0.20;
+    // --- B1 THE KEY HAS TO REACH THE TRACK (Chad, 2026-09-18) --------------
+    // "throttle is cut unless im key pressing BUT IF I KEY PRESS THROTTLE
+    //  SHOULD RAMP UP"
+    //
+    // The fraction of his commanded thumb that survives the `rolled` latch.
+    // 0.0 is the SHIPPED KERNEL EXACTLY -- `s.rolled ? 0.0 : thr` has cut the
+    // throttle on that line for rungs, and `0.0 * thr_in` is the same IEEE zero
+    // by the same arithmetic for every finite clamp01'd `thr_in`. It is a
+    // MULTIPLY-BY-ZERO on a value that is already zero, not a 0-weight lerp.
+    //
+    // ⚠ WHY IT CANNOT LIVE IN app/. The app already ramps the thumb and ships
+    // it unconditionally; the kernel's `s.rolled` branch is the only thing
+    // between his thumb and the track. An app-side fix would be a SECOND,
+    // PARALLEL throttle path -- the lying-instrument shape this project has
+    // paid for before.
+    //
+    // ⚠ AND IT IS NOT THE `!hands_on` HALF. A man thrown off the bars has no
+    // thumb on the lever (R4a §7.4): that zero stays unconditional and is not
+    // this dial's business. `sled_rolled_throttle_never_reaches_a_handless_
+    // rider` is the leg that keeps the two branches from being collapsed into
+    // one.
+    //
+    // ⚠⚠ THERE IS NO WALL YET, AND THIS HEADER IS WHERE THE NEXT LANE LOOKS
+    // FIRST (FOLDED RED-TEAM P0-1 law+feel / P1-1 mechanism, 2026-09-18).
+    // `sled_onside_recovery_is_momentum_not_magnetism` drives a CLOSED thumb
+    // and cannot see this dial at all. Its replacement holds W -- and on flat
+    // ground a downed machine's track has NO CONTACT, so `thrust_n` and
+    // `roost_flux` are 0.00 in every cell and the final tilt is identical to
+    // the 17th digit at 0.00, 0.15 and 1.00. The red-team then hunted a fixture
+    // that CAN arm it -- cross-slope fields at 0.30 and 0.60, and a side-slide
+    // recovery window at 15/20/25/30 m/s over 1800 ticks, 24 cells in all --
+    // and the track patch never once entered the thrust block while `rolled`.
+    // So: no ceiling has been MEASURED, and 0.15 stands on ladder_v2 §D's
+    // arithmetic, not on a wall. UNTIL A WALL EXISTS THIS VALUE'S CEILING IS
+    // CHAD'S SEAT. `sled_rolled_throttle_is_dark_on_flat_ground` records the
+    // darkness honestly and must not be read as a ceiling.
+    //
+    // ★ CLAMPED AT USE (FOLDED RED-TEAM P1-4): the kernel clamp01's the
+    // PRODUCT, so an out-of-band env value cannot push `throttle` outside the
+    // [0,1] domain every downstream reader was written against. `clamp01` is
+    // the identity function for every value <= 1.0, identity included.
+    //
+    // ★ THE DRIVEN VALUE, AND WHAT HIS WORD ON IT DOES AND DOES NOT COVER.
+    // Run 3 of the drive: "NOTICED NO DIFFERENCE" -- and the tape said why
+    // (rpm 2645 with W held while rolled, `thrust_n` 0 N on every rolled tick,
+    // because a downed machine's track never touches flat ground, and this exe
+    // has no engine sound), which is the darkness `sled_rolled_throttle_is_
+    // dark_on_flat_ground` pins. Told that, he ruled "3 IS APPROVED", and then
+    // "yes very good" on the combination. So this value is APPROVED ON THE
+    // TAPE AND ON HIS RULING, not on his ear: the day a fixture or a kernel
+    // change gives that track a face to push on, the wall is still owed and
+    // that leg goes red to say so. `docs/SESSION_HANDOFF_20260918_sled_
+    // firstbuild_DRIVEN.md` §2-§3.3.
+    // SLED KERNEL v2, Chad-driven 2026-09-18, identity = 0.0
+    double rolled_throttle_frac = 0.15;
     // --- R4a SEATED SELF-RIGHT (Chad, 2026-08-26) ---------------------------
     // "IF ON THE SEAT AFTER A ROLLOVER PRESSING THE STAND BUTTON AS IN REGULAR
     //  SEATED OPERATION WILL RIGHT THE SLEIGHT ONTO ITS SKIS ... MACHINE NEEDS
@@ -226,6 +281,18 @@ struct SledComfort {
     // 5 km/h = 1.3888... m/s. Hysteretic like every gate in this kernel: it
     // releases at this speed and re-arms at 0.8x, so a machine hovering at the
     // threshold cannot chatter the assist on and off.
+    //
+    // ★★ SLED KERNEL v2, Chad-driven 2026-09-18, identity = 1.3888888888888888
+    // (= 5.0/3.6). HE RAISED HIS OWN NUMBER: "4 is approved I can land upright
+    // more often" (drive run 4). ⚠ THE SHIPPED VALUE IS 4.0 AND IT LIVES IN
+    // `config/scenario.toml [sled_comfort] right_assist_max_ms`, NOT HERE --
+    // `[sled_comfort]` is the loaded table (app/main.cpp `sled_params.comfort =
+    // scen.sled_comfort;`), so the TOML key is what the game and every loader
+    // test actually read. THIS STRUCT DEFAULT IS DELIBERATELY LEFT AT THE
+    // IDENTITY, because it is also the TAPE-ABSENT reconstruction: a tape cut
+    // before a dial existed must replay the kernel that DROVE it, and for the
+    // 34-dial-gap goldens in test/golden/sled that kernel had 1.3889 here.
+    // Moving this line would silently re-drive every one of them.
     double right_assist_max_ms = 5.0 / 3.6;
     double right_assist_rearm_frac = 0.8;
     // "MACHINE NEEDS TO BE TIPPING OVER" -- the assist does nothing to an
@@ -337,6 +404,16 @@ struct SledComfort {
     // ★ It is also exactly the state the ANIMATION needs: rider_lat_m is the
     // posed lateral offset, so the leg extending to push the machine over is
     // this number, not a separate clip.
+    //
+    // ★★ SLED KERNEL v2, Chad-driven 2026-09-18, identity = 1.0. "5 is
+    // approved" (drive run 5), driving 0.5: the automatic brace commands HALF
+    // the shift and his own rocking is live again, which is the whole of what
+    // `selfright_a_timed_rock_beats_a_mistimed_one` measures (the timed-rock
+    // advantage GROWS as this falls: 0.29 s at 1.0, 0.58 s at 0.5).
+    // ⚠ SHIPPED VALUE 0.5 LIVES IN `config/scenario.toml [sled_comfort]
+    // right_stand_shift_frac`, NOT HERE, for the same two reasons as
+    // right_assist_max_ms above: `[sled_comfort]` is the loaded table, and this
+    // struct default doubles as the TAPE-ABSENT reconstruction.
     double right_stand_shift_frac = 1.0;  // x lean_lat_stand_m
 
     double right_assist_min_tilt_rad = 0.35;
@@ -1000,10 +1077,15 @@ struct SledParams {
     // <= 0.0 = OFF (a BRANCH, not 0.0*normal arithmetic — structurally
     // bit-identical to the pre-item-2 kernel), and OFF is also the TAPE-ABSENT
     // reconstruction for every tape recorded before this dial existed.
-    // ★ SHIPS AT 0.0 PENDING MEASUREMENT: the value is NOT invented here. The
-    // fence (tip onset / peak / ratio) and the carve matrix are swept and put
-    // in front of Chad, per NO GUESSING, before any non-zero default.
-    double traction_mu = 0.0;
+    // ★ SHIPPED AT 0.0 PENDING MEASUREMENT until 2026-09-18 -- DISCHARGED, and
+    // discharged the way this comment demanded: the value was NOT invented
+    // here, it was put in front of Chad in his own seat (`SEADS_SLED_TRACTION_
+    // MU`, drive run 2, `docs/SESSION_HANDOFF_20260918_sled_firstbuild_
+    // DRIVEN.md` §2) and he drove it. "a little different jump was more stable
+    // right at the start ... 2 is approved" (run 2), then "yes very good" on
+    // the five-dial combination (run 7).
+    // SLED KERNEL v2, Chad-driven 2026-09-18, identity = 0.0
+    double traction_mu = 3.0;
     // ★ GI S1 (P1-10): 1201 -> 2600. mu_brake is now the TOTAL Coulomb budget
     // that caps the achievable brake force per surface (see SurfaceDials::
     // mu_brake) -- this raw newton figure is only ever the CEILING on top of
@@ -1191,6 +1273,65 @@ struct SledParams {
     // behaviour-neutral today; kept as the file-consistent value and rostered
     // (sled_track_lat_mu_is_the_rostered_value) so it cannot drift unnoticed.
     double track_lat_mu = 0.70;      // a track slides sideways poorly
+    // --- B3 THE THROTTLE HAS TO SWING THE TAIL (Chad, 2026-09-18) ----------
+    // "throttle should also be able to swing my tail around on account of the
+    //  roost, esp with weight shifting of the sudburian"
+    //
+    // How much of the track's LATERAL grip is shed per unit of the
+    // longitudinal slip it is already spending. LITERATURE: a friction
+    // ellipse / combined-slip law is universal in tyre and terramechanics
+    // models -- a contact patch spending its budget forwards has less left
+    // sideways -- and THIS KERNEL HAS NONE. grep finds only `mu_brake`, which
+    // caps longitudinal braking and never charges lateral.
+    //
+    // 0.0 is the shipped kernel: a BRANCH, not a multiply, so the shed term
+    // does not exist at all at identity and `mu_l` is the shipped expression
+    // byte for byte.
+    //
+    // ⚠ THE HONEST LIMIT, IN THE HEADER WHERE NOBODY CAN MISS IT: shedding the
+    // track's lateral mu removes the yaw resistance that keeps a ski-on-a-bank
+    // strike from becoming a SPIN -- and "often rolling when hitting banks ...
+    // a ski hitting the bank on one side" is his loudest OLD complaint. This
+    // dial and that complaint pull in opposite directions BY CONSTRUCTION. The
+    // drive owes two separate answers (did the tail come around / DID SHE ROLL
+    // MORE) and the second outranks the first. If the banks got worse the fix
+    // is the lean-gated fallback form -- `(1.0 + align_m)` -> `align_m`, so a
+    // straight line sheds nothing -- NOT a smaller number.
+    //
+    // ⚠ TRACK ONLY (`g.is_track`). It keeps `plane_lat_lean_gain`'s discipline
+    // -- lean buys ski plate, never track plate -- but it is REDUNDANT BY
+    // SCOPE today and NO LEG CAN RED ON DELETING IT (FOLDED RED-TEAM P1-3
+    // law+feel / P2-1 mechanism, MEASURED): the slip and flux it reads are
+    // per-patch locals written only inside the track branch, so a ski patch
+    // evaluates `mu_l *= 1.0`. Keep the guard; do not claim a gate watches it.
+    // The hazard it really defends against is a future lane hoisting those
+    // locals to substep scope.
+    //
+    // ★★ THE TERM AS BUILT, AFTER THE RED-TEAM FOLD, IS
+    //   `mu_l *= max(0, 1 - shed * flux * (drive + (1-drive)*clutch_blend)
+    //                       * (1 + align_m))`
+    // and the two middle factors are folds, not decoration:
+    //   `flux` (= |trk_slip| * avail) instead of `|trk_slip|` -- FOLDED P1-3
+    //     (mechanism). `avail` is identically 0 on the non-sinkable rows, so
+    //     the dial is DARK on a plowed road and on lake ice. His sentence says
+    //     "on account of the roost"; `flux` IS the roost.
+    //   the CLUTCH/DRIVE DECOUPLE -- FOLDED P1-2 (mechanism). With the thumb
+    //     shut below 3.0 m/s the bare slip is exactly -1, the largest value
+    //     this dial can ever see, at ZERO throttle. Without the decouple,
+    //     closing the throttle would not hook the tail back up in precisely
+    //     the regime the bank strikes live in.
+    // ⚠ THIS IS A DEVIATION FROM ladder_v2 §4.3, WHICH SPECIFIED `|trk_slip|`
+    // ALONE. It is a red-team fold, recorded in the handoff FOLD LOG, and the
+    // ladder owes a correction or a ruling beside it.
+    //
+    // ★ THE DRIVEN VALUE. Chad climbed this one himself, three rungs in one
+    // sitting: 0.4 "it needs more fishtail", 0.8 "a little more fishtail even
+    // still", 1.4 "okay good" -- and no roll complaint at any step (the ladder
+    // is the roost-scaled one, so 1.4 here is NOT 1.4 of bare slip; see the
+    // arithmetic above). `docs/SESSION_HANDOFF_20260918_sled_firstbuild_
+    // DRIVEN.md` §2 run 6, combination approved in run 7.
+    // SLED KERNEL v2, Chad-driven 2026-09-18, identity = 0.0
+    double track_lat_slip_shed = 1.4;
     // ★ GI S2.6 (plane_fit_load_weight, P0-5 restored): the roll-assist
     // reference plane (sled.cpp's `n_surf`, fit through the three patch
     // ground points) by default used every patch's ground point equally --

@@ -154,7 +154,162 @@ RockResult rock(const sim::SledParams& p, double tilt0, double lean_lat,
     return r;
 }
 
+
+// ★★ B2b THE PENDULUM (ladder_v2 §4.4 -- THE LEG THAT DECIDES THE RUNG).
+// Chad, 2026-09-18: "self righting with a press and I want to be able to self
+// right by rocking bodyweight back an fourth while pressing stand on and off,
+// gain pendulum momentum (NOT AUTOMATIC RE RIGHTING)."
+//
+// Same 180 deg start, same STAND cadence; the ONLY difference between the arms
+// is WHEN his body goes across. `lean_lat` is a square wave keyed to the sign of
+// the body roll rate `angular_vel.z`.
+//
+// ⚠ THE SIGN CONVENTION IS MEASURED, NOT ASSUMED, AND IT IS THE OPPOSITE OF THE
+// OBVIOUS ONE. Body +Z is BACKWARD (body -Z is forward, SPEC §7), so a positive
+// `angular_vel.z` is a roll toward NEGATIVE `lean_lat`. The arm that adds energy
+// to the swing -- the one a child uses on a swing set -- is therefore
+// `lean_lat = -sign(angular_vel.z)`, and that is what `phase = +1` means here.
+// MEASURED at 178 deg / frac 0.5: -sign rights in 1.48 s, +sign in 2.06 s. If
+// `phase` were defined the naive way this leg would assert the mistimed arm is
+// faster and would be permanently red for a reason that has nothing to do with
+// the mechanism.
+struct PumpResult {
+    double t_right = -1.0;  // seconds to come under right_tilt_lo_rad; -1 never
+    double tilt_final = 0.0;
+    bool hit_150 = false;
+};
+
+PumpResult pump(const sim::SledParams& p, double tilt0, double on_s,
+                double off_s, double total_s, int phase) {
+    const world::SnowpackField f = field();
+    sim::SledState s = settled(p, tilt0, 0.0, 0.0, f);
+    sim::SledInputs in;
+    PumpResult r;
+    const double dt = 1.0 / 120.0;
+    const int n = static_cast<int>(total_s / dt);
+    const double period = on_s + off_s;
+    for (int i = 0; i < n; ++i) {
+        const double t = static_cast<double>(i) * dt;
+        in.stand = (std::fmod(t, period) < on_s) ? 1.0f : 0.0f;
+        if (phase == 0) {
+            // ★★ FOLDED RED-TEAM P1-5: THE HUMAN-CADENCE ARM. `phase` +/-1 is a
+            // 120 Hz sign-following BANG-BANG controller -- perfect-information
+            // feedback, not a hand on a mouse. It proves "a feedback controller
+            // beats an anti-feedback controller", which for a pendulum is
+            // nearly a tautology. This arm is a FREE-RUNNING square wave
+            // phase-locked to the PRESS (the same 1.0 s / 0.7 s rhythm his
+            // thumb is on) and blind to `angular_vel.z` -- the closest thing a
+            // fixture can get to a man rocking in time with his own pressing.
+            in.lean_lat = (std::fmod(t, period) < on_s) ? 1.0f : -1.0f;
+        } else {
+            const double w = s.angular_vel.z;
+            const double sgn = (w > 0.0) ? -1.0 : (w < 0.0 ? 1.0 : 0.0);
+            in.lean_lat = static_cast<float>(phase * sgn);
+        }
+        s = sim::step_sled(s, in, p, f, dt);
+        const double tl = tilt_of(s);
+        if (tl > 150.0 * kDeg) r.hit_150 = true;
+        if (r.t_right < 0.0 && tl < p.comfort.right_tilt_lo_rad) r.t_right = t;
+    }
+    r.tilt_final = tilt_of(s);
+    return r;
+}
+
 }  // namespace
+
+TEST_CASE("selfright_a_timed_rock_beats_a_mistimed_one") {
+    // THE CLAIM, in his words: at B2b's candidate the TIMING has to matter.
+    //
+    // ★★ AND A REPORT AGAINST THE SPEC'S OWN POSITIVE CONTROL. §4.4 predicts
+    // that at the shipped 1.0 the leg "should show NO discrimination", because
+    // the automatic brace commands the whole shift. MEASURED, IT DOES NOT:
+    // at 1.0 the timed rock still wins, 1.48 s against 1.77 s. The brace does
+    // not drown his body -- it is ADDED to it. sim/sled.cpp:417-421:
+    // `lat_target_sr = clamp(target_lat_m + right_shift_cmd * frac *
+    // lean_lat_stand_m, +/- lean_lat_stand_m)`. His lean is never REPLACED; at
+    // 1.0 the brace can only saturate the clamp on one side, which is why the
+    // advantage shrinks instead of vanishing. So the positive control as
+    // written is FALSE, and it is reported here rather than asserted.
+    //
+    // What IS true, measured, and is the rung's actual claim: the discrimination
+    // GROWS as the brace is turned down. 0.29 s of advantage at 1.0, 0.58 s at
+    // 0.5, and at 0.25 and 0.0 the mistimed arm never rights from inversion at
+    // all. That ordering is what this leg asserts.
+    //
+    // KILLED BY: `right_stand_shift_frac` not reaching the rider's lateral
+    // target at all (an app override that writes a field nobody reads, or the
+    // frac dropped from the clamp) -- both gaps then come out equal and the
+    // final REQUIRE reds. Also killed by a fixture that holds a CONSTANT lean:
+    // that measures which SIDE he picked, not when he went there, and both arms
+    // would separate for the wrong reason.
+    const double kStart = 178.0 * kDeg;
+    auto gap = [&](double frac) {
+        sim::SledParams p = shipped();
+        p.comfort.right_stand_shift_frac = frac;
+        const PumpResult timed = pump(p, kStart, 1.0, 0.7, 16.0, +1);
+        const PumpResult mistimed = pump(p, kStart, 1.0, 0.7, 16.0, -1);
+        REQUIRE(timed.hit_150);     // both arms really started inverted
+        REQUIRE(mistimed.hit_150);
+        REQUIRE(timed.t_right >= 0.0);  // the timed rock always comes up
+        std::printf("[B2 pendulum] frac=%.2f  timed=%6.2f s  mistimed=%6.2f s "
+                    "(end %5.1f deg)\n",
+                    frac, timed.t_right, mistimed.t_right,
+                    mistimed.tilt_final / kDeg);
+        // A mistimed rock that NEVER rights is an infinite advantage; score it
+        // as the whole run so the ordering below stays well defined.
+        const double m = mistimed.t_right < 0.0 ? 16.0 : mistimed.t_right;
+        return m - timed.t_right;
+    };
+    const double at_shipped = gap(1.0);   // the brace carries most of it
+    const double at_candidate = gap(0.5); // B2b's drive value
+    const double at_quarter = gap(0.25);
+    REQUIRE(at_candidate > at_shipped);   // turning the brace down ...
+    REQUIRE(at_quarter > at_candidate);   // ... makes the timing matter MORE
+    REQUIRE(at_candidate > 0.0);          // and at the candidate, timing wins
+
+    // ★★ FOLDED RED-TEAM P1-5 (law+feel): B2b IS A SUBTRACTION SOLD AS A GAIN,
+    // AND THIS LEG'S OWN ROWS SAY SO. MEASURED, timed / mistimed, in seconds:
+    //     frac 1.00   1.48 / 1.77
+    //     frac 0.50   1.48 / 2.06
+    //     frac 0.25   1.51 / never (ends 107.7 deg)
+    //     frac 0.00   1.57 / never (ends 107.4 deg)
+    // THE TIMED ARM NEVER IMPROVES -- it gets slightly SLOWER, 1.48 -> 1.57 s.
+    // Every bit of the widening gap comes from the MISTIMED arm degrading. So
+    // what this dial delivers is not "gain pendulum momentum"; it is "a bad
+    // rhythm stops being free". That may still be the feel he wants -- a
+    // mechanic you can fail is a mechanic -- but it is a DIFFERENT mechanic
+    // from the one his sentence asks for, the four rows are on his drive sheet
+    // above run 5, and handoff §5 carries the owed ruling: DID YOU WANT THE
+    // ROCK ITSELF TO PAY? If yes, `right_stand_shift_frac` is the wrong dial
+    // entirely and the rung needs a term converting his lean RATE into
+    // righting torque -- another dial, another night.
+    //
+    // ★ AND THE THIRD ARM, because the two above are bang-bang controllers.
+    // `phase == 0` is a FREE-RUNNING human cadence, phase-locked to the press
+    // and blind to the roll rate. The claim it tests is the one that actually
+    // matters to a hand: does a rock that is merely IN RHYTHM WITH THE PRESSING
+    // beat one that is fighting the machine? Reported at both ends of the dial;
+    // asserted only where the measurement supports it.
+    auto human = [&](double frac) {
+        sim::SledParams p = shipped();
+        p.comfort.right_stand_shift_frac = frac;
+        const PumpResult free_run = pump(p, kStart, 1.0, 0.7, 16.0, 0);
+        const PumpResult mistimed = pump(p, kStart, 1.0, 0.7, 16.0, -1);
+        std::printf("[B2 human] frac=%.2f  free-running=%6.2f s (end %5.1f "
+                    "deg)  mistimed=%6.2f s\n",
+                    frac, free_run.t_right, free_run.tilt_final / kDeg,
+                    mistimed.t_right);
+        return free_run;
+    };
+    const PumpResult human_shipped = human(1.0);
+    const PumpResult human_candidate = human(0.5);
+    // A free-running rock must still right her at the drive value, or the rung
+    // is not established FOR A HAND and that is a finding worth more than this
+    // leg's pass. KILLED BY: a dial that only works for a 120 Hz controller.
+    REQUIRE(human_candidate.hit_150);
+    REQUIRE(human_candidate.t_right >= 0.0);
+    REQUIRE(human_shipped.t_right >= 0.0);
+}
 
 // ★★ THE LEG THAT CATCHES v1's KILLER DEFECT. v1's error signal was
 // -up_body.x = sin(tilt), IDENTICALLY ZERO at 180 deg: at the one attitude Chad
@@ -298,10 +453,29 @@ TEST_CASE("selfright: an upright machine is untouched") {
 
 // "NOT ABOVE 5KM/H" -- measured on the READOUT, because an outcome test cannot
 // tell a closed gate from a machine that slowed down and rightly rose.
-TEST_CASE("selfright: above 5 km/h it cannot happen") {
+//
+// ⚠⚠ RENAMED AND RE-BASED AT SLED KERNEL v2 (Chad 2026-09-18). It was
+// `selfright: above 5 km/h it cannot happen` and it drove a FIXED 4.0 m/s
+// against a gate that was 1.3889 m/s -- a hard-coded speed that only worked
+// while the gate stood still. HE MOVED THE GATE HIMSELF: "4 is approved I can
+// land upright more often" (drive run 4), so `[sled_comfort]
+// right_assist_max_ms` is 4.0 m/s now and a 4.0 m/s fixture sits exactly ON the
+// threshold and never disarms. THE LAW IS UNCHANGED AND IS WHAT THIS LEG STILL
+// ASSERTS -- there is a speed above which the assist cannot happen, and above
+// it the assist is SILENT, not merely weak. Only the number is read from the
+// shipped table instead of being retyped, which is the same fix `shipped()`
+// itself was written for (see the banner at the top of this file).
+TEST_CASE("selfright: above the shipped speed gate it cannot happen") {
     const sim::SledParams p = shipped();
     const world::SnowpackField f = field();
-    sim::SledState s = tipped_raw(p, f, 90.0 * kDeg, 4.0);
+    // Comfortably above the gate, whatever the gate is. TWICE the gate, and
+    // the factor is MEASURED on this fixture, not picked: over 240 ticks from a
+    // 90 deg tip the assist never disarms at 1.5x (6.0 m/s) because the 0.5 s
+    // low-pass is still climbing while she drags to a stop, and disarms at
+    // 2x / 3x / 4x / 6x (8, 12, 16, 24 m/s). The old fixed 4.0 m/s was 2.88x
+    // the pre-v2 gate, so 2x is if anything the tighter test.
+    const double v_over = p.comfort.right_assist_max_ms * 2.0;
+    sim::SledState s = tipped_raw(p, f, 90.0 * kDeg, v_over);
     sim::SledInputs in;
     in.stand = 1.0f;
     // The low-pass needs a moment to see the real speed (tau = 0.5 s); that is
@@ -315,6 +489,9 @@ TEST_CASE("selfright: above 5 km/h it cannot happen") {
         }
     }
     REQUIRE(ever_disarmed);  // non-vacuity: the gate really did close
+    // ★ v2 PIN: the shipped gate is Chad's driven 4.0 m/s, by name, so this leg
+    // reds if the TOML key is quietly walked back to the pre-v2 1.3889.
+    REQUIRE(p.comfort.right_assist_max_ms == 4.0);
 }
 
 // ★ THE GATE MUST NOT EAT ITS OWN MECHANIC. A healthy rock sways the CG fast
@@ -324,7 +501,21 @@ TEST_CASE("selfright: rocking does not trip its own speed gate") {
     const sim::SledParams p = shipped();
     const RockResult paced = rock(p, 178.0 * kDeg, 1.0, 1.0, 0.7, 12.0);
     REQUIRE(paced.tilt_final < p.comfort.right_tilt_lo_rad);
-    REQUIRE(paced.gs_peak > p.comfort.right_assist_max_ms * 0.5);
+    // ⚠ THE NON-VACUITY CLAUSE IS MEASURED AGAINST THE **PRE-v2** RAW GATE, AS
+    // AN EXPLICIT CONSTANT, AND HERE IS WHY (SLED KERNEL v2, 2026-09-18).
+    // The claim is "a healthy rock sways the CG fast enough to cross the RAW
+    // gate, and the 0.5 s low-pass is what stops that disarming the assist
+    // mid-swing". MEASURED, the rock peaks at 1.9224 m/s. Against the pre-v2
+    // gate of 1.3889 m/s that is 1.38x the whole gate -- the hazard was real and
+    // the low-pass is why it never bit. Chad's v2 gate is 4.0 m/s, so the rock
+    // now peaks at 0.48x the gate and the hazard has receded; writing the clause
+    // as `> shipped_gate * 0.5` would red for the wrong reason (1.9224 > 2.0 is
+    // false) and would be asserting that the rock is FAST, which was never the
+    // claim. The constant below is the gate the hazard was measured against.
+    constexpr double kPreV2RawGateMs = 5.0 / 3.6;  // 1.3888888888888888
+    REQUIRE(paced.gs_peak > kPreV2RawGateMs);
+    // ... and the headroom his v2 gate bought, stated rather than implied.
+    REQUIRE(paced.gs_peak < p.comfort.right_assist_max_ms);
 }
 
 // A TUCK is not a stand; each arm compared against the SAME input with the

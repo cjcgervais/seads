@@ -120,6 +120,66 @@ inline int ribbon_tr_splits(const glm::dvec3& dL, const glm::dvec3& dR, double R
     return n;
 }
 
+// ---------------------------------------------------------------------------
+// ★ ROAD-REPAIR / F2 -- THE SHARED RUNG EVALUATOR, and the reason the junction
+// seam is gap-free rather than merely small.
+//
+// The two edge directions and the two (s, v) pairs of the rung at parameter `t`
+// in [0,1] across baked quad `m`. t == 0 and t == 1 return the EXACT baked
+// values (never a normalize() round-trip of them); the interior is the same
+// normalized lerp this file has always used. build_ribbon_batches below and
+// render/ribbon_junction.h's cap builder BOTH call this, so a trimmed leg end
+// and the cap edge that meets it are bit-for-bit the same three floats -- the
+// seam gap is identically zero by construction.
+// ---------------------------------------------------------------------------
+inline void ribbon_rung_at(const GisRibbonPath& P, int m, double t,
+                           glm::dvec3* dL, glm::dvec3* dR, float* sL, float* sR,
+                           float* vL, float* vR) {
+    const GisRibbonVertex& VL0 = kSudburyRibbonVerts[P.vtx_off + 2 * m];
+    const GisRibbonVertex& VR0 = kSudburyRibbonVerts[P.vtx_off + 2 * m + 1];
+    const GisRibbonVertex& VL1 = kSudburyRibbonVerts[P.vtx_off + 2 * m + 2];
+    const GisRibbonVertex& VR1 = kSudburyRibbonVerts[P.vtx_off + 2 * m + 3];
+    const glm::dvec3 dL0(VL0.dir[0], VL0.dir[1], VL0.dir[2]);
+    const glm::dvec3 dR0(VR0.dir[0], VR0.dir[1], VR0.dir[2]);
+    const glm::dvec3 dL1(VL1.dir[0], VL1.dir[1], VL1.dir[2]);
+    const glm::dvec3 dR1(VR1.dir[0], VR1.dir[1], VR1.dir[2]);
+    if (t <= 0.0) {
+        *dL = dL0; *dR = dR0;
+        *sL = VL0.s; *sR = VR0.s; *vL = VL0.v; *vR = VR0.v;
+        return;
+    }
+    if (t >= 1.0) {
+        *dL = dL1; *dR = dR1;
+        *sL = VL1.s; *sR = VR1.s; *vL = VL1.v; *vR = VR1.v;
+        return;
+    }
+    const float tf = static_cast<float>(t);
+    *dL = glm::normalize(dL0 + (dL1 - dL0) * t);
+    *dR = glm::normalize(dR0 + (dR1 - dR0) * t);
+    *sL = VL0.s + (VL1.s - VL0.s) * tf;
+    *sR = VR0.s + (VR1.s - VR0.s) * tf;
+    *vL = VL0.v + (VL1.v - VL0.v) * tf;
+    *vR = VR0.v + (VR1.v - VR0.v) * tf;
+}
+
+// The drawn centreline direction of the rung at parameter t in quad m.
+inline glm::dvec3 ribbon_centre_at(const GisRibbonPath& P, int m, double t) {
+    glm::dvec3 dL, dR;
+    float a, b, c, d;
+    ribbon_rung_at(P, m, t, &dL, &dR, &a, &b, &c, &d);
+    return glm::normalize(dL + dR);
+}
+
+// ★ ROAD-REPAIR / F2: what survives of one baked quad after the junction cut.
+// The DEFAULT IS THE IDENTITY, and a trim list holding only defaults produces
+// the pre-F2 mesh. `drop` is a quad that lies wholly inside a junction cap.
+struct RibbonQuadTrim {
+    double t_lo = 0.0;  // the quad is drawn over [t_lo, t_hi] ...
+    double t_hi = 1.0;
+    bool drop = false;  // ... or not at all
+    bool cut() const { return drop || t_lo > 0.0 || t_hi < 1.0; }
+};
+
 // The direction at lateral fraction u in [0,1] across a rung.
 inline glm::dvec3 ribbon_lat_dir(const glm::dvec3& dL, const glm::dvec3& dR,
                                  double u) {
@@ -208,10 +268,18 @@ struct RibbonBatchCPU {
 // each surviving triangle; every sub-quad then emits exactly those patterns.
 // A clipped original triangle therefore clips ALL of its children, and a
 // surviving one keeps its original winding by construction.
+//
+// ★ ROAD-REPAIR / F2: `trim`, when non-null, is the JUNCTION CUT -- one entry
+// per baked quad saying which parametric slice [t_lo, t_hi] of it survives, or
+// that it is wholly inside a junction cap and is not drawn at all. nullptr is
+// the identity and is what every caller passed before F2 existed. The trimmed
+// rung is evaluated by `ribbon_rung_at`, the SAME function the cap builder
+// calls, so the leg end and the cap edge that meets it are the same floats.
 inline std::vector<RibbonBatchCPU> build_ribbon_batches(
     const GisRibbonPath& P, const std::vector<unsigned short>& kept,
     const std::function<double(const glm::dvec3&)>& radius_fn, double lift,
-    double R, double max_seg_m, double max_tr_m = 0.0) {
+    double R, double max_seg_m, double max_tr_m = 0.0,
+    const std::vector<RibbonQuadTrim>* trim = nullptr) {
     std::vector<RibbonBatchCPU> out;
     if (kept.empty()) return out;
 
@@ -241,7 +309,7 @@ inline std::vector<RibbonBatchCPU> build_ribbon_batches(
     };
 
     // --- the IDENTITY: the pre-cut mesh, vertex for vertex, index for index -
-    if (!(max_seg_m > 0.0) && !(max_tr_m > 0.0)) {
+    if (!(max_seg_m > 0.0) && !(max_tr_m > 0.0) && trim == nullptr) {
         whole_path_batch(kept);
         return out;
     }
@@ -275,17 +343,32 @@ inline std::vector<RibbonBatchCPU> build_ribbon_batches(
     out.emplace_back();
     int last_quad = -2;  // the quad emitted immediately before ...
     int last_nt = 0;     // ... its column count, and its FINAL rung's row of
+    bool last_open_end = true;  //  ... whether it ran to its own t == 1, and
     std::vector<unsigned short> last_row;  //     indices, shared into rung 0.
     std::vector<unsigned short> grid;      // (n+1) x (nt+1), row-major
     for (int m = 0; m + 1 < nrungs; ++m) {
         const std::vector<unsigned char>& q = pat[static_cast<std::size_t>(m)];
         if (q.empty()) continue;
-        const glm::dvec3 dL0 = vdir(2 * m), dR0 = vdir(2 * m + 1);
-        const glm::dvec3 dL1 = vdir(2 * m + 2), dR1 = vdir(2 * m + 3);
-        const GisRibbonVertex& VL0 = kSudburyRibbonVerts[P.vtx_off + 2 * m];
-        const GisRibbonVertex& VR0 = kSudburyRibbonVerts[P.vtx_off + 2 * m + 1];
-        const GisRibbonVertex& VL1 = kSudburyRibbonVerts[P.vtx_off + 2 * m + 2];
-        const GisRibbonVertex& VR1 = kSudburyRibbonVerts[P.vtx_off + 2 * m + 3];
+        // ★ F2: the junction cut. A quad inside a cap is not drawn; a quad the
+        // boundary crosses is drawn over its surviving slice only.
+        double t0q = 0.0, t1q = 1.0;
+        if (trim != nullptr) {
+            if (static_cast<std::size_t>(m) >= trim->size()) continue;
+            const RibbonQuadTrim& tq = (*trim)[static_cast<std::size_t>(m)];
+            if (tq.drop) continue;
+            t0q = tq.t_lo;
+            t1q = tq.t_hi;
+            if (!(t1q > t0q)) continue;
+        }
+        // The BAKED rungs still set the column count -- ribbon_quad_columns in
+        // render/ribbon_junction.h predicts nt from these same two, and the cap
+        // edge is built with that prediction.
+        const glm::dvec3 bL0 = vdir(2 * m), bR0 = vdir(2 * m + 1);
+        const glm::dvec3 bL1 = vdir(2 * m + 2), bR1 = vdir(2 * m + 3);
+        glm::dvec3 dL0, dR0, dL1, dR1;
+        float sL0, sR0, vL0f, vR0f, sL1, sR1, vL1f, vR1f;
+        ribbon_rung_at(P, m, t0q, &dL0, &dR0, &sL0, &sR0, &vL0f, &vR0f);
+        ribbon_rung_at(P, m, t1q, &dL1, &dR1, &sL1, &sR1, &vL1f, &vR1f);
         const glm::dvec3 c0 = glm::normalize(dL0 + dR0);
         const glm::dvec3 c1 = glm::normalize(dL1 + dR1);
         const int n = ribbon_seg_splits(c0, c1, R, max_seg_m);
@@ -299,12 +382,15 @@ inline std::vector<RibbonBatchCPU> build_ribbon_batches(
         const bool whole_quad = (q.size() == 6);
         const int nt =
             whole_quad
-                ? std::max(ribbon_tr_splits(dL0, dR0, R, max_tr_m),
-                           ribbon_tr_splits(dL1, dR1, R, max_tr_m))
+                ? std::max(ribbon_tr_splits(bL0, bR0, R, max_tr_m),
+                           ribbon_tr_splits(bL1, bR1, R, max_tr_m))
                 : 1;
 
         RibbonBatchCPU* b = &out.back();
-        bool share = (last_quad == m - 1 && last_nt == nt);
+        // ★ F2: a shared row is only legal when the two quads actually meet at
+        // the baked rung -- a trimmed end does not.
+        bool share = (last_quad == m - 1 && last_nt == nt && last_open_end &&
+                      t0q <= 0.0);
         const std::size_t cols = static_cast<std::size_t>(nt) + 1;
         const std::size_t need =
             cols * static_cast<std::size_t>(share ? n : n + 1);
@@ -329,27 +415,20 @@ inline std::vector<RibbonBatchCPU> build_ribbon_batches(
                 for (std::size_t i = 0; i < cols; ++i) grid[i] = last_row[i];
                 continue;
             }
-            // The rung's own edges: EXACT baked values at the two ends, the
-            // normalized interpolation between.
-            glm::dvec3 dLj = dL0, dRj = dR0;
-            float sL = VL0.s, sR = VR0.s, vL = VL0.v, vR = VR0.v;
-            if (j == n) {
-                dLj = dL1;
-                dRj = dR1;
-                sL = VL1.s;
-                sR = VR1.s;
-                vL = VL1.v;
-                vR = VR1.v;
-            } else if (j != 0) {
-                const double t = static_cast<double>(j) / static_cast<double>(n);
-                const float tf = static_cast<float>(t);
-                dLj = glm::normalize(dL0 + (dL1 - dL0) * t);
-                dRj = glm::normalize(dR0 + (dR1 - dR0) * t);
-                sL = VL0.s + (VL1.s - VL0.s) * tf;
-                sR = VR0.s + (VR1.s - VR0.s) * tf;
-                vL = VL0.v + (VL1.v - VL0.v) * tf;
-                vR = VR0.v + (VR1.v - VR0.v) * tf;
-            }
+            // The rung's own edges. ★ F2: one evaluator, `ribbon_rung_at`, for
+            // every row -- it returns the EXACT baked values at t == 0 and
+            // t == 1 (so the untrimmed drape is unchanged) and the same
+            // normalized interpolation between. j == 0 and j == n take t0q/t1q
+            // VERBATIM rather than through the arithmetic, so a trimmed end is
+            // the identical double the cap builder is handed.
+            const double t = (j == 0)   ? t0q
+                             : (j == n) ? t1q
+                                        : t0q + (t1q - t0q) *
+                                                    static_cast<double>(j) /
+                                                    static_cast<double>(n);
+            glm::dvec3 dLj, dRj;
+            float sL, sR, vL, vR;
+            ribbon_rung_at(P, m, t, &dLj, &dRj, &sL, &sR, &vL, &vR);
             for (int i = 0; i <= nt; ++i) {
                 const double u = static_cast<double>(i) / nt;
                 const float uf = static_cast<float>(u);
@@ -375,6 +454,7 @@ inline std::vector<RibbonBatchCPU> build_ribbon_batches(
                     }
         last_quad = m;
         last_nt = nt;
+        last_open_end = (t1q >= 1.0);
         last_row.assign(grid.begin() + static_cast<std::ptrdiff_t>(
                                            static_cast<std::size_t>(n) * cols),
                         grid.end());

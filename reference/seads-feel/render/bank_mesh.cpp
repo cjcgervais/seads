@@ -1,6 +1,7 @@
 #include "render/bank_mesh.h"
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <glm/geometric.hpp>
 #include <thread>
@@ -38,10 +39,46 @@
 //       into chunks, so a chunk seam and a left/right pair cannot disagree.
 //   R4  The ring set is refined until its chord error is under chord_tol_m.
 //       The shipped 7 knots chorded the C1 section by 0.178 m.
+//
+// ★ ROAD-REPAIR F1 (2026-09-12, "eyesores in the intersections and corners of
+// roads ... z flashing all over"). ONE change: a bank station whose rings lie
+// inside a DRAWN road deck yields -- it is demoted to R1's taper CAP and the
+// strip breaks. The predicate is new; the machinery it drives is R1's, and the
+// dial `[bank_mesh] deck_yield_m` is 0.0-identity by a branch. See
+// bank_mesh.h's BankBuildParams::deck_yield_m for the law and the measurement.
 
 namespace render {
 
 namespace {
+
+// ★ ROAD-REPAIR F1 -- THE YIELD LEDGER. Relaxed atomics: a counter per 5 cm of
+// penetration, so the whole distribution comes out of ONE armed run and the
+// dial is CHOSEN rather than guessed. Order-independent by construction (they
+// are counts), so the pool's scheduling cannot change the report.
+constexpr int kYieldBins = 401;      // 0.00 .. 20.00 m, 5 cm, last = overflow
+constexpr double kYieldBinM = 0.05;
+std::atomic<long long> g_yield_bin[kYieldBins];
+std::atomic<long long> g_yield_stations{0};
+std::atomic<long long> g_yield_capped{0};
+
+// ★ THE SEARCH RADIUS for the deck query, and why it is a constant and not a
+// dial. It is not a tuning knob: it only has to be wider than the widest drawn
+// deck on the map, because a segment further away than its own half-width can
+// never contribute a positive penetration. The widest recovered half-width in
+// the bake is ~9.6 m plus up to 2x miter inflation at a corner; 60 m clears
+// that by more than 3x and still fits inside the linework grid's 120 m cell,
+// so the query stays a 3x3 cell walk. A DIAL here could be set too small and
+// would then silently under-report the overlap it exists to find.
+constexpr double kDeckSearchM = 60.0;
+
+void yield_note(double pen, bool capped) {
+    int b = static_cast<int>(pen / kYieldBinM);
+    if (b < 0) b = 0;
+    if (b >= kYieldBins) b = kYieldBins - 1;
+    g_yield_bin[b].fetch_add(1, std::memory_order_relaxed);
+    g_yield_stations.fetch_add(1, std::memory_order_relaxed);
+    if (capped) g_yield_capped.fetch_add(1, std::memory_order_relaxed);
+}
 
 inline double ss01(double x) {
     const double t = x < 0.0 ? 0.0 : (x > 1.0 ? 1.0 : x);
@@ -442,6 +479,40 @@ long build_bank_run(const std::vector<glm::dvec3>& ctr,
             // bank_height_m.
             st.state = (depth_max - ambient_out < p.min_amp_m) ? 1 : 2;
 
+            // ★ ROAD-REPAIR F1 -- THE BANK YIELDS TO THE DECK. A FULL station
+            // whose rings land more than deck_yield_m inside a drawn deck is
+            // demoted to R1's CAP, and phase C breaks the strip on it.
+            //
+            // THE PROBE SET is three of the ring directions THIS STATION HAS
+            // ALREADY COMPOSED -- the foot (offset 0, which is the drawn edge
+            // of its own way), the middle of the bank, and the outer bank ring
+            // -- so the probe costs three corridor queries and not one new
+            // normalize. Three and not `nb`, deliberately: the penetration is
+            // monotone-ish across the ring column (the rings march outward
+            // along one ray), so three samples bracket it, and nb samples
+            // would have doubled the build's corridor traffic to refine a
+            // threshold decision that is already made in metres.
+            //
+            // ⚠ The station's OWN way is NOT excluded, and that is the point:
+            // on a straight run the foot sits exactly ON its own drawn edge,
+            // so its own segment contributes a penetration of ~0 and changes
+            // nothing -- while at a MITERED CORNER its own drawn deck swings
+            // out past the nominal half-width and the foot really is inside
+            // its own asphalt. Excluding the own way would blind the predicate
+            // to exactly the corners Chad named.
+            if (p.deck_yield_m > 0.0 && st.state == 2 && snow.lines != nullptr) {
+                const int probe[3] = {0, nb / 2, nb - 1};
+                double pen = 0.0;
+                for (const int pr : probe)
+                    pen = std::max(
+                        pen, snow.lines->deck_penetration_m(
+                                 st.d[static_cast<std::size_t>(pr)],
+                                 kDeckSearchM));
+                const bool yields = pen > p.deck_yield_m;
+                yield_note(pen, yields);
+                if (yields) st.state = 1;
+            }
+
             // ★ ROAD-REPAIR RUNG 2 -- THE APRON. Built on THIS side, from the
             // outer skirt ring outward, riding drive_radius_at: the anti-fork
             // line again, one surface further out. Not one call of any of it
@@ -665,6 +736,58 @@ long build_bank_run(const std::vector<glm::dvec3>& ctr,
     return verts;
 }
 
+// ★ ROAD-REPAIR F1 -- THE YIELD LEDGER, read out. Percentiles are taken on the
+// 5 cm bins, reported at the bin's UPPER edge, so a quoted p90 is a number the
+// dial can be set to without ambiguity about which side of the bin it lands.
+BankDeckYieldStat bank_deck_yield_stat() {
+    BankDeckYieldStat s;
+    s.stations = g_yield_stations.load(std::memory_order_relaxed);
+    s.capped = g_yield_capped.load(std::memory_order_relaxed);
+    if (s.stations <= 0) return s;
+    const auto at = [&](double q) {
+        const long long want =
+            static_cast<long long>(q * static_cast<double>(s.stations));
+        long long run = 0;
+        for (int b = 0; b < kYieldBins; ++b) {
+            run += g_yield_bin[b].load(std::memory_order_relaxed);
+            if (run >= want) return (b + 1) * kYieldBinM;
+        }
+        return kYieldBins * kYieldBinM;
+    };
+    s.pen_p50 = at(0.50);
+    s.pen_p90 = at(0.90);
+    s.pen_p99 = at(0.99);
+    for (int b = kYieldBins - 1; b >= 0; --b)
+        if (g_yield_bin[b].load(std::memory_order_relaxed) > 0) {
+            s.pen_max = (b + 1) * kYieldBinM;
+            break;
+        }
+    return s;
+}
+
+double bank_deck_yield_fraction_over(double thresh_m) {
+    const long long total = g_yield_stations.load(std::memory_order_relaxed);
+    if (total <= 0) return 0.0;
+    // A station in bin b has penetration in [b*bin, (b+1)*bin), so the bin the
+    // threshold falls INSIDE is only partly over it. It is counted whole,
+    // deliberately: over-reporting the cost of a dial by at most one 5 cm
+    // bucket is the safe direction for a number used to decide how much bank
+    // to delete.
+    int first = static_cast<int>(thresh_m / kYieldBinM);
+    if (first < 0) first = 0;
+    long long over = 0;
+    for (int b = first; b < kYieldBins; ++b)
+        over += g_yield_bin[b].load(std::memory_order_relaxed);
+    return static_cast<double>(over) / static_cast<double>(total);
+}
+
+void reset_bank_deck_yield_stat() {
+    for (int b = 0; b < kYieldBins; ++b)
+        g_yield_bin[b].store(0, std::memory_order_relaxed);
+    g_yield_stations.store(0, std::memory_order_relaxed);
+    g_yield_capped.store(0, std::memory_order_relaxed);
+}
+
 BankStripContinuity bank_strip_continuity(
     const std::vector<BankStripCPU>& strips, int nr, double crest_v) {
     BankStripContinuity c;
@@ -859,6 +982,7 @@ std::vector<BankStripCPU> build_bank_strips(const HeightField& hf, int subdiv,
     // the field's own fade law rather than retyped as a [bank_mesh] number.
     // The network comes from the SAME SnowpackField the strips are composed
     // against, so the stations cannot be denser than the field they sample.
+    reset_bank_deck_yield_stat();
     BankBuildParams rp = p;
     if (rp.junction_station_m > 0.0) {
         rp.junction_net = snow.lines;
@@ -893,6 +1017,9 @@ std::vector<BankStripCPU> build_bank_strips(const HeightField& hf, int subdiv,
         for (BankStripCPU& sc : bucket[ri]) out.push_back(std::move(sc));
     }
     if (verts_out != nullptr) *verts_out = verts;
+    // ★ ROAD-REPAIR F1: the ledger is READ OUT BY THE CALLER
+    // (render/ribbons.cpp build_bank_surfaces), not logged here -- this TU is
+    // the pure one and owns ZERO raylib, TraceLog included.
     return out;
 }
 

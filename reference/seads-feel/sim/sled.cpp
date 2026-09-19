@@ -289,8 +289,36 @@ SledState step_sled(const SledState& state, const SledInputs& in,
         // is the one with a chain hanging off it; it does not license a
         // riderless machine that still steers.
         const bool hands_on = s.grip.attached;
+        // ★★ B1 SPLIT (ladder_v2 §4.1, Chad 2026-09-18: "if I key press
+        // throttle should ramp up"). ONE ternary became two statements, and
+        // the two halves are DIFFERENT FACTS:
+        //   `!hands_on` -> an unconditional zero. A man off the bars has no
+        //     thumb on the lever (R4a §7.4). Not this dial's business, and
+        //     `sled_rolled_throttle_never_reaches_a_handless_rider` keeps the
+        //     two from being collapsed back into one.
+        //   `s.rolled` -> scaled by `comfort.rolled_throttle_frac`, which SHIPS
+        //     AT 0.0 and is therefore the shipped kernel exactly: `0.0 * x ==
+        //     0.0` for every finite clamp01'd x, the same IEEE zero the literal
+        //     produced.
+        // ⚠ THE ORDER MATTERS AND IT IS THE SIGN TRAP: it is `frac * thr_in`,
+        // never `(1 - frac) * thr_in`. The complement form delivers FULL
+        // throttle at the identity value; `sled_rolled_throttle_frac_zero_is_
+        // the_shipped_zero` exists to red exactly that slip.
+        //
+        // ★★ FOLDED RED-TEAM P1-4 (law+feel, 2026-09-18): THE PRODUCT IS
+        // CLAMPED. `thr_in` is clamp01'd; the PRODUCT was not, and the env
+        // route this build drives on has no range check the TOML route has.
+        // `SEADS_SLED_ROLLED_THROTTLE=1.5` put 1.5 into `v_cmd`, `engine_rpm`
+        // (11150), the moment arm and the HUD -- outside the kernel's
+        // documented [0,1] domain for `throttle`, reachable only while rolled.
+        // `clamp01` here is the IDENTITY FUNCTION for every frac <= 1.0 with
+        // thr_in in [0,1], and at frac == 0.0 `clamp01(0.0)` is the same +0.0
+        // the literal produced -- so the identity and the tape corpus are
+        // untouched and only the out-of-band case changes.
+        const double thr_in = hands_on ? clamp01(in.throttle) : 0.0;
         const double throttle =
-            (s.rolled || !hands_on) ? 0.0 : clamp01(in.throttle);
+            s.rolled ? clamp01(p.comfort.rolled_throttle_frac * thr_in)
+                     : thr_in;
         const double brake = hands_on ? clamp01(in.brake) : 0.0;
 
         // --- steer slew (§3.5, feel not the rollover fix, PACKET_B §15.4) ---
@@ -1039,6 +1067,87 @@ SledState step_sled(const SledState& state, const SledInputs& in,
                 add_at(-plow * fwd_t, tan_mount);  // GI S2.1: tangential-moves
             }
 
+            // ★★ B3 THE HOIST (ladder_v2 §4.3, the sled first build). The six
+            // lines that build the TRACK's longitudinal slip used to live 58
+            // lines below, inside `if (g.is_track)`. They are here now, above
+            // the lateral bite, because `track_lat_slip_shed` charges the
+            // track's SIDEWAYS grip for the slip it is already spending
+            // forwards -- "throttle should also be able to swing my tail around
+            // on account of the roost" (Chad, 2026-09-18) -- and the bite is
+            // computed first.
+            //
+            // IT IS A PURE MOVE, and that is a claim with a shape: the six lines
+            // have no side effects (no `add_at`, no `s.` write, no `dbg_term`),
+            // and every input they read is FIXED for this patch between the two
+            // sites -- `p.*` (const params), `throttle` (the substep's, :293),
+            // `v_fwd` (:1006, this patch's, computed above) and `kEps`. Nothing
+            // between :1042 and the old site writes any of them. So the values
+            // are the same values, in the same order, and the identity is
+            // arithmetic rather than tolerance.
+            //
+            // ★★ FOLDED RED-TEAM P1-3 (mechanism, 2026-09-18): THE ROOST IS
+            // HOISTED WITH THE SLIP, and the shed reads IT, not the bare slip.
+            // His sentence is "swing my tail around ON ACCOUNT OF THE ROOST".
+            // The kernel already owns the roost as ONE number -- `flux =
+            // |trk_slip| * avail` -- and `avail` is identically 0 on every
+            // NON-SINKABLE row (Road, LakeIce, RockOutcrop, MineWorks; pinned
+            // by sled_road_sinkage_is_exactly_zero). The first build read
+            // `|trk_slip|` alone, which is surface-BLIND: it stripped the
+            // track's lateral grip at full strength on a plowed road, where by
+            // construction there is no roost to swing anything with -- "just
+            // going down the road", his words, and the surface his loudest OLD
+            // complaint lives on. `bury`/`loose`/`avail` read only `s.sink_m[i]`
+            // (written at :761-764, far above this force loop), `gs.depth_m`,
+            // `d.sinkable` and const params, so hoisting them is the same PURE
+            // move the slip was -- and `flux` becomes the ONE NUMBER's THIRD
+            // consumer, which is what that comment is for, never a parallel
+            // constant.
+            double clutch_blend = 0.0, drive = 0.0, v_track = 0.0,
+                   trk_slip = 0.0, trk_flux = 0.0;
+            if (g.is_track) {
+                // ★ CVT SMOOTHSTEP (§8 P1-2). A hard step at 480 Hz limit-
+                // cycles on downhills; blend over clutch_engage_ms +/- 0.25
+                // instead. 0 well below engage speed, 1 above -- and
+                // `engine_rpm` is mapped off the SAME blend, never a second
+                // one.
+                const double engage_lo = p.clutch_engage_ms - 0.25;
+                const double engage_hi = p.clutch_engage_ms + 0.25;
+                const double engage_t = std::clamp(
+                    (v_fwd - engage_lo) / std::max(engage_hi - engage_lo, kEps),
+                    0.0, 1.0);
+                clutch_blend = engage_t * engage_t * (3.0 - 2.0 * engage_t);
+
+                // ★ THE BELT IS BACK-DRIVEN WHEN THE THUMB IS OFF (Phase V
+                // P1-A, measured: without this the closed throttle commanded
+                // v_track = 0, slip = -1, and the track developed FULL REVERSE
+                // SHEAR -- a locked track, 1.29 g of face-brake the moment the
+                // player let off at speed. A CVT-engaged two-stroke does the
+                // opposite: the ground turns the track at ground speed, slip
+                // ~ 0, and the only drivetrain drag is the engine-brake term
+                // below. `drive` is smooth in THROTTLE (P1-B) so the 420 N
+                // term cannot step across the spring-return thumb's 0.05 line.
+                const double drive_t =
+                    std::clamp((throttle - 0.02) / 0.08, 0.0, 1.0);
+                drive = drive_t * drive_t * (3.0 - 2.0 * drive_t);
+                const double v_cmd = throttle * p.track_speed_max_ms;
+                const double v_back = clutch_blend * std::max(v_fwd, 0.0);
+                v_track = drive * v_cmd + (1.0 - drive) * v_back;
+                trk_slip = std::clamp(
+                    (v_track - v_fwd) / std::max(v_track, 1.0), -1.0, 1.0);
+                // A buried tunnel has no free cleat to throw snow with. This
+                // one fraction is simultaneously why the roost dies and why the
+                // escape fails -- §3.5a's terminal failure as arithmetic.
+                const double bury =
+                    clamp01(s.sink_m[i] / std::max(p.track_clearance_m, kEps));
+                const double loose = d.sinkable ? gs.depth_m : 0.0;
+                const double avail =
+                    clamp01(loose / std::max(p.roost_ref_depth_m, kEps)) *
+                    (1.0 - bury);
+                // ★★ THE ONE NUMBER, NOW THREE CONSUMERS (§3.5a): S5's roost,
+                // the escape thrust below, and B3's shed above.
+                trk_flux = std::abs(trk_slip) * avail;
+            }
+
             // ★ LATERAL BITE UNDER WEIGHT TRANSFER (§3.2). The force reads
             // THIS patch's normal load, so throttle (which unloads the skis via
             // the moment arm above) genuinely costs you steering. Nothing named
@@ -1053,7 +1162,65 @@ SledState step_sled(const SledState& state, const SledInputs& in,
             const double slip_ang =
                 std::atan2(v_lat, std::max(std::abs(v_fwd), 0.5)) +
                 (g.steered ? delta : 0.0);
-            const double mu_l = g.is_track ? p.track_lat_mu : d.mu_lat;
+            double mu_l = g.is_track ? p.track_lat_mu : d.mu_lat;
+            // ★★ B3 THE SHED (ladder_v2 §4.3). "throttle should also be able
+            // to swing my tail around on account of the roost, esp with weight
+            // shifting of the sudburian" (Chad, 2026-09-18). The track spends
+            // its friction budget FORWARDS as `trk_slip`; a friction ellipse
+            // says what it spends forwards it does not have sideways. This
+            // kernel had no such law -- `mu_brake` caps longitudinal braking
+            // and never charges lateral -- so the tail could not be swung with
+            // the thumb.
+            //
+            // ★ `align_m`, NEVER the raw signed lean. align_m is already
+            // clamped >= 0 (the house rule: a WRONG-WAY LEAN IS NEVER A
+            // PENALTY, pinned by sled_wrong_way_lean_is_never_a_penalty at the
+            // 4th decimal) and already requires a real yaw rate. The `1.0 +`
+            // is what makes the shed real in a straight line too -- which is
+            // honest, and is the part that can make a bank strike worse. The
+            // lean-GATED fallback, if his drive says the banks got worse, is
+            // `align_m` alone in place of `(1.0 + align_m)`.
+            //
+            // ★★ FOLDED RED-TEAM P1-3 (mechanism): `trk_flux`, NOT
+            // `|trk_slip|`. `flux = |trk_slip| * avail` is the kernel's one
+            // roost number and `avail` is identically 0 on the non-sinkable
+            // rows, so the shed is now DARK on a plowed road and on lake ice --
+            // where his loudest OLD complaint lives and where there is no roost
+            // to swing anything with. His sentence names the roost; the dial
+            // now reads it.
+            //
+            // ★★ FOLDED RED-TEAM P1-2 (mechanism): THE CLOSED-THUMB DECOUPLE,
+            // the SAME factor the thrust uses at the track block below (`T *=
+            // drive + (1 - drive) * clutch_blend`). MEASURED: with the thumb
+            // SHUT, below clutch_engage_ms - 0.25 = 3.0 m/s, `v_track` is 0 and
+            // `trk_slip` is exactly -1 -- the LARGEST value this dial can ever
+            // see, reached at ZERO throttle. Without this factor the shed fired
+            // at full strength on a coasting machine: closing the throttle
+            // would NOT hook the tail back up below ~3.3 m/s, which is the
+            // opposite of the sentence the dial is built from, and it is
+            // exactly the regime the bank strikes live in. The shed now exists
+            // only where the drivetrain is connected.
+            //
+            // ★ `g.is_track`: lean buys ski plate, never track plate.
+            // ⚠ AND THE HONEST NOTE (FOLDED RED-TEAM P1-3 law+feel / P2-1
+            // mechanism): the guard is REDUNDANT BY SCOPE today and a leg
+            // cannot red on deleting it -- `trk_slip` and `trk_flux` are
+            // per-patch locals initialised 0.0 and written only inside
+            // `if (g.is_track)` above, so on a ski patch the factor is
+            // `max(0, 1 - shed*0*...) == 1.0` and `mu_l *= 1.0` is
+            // bit-identical. MEASURED by the red-team: delete `g.is_track &&`,
+            // rebuild, the leg still passes. KEEP THE GUARD ANYWAY -- it is the
+            // only protection the ski plate has the day someone hoists those
+            // locals to substep scope as an "optimisation" -- but do not claim
+            // a leg watches it.
+            //
+            // A BRANCH, so at the shipped 0.0 this term does not exist and
+            // `mu_l` below is the shipped expression byte for byte.
+            if (g.is_track && p.track_lat_slip_shed > 0.0)
+                mu_l *= std::max(
+                    0.0, 1.0 - p.track_lat_slip_shed * trk_flux *
+                                   (drive + (1.0 - drive) * clutch_blend) *
+                                   (1.0 + align_m));
             double bite = -normal * mu_l *
                           std::tanh(slip_ang /
                                     std::max(p.slip_ref_rad, kEps));
@@ -1112,48 +1279,34 @@ SledState step_sled(const SledState& state, const SledInputs& in,
 
             // --- track thrust (§3.2, §3.5a) ---------------------------------
             if (g.is_track) {
-                // ★ CVT SMOOTHSTEP (§8 P1-2). A hard step at 480 Hz limit-
-                // cycles on downhills; blend over clutch_engage_ms +/- 0.25
-                // instead. 0 well below engage speed, 1 above -- and
-                // `engine_rpm` is mapped off the SAME blend, never a second
-                // one.
-                const double engage_lo = p.clutch_engage_ms - 0.25;
-                const double engage_hi = p.clutch_engage_ms + 0.25;
-                const double engage_t = std::clamp(
-                    (v_fwd - engage_lo) / std::max(engage_hi - engage_lo, kEps),
-                    0.0, 1.0);
-                const double clutch_blend =
-                    engage_t * engage_t * (3.0 - 2.0 * engage_t);
-
-                // ★ THE BELT IS BACK-DRIVEN WHEN THE THUMB IS OFF (Phase V
-                // P1-A, measured: without this the closed throttle commanded
-                // v_track = 0, slip = -1, and the track developed FULL REVERSE
-                // SHEAR -- a locked track, 1.29 g of face-brake the moment the
-                // player let off at speed. A CVT-engaged two-stroke does the
-                // opposite: the ground turns the track at ground speed, slip
-                // ~ 0, and the only drivetrain drag is the engine-brake term
-                // below. `drive` is smooth in THROTTLE (P1-B) so the 420 N
-                // term cannot step across the spring-return thumb's 0.05 line.
-                const double drive_t =
-                    std::clamp((throttle - 0.02) / 0.08, 0.0, 1.0);
-                const double drive = drive_t * drive_t * (3.0 - 2.0 * drive_t);
-                const double v_cmd = throttle * p.track_speed_max_ms;
-                const double v_back = clutch_blend * std::max(v_fwd, 0.0);
-                const double v_track = drive * v_cmd + (1.0 - drive) * v_back;
-                const double slip = std::clamp(
-                    (v_track - v_fwd) / std::max(v_track, 1.0), -1.0, 1.0);
-                // A buried tunnel has no free cleat to throw snow with. This
-                // one fraction is simultaneously why the roost dies and why the
-                // escape fails -- §3.5a's terminal failure as arithmetic.
-                const double bury =
-                    clamp01(s.sink_m[i] / std::max(p.track_clearance_m, kEps));
-                const double loose = d.sinkable ? gs.depth_m : 0.0;
-                const double avail =
-                    clamp01(loose / std::max(p.roost_ref_depth_m, kEps)) *
-                    (1.0 - bury);
-                // ★★ THE ONE NUMBER, TWO CONSUMERS (§3.5a). S5's roost scales
-                // off this field; the escape thrust below is computed FROM it.
-                const double flux = std::abs(slip) * avail;
+                // ★★ THE SLIP IS BUILT ABOVE NOW, NOT HERE (B3 THE HOIST,
+                // ladder_v2 §4.3). `clutch_blend`, `drive`, `v_track` and
+                // `trk_slip` are patch-scope locals, assigned in the hoisted
+                // block just above the lateral bite, because the bite runs
+                // FIRST and `track_lat_slip_shed` needs the slip there.
+                //
+                // ⚠ THIS BLOCK READS THEM. IT MUST NEVER RECOMPUTE THEM. Two
+                // copies of the slip formula is how the CVT and the rpm readout
+                // drift apart -- the comment at the engine_rpm map below says so
+                // in its own words. The tripwire that catches a second copy is
+                // in ladder_v2 §4.3: grep for the slip's DIVISOR form (the
+                // subtraction together with its std::max divisor) and require
+                // exactly ONE hit in this file. ⚠ DO NOT WRITE THAT FORM AGAIN,
+                // COMMENTS INCLUDED -- a comment quoting it verbatim reds the
+                // tripwire, which is how this comment came to be worded around
+                // it. (The looser form, the subtraction alone, is 2 on the
+                // shipped tree: `roost_thrust`'s `v_rel` below is the second,
+                // and a lane obeying THAT form either believes a correct hoist
+                // failed or deletes the roost -- the very term his "swing my
+                // tail around on account of the roost" names.)
+                // ★★ `bury`, `avail` AND `flux` ARE BUILT ABOVE NOW TOO
+                // (FOLDED RED-TEAM P1-3, mechanism) -- the shed at the lateral
+                // bite needs the ROOST, not the bare slip, and the bite runs
+                // first. ⚠ THIS BLOCK READS THEM. IT MUST NEVER RECOMPUTE THEM,
+                // for the same reason the slip must not be recomputed: two
+                // copies is how the roost bar and the escape thrust drift
+                // apart.
+                const double flux = trk_flux;
 
                 // Mohr-Coulomb shear on the running surface: what the pack can
                 // carry. On hard pack cohesion is high and this is the whole
@@ -1171,7 +1324,7 @@ SledState step_sled(const SledState& state, const SledInputs& in,
                     c_eff + sigma * std::tan(glm::radians(d.phi_deg));
                 const double shear =
                     area * tau_max *
-                    (1.0 - std::exp(-std::abs(slip) * g.len /
+                    (1.0 - std::exp(-std::abs(trk_slip) * g.len /
                                     std::max(p.shear_K_m, kEps)));
                 // ★ THE ESCAPE, AND WHY FULL THROTTLE IS THE ANSWER: slip
                 // develops thrust BY THROWING MASS BACKWARDS, and that ejected
@@ -1181,7 +1334,7 @@ SledState step_sled(const SledState& state, const SledInputs& in,
                 const double v_rel = std::abs(v_track - v_fwd);
                 const double roost_thrust =
                     p.roost_gain * flux * d.rho_eff * area * v_rel * v_rel;
-                double T = (shear + roost_thrust) * (slip >= 0.0 ? 1.0 : -1.0);
+                double T = (shear + roost_thrust) * (trk_slip >= 0.0 ? 1.0 : -1.0);
                 // ★ CLOSED-THROTTLE DECOUPLE (§8: "full decouple below
                 // clutch_engage_ms -- free-coast on mu alone"). Below the
                 // engage speed the engine is unclutched from the track, so
@@ -1255,7 +1408,7 @@ SledState step_sled(const SledState& state, const SledInputs& in,
                                fwd_t,
                            tan_mount);  // GI S2.1: tangential-moves
 
-                rep_slip = slip;
+                rep_slip = trk_slip;
                 rep_flux = flux;
                 rep_thrust = T;
             }

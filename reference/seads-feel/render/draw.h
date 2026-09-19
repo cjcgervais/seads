@@ -198,6 +198,9 @@ struct BankBuildCfg {
     double skirt_bury_m = 0.5;
     double speckle_density = 0.22;
     double speckle_dark = 0.55;
+    // ★ ROAD-REPAIR rung AA: the speckle anti-alias width
+    // multiplier. 0.0 == the identity, by branch in the bank FS.
+    double speckle_aa = 0.0;
     double crest_smudge = 1.2;
     double min_amp_m = 0.20;  // clear-the-intersections threshold
     int skirt_rings = 3;        // ★ ROAD-REPAIR: burial-skirt sub-rings
@@ -208,6 +211,8 @@ struct BankBuildCfg {
     double apron_m = 0.0;
     double apron_tol_m = 0.25;
     double apron_min_drop_m = 0.5;
+    // ★ ROAD-REPAIR F1: the bank yields to the drawn deck (0 = off, identity).
+    double deck_yield_m = 0.0;
 };
 void set_bank_build_params(const BankBuildCfg& c);
 void set_bank_snow_sources(const world::SnowpackField* snow);
@@ -235,6 +240,14 @@ struct RibbonBuildParams {
     // ★ ROAD-REPAIR / ONAPING SINK: the longest chord ACROSS the deck (m).
     // 0.0 == the identity.
     double max_tr_m = 0.0;
+    // ★ ROAD-REPAIR F2: the junction cut radius (m). 0.0 == the identity.
+    double junction_cut_m = 0.0;
+    // ★ ROAD-REPAIR F3: the over-bank bias, in units of the shipped
+    // (-2, -4) deck polygon offset. 0.0 == the identity, by branch.
+    double over_bank_bias = 0.0;
+    // ★ ROAD-REPAIR rung AA: the centreline anti-alias width
+    // multiplier. 0.0 == the identity, by branch in the ribbon FS.
+    double line_aa = 0.0;
     glm::dvec3 road_bed{0.10};   // dark road surface (mono)
     glm::dvec3 road_line{0.80};  // light dashed centerline (mono)
     double road_center_frac =

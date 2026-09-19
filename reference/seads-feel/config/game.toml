@@ -87,6 +87,27 @@ deep_penetration_m = 50.0  # T3 tunnel-wall collision (docs/tunnel_staging.md):
                         # tick of sink is sub-metre) and stay well under depth_m
                         # so a deep graze always fires it. Loader-enforced in
                         # (contact_height_m + 5, 500].
+facet_contact = 1.0     # ★ terrain-clip T2 — THE ONE DIAL (Chad, 2026-09-15:
+                        # "I was able to fly into the small earth and fly
+                        # inside it ... at the Murray entrance ... and then at
+                        # Onaping pump and area"). How much of the aircraft's
+                        # crash surface is the surface the EYE IS SHOWN.
+                        #   0 = the DEM field (the pre-T2 world, bit-identical
+                        #       by branch: the facet fn is never called)
+                        #   1 = the drawn ~59 m mesh facet — collision == what
+                        #       is on screen, the SAME law the sled already has
+                        #       ([snowpack] hf_faceted_ground = true)
+                        # T1 measured the field-vs-facet gap: the drawn chord
+                        # rides up to +66.7 m ABOVE the crash field inside the
+                        # Onaping pump area (3.8 % of ground within 3 km), and
+                        # the mirror sign — the crash shell above the drawn
+                        # ground, Chad's earlier "I collided into nothing" — is
+                        # 24 % of the same box. One dial kills both.
+                        # Feel cost on open ground is centimetres (p50 |gap|
+                        # ~0.03 m); it is metres only where the mesh was
+                        # already lying about where the ground is.
+                        # KILL: SEADS_FACET_CONTACT=0 replaces this value.
+                        # Range [0, 1], loader-enforced.
 
 [buildings]  # R4f building collision (Chad: "I go right through houses")
 collide = true          # false = buildings are ghosts (the pre-R4f world, A/B)

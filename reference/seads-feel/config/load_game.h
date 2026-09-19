@@ -49,6 +49,12 @@ struct GameParams {
         // tunnel-wall graze into rock — a crash, not a teleport-landing. Must
         // exceed contact_height_m + a few metres (loader-enforced). 0 = off.
         double deep_penetration_m = 0.0;
+        // ★ terrain-clip T2 (docs/terrain_clip/T2_facet_contact.md): how much
+        // of the aircraft's crash surface is the DRAWN mesh facet rather than
+        // the bilinear DEM field. 0 = the pre-T2 field, bit-identical by
+        // branch; 1 = collision == what the eye sees (the sled's law). [0, 1],
+        // loader-enforced. SEADS_FACET_CONTACT replaces it (app/main.cpp).
+        double facet_contact = 0.0;
     } ground;
     struct {
         // R4f building collision (Chad: "I go right through houses").

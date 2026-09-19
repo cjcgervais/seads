@@ -192,14 +192,24 @@ SimState step(const SimState& state, const Inputs& inputs,
         const bool in_tunnel =
             env->tunnels != nullptr && env->tunnels->contains(next.position);
         if (!in_tunnel) {
+            // ★ terrain-clip T2: the drawn-facet sampler rides along as a
+            // pointer to the env's std::function. Empty (no render layer) or
+            // [ground] facet_contact 0 => ground_contact never calls it and the
+            // contact radius is the pre-T2 field expression, bit-identically.
             ground_contact(state, next, *env->ground, env->ground_params, p,
-                           static_cast<double>(inputs.wheel_brake), dt);
+                           static_cast<double>(inputs.wheel_brake), dt,
+                           &env->ground_facet_fn);
             // R4f: building prisms share the crash verdict (and the height
             // field for their base) — one crash surface, resolved right after
             // terrain.
             if (env->obstacles != nullptr) {
+                // ★ T2c red-team P0-1: the facet MUST be passed here too, or
+                // the prism-base fix (T2b P1-2) is inert in the game -- the
+                // houses would keep their feet on the DEM field while the
+                // terrain under them moved to the drawn facet. Same pointer,
+                // same identity-by-branch inside obstacle_contact.
                 obstacle_contact(next, *env->obstacles, *env->ground,
-                                 env->ground_params);
+                                 env->ground_params, &env->ground_facet_fn);
             }
         } else {
             // T1 fold (red-team P0-1): the net has no floor — entering it

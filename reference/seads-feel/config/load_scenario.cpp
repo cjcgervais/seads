@@ -483,6 +483,13 @@ ScenarioParams load_scenario_toml(const std::string& path,
     // reproduces sim::SledComfort{} exactly (bit-neutral load, asserted by
     // scenario_sled_comfort_matches_kernel_defaults); strict like every other
     // section — a missing key throws.
+    // ⚠ SLED KERNEL v2 (Chad 2026-09-18): the bit-neutral clause now has TWO
+    // NAMED EXCEPTIONS, `right_assist_max_ms` (4.0) and `right_stand_shift_frac`
+    // (0.5) — dials he drove and signed, so the toml deliberately no longer
+    // equals the struct default for those two. That is the "until Chad turns a
+    // dial" case the contract always allowed, and it is why
+    // scenario_sled_comfort_matches_kernel_defaults does not list them.
+    // `sled_kernel_v2_defaults_are_the_driven_values` pins both sides instead.
     s.sled_comfort.rolled_persist_s =
         require(root, "sled_comfort", "rolled_persist_s");
     s.sled_comfort.rolled_grace_s =
@@ -574,6 +581,30 @@ ScenarioParams load_scenario_toml(const std::string& path,
           "sled_comfort.lean_bite_gain must be >= 0");
     check(s.sled_comfort.lean_sat_gain_rad >= 0.0,
           "sled_comfort.lean_sat_gain_rad must be >= 0");
+    // ★ SLED KERNEL v2 (Chad 2026-09-18): these two keys stopped being
+    // identities and carry his driven values now (4.0 m/s and 0.5), so they
+    // get the range check the six-touch landing path owes every landed dial.
+    // A NEGATIVE speed gate would disarm the righting assist everywhere; a
+    // shift fraction outside [0, 1] is a rider reaching past his own board.
+    //
+    // ⚠⚠ LANDING RED-TEAM P2-2, FOLDED 2026-09-19: this check shipped as
+    // `>= 0.0` and therefore ADMITTED THE EXACT FAILURE THE COMMENT ABOVE
+    // NAMES. At `sim/sled.cpp:1847-1852` the gate is `gate_hi =
+    // right_assist_max_ms`, `gate_lo = gate_hi * rearm_frac`; armed goes false
+    // once `right_gs_lp > gate_hi` and back true only once `right_gs_lp <
+    // gate_lo`. At 0.0 both comparisons behave exactly as they do at -1.0 --
+    // the assist disarms on the first tick with any speed at all and NEVER
+    // re-arms. `0.0` is not "the dial off", it is the righting assist dead
+    // everywhere, silently, with a table the loader called valid. The bar is
+    // `> 0.0`, and the message says so. Mutation-proven on the REAL table by
+    // `scenario_sled_comfort_rejects_a_v2_dial_out_of_band`, which now feeds
+    // it 0.0 as well as -1.0.
+    check(s.sled_comfort.right_assist_max_ms > 0.0,
+          "sled_comfort.right_assist_max_ms must be > 0 (0 disarms the "
+          "righting assist everywhere, exactly as a negative does)");
+    check(s.sled_comfort.right_stand_shift_frac >= 0.0 &&
+              s.sled_comfort.right_stand_shift_frac <= 1.0,
+          "sled_comfort.right_stand_shift_frac must be in [0, 1]");
     check(s.sled_comfort.assist_hull_frac >= 0.0,
           "sled_comfort.assist_hull_frac must be >= 0");
     check(s.sled_comfort.roll_stiff_vgain >= 0.0,

@@ -22,6 +22,7 @@
 #include "render/gunsight.h"
 #include "render/tunnel_lamp_hits.h"  // T5c destructible gaslamp hit pass
 #include "sim/fields.h"
+#include "sim/ground.h"  // T2b: sim::air_ground_radius -- THE one surface
 #include "sim/state.h"
 #include "sim/step.h"
 #include "sim/world.h"
@@ -597,7 +598,7 @@ inline int raider_rank(int spawn_index, const bool* live) {
 inline void plant_at_slot(drone::DroneState& d, const glm::dvec3& cdir,
                           const glm::dvec3& maj, double arc_m, int slot,
                           const sim::AircraftParams& ap, const DroneWorld& dw,
-                          double alt_m, const world::HeightField* ground) {
+                          double alt_m, const sim::Environment* env) {
     // Tangent basis at the dome's centre (major axis defensively
     // re-orthogonalized, same discipline as the atm_frac_at sampler).
     const glm::dvec3 c = glm::normalize(cdir);
@@ -616,7 +617,14 @@ inline void plant_at_slot(drone::DroneState& d, const glm::dvec3& cdir,
     const double th = golden * static_cast<double>(slot);
     const glm::dvec3 t = e1 * std::cos(th) + e2 * std::sin(th);
     const glm::dvec3 pdir = c * std::cos(ang) + t * std::sin(ang);
-    const double r_base = ground != nullptr ? ground->radius_at(pdir) : ap.R;
+    // ★ T2b (red-team P1-1): AGL is measured off sim::air_ground_radius, the
+    // kernel's own contact surface, so a deck respawn cannot plant an aeroplane
+    // INSIDE a hill the eye is shown (the deck AGL is ~90 m and the facet gap
+    // reaches 66.7 m at Onaping). env/ground absent => shell altitude at ap.R,
+    // unchanged from the pre-T2b body, bit for bit.
+    const double r_base = (env != nullptr && env->ground != nullptr)
+                              ? sim::air_ground_radius(*env, pdir)
+                              : ap.R;
     const glm::dvec3 pos = pdir * (r_base + alt_m);
     // Great-circle tangent at pos pointing back at the dome centre.
     glm::dvec3 fwd = c - pdir * glm::dot(c, pdir);
@@ -689,7 +697,7 @@ inline bool place_on_faction_deck(drone::DroneState& d, int faction,
     double b = 0.0;
     world::faction_ellipse(faction, base, cdir, maj, a, b);
     if (!(a > 0.0 && b > 0.0)) return false;
-    plant_at_slot(d, cdir, maj, 0.6 * b, slot, ap, dw, agl_m, env->ground);
+    plant_at_slot(d, cdir, maj, 0.6 * b, slot, ap, dw, agl_m, env);
     return true;
 }
 
@@ -1858,9 +1866,13 @@ inline TickResult tick(LoopState& st, const TickInput& in,
                                                   own_maj, own_a, own_b, ap.R,
                                                   rdp.regroup_pull_frac, pdir);
                         if (want) {
+                            // T2b: the regroup aim point's AGL is measured off
+                            // the kernel's contact surface, never the raw DEM
+                            // field -- an order that plants a target inside a
+                            // drawn hillside is an order to auger in.
                             const double gr =
                                 (env != nullptr && env->ground != nullptr)
-                                    ? env->ground->radius_at(pdir)
+                                    ? sim::air_ground_radius(*env, pdir)
                                     : ap.R;
                             d.regroup.active = true;
                             d.regroup.reason = reason;
@@ -1906,7 +1918,8 @@ inline TickResult tick(LoopState& st, const TickInput& in,
                         const double agl =
                             (env != nullptr && env->ground != nullptr)
                                 ? glm::length(d.curr.position) -
-                                      env->ground->radius_at(
+                                      sim::air_ground_radius(
+                                          *env,
                                           glm::normalize(d.curr.position))
                                 : 0.0;
                         // The ballistic sequence never runs while a higher

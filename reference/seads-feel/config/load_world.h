@@ -281,12 +281,29 @@ struct WorldParams {
         double skirt_bury_m = 0.5;
         double speckle_density = 0.22;
         double speckle_dark = 0.55;
+        // ★ ROAD-REPAIR rung AA -- the gravel-speckle anti-alias
+        // width multiplier. The oreo albedo is a deterministic hash of ~22 cm
+        // grains in surface metres; once a grain is under a pixel, which grain
+        // a pixel samples is decided by where the EYE is, and 2 cm of eye
+        // travel re-samples the whole field. That is 13.5-16.4 pp of the
+        // road-mask flicker Chad reported (onaping_flash_F3.md 6.3). This dial
+        // scales the grain footprint the Nyquist gate is taken on: 1.0 fades
+        // the binary speckle onto its own mean coverage over a grain period of
+        // 2 px down to 1 px. The gate's footprint is the ISOTROPIC one (the
+        // Frobenius norm of the grain-per-pixel Jacobian), not fwidth's L1
+        // sum, so the onset does not swing with the view orientation -- the
+        // red-team fold. 0.0 == the identity, BY AN EXPLICIT BRANCH.
+        // SEADS_SPECKLE_AA REPLACES this value (clamped to [0, 4]).
+        double speckle_aa = 0.0;
         double crest_smudge = 1.2;
         double min_amp_m = 0.20;
         int skirt_rings = 3;        // ★ ROAD-REPAIR: skirt sub-rings
         double chord_tol_m = 0.05;  // ★ ROAD-REPAIR: section chord tolerance
         // ★ ROAD-REPAIR: short stations where the junction gap is fading.
         double junction_station_m = 0.0;
+        // ★ ROAD-REPAIR F1 -- the bank yields to the drawn deck.
+        // deck_yield_m == 0.0 is the identity (the predicate is never run).
+        double deck_yield_m = 0.0;
         // ★ ROAD-REPAIR ONAPING RUNG 2 -- the drawn apron past the skirt.
         // apron_m == 0.0 is the identity (no apron strip is built at all).
         double apron_m = 0.0;
@@ -343,6 +360,37 @@ struct WorldParams {
         // road, so the centreline -- where the machine rides -- is a flat
         // chord between the two edges. 0.0 == the identity.
         double max_tr_m = 0.0;
+        // ★ ROAD-REPAIR F2 -- THE JUNCTION CUT radius (m). No junction cut
+        // exists anywhere in the road stack: each baked way is draped as its
+        // own quad strip and nothing clips one deck against another, so a
+        // square-cut deck end stands across its neighbour's pavement and two
+        // near-coplanar decks share one polygon offset. At a node where 3+
+        // ways end, F2 trims every leg back to this radius and emits ONE cap
+        // over the node. 0.0 == the identity, by an explicit branch.
+        double junction_cut_m = 0.0;
+        // ★ ROAD-REPAIR F3 -- THE OVER-BANK BIAS. The deck pass and the
+        // bank pass ship the IDENTICAL glPolygonOffset(-2,-4), so the two
+        // surfaces have ZERO relative depth bias and which one wins is decided
+        // by the last bit of a 24-bit depth value -- stable in a still frame,
+        // flipping in motion (docs/road_repair/onaping_flash_E2.md §1). This
+        // dial scales the DECK pass's pair to (-2(1+b), -4(1+b)); the bank pass
+        // is untouched, so b > 0 puts the deck on top everywhere they tie.
+        // Units are the shipped pair. 0.0 == the identity, BY AN EXPLICIT
+        // BRANCH (the old glPolygonOffset call, verbatim).
+        double over_bank_bias = 0.0;
+        // ★ ROAD-REPAIR rung AA -- the centreline anti-alias width
+        // multiplier. The dashed white line is one hard ternary in the deck FS
+        // with no derivative anywhere, while the trail corduroy in the same
+        // shader has had the fwidth fade all along; once the 0.312 m stripe is
+        // sub-pixel, 2 cm of eye travel re-decides it (onaping_flash_F3.md 6.4
+        // -- Chad: "the white line"). ⚠ The red-team fold corrected the RANGE:
+        // that is ~292 m (935 px/rad at screen centre, kChaseFovyDeg 60 at
+        // 1080p), not the rig's 70 m where the stripe is ~4 px wide, and a
+        // graze foreshortens the road along s, never the stripe across v.
+        // This dial scales the screen-space footprint the stripe and the dash
+        // are box-filtered over. 0.0 == the identity, BY AN EXPLICIT BRANCH.
+        // SEADS_LINE_AA REPLACES this value (clamped to [0, 4]).
+        double line_aa = 0.0;
         glm::dvec3 road_bed{0.10};   // dark road surface (mono)
         glm::dvec3 road_line{0.80};  // light dashed centerline (mono)
         double road_center_frac =

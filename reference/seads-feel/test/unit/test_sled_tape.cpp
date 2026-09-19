@@ -13,6 +13,7 @@
 // Test names stay pure ASCII (gate.sh tripwire; the codepage trap).
 
 #include <catch2/catch_test_macros.hpp>
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <fstream>
@@ -651,4 +652,70 @@ TEST_CASE("tape_360_chad_repro", "[sled][tape][chad]") {
     // happened at the same tick on tape and on replay.
     REQUIRE(r.rolled_tick_tape == 7188);
     REQUIRE(r.rolled_tick_replay == 7188);
+}
+
+TEST_CASE("sled_tape_absent_dials_replay_at_the_identity_not_the_v2_default",
+          "[sled][tape][v2]") {
+    // ★★★ THE LEG test/harness/sled_tape.h:399 HAS BEEN PROMISING. It named
+    // this test as "the leg that reds on the delete" and the leg did not
+    // exist -- a comment that ADVERTISES a guard is worse than no comment,
+    // because it invites the tidy-up it claims to catch. Landing red-team
+    // P1-2, 2026-09-19, folded.
+    //
+    // WHAT IT BARS. `load()` starts from a default-constructed SledParams and
+    // overwrites only what the tape NAMES, so a dial absent from an old header
+    // silently takes TODAY'S struct default. SLED KERNEL v2 is the first rung
+    // to ship NON-INERT struct defaults, so the OFF-by-absence preset block is
+    // now the only thing keeping every pre-v2 tape replaying the kernel that
+    // CUT it. This leg pins that block, dial by dial, after a real load().
+    //
+    // WHY PROSE WAS NOT ENOUGH -- MEASURED, one preset deleted at a time,
+    // seads_tests rebuilt, `ctest -R "tape|golden|replay"` run:
+    //   traction_mu deleted          -> tape_360_chad_repro RED, flip_fence RED
+    //   rolled_throttle_frac deleted -> tape_360_chad_repro RED
+    //   track_lat_slip_shed deleted  -> NOTHING REDS  (40/40 passed)
+    // The shed dial is dark in all three goldens, so its identity line could
+    // be deleted today for free and the corpus would still report "bit-exact"
+    // -- the precise failure the harness paragraph predicts. It reds HERE.
+    //
+    // KILLED BY: deleting or moving any of the five identity lines in
+    // test/harness/sled_tape.h's OFF-by-absence block.
+    const seads_sledtape::Tape t = load_golden("tape_360_chad.sledtape");
+
+    // NON-VACUITY, HALF ONE: these dials really are ABSENT from this tape --
+    // otherwise the tape would be overwriting them and the presets would be
+    // untested no matter what they said.
+    auto absent = [&t](const char* dial) {
+        return std::find(t.dial_gap.begin(), t.dial_gap.end(),
+                         std::string(dial)) != t.dial_gap.end();
+    };
+    REQUIRE(absent("traction_mu"));
+    REQUIRE(absent("track_lat_slip_shed"));
+    REQUIRE(absent("rolled_throttle_frac"));
+    REQUIRE(absent("right_assist_max_ms"));
+    REQUIRE(absent("right_stand_shift_frac"));
+
+    // NON-VACUITY, HALF TWO: today's struct default is DIFFERENT for the three
+    // v2 dials that ship from sim/sled.h, so "reconstructed at the identity"
+    // and "took the struct default" are distinguishable outcomes. Without this
+    // the leg could pass on a kernel where the two agree -- which is exactly
+    // the coincidence that hid the traction_mu preset's teeth until 2026-09-18.
+    const sim::SledParams def;
+    REQUIRE(def.traction_mu == 3.0);
+    REQUIRE(def.track_lat_slip_shed == 1.4);
+    REQUIRE(def.comfort.rolled_throttle_frac == 0.15);
+
+    // THE CLAIM: an ABSENT dial reconstructs at the IDENTITY -- the value the
+    // kernel that cut this tape had -- never at today's default.
+    REQUIRE(t.params.traction_mu == 0.0);
+    REQUIRE(t.params.track_lat_slip_shed == 0.0);
+    REQUIRE(t.params.comfort.rolled_throttle_frac == 0.0);
+    // These two ship from config/scenario.toml, so their struct defaults still
+    // ARE the identity and the two assertions below cannot currently fail.
+    // They are here so the law does not rest on that coincidence a second
+    // time: the day anybody "repairs" the deliberate divergence stated in
+    // sled_kernel_v2_defaults_are_the_driven_values clause (iii), this leg is
+    // already standing over the corpus.
+    REQUIRE(t.params.comfort.right_assist_max_ms == 5.0 / 3.6);
+    REQUIRE(t.params.comfort.right_stand_shift_frac == 1.0);
 }

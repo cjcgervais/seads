@@ -1,0 +1,89 @@
+# GATE VERDICT -- terrain-clip T2c RED-TEAM FOLD 2, tip a18fc9b1c
+# Trimmed to header + verdict + the red list, per the lane precedent
+# (docs/road_repair/GATE_VERDICT_b659a119d.txt): the raw 603,879-byte ctest log
+# is NOT committed (repo weight, the sentinel's standing note).
+#
+# Tree:   sandbox/terrain-clip @ a18fc9b1c = c82bef2e2 (T2b) + ONE commit, the
+#         T2c red-team fold: the prism argument reaches the game through
+#         sim/step.cpp, FACETCONTACT L6 became a MEASUREMENT leg with the strict
+#         bar moved to the hidden [.t3-strict] L6-STRICT, deck_look's
+#         Environment* un-defaulted, the tape tolerance 5e-3, the banner parse
+#         anchored, air_ground_radius's env.ground assert, the app/main.cpp
+#         banner block moved below render::set_tree_snowhill, and doc section 7
+#         (the snow residual, Chad's ruling owed).
+# Build:  build/ Debug (Ninja, MinGW GCC), the gate build, rebuilt from this tip
+#         BEFORE the run; ctest -N = 2130 (main 3a95a4d08 = 2116, delta +14:
+#         the T1 CLIPPROBE legs and FACETCONTACT L1..L8; L6-STRICT is HIDDEN and
+#         is deliberately NOT among them).
+# Run:    ctest --test-dir build -C Debug --output-on-failure, DETACHED in a
+#         hidden process from this worktree. NO game ran, no build-play smoke,
+#         per GATE_VERDICT_93d721527.txt's own lesson.
+#
+# ⚠ HONEST NOTE ON THE BOX, so the wall clock is not read as a regression.
+#   A FIRST launch of this same gate on this same tip was killed at 04:32 local,
+#   38 tests in, by another lane's machine-wide ctest kill (the known trap:
+#   memory `r4a-grip-release-rung`, "scope process kills by worktree path").
+#   The run recorded below is the SECOND launch, and it shared the box with that
+#   other lane's own gate for its whole length. That inflates "Total Test time
+#   (real)" (4152.52 s vs the ~3790 s a solo gate of this size takes) and
+#   NOTHING else: ctest reports pass/fail, not timing budgets, and no leg here
+#   grades wall clock. The red SET is what this file is evidence for.
+#
+# CLOCKS, so nobody has to take "it was run on this tip" on faith:
+#   tip a18fc9b1c committed  2026-09-17T04:29:07-0700  (epoch 1789644547)
+#   gate launched            2026-09-17T05:22:09-0700  (epoch 1789647729, 3182 s after the commit)
+#   gate log last written    2026-09-17T06:31:21-0700  (epoch 1789651881)
+#   => the log's mtime is 7,334 s after the tip's commit time, and the run's own
+#      "Total Test time (real)" is 4152.52 s: the whole gate fits inside the
+#      window that opens at the commit, so no part of it predates the tree it
+#      claims to describe.
+#   raw log (uncommitted): C:/Users/Chad/AppData/Local/Temp/claude/D--flight-sim2/a0d3002b-c33c-48fe-919b-654a321ff0ec/scratchpad/gate2/gate_a18fc9b1c.log
+
+=== THE RED SET ===
+
+  79/2130 Test   #79: probe P-F: the relentless raider keeps the pump and shoots back ........................................................................................***Failed    0.53 sec
+ 119/2130 Test  #119: E12.1: the raider backfill keeps a faction's pump offense alive ........................................................................................***Failed  356.55 sec
+1287/2130 Test #1287: sled_slides_before_it_tips_on_flat_snow ................................................................................................................***Failed    1.99 sec
+1288/2130 Test #1288: sled_grip_ceiling_stays_below_the_tip_threshold ........................................................................................................***Failed   11.10 sec
+1326/2130 Test #1326: sled_assist_reference_plane_is_load_weighted ...........................................................................................................***Failed    0.49 sec
+1329/2130 Test #1329: sled_debug_sink_is_write_only ..........................................................................................................................***Failed    1.27 sec
+
+=== ctest trailer (the failed list, by name) ===
+The following tests FAILED:
+	 79 - probe P-F: the relentless raider keeps the pump and shoots back (Failed)
+	119 - E12.1: the raider backfill keeps a faction's pump offense alive (Failed)
+	1287 - sled_slides_before_it_tips_on_flat_snow (Failed)
+	1288 - sled_grip_ceiling_stays_below_the_tip_threshold (Failed)
+	1326 - sled_assist_reference_plane_is_load_weighted (Failed)
+	1329 - sled_debug_sink_is_write_only (Failed)
+Errors while running CTest
+
+=== tools/gate/gate_baseline.py check (THE RUNNER WROTE THIS, not a hand grade) ===
+gate: 6 failed of 2130
+baseline: 6 known reds
+
+OK -- the red set is EXACTLY the baseline, member for member.
+GATE_EXIT=0
+
+# ---------------------------------------------------------------------------
+# WHAT THIS GATE IS EVIDENCE FOR, AND WHAT IT IS NOT.
+# The six reds are the committed baseline in generated/gate/known_reds.txt --
+# two enemy-AI probes and four sled legs, all of them older than this lane and
+# untouched by it. EXACTLY the baseline, member for member, by the runner's own
+# verdict: no new red, no fixed red, no count-matched-while-members-moved.
+#
+# It proves the T2c fold broke nothing the suite can see, and that the eight
+# FACETCONTACT legs (L1..L8) and the T1 CLIPPROBE legs are green on the shipped
+# dial [ground] facet_contact 1.0.
+#
+# It does NOT grade:
+#   * FACETCONTACT L6-STRICT -- hidden behind [.t3-strict], RED by measurement
+#     and by design; it is Chad's ruling (doc section 7), not a gate failure.
+#     Run it deliberately:  build/seads_tests.exe "[.t3-strict]"
+#   * FACETAI -- hidden behind [.facetai], a MANUAL leg (two 22-minute matches).
+#     Re-run on this tip: UNMOVED from T2b (9 -> 7 enemy wrecks, 7 -> 5
+#     deck-scope, 53782 -> 40397 avoid-latch ticks), honestly so, because that
+#     harness binds no BuildingColliders and therefore never reaches the
+#     sim/step.cpp block this fold repaired.
+#   * anything on a GPU, and anything about FEEL. Chad's fly is still owed, and
+#     so is his ruling on the snow residual.

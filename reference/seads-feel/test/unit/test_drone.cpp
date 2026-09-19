@@ -1081,7 +1081,8 @@ TEST_CASE("S1-DECK deck_track_gamma: flat is level, a ridge ahead is a climb") {
 
     // 1. FLAT GROUND at the hold altitude: neither climb nor dive.
     {
-        const drone::DeckLook lk = drone::deck_look(s, hf, dp.deck_lookahead_s);
+        const drone::DeckLook lk = drone::deck_look(s, hf, dp.deck_lookahead_s,
+                             /*env=*/nullptr);
         REQUIRE(lk.ok);
         CHECK(std::abs(drone::deck_track_gamma(lk, dp)) < 0.01);
     }
@@ -1090,7 +1091,8 @@ TEST_CASE("S1-DECK deck_track_gamma: flat is level, a ridge ahead is a climb") {
         sim::SimState hi = s;
         hi.position = up * (hf.radius_at(up) + 600.0);
         const drone::DeckLook lk =
-            drone::deck_look(hi, hf, dp.deck_lookahead_s);
+            drone::deck_look(hi, hf, dp.deck_lookahead_s,
+                             /*env=*/nullptr);
         REQUIRE(lk.ok);
         CHECK(drone::deck_track_gamma(lk, dp) ==
               Catch::Approx(-dp.deck_track_dive_cap));
@@ -1102,7 +1104,8 @@ TEST_CASE("S1-DECK deck_track_gamma: flat is level, a ridge ahead is a climb") {
         REQUIRE(hf.radius_at(up) == Catch::Approx(hf.R));  // still flat HERE
         const glm::dvec3 crest_dir = deck_fx::ahead_dir(up, fwd, hf.R, 1000.0);
         REQUIRE(hf.radius_at(crest_dir) > hf.R + 300.0);  // a real wall
-        const drone::DeckLook lk = drone::deck_look(s, hf, dp.deck_lookahead_s);
+        const drone::DeckLook lk = drone::deck_look(s, hf, dp.deck_lookahead_s,
+                             /*env=*/nullptr);
         REQUIRE(lk.ok);
         const double g = drone::deck_track_gamma(lk, dp);
         CHECK(g > 0.20);                     // a genuine climb, not the flat ~0
@@ -1132,7 +1135,8 @@ TEST_CASE("S1-DECK deck_forward_violated: flat never arms, a ridge does") {
     // FLAT, at the shipped cruise AND at the measured pursuit speed.
     for (double v : {85.0, 156.0}) {
         s.velocity = fwd * v;
-        const drone::DeckLook lk = drone::deck_look(s, hf, dp.deck_lookahead_s);
+        const drone::DeckLook lk = drone::deck_look(s, hf, dp.deck_lookahead_s,
+                             /*env=*/nullptr);
         REQUIRE(lk.ok);
         INFO("flat deck at " << v << " m/s");
         CHECK_FALSE(drone::deck_forward_violated(lk, dp, enter_m));
@@ -1145,7 +1149,8 @@ TEST_CASE("S1-DECK deck_forward_violated: flat never arms, a ridge does") {
         drone::DroneParams off = dp;
         off.avoid_pull_net_g = 0.0;
         s.velocity = fwd * 85.0;
-        const drone::DeckLook lk = drone::deck_look(s, hf, dp.deck_lookahead_s);
+        const drone::DeckLook lk = drone::deck_look(s, hf, dp.deck_lookahead_s,
+                             /*env=*/nullptr);
         CHECK_FALSE(drone::deck_forward_violated(lk, off, enter_m));
     }
     // A RIDGE inside the window: it must arm.
@@ -1154,7 +1159,8 @@ TEST_CASE("S1-DECK deck_forward_violated: flat never arms, a ridge does") {
     REQUIRE(hf.radius_at(deck_fx::ahead_dir(up, fwd, hf.R, 1000.0)) >
             hf.R + 300.0);
     s.velocity = fwd * 85.0;
-    const drone::DeckLook lk = drone::deck_look(s, hf, dp.deck_lookahead_s);
+    const drone::DeckLook lk = drone::deck_look(s, hf, dp.deck_lookahead_s,
+                             /*env=*/nullptr);
     REQUIRE(lk.ok);
     CHECK(drone::deck_forward_violated(lk, dp, enter_m));
 }
