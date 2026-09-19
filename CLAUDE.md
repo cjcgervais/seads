@@ -32,7 +32,10 @@ seal**. `D:\flight_sim2\seads-feel` (a worktree of `D:\flight_sim2\seads`, on wh
 `feel/<name>` lane is checked out) is where new feel work lands first.
 
 **Tip as of 2026-09-16 22:55, re-derived this session — RE-DERIVE IT AGAIN BEFORE CITING IT:**
-`origin/main` = **`533c86409`** = tag `terrain-clip-t2-facet-signed` (T2 `[ground] facet_contact` 1.0,
+`origin/main` = **`4acac47a2`** = tag `sled-kernel-v2-signed` (SLED KERNEL v2: five Chad-driven sled
+dials shipped as defaults, landed 2026-09-19 02:24 on the sentinel GO; his words *"yes very good"*,
+*"I want this all in a v2"*, *"accept 1.4"*, *"1 re bar the test"*; the FLIGHT kernel is unchanged at v17)
+on top of `533c86409` = tag `terrain-clip-t2-facet-signed` (T2 `[ground] facet_contact` 1.0,
 three sim files, landed 2026-09-17 23:27 BY THIS SENTINEL on Chad's word after he closed the lane
 session) on top of `ed0a43ce8` (road-repair E2/F3/AA/F1 landed 2026-09-17 20:48 on Chad's word
 "push it", a world lane, kernel proof empty) on top of `4208c392e` (LANES-only: kernel lane CLOSED
