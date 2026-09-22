@@ -63,6 +63,17 @@ struct SledInputs {
 enum class Patch : int { SkiLeft = 0, SkiRight, Track, kCount };
 constexpr int kPatches = static_cast<int>(Patch::kCount);
 
+// ★ N1 the leg work (SledComfort::leg_work_nm): the stuck-attitude stage the
+// kernel has ARMED (SledState::leg_stage). Armed is silent -- nothing moves
+// until a press. Plain ints on the state so the HUD and the probe can print
+// them without a cast.
+enum LegStage : int {
+    kLegNone = 0,
+    kLegPitched = 1,   // on its end (nose-up on the tail, or nose-down)
+    kLegInverted = 2,  // on its back
+    kLegOnSide = 3,    // the v2 pendulum's territory; no new torque
+};
+
 // ★★★ K-WS1 / K1 -- THE HONEST AFT CEILING, MEASURED, ONE ROW, FIVE SLICES.
 //
 // PROVENANCE. These are the animation's OWN delivered rider-CG travel at full
@@ -417,6 +428,171 @@ struct SledComfort {
     double right_stand_shift_frac = 1.0;  // x lean_lat_stand_m
 
     double right_assist_min_tilt_rad = 0.35;
+    // ★★ N2 -- LAKE-ICE LOW-SPEED SKI BITE. Chad, drive run 7, 2026-09-18:
+    // "on lake ice the ski runners are not digging in to the ice and there is
+    //  no turn authority on it, at least at high speed it given limits turning
+    //  I think it is less grip at lower speeds than I would like."
+    // Read as two sentences: KEEP the high-speed limit (real -- a carbide on
+    // glare ice holds nothing at speed), RAISE the low-speed ski bite.
+    //
+    // WHAT IT IS: an ADDITIVE lateral mu on the STEERED patches only (the
+    // skis -- his word is "runners"), LakeIce only (SK-1a blend-weighted, so a
+    // shoreline is continuous), fading from full at rest to EXACTLY 0.0 by a
+    // fixed reference speed `kIceBiteVrefMs` = 8.0 m/s (sim/sled.cpp, a
+    // constant, not a second dial -- one dial per rung). Per steered patch:
+    //     mu_lat_eff = d.mu_lat + ice_bite_mu * w_ice * smoothstep_down(v/8)
+    // where v is THAT patch's own tangential speed (patch-honest: the inner ski
+    // in a spin has its own speed; not low-passed, the gain is continuous so it
+    // needs none). At >= 8 m/s the added term is +0.0 and the whole state is
+    // bit-identical to today -- the high-speed limit is kept by ARITHMETIC,
+    // not by a clamp. At rest a ski holds 0.22 + ice_bite_mu.
+    //
+    // ⚠ WHAT IT DELIBERATELY DOES NOT TOUCH: `SledParams::track_lat_mu` (0.70)
+    // is SURFACE-BLIND -- on ice each ski holds 0.22 while the track holds
+    // 0.70 (3.2:1 rear:front; on Bush it is 0.70:0.55). That imbalance is the
+    // whole of "no turn authority" at every speed, and the thumb cannot break
+    // the tail loose either (the B3 shed reads roost, and ice has none). A
+    // per-surface track mu is its OWN rung with a ruling owed; this dial only
+    // moves the ski side of the ratio (0.47:0.70 at rest at 0.25).
+    //
+    // MEASURED (docs/SLED_KERNEL_N2_ICEBITE.md, all-water field, full lock,
+    // 8 s at 60 Hz, mean over ticks 240-480): at 20 m/s every value of this
+    // dial is BIT-IDENTICAL to 0.0 (whole SledState); at 3 and 6 m/s the yaw
+    // rate rises monotonically with the dial and nothing rolls. The band the
+    // loader admits is [0, 1]; the env band is [0, 0.45] so that
+    // mu_lat_eff <= 0.67 stays under TrailMain's 0.70 (a ski on ice never
+    // out-bites a ski on a groomed trail).
+    //
+    // ⚠ SHIPPED VALUE LIVES IN `config/scenario.toml [sled_comfort]
+    // ice_bite_mu`, NOT HERE, for the same two reasons as right_assist_max_ms
+    // above: `[sled_comfort]` is the loaded table, and this struct default
+    // doubles as the TAPE-ABSENT reconstruction (test/harness/sled_tape.h) --
+    // every tape cut before this dial existed replays at 0.0, the kernel that
+    // cut it. `SEADS_SLED_ICE_BITE` overrides the toml line; 0 is the kill.
+    // ⚠ NOT FLOWN: the toml value was picked by measurement on 2026-09-19,
+    // not by his seat. His drive is the next thing this dial owes.
+    // N2 LAKE-ICE BITE, 2026-09-19, identity = 0.0
+    double ice_bite_mu = 0.0;  // additive ski mu on LakeIce, fades out by 8 m/s
+    // ★★ N1 -- THE LEG WORK. Chad, drive runs 5 and 7, 2026-09-18:
+    //   run 5: "designate ctrl when not rolled on side, but stuck in bank
+    //           upside down nose down vertical or nose up on track, rider
+    //           attached can use legs to roll it over backward and on its side
+    //           where it can then be weight shift mounted."
+    //   run 7: "... when fully upside down to extend legs with shift would put
+    //           the sled up first then falling over on its side is the stage
+    //           that another press of the shift can right you. TO make the r
+    //           autoright key fully redundant."
+    //
+    // WHAT IT IS: the rider's LEG torque budget [N m] for the two stuck
+    // attitudes the v2 pendulum (right_assist_nm, roll axis) cannot reach --
+    // a machine on its END (nose-up on the tail, or nose-down: the PITCHED
+    // band, |up_body.z| >= sin 50 deg and not on a side) and a machine on its
+    // BACK (INVERTED, up_body.y <= cos 150 deg). Every stage is PRESS-GATED
+    // (a rising edge of the key AFTER the stage armed -- a key already held
+    // when the machine got stuck never fires), ONE-WAY (a stage arms only
+    // after rolled_persist_s of dwell in its band, and never re-arms within
+    // the same episode without a fresh dwell), and gated exactly like the
+    // rolled latch and the pendulum: ground contact (air_s <= rolled_grace_s),
+    // the pendulum's own hysteretic low-passed speed gate (right_assist_armed,
+    // 4.0 / 3.2 m/s), hands on (grip.attached), AND the kernel's own rolled
+    // latch (SledState::rolled: tilt > 75 deg held rolled_persist_s in
+    // contact -- the fact that makes R legal, app/player_mode.h
+    // autoright_legal). Nothing is automatic.
+    // ★ RED-TEAM FOLD (P1, 2026-09-19): the rolled latch was NOT a gate at
+    // first. The PITCHED band reads |up_body.z| against RADIAL up, so a
+    // machine parked UPRIGHT on a >= 50 deg bank sat in it (tilt 51.8,
+    // rolled 0) and one CTRL edge backflipped it down the hill (2049 N m,
+    // omega 11.0 rad/s, 1.23 s airborne) -- a tumble the identity kernel
+    // never produces. Now a stage arms only on a machine the kernel already
+    // calls rolled: pinned by legwork_never_arms_on_an_upright_machine_on_a_
+    // bank (flat / 46 / 52 deg flank, CTRL and SHIFT edges, 4000 == 0).
+    // ⚠ COUPLING, STATED: the legs read EIGHT of the pendulum's dials as
+    // their own shape -- right_charge_push_s / right_charge_rest_s (the
+    // charge), right_dir_eps (the direction cone), right_pump_omega_eps (the
+    // pump weight), right_seed_frac (the roll share's brace), rolled_persist_s
+    // (the dwell), rolled_grace_s (contact) and, through right_assist_armed,
+    // right_assist_max_ms / right_assist_rearm_frac / right_speed_lp_s. That
+    // arming flag is advanced ONLY inside the pendulum's `right_assist_nm >
+    // 0.0` branch: with the pendulum killed by the toml it is frozen at its
+    // struct default (true) and the legs lose their speed gate (the rolled
+    // latch above still holds them to a machine past 75 deg in contact). A
+    // pendulum retune moves the legs' shape with no leg re-measure owed by
+    // any test. Recorded 2026-09-19 (docs/sled_legwork/REDTEAM_2026-09-19.md
+    // P2-3 / P2-5), not folded: leg_work_nm > 0 assumes right_assist_nm > 0.
+    //   PITCHED  + CTRL  (crouch): "roll it over BACKWARD" -- nose UP about
+    //            body X, +1 by the MEASURED law (test
+    //            legwork_pitch_sign_is_measured: +angular_vel.x is nose UP,
+    //            nose-down is +up_body.z), for BOTH ends: a nose-down machine
+    //            comes back onto its track, a nose-up one goes over onto its
+    //            back (then SHIFT is the next rung) or, with HALF the budget
+    //            about body Z toward the side it already leans (the pendulum's
+    //            own rule, tanh(-up_body.x / right_dir_eps)), onto that side.
+    //            NOT "toward level" (the recon spec's reading): the
+    //            nose-up rest is a STABLE two-contact pose at 105.5 deg (tail
+    //            + rear hull), and pushing it nose-down fights ~900 N m of
+    //            gravity through top dead centre -- measured, 1500 never left
+    //            it. Backward goes with gravity, which is what legs can do.
+    //            ⚠ RULING OWED (red-team P1-2, 2026-09-19): at the SHIPPED
+    //            2400 BOTH signs leave the end in one press. Backward (+1,
+    //            ships) lands it on its BACK at tilt 150.4 (omega 1.94) and
+    //            owes a SHIFT; toward-level (-1) lands it on its TRACK,
+    //            upright at tilt 13.1 (omega 3.43), no second rung. His word
+    //            is "backward ... and on its side", so +1 ships and the
+    //            landing band is PINNED (legwork_ctrl_from_nose_up_kicks_it_
+    //            off_its_end_within_6_s REQUIRES inverted, not any of three);
+    //            whichever he takes from the seat, the leg must move with it.
+    //   INVERTED + SHIFT (extend legs): about body X, lift the end that is
+    //            already higher, tanh(up_body.z / right_dir_eps): in the
+    //            INVERTED band up_body.y < 0 and the sign that grows |z| is
+    //            the one that raises the higher end. The v2 pendulum fires on
+    //            the same press about body Z; the two stack on different
+    //            axes. MEASURED on flat snow: the lift raises |z| 0.12 -> 0.39
+    //            at 2400 (0.70 at 4000) but never stands the machine on its
+    //            end (that is ~3000 N m sustained, above the band); the
+    //            pendulum's latched brace already breaks the 180 deg dead
+    //            point there and rights the flat fixture alone in 1.62 s, the
+    //            lift shortens it to 1.43 s. Whether the lift is what gets
+    //            him off his back in SNOW is his drive's question.
+    //   ON_SIDE  + SHIFT: the v2 pendulum, byte-untouched. CTRL in INVERTED
+    //            or ON_SIDE and SHIFT in PITCHED add nothing.
+    // Each press spends its own charge (`leg_charge`, the pendulum's two
+    // taus: drains over right_charge_push_s while held, refills over
+    // right_charge_rest_s on release) through the pendulum's own pump weight
+    // (w_pump on the driven axis), so an infinite hold injects finite energy
+    // and cadence -- not mashing -- is the skill. The torque stops the
+    // substep the attitude leaves the stage's exit band (sin 40 deg pitched,
+    // cos 140 deg inverted); gravity finishes the fall.
+    //
+    // ★ THE TUMBLE RULING (audit rung 8, "a backflip is not a rollover";
+    // DRIVE_WORDS "kill the tumble, never the authority"): this is a PITCH
+    // torque on a grounded machine, the axis that rung was refused on. It is
+    // not that term because it is contact-gated, speed-gated, press-gated
+    // and stage-gated; a send never sees it (airborne or above 3.2 m/s
+    // excludes it), pinned by legwork_never_touches_a_send_or_a_moving_
+    // machine. CTRL while riding stays the TUCK (rider_up_m -> -tuck_drop_m);
+    // the attitude gate lives here, not in app/main.cpp.
+    //
+    // MEASURED REST POSES (test legwork_rest_pose_holds_before_any_press,
+    // flat Bush at 0.5 / 1.0 / 2.0 m): nose-UP 70-90 deg RESTS on its tail at
+    // tilt 105.5 deg (|up_body.z| 0.96) -- his "nose up on track"; INVERTED
+    // rests at 173.5 deg; nose-DOWN 70-90 deg is NOT a rest pose on flat
+    // snow -- it falls onto its back in 0.7-1.5 s and becomes the INVERTED
+    // case. A nose held by a BANK is his real nose-down case and has no flat
+    // fixture; the PITCHED band covers it with the same expression.
+    //
+    // 0.0 = OFF, BIT-IDENTICAL (a structural branch; no state is written).
+    // ⚠ SHIPPED VALUE LIVES IN config/scenario.toml [sled_comfort]
+    // leg_work_nm, NOT HERE (the v2 / N2 split: this default doubles as the
+    // TAPE-ABSENT reconstruction in test/harness/sled_tape.h, and every tape
+    // cut before this dial existed -- including the ones with his SHIFT-
+    // while-rolled moments -- replays at 0.0, the kernel that cut it).
+    // `SEADS_SLED_LEGWORK` overrides the toml line; 0 is the kill. Band
+    // [0, 4000]: I.x 158.7 kg m^2, so 2400 N m is 15 rad/s^2 of pitch --
+    // the charge and the pump shape are what keep that a shove, not a launch.
+    // ⚠ NOT FLOWN: the toml value was picked by MEASUREMENT on 2026-09-19
+    // (docs/SLED_KERNEL_N1_LEGWORK.md), not by his seat.
+    // N1 LEG WORK, 2026-09-19, identity = 0.0
+    double leg_work_nm = 0.0;  // rider leg torque budget for the stuck stages
     // --- A: contact-gated saturating roll stiffness ("the sway bar that
     // doesn't exist" — the core §0b fix). Torque about the body roll axis:
     //   -stiff_nm * tanh(phi/ref_rad) * release(|phi|) * w_contact
@@ -1405,6 +1581,28 @@ struct SledState {
     // lean slew (which runs earlier in the step) can consume it. Deterministic;
     // one substep is 1/1440 s.
     double right_shift_cmd = 0.0;      // [-1,1], + = brace LEFT
+    // --- N1 the leg work (Chad 2026-09-18; SledComfort::leg_work_nm). ALL
+    // DERIVED, the `right_assist_armed` class: a stage is a hysteretic
+    // function of attitude + contact + the speed gate, the press latch and
+    // the charge re-converge from tick 0 on replay from taped inputs alone
+    // (`in.stand` IS taped), and every one of them is written ONLY inside the
+    // `leg_work_nm > 0.0` branch -- at the identity none of this exists.
+    // ⚠⚠ NOT IN THE POSITIONAL PIN ROSTER (test/harness/sled_tape.h
+    // SLEDTAPE_PIN_D, 41 doubles by index): adding one refuses every tape.
+    //   leg_stage: 0 NONE, 1 PITCHED, 2 INVERTED, 3 ON_SIDE (sim::LegStage)
+    //   leg_cand / leg_dwell_s: the band being dwelt on and for how long
+    //   leg_press: the latched press (rising edge after the stage armed;
+    //              clears on release)
+    //   leg_charge: this press's budget [0,1]; the pendulum's two taus
+    //   leg_prev_stand: last substep's in.stand, for the edge
+    //   leg_nm_now: readout, |torque| the leg block applied this substep
+    int leg_stage = 0;
+    int leg_cand = 0;
+    double leg_dwell_s = 0.0;
+    bool leg_press = false;
+    double leg_charge = 1.0;
+    float leg_prev_stand = 0.0f;
+    double leg_nm_now = 0.0;
     double rider_lat_m = 0.0;  // + LEFT, to AGREE with steer +1 = LEFT
     double rider_fwd_m = 0.0;  // + forward
     double rider_up_m = 0.0;   // + standing, - tucked

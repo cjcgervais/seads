@@ -93,7 +93,8 @@ inline constexpr const char* kMagic = "seads-sled-tape v1";
     X(release_floor_hi_rad) X(assist_v_lo_ms) X(assist_v_hi_ms)               \
     X(side_k) X(side_c) X(side_mu) X(hull_shear_width_m) X(side_yaw_mu)       \
     X(side_right_gain_nm) X(side_right_vmin_ms) X(side_right_vref_ms)         \
-    X(side_right_wref_rads)
+    X(side_right_wref_rads)                                                \
+    X(ice_bite_mu) X(leg_work_nm)
 
 // The full SledState pin, doubles (sim/sled.h:661-727). surface + rolled are
 // the two non-doubles, handled explicitly beside this list everywhere.
@@ -457,6 +458,13 @@ inline bool load(std::istream& in, Tape& t, std::string* err) {
     // corpus is already protected.
     t.params.comfort.right_assist_max_ms = 5.0 / 3.6;  // shipped 4.0 (toml)
     t.params.comfort.right_stand_shift_frac = 1.0;     // shipped 0.5 (toml)
+    // ★ N2 LAKE-ICE BITE (2026-09-19): ships 0.25 from the toml; the identity
+    // is 0.0 and every tape cut before this dial existed replays there.
+    t.params.comfort.ice_bite_mu = 0.0;                // shipped 0.25 (toml)
+    // ★ N1 THE LEG WORK (2026-09-19): ships 2400 from the toml; the identity
+    // is 0.0. `stand` IS taped, so a tape with his SHIFT-while-rolled moments
+    // replays at 0.0 the machine that cut it, never the leg ladder.
+    t.params.comfort.leg_work_nm = 0.0;                // shipped 2400 (toml)
     std::string line;
     std::uint64_t hash = kFnvBasis;
     auto fail = [&](const char* m, const std::string& l) {

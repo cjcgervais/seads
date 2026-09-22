@@ -694,6 +694,8 @@ TEST_CASE("sled_tape_absent_dials_replay_at_the_identity_not_the_v2_default",
     REQUIRE(absent("rolled_throttle_frac"));
     REQUIRE(absent("right_assist_max_ms"));
     REQUIRE(absent("right_stand_shift_frac"));
+    REQUIRE(absent("ice_bite_mu"));  // N2, 2026-09-19
+    REQUIRE(absent("leg_work_nm"));  // N1, 2026-09-19
 
     // NON-VACUITY, HALF TWO: today's struct default is DIFFERENT for the three
     // v2 dials that ship from sim/sled.h, so "reconstructed at the identity"
@@ -718,4 +720,8 @@ TEST_CASE("sled_tape_absent_dials_replay_at_the_identity_not_the_v2_default",
     // already standing over the corpus.
     REQUIRE(t.params.comfort.right_assist_max_ms == 5.0 / 3.6);
     REQUIRE(t.params.comfort.right_stand_shift_frac == 1.0);
+    // N2 (2026-09-19): ships 0.25 from the toml, identity 0.0 -- same clause.
+    REQUIRE(t.params.comfort.ice_bite_mu == 0.0);
+    // N1 (2026-09-19): ships 2400 from the toml, identity 0.0 -- same clause.
+    REQUIRE(t.params.comfort.leg_work_nm == 0.0);
 }

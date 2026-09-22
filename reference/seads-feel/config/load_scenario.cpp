@@ -538,6 +538,11 @@ ScenarioParams load_scenario_toml(const std::string& path,
         require(root, "sled_comfort", "right_pump_omega_eps");
     s.sled_comfort.right_stand_shift_frac =
         require(root, "sled_comfort", "right_stand_shift_frac");
+    // ★ N2 LAKE-ICE BITE (2026-09-19): the sixth [sled_comfort] key that is
+    // not an identity in the shipped table (sim/sled.h ice_bite_mu).
+    s.sled_comfort.ice_bite_mu = require(root, "sled_comfort", "ice_bite_mu");
+    // ★ N1 THE LEG WORK (2026-09-19): the seventh (sim/sled.h leg_work_nm).
+    s.sled_comfort.leg_work_nm = require(root, "sled_comfort", "leg_work_nm");
     s.sled_comfort.assist_hull_frac =
         require(root, "sled_comfort", "assist_hull_frac");
     s.sled_comfort.roll_stiff_vgain =
@@ -605,6 +610,18 @@ ScenarioParams load_scenario_toml(const std::string& path,
     check(s.sled_comfort.right_stand_shift_frac >= 0.0 &&
               s.sled_comfort.right_stand_shift_frac <= 1.0,
           "sled_comfort.right_stand_shift_frac must be in [0, 1]");
+    // ★ N2 LAKE-ICE BITE: an additive mu. 0.0 IS the identity (the term is a
+    // branch on `> 0.0`), so zero is admitted; a negative would be a ski that
+    // pushes the machine OUT of the turn it is steered into. The top is a mu
+    // -- 1.0 is already past any ski on any surface in the table (TrailMain
+    // 0.70 is the largest lateral row).
+    check(s.sled_comfort.ice_bite_mu >= 0.0 && s.sled_comfort.ice_bite_mu <= 1.0,
+          "sled_comfort.ice_bite_mu must be in [0, 1]");
+    // ★ N1 THE LEG WORK: a negative budget is legs that pull the machine
+    // AWAY from level. The env band's top is 4000 (app/main.cpp); the loader
+    // only refuses the sign, so a toml walk-back can never be refused here.
+    check(s.sled_comfort.leg_work_nm >= 0.0,
+          "sled_comfort.leg_work_nm must be >= 0");
     check(s.sled_comfort.assist_hull_frac >= 0.0,
           "sled_comfort.assist_hull_frac must be >= 0");
     check(s.sled_comfort.roll_stiff_vgain >= 0.0,

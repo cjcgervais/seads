@@ -2591,7 +2591,7 @@ int main(int argc, char** argv) {
             *dst = v;
             return true;
         };
-        bool armed_ok[5] = {false, false, false, false, false};
+        bool armed_ok[7] = {false, false, false, false, false, false, false};
         // B0 -- the contact ceiling (rung 7, promoted: it is B1's
         // precondition). A track cannot push harder than the snow it stands
         // on. Shipped 0.0 = OFF through the drive; SHIPS 3.0 SINCE v2, so this
@@ -2627,19 +2627,45 @@ int main(int argc, char** argv) {
         // reading a fraction. Handoff SS5 carries the arithmetic.
         armed_ok[4] = env_dial("SEADS_SLED_TAILSHED",
                                &sled_params.track_lat_slip_shed, 0.0, 5.0);
+        // ★ N2 -- the lake-ice low-speed ski bite (his run-7 words: "the ski
+        // runners are not digging in to the ice ... less grip at lower speeds
+        // than I would like"). Additive ski mu on LakeIce only, fading to
+        // exactly 0 by 8 m/s. SHIPS 0.25 from config/scenario.toml
+        // [sled_comfort] ice_bite_mu -- picked by MEASUREMENT, NOT YET FLOWN;
+        // this env var overrides that line and 0 is the kill switch.
+        // BAND [0, 0.45]: 0.22 + 0.45 = 0.67 keeps a ski on ice under a ski on
+        // a groomed trail (TrailMain mu_lat 0.70).
+        armed_ok[5] = env_dial("SEADS_SLED_ICE_BITE",
+                               &sled_params.comfort.ice_bite_mu, 0.0, 0.45);
+        // ★ N1 -- the leg work (his runs 5 and 7: "rider attached can use
+        // legs to roll it over backward and on its side"; "extend legs with
+        // shift would put the sled up first then falling over on its side").
+        // The rider's leg torque budget [N m] for a machine stuck on its END
+        // (CTRL kicks it over BACKWARD, nose up, onto its back or a side) or
+        // on its BACK (SHIFT lifts the higher end, the pendulum on the same
+        // press rights it); every stage press-gated, one-way, and gated on
+        // contact, speed, hands AND the kernel's own rolled latch (the fact
+        // that makes R legal -- red-team fold 2026-09-19). SHIPS 2400
+        // from config/scenario.toml [sled_comfort] leg_work_nm -- picked by
+        // MEASUREMENT, NOT YET FLOWN; this env var overrides that line and 0
+        // is the kill switch. BAND [0, 4000]. The R autoright key below is
+        // untouched: the ladder makes it unnecessary, not absent.
+        armed_ok[6] = env_dial("SEADS_SLED_LEGWORK",
+                               &sled_params.comfort.leg_work_nm, 0.0, 4000.0);
         // ★ THE BANNER. One line, always printed, naming every value in force
         // and which of them an env var actually moved -- so a run's own log
         // says what it was flown at and "did you have it armed?" is never a
         // question anybody has to answer from memory.
-        const char* const kNames[5] = {
+        const char* const kNames[7] = {
             "SEADS_SLED_TRACTION_MU", "SEADS_SLED_ROLLED_THROTTLE",
             "SEADS_SLED_RIGHT_MAXSPD", "SEADS_SLED_STAND_SHIFT",
-            "SEADS_SLED_TAILSHED"};
+            "SEADS_SLED_TAILSHED",     "SEADS_SLED_ICE_BITE",
+            "SEADS_SLED_LEGWORK"};
         // ★ BUILT FROM ACCEPTANCE, NEVER FROM PRESENCE (FOLDED P2-3/P3-10):
         // a value this block REJECTED is not armed, and the one line he will
         // skim must not say it is.
         std::string armed;
-        for (int k = 0; k < 5; ++k) {
+        for (int k = 0; k < 7; ++k) {
             if (!armed_ok[k]) continue;
             const char* e = std::getenv(kNames[k]);
             if (!armed.empty()) armed += " ";
@@ -2651,12 +2677,13 @@ int main(int argc, char** argv) {
             "[config] sled first-build: traction_mu %.10g "
             "rolled_throttle_frac %.10g right_assist_max_ms %.10g "
             "right_stand_shift_frac %.10g track_lat_slip_shed %.10g "
-            "(env: %s)\n",
+            "ice_bite_mu %.10g leg_work_nm %.10g (env: %s)\n",
             sled_params.traction_mu, sled_params.comfort.rolled_throttle_frac,
             sled_params.comfort.right_assist_max_ms,
             sled_params.comfort.right_stand_shift_frac,
-            sled_params.track_lat_slip_shed,
-            armed.empty() ? "none -- SLED KERNEL v2 shipped defaults"
+            sled_params.track_lat_slip_shed, sled_params.comfort.ice_bite_mu,
+            sled_params.comfort.leg_work_nm,
+            armed.empty() ? "none -- SLED KERNEL v2 + N2 + N1 shipped defaults"
                           : armed.c_str());
     }
     sim::SledState sled, sled_prev;
@@ -8718,6 +8745,25 @@ int main(int argc, char** argv) {
                 walker_prev = walker;
                 sled = sim::step_sled(sled, sin_, sled_params, snow_field,
                                       params.sim_dt);
+                // ★ N1 THE LEG WORK, APP-ONLY HUD: the stage the kernel has
+                // ARMED (sim::LegStage, derived state, not taped), so he can
+                // tell an armed stage from a dead key and judge the press.
+                // Nothing here feeds the kernel; the tape never sees it.
+                if (sled_params.comfort.leg_work_nm > 0.0 && bars) {
+                    const char* stage_note = nullptr;
+                    if (sled.leg_stage == sim::kLegPitched)
+                        stage_note = "STUCK ON END -- CTRL: legs kick it over";
+                    else if (sled.leg_stage == sim::kLegInverted)
+                        stage_note = "UPSIDE DOWN -- SHIFT: legs lift it";
+                    else if (sled.leg_stage == sim::kLegOnSide)
+                        stage_note = "ON ITS SIDE -- SHIFT rights it";
+                    if (stage_note != nullptr &&
+                        (sled_note == nullptr || GetTime() >= sled_note_until_s ||
+                         sled_note == stage_note)) {
+                        sled_note = stage_note;
+                        sled_note_until_s = GetTime() + 0.25;
+                    }
+                }
                 // ★★★ R4c §7.3 STAGES 4-7 -- THE MAN, ON THE MACHINE'S OWN TICK.
                 // Stepped INSIDE this loop and not once per frame: he is a
                 // kernel body, and a body advanced on frames is frame-rate

@@ -133,6 +133,15 @@ TEST_CASE("sled_kernel_v2_defaults_are_the_driven_values") {
     // the loader, so the TOML line is the value the game runs.
     CHECK(s.sled_comfort.right_assist_max_ms == 4.0);      // run 4, "4 is approved"
     CHECK(s.sled_comfort.right_stand_shift_frac == 0.5);   // run 5, "5 is approved"
+    // ★ N2 LAKE-ICE BITE (2026-09-19): the sixth toml-shipped dial. 0.25 was
+    // picked by MEASUREMENT (docs/SLED_KERNEL_N2_ICEBITE.md), NOT by his seat
+    // -- it is pinned here so a walk-back is a deliberate edit, and its struct
+    // default stays at the identity 0.0 for the same clause-(iii) reason.
+    CHECK(s.sled_comfort.ice_bite_mu == 0.25);
+    // ★ N1 THE LEG WORK (2026-09-19): the seventh. 2400 N m was picked by
+    // MEASUREMENT (docs/SLED_KERNEL_N1_LEGWORK.md), NOT by his seat; same
+    // clause-(iii) split, struct default = the identity 0.0.
+    CHECK(s.sled_comfort.leg_work_nm == 2400.0);
     // (iii) AND THE DELIBERATE DIVERGENCE, STATED SO NOBODY "REPAIRS" IT. The
     // struct defaults for those two stay at the PRE-v2 identity on purpose:
     // test/harness/sled_tape.h reconstructs a dial ABSENT from an old tape at
@@ -142,6 +151,8 @@ TEST_CASE("sled_kernel_v2_defaults_are_the_driven_values") {
     const sim::SledComfort d;
     CHECK(d.right_assist_max_ms == 5.0 / 3.6);
     CHECK(d.right_stand_shift_frac == 1.0);
+    CHECK(d.ice_bite_mu == 0.0);  // N2: identity, the tape-absent value
+    CHECK(d.leg_work_nm == 0.0);  // N1: identity, the tape-absent value
     // (iv) THE THREE FIXTURE PRECONDITIONS
     // `sled_kernel_v2_defaults_equal_the_env_arm` LEANS ON, PINNED HERE.
     //
@@ -209,6 +220,26 @@ TEST_CASE("scenario_sled_comfort_rejects_a_v2_dial_out_of_band") {
             base, "right_stand_shift_frac   = 0.5",
             "right_stand_shift_frac   = 1.5");
         CHECK_THROWS(cfg::load_scenario_toml(write_temp(bad, "v2shift"), kAp));
+    }
+    {
+        // ★ N2 LAKE-ICE BITE: a negative mu is a ski pushing OUT of the turn.
+        // KILLED BY: dropping the `>= 0.0` half of the loader check.
+        REQUIRE(base.find("ice_bite_mu              = 0.25") !=
+                std::string::npos);
+        const std::string bad = replace_all(base,
+                                            "ice_bite_mu              = 0.25",
+                                            "ice_bite_mu              = -0.1");
+        CHECK_THROWS(cfg::load_scenario_toml(write_temp(bad, "n2icebite"), kAp));
+    }
+    {
+        // ★ N1 THE LEG WORK: a negative budget is legs pulling the machine
+        // AWAY from level. KILLED BY: dropping the loader's `>= 0.0` check.
+        REQUIRE(base.find("leg_work_nm              = 2400") !=
+                std::string::npos);
+        const std::string bad = replace_all(base,
+                                            "leg_work_nm              = 2400",
+                                            "leg_work_nm              = -1.0");
+        CHECK_THROWS(cfg::load_scenario_toml(write_temp(bad, "n1legwork"), kAp));
     }
 }
 

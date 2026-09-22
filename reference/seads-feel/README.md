@@ -1,16 +1,14 @@
 # reference/seads-feel/ — PRIMARY reference: the active kernel
 
-These files are **copies**, re-snapshotted **2026-09-19 (02:40)**, from `D:\flight_sim2\seads-feel`'s
+These files are **copies**, re-snapshotted **2026-09-22 (11:35)**, from `D:\flight_sim2\seads-feel`'s
 shared repository (`D:\flight_sim2\seads`, remote `github.com/cjcgervais/seads_sandbox1`) at
-**`4acac47a2`** = tag **`sled-kernel-v2-signed`** (landed on `main` 2026-09-19 02:24 through this repo's
-sentinel; `origin/main` == the tag). The FLIGHT kernel in this snapshot is still **v17**
-(`kernel-v17-tremor-signed` = `3a95a4d08`); above it main carries `4208c392e` (LANES: kernel lane closed),
-`ed0a43ce8` (road-repair E2/F3/AA/F1), `533c86409` (`terrain-clip-t2-facet-signed`, `[ground]
-facet_contact` 1.0, three sim files) and `4acac47a2` (SLED KERNEL v2). The `seads-recon` fly tree
-(`sandbox/r4a-phase0`) merged it as `a97cf0f85` and rebuilt `build-play/seads.exe` at 2026-09-19 02:29:18
-(the kernel lane's report, verified) — check the exe mtime.
+**`babf9df6a`** = tag **`sled-kernel-v3-gated`** (SLED KERNEL v3 CANDIDATE, GATED NOT DRIVEN, landed on
+`main` 2026-09-22 11:23 through this repo's sentinel on Chad's sentence; `origin/main` == the tag). The
+FLIGHT kernel in this snapshot is still **v17** (`kernel-v17-tremor-signed` = `3a95a4d08`). The
+`seads-recon` fly tree (`sandbox/r4a-phase0`) merged it as `8acd48b34` and rebuilt `build-play/seads.exe`
+at 2026-09-22 11:26:00 (verified) — Chad's drive word on N1/N2 is OWED on that exe; check the exe mtime.
 
-**Snapshot method:** `git archive 4acac47a2 app config control docs input render sim test`.
+**Snapshot method:** `git archive babf9df6a app config control docs input render sim test`.
 **Purity exceptions, stated (all reproducible from the tag, none touch the kernel):**
 
 - `render/*.gen.h` — the 26 MB generated Sudbury GIS header, omitted.
@@ -69,6 +67,23 @@ line + `docs/flight-log.md` row in the same landing). See this repo's `docs/DECI
 controller; the writer and reader both derive from one column list after the "void battery"
 defect (a reader that defaulted a missing column to 0.0 graded a dial against a non-dive for
 a night). `app/rest_horizon.h` (extracted from `instructor_tick.h` by the cam-smooth lane).
+
+## SLED KERNEL v3 CANDIDATE (`sled-kernel-v3-gated`, `babf9df6a`, 2026-09-22) — GATED NOT DRIVEN, IN THIS SNAPSHOT
+
+Two rungs, ONE dial each, identity 0.0 = v2 bit-exactly (seven tapes replayed pre/post, golden diff
+prints nothing), shipped via `config/scenario.toml` `[sled_comfort]`, each with an env kill switch:
+**N2 `ice_bite_mu` 0.25** (ski-only, LakeIce-only, low-speed ski bite; `SEADS_SLED_ICE_BITE`) and
+**N1 `leg_work_nm` 2400** (press-gated leg work: CTRL when PITCHED on its end, SHIFT when INVERTED;
+ON_SIDE keeps the v2 pendulum; R untouched; `SEADS_SLED_LEGWORK`). Landed on Chad's sentence
+*"please add the docs and addendum and these additions to the sled kernel ty. Use an efficient opus
+workflow to accomplish this, then push to main and seads-recon .. ty"* — push-before-drive, the R4a
+GATED-NOT-FLOWN precedent. Red-team `docs/sled_legwork/REDTEAM_2026-09-19.md`, four P1s folded at
+`c8a61c05c`; gate on `c8a61c05c` = 6 of 2165 == baseline six by name. The sled-audit packet and
+addendum (`docs/SLED_RIDE_AUDIT_20260918*.md`, `docs/sled_audit/`) land here as docs. **OWED:** Chad's
+drive word per rung on the recon exe, and two rulings named in LANES (the SIGN of the CTRL kick —
+backward ships on his run-5 word; the zero-lean landing side); then `sled-kernel-v3-signed` or a
+walk-back. Records: `docs/SESSION_HANDOFF_20260922_sled_legwork.md`, `docs/SLED_KERNEL_N1_LEGWORK.md`,
+`docs/SLED_KERNEL_N2_ICEBITE.md`.
 
 ## SLED KERNEL v2 (`sled-kernel-v2-signed`, `4acac47a2`, 2026-09-19) — S-facetcontact's neighbour, the SLED, IN THIS SNAPSHOT
 

@@ -54,15 +54,16 @@ movements kept me inverted for the most part"*. v16 (`354f6df3a`) = `[coordinati
 yaw_vert_budget` 1.0, the lateral nose-down answer. The feel branch is NO LONGER
 `feel/kernel-v5` (dead at `15571a5f4`): feel work lands on short-lived `feel/<name>` lanes
 through the SENTINEL protocol and is tagged at the pushed `main` tip.
-**`reference/seads-feel/` is snapshotted at `4acac47a2`** (`sled-kernel-v2-signed`; five stated purity
+**`reference/seads-feel/` is snapshotted at `babf9df6a`** (`sled-kernel-v3-gated`; five stated purity
 exceptions in its README; the flight kernel inside it is v17). `docs/cascade/hand-tremor-net-window.md` is the v17 entry,
 `docs/cascade/lateral-nose-down-unload.md` the v16 one. The knife-edge rung was tried twice on
 `feel/knife-edge-diag` (`lean_vert_purge`, then `lean_upright_fade`), refused by its red-teams and
 **SCRAPPED at Chad's ruling 2026-09-17** (tag `scrapped/s-leanfade-20260917`); the second ring was
 ruled NOT-JUSTIFIED; Chad: *"I actually find the flight kernel very good, lets close the lane
 until further notice"* — **no kernel lane is open.**
-The fly tree `D:\flight_sim2\seads-recon` (`sandbox/r4a-phase0`) is at `a97cf0f85` (= main
-`4acac47a2` merged), exe `build-play/seads.exe` 2026-09-19 02:29:18 — check the exe mtime. Chad's
+The fly tree `D:\flight_sim2\seads-recon` (`sandbox/r4a-phase0`) is at `8acd48b34` (= main
+`babf9df6a` merged), exe `build-play/seads.exe` 2026-09-22 11:26:00 — check the exe mtime. **Chad's
+drive word on the v3 candidate (N1 leg work, N2 ice bite) is OWED on that exe.** Chad's
 word 2026-09-17: a **snowmachine kernel lane** is underway with a workflow; it lands only after merging
 `533c86409`, a full gate on the merged tip, a red-team record, his fly word, and a sentinel GO.
 

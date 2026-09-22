@@ -121,6 +121,30 @@ double pack_modulus(const SledParams& p, double b, double depth_m) {
           std::pow(p.pack_ref_depth_m / std::max(depth_m, 0.02), p.pack_soften);
 }
 
+
+// ★ N2 LAKE-ICE BITE (sim/sled.h SledComfort::ice_bite_mu): the patch speed
+// [m/s] at which the added low-speed ski bite has faded to EXACTLY zero. A
+// CONSTANT, not a second dial (one dial per rung): the clutch engages at 3.25
+// m/s, and every turn on his tape 90 sits in the 13-27 m/s band, which this
+// leaves bit-untouched.
+constexpr double kIceBiteVrefMs = 8.0;
+
+// ★ N1 THE LEG WORK (SledComfort::leg_work_nm) -- the stage bands, constants
+// not dials (one dial per rung). Enter / exit pairs are the hysteresis; the
+// dwell reuses rolled_persist_s and the direction cone reuses right_dir_eps.
+//   PITCHED : |up_body.z| >= sin 50 enter, < sin 40 exit, AND |up_body.x| <
+//             sin 35 (a machine on its side is the pendulum's, not this)
+//   INVERTED: up_body.y <= cos 150 enter, > cos 140 exit
+//   ON_SIDE : |up_body.x| >= sin 50 (readout only; no new torque)
+// Measured against the rest poses in test_sled_legwork.cpp: nose-up rests
+// at |z| 0.96, inverted at y -0.99 -- both well inside their enter bands.
+constexpr double kLegPitchEnter = 0.76604444311897801;   // sin 50 deg
+constexpr double kLegPitchExit = 0.64278760968653925;    // sin 40 deg
+constexpr double kLegSideBand = 0.57357643635104605;     // sin 35 deg
+constexpr double kLegInvEnter = -0.86602540378443860;    // cos 150 deg
+constexpr double kLegInvExit = -0.76604444311897801;     // cos 140 deg
+constexpr double kLegRollShare = 0.5;                    // pitch : roll = 1 : 0.5
+
 }  // namespace
 
 SledParams::SledParams() {
@@ -1163,6 +1187,41 @@ SledState step_sled(const SledState& state, const SledInputs& in,
                 std::atan2(v_lat, std::max(std::abs(v_fwd), 0.5)) +
                 (g.steered ? delta : 0.0);
             double mu_l = g.is_track ? p.track_lat_mu : d.mu_lat;
+            // ★★ N2 -- LAKE-ICE LOW-SPEED SKI BITE (sim/sled.h ice_bite_mu;
+            // Chad, run 7, 2026-09-18: "the ski runners are not digging in to
+            // the ice ... less grip at lower speeds than I would like").
+            // ADDITIVE ski mu, LakeIce only (SK-1a blend-weighted from the
+            // patch's OWN ground sample, so a shoreline stays continuous),
+            // fading from full at rest to EXACTLY +0.0 by kIceBiteVrefMs on
+            // THIS patch's tangential speed -- above that the sum is `mu_l +
+            // 0.0`, bit-identical, which is how the high-speed limit he
+            // called real is kept: by arithmetic, not a clamp.
+            //
+            // ★ `g.steered`, NEVER `!g.is_track`: his word is "runners" and the
+            // track's lateral hold (track_lat_mu 0.70, surface-blind) is the
+            // OTHER side of the ratio this dial is moving -- more track bite
+            // would cancel the gain. KILLING MUTATION (measured, docs/
+            // SLED_KERNEL_N2_ICEBITE.md): `!g.steered` here moves the 3 m/s
+            // row's yaw the OTHER way and the leg
+            // `sled_ice_bite_raises_low_speed_yaw` reds.
+            //
+            // A BRANCH, so at the identity 0.0 this term does not exist and
+            // `mu_l` is the shipped expression byte for byte (pinned 17 digits
+            // by `sled_ice_bite_zero_is_the_identity`).
+            if (p.comfort.ice_bite_mu > 0.0 && g.steered) {
+                const double w_ice =
+                    (gs.surf == world::Surface::LakeIce ? 1.0 - gs.surf_mix
+                                                        : 0.0) +
+                    (gs.surf_mix > 0.0 && gs.surf_b == world::Surface::LakeIce
+                         ? gs.surf_mix
+                         : 0.0);
+                if (w_ice > 0.0) {
+                    const double u = clamp01(v_tan_vec_len / kIceBiteVrefMs);
+                    // 1 at rest, exactly 0 at u == 1: 1 - 1*(3 - 2) == 0.0.
+                    const double w_lo = 1.0 - u * u * (3.0 - 2.0 * u);
+                    mu_l += p.comfort.ice_bite_mu * w_ice * w_lo;
+                }
+            }
             // ★★ B3 THE SHED (ladder_v2 §4.3). "throttle should also be able
             // to swing my tail around on account of the roost, esp with weight
             // shifting of the sudburian" (Chad, 2026-09-18). The track spends
@@ -1950,6 +2009,164 @@ SledState step_sled(const SledState& state, const SledInputs& in,
         } else {
             s.right_assist_nm_now = 0.0;
             s.right_shift_cmd = 0.0;
+        }
+
+        // --- N1 THE LEG WORK (Chad 2026-09-18, runs 5 and 7) ---------------
+        // The two stuck attitudes the pendulum above cannot reach: on its END
+        // (PITCHED) and on its BACK (INVERTED). Everything is on sim/sled.h
+        // SledComfort::leg_work_nm; here is the mechanism, in order:
+        //   1. gates: hands on, ground contact (the rolled latch's own
+        //      air_s <= rolled_grace_s), the pendulum's hysteretic
+        //      low-passed speed gate (right_assist_armed, advanced above),
+        //      AND the rolled latch itself (s.rolled: tilt > 75 deg held
+        //      rolled_persist_s in contact -- the red-team fold below).
+        //   2. band: which attitude this substep is in, read against the
+        //      ARMED stage's EXIT threshold and everything else's ENTER
+        //      threshold (the hysteresis).
+        //   3. dwell: a band must hold rolled_persist_s before it ARMS; the
+        //      substep the attitude leaves an armed band (or a gate drops)
+        //      the stage DISARMS and a fresh dwell is owed -- one-way.
+        //   4. press: a RISING EDGE of the stage's own key AFTER it armed
+        //      (CTRL for PITCHED, SHIFT for INVERTED); a key already held when
+        //      the machine got stuck never fires. Release ends the press.
+        //   5. torque: budget x charge x pump weight on the driven axis;
+        //      PITCHED also spends kLegRollShare of the budget about Z
+        //      toward the side the machine already leans, so it lands on a
+        //      side (exact symmetry lands it on the track -- accepted).
+        // The sign law: +angular_vel.x is nose UP and nose-down is
+        // +up_body.z (MEASURED, test legwork_pitch_sign_is_measured). PITCHED
+        // pushes +X, nose UP, both ends ("backward", see below); INVERTED
+        // pushes tanh(up_body.z / eps) about X, which GROWS |z| (lifts the
+        // end that is already higher).
+        // ★ 0.0 == today's kernel bit for bit: nothing inside is reached, and
+        // no state is written (leg_prev_stand included).
+        if (p.comfort.leg_work_nm > 0.0) {
+            const glm::dvec3 up_body = glm::transpose(R) * up_cg;
+            const double ax = std::abs(up_body.x);
+            const double az = std::abs(up_body.z);
+            const bool contact = s.air_s <= p.comfort.rolled_grace_s;
+            // ★ RED-TEAM FOLD (P1, 2026-09-19): AND THE KERNEL'S OWN ROLLED
+            // LATCH. Without it the PITCHED band (|up_body.z| >= sin 50)
+            // read against RADIAL up armed on a machine parked UPRIGHT on a
+            // >= 50 deg bank -- measured: 52.2 deg ridge flank, tilt 51.8,
+            // rolled 0, stage ARMED, one CTRL edge -> 2049 N m, omega 11.0
+            // rad/s, 1.23 s airborne, over onto its back down the hill: the
+            // tumble the identity kernel never produces. `s.rolled` is the
+            // readout above (tilt > 75 deg HELD rolled_persist_s in ground
+            // contact), the same fact that makes R legal (app/player_mode.h
+            // autoright_legal) -- the legs are legal exactly where R is.
+            // Both rest fixtures sit at 105.5 / 173.5 deg with it latched,
+            // so nothing this block was measured on moves. Arithmetic: rolled
+            // (|y| <= cos 75) AND not on a side (|x| < sin 35) already puts
+            // |z| > 0.777 > sin 50, so the PITCHED enter threshold is implied
+            // here; it stays as the band's stated shape and its exit (sin 40)
+            // is the hysteresis that still matters.
+            const bool gated =
+                hands_on && contact && s.right_assist_armed && s.rolled;
+            int band = kLegNone;
+            if (up_body.y <=
+                (s.leg_stage == kLegInverted ? kLegInvExit : kLegInvEnter))
+                band = kLegInverted;
+            else if (az >= (s.leg_stage == kLegPitched ? kLegPitchExit
+                                                       : kLegPitchEnter) &&
+                     ax < kLegSideBand)
+                band = kLegPitched;
+            else if (ax >= kLegPitchEnter)
+                band = kLegOnSide;
+            if (!gated) {
+                s.leg_stage = kLegNone;
+                s.leg_press = false;
+                s.leg_cand = kLegNone;
+                s.leg_dwell_s = 0.0;
+            } else if (band == s.leg_stage) {
+                s.leg_cand = kLegNone;
+                s.leg_dwell_s = 0.0;
+            } else {
+                if (s.leg_stage != kLegNone) {  // left the armed band: one-way
+                    s.leg_stage = kLegNone;
+                    s.leg_press = false;
+                }
+                if (band != s.leg_cand) {
+                    s.leg_cand = band;
+                    s.leg_dwell_s = 0.0;
+                }
+                s.leg_dwell_s += h;
+                if (band != kLegNone &&
+                    s.leg_dwell_s >= p.comfort.rolled_persist_s) {
+                    s.leg_stage = band;  // ARMED, silently
+                    s.leg_press = false;
+                    s.leg_cand = kLegNone;
+                    s.leg_dwell_s = 0.0;
+                }
+            }
+            // The press: a rising edge of the stage's own key, after arming.
+            auto key_of = [](float v) {
+                return v > 0.5f ? +1 : (v < -0.5f ? -1 : 0);
+            };
+            const int key = key_of(in.stand);
+            const int prev = key_of(s.leg_prev_stand);
+            s.leg_prev_stand = in.stand;
+            const int want = (s.leg_stage == kLegPitched)    ? -1
+                             : (s.leg_stage == kLegInverted) ? +1
+                                                             : 0;
+            if (want != 0 && key == want && prev != want) s.leg_press = true;
+            if (want == 0 || key != want) s.leg_press = false;
+            const double p_leg = s.leg_press ? 1.0 : 0.0;
+            // The legs tire exactly as the pusher does (the pendulum's two
+            // taus): a hold spends finite energy, a release refills it.
+            const double tau_push =
+                std::max(1e-6, p.comfort.right_charge_push_s);
+            const double tau_rest =
+                std::max(1e-6, p.comfort.right_charge_rest_s);
+            s.leg_charge +=
+                h * ((1.0 - p_leg) * (1.0 - s.leg_charge) / tau_rest -
+                     p_leg * s.leg_charge / tau_push);
+            s.leg_charge = std::clamp(s.leg_charge, 0.0, 1.0);
+            if (p_leg > 0.0) {
+                const double eps = std::max(1e-6, p.comfort.right_dir_eps);
+                const double om_eps =
+                    std::max(1e-6, p.comfort.right_pump_omega_eps);
+                // PITCHED: "roll it over BACKWARD" (his word) = nose UP, +X
+                // by the measured law, for BOTH ends -- a nose-down machine
+                // comes back onto its track, a nose-up one goes over onto
+                // its back or side (the roll share below). MEASURED: the
+                // nose-up rest is a STABLE two-contact pose at 105.5 deg
+                // (tail + rear hull), so "toward level" would fight ~900 N m
+                // of gravity through top dead centre and 1500 never leaves
+                // it (test legwork ladder probe); backward goes WITH it.
+                // INVERTED: lift the end that is already higher,
+                // tanh(up_body.z / eps) -- in that band the sign that grows
+                // |z| is the one that raises the higher end.
+                const double dir_x = (s.leg_stage == kLegPitched)
+                                         ? 1.0
+                                         : std::tanh(up_body.z / eps);
+                const double w_pump_x =
+                    0.5 * (1.0 + std::tanh(s.angular_vel.x * dir_x / om_eps));
+                const double t_x = p.comfort.leg_work_nm * p_leg *
+                                   s.leg_charge * dir_x * w_pump_x;
+                torque_body.x += t_x;
+                double t_z = 0.0;
+                if (s.leg_stage == kLegPitched) {
+                    // The pendulum's own side rule (its latched brace is 0
+                    // under CTRL, so this is the machine's own lean).
+                    const double braced =
+                        (s.right_shift_cmd > 0.0)
+                            ? 1.0
+                            : (s.right_shift_cmd < 0.0 ? -1.0 : 0.0);
+                    const double dir_z = std::tanh(
+                        (-up_body.x - p.comfort.right_seed_frac * braced) /
+                        eps);
+                    const double w_pump_z =
+                        0.5 *
+                        (1.0 + std::tanh(s.angular_vel.z * dir_z / om_eps));
+                    t_z = kLegRollShare * p.comfort.leg_work_nm * p_leg *
+                          s.leg_charge * dir_z * w_pump_z;
+                    torque_body.z += t_z;
+                }
+                s.leg_nm_now = std::abs(t_x) + std::abs(t_z);
+            } else {
+                s.leg_nm_now = 0.0;
+            }
         }
 
         // --- RC item A (+B2): contact-gated saturating roll stiffness ------

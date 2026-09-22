@@ -2129,6 +2129,40 @@ right_pump_omega_eps     = 0.35
 # `SEADS_SLED_STAND_SHIFT` still overrides this line. Same divergence note as
 # right_assist_max_ms: the struct default stays at the identity 1.0.
 right_stand_shift_frac   = 0.5
+# ★★ N2 -- LAKE-ICE LOW-SPEED SKI BITE (Chad, run 7, 2026-09-18: "the ski
+# runners are not digging in to the ice ... less grip at lower speeds than I
+# would like"). Additive lateral mu on the SKIS only, LakeIce only, full at rest
+# and fading to exactly 0 by 8 m/s (kIceBiteVrefMs, a constant in sim/sled.cpp)
+# -- the high-speed limit he called real is untouched. Identity = 0.0 (today's
+# kernel bit for bit; the struct default and every older tape's reconstruction).
+# ⚠ NOT FLOWN: 0.25 was picked by MEASUREMENT (docs/SLED_KERNEL_N2_ICEBITE.md:
+# at 3 m/s the mean yaw rate on ice rises vs 0.0, 20 m/s bit-identical, no
+# rollover, parked creep measured). `SEADS_SLED_ICE_BITE` overrides this line;
+# 0 is the kill switch. Ladder 0.15 / 0.25 / 0.35; a ski never out-bites a
+# groomed trail (0.22 + 0.45 = 0.67 < TrailMain 0.70 is the env band's top).
+ice_bite_mu              = 0.25
+# ★★ N1 -- THE LEG WORK (Chad, runs 5 and 7, 2026-09-18: "rider attached can
+# use legs to roll it over backward and on its side"; "when fully upside down
+# to extend legs with shift would put the sled up first then falling over on
+# its side ... TO make the r autoright key fully redundant"). The rider's leg
+# torque budget [N m] for the two stuck attitudes the STAND pendulum cannot
+# reach: on its END (PITCHED, CTRL = crouch and kick it toward level, half the
+# budget rolls it toward the side it leans) and on its BACK (INVERTED, SHIFT =
+# extend the legs, lift the higher end; the pendulum's own roll on the same
+# press drops it onto a side). Every stage is press-gated (a rising edge AFTER
+# it armed), one-way (rolled_persist_s dwell in the band, disarms the substep
+# it leaves), and gated by ground contact, the pendulum's own low-passed speed
+# gate (right_assist_max_ms) and hands on. R stays bound and untouched.
+# Identity = 0.0 (today's kernel bit for bit; the struct default and every
+# older tape's reconstruction -- his SHIFT-while-rolled tapes replay at 0.0).
+# ⚠ NOT FLOWN: 2400 was picked by MEASUREMENT (docs/SLED_KERNEL_N1_LEGWORK.md:
+# the nose-up-on-the-tail rest is a stable two-contact pose that 1500 never
+# leaves and 1800 leaves in 1.22 s; 2400 = one CTRL press, over onto its back
+# in 0.73 s, rider welded; it is also the pendulum's own right_assist_nm).
+# `SEADS_SLED_LEGWORK` overrides this line; 0 is the kill switch. Ladder
+# 1800 / 2400 / 3200, band [0, 4000] (I.x 158.7 kg m^2: 2400 N m is 15 rad/s^2
+# of pitch before the charge and the pump weight shape it).
+leg_work_nm              = 2400
 assist_hull_frac     = 0.5
 roll_stiff_vgain     = 1.0
 release_floor_frac   = 0.3

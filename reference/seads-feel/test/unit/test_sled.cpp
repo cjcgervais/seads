@@ -5570,3 +5570,217 @@ TEST_CASE("sled_kernel_v2_defaults_equal_the_env_arm", "[sled][v2]") {
         REQUIRE_FALSE(same_drive(drive_v2(m, f), b));
     }
 }
+
+// ============================================================================
+// ★★ N2 -- LAKE-ICE LOW-SPEED SKI BITE (`SledComfort::ice_bite_mu`), Chad's
+// run-7 words 2026-09-18: "on lake ice the ski runners are not digging in to
+// the ice and there is no turn authority on it, at least at high speed it
+// given limits turning I think it is less grip at lower speeds than I would
+// like." Keep the high-speed limit, raise the LOW-speed ski bite, ice only.
+// ============================================================================
+namespace {
+
+// The all-water field of `sled_cold_sink_on_lake_ice_is_exactly_zero_even_at_
+// h_2`: every ground sample classes LakeIce (non-sinkable, mu_lat 0.22).
+struct IceField {
+    world::HeightField hf = flat_field();
+    world::Raster8 lake = uniform_raster(64, 32, 1.0);
+    world::SnowpackField f;
+    IceField() {
+        f.hf = &hf;
+        f.landmask = &lake;
+        f.p.water_class_frac = 0.5;
+        f.p.depth_max_m = 5.0;
+    }
+};
+
+// A full-lock turn from a settled start at v0, throttle held at `thr`, `ticks`
+// at 60 Hz. Returns the final state; `yaw_mean` receives the mean |yaw rate|
+// about local up over the second half [rad/s] when non-null.
+sim::SledState ice_turn(const sim::SledParams& p, const world::SnowpackField& f,
+                        double v0, float thr, int ticks,
+                        double* yaw_mean = nullptr, double* v_end = nullptr) {
+    sim::SledState s = settle(p, f, v0);
+    sim::SledInputs in;
+    in.throttle = thr;
+    in.steer = 1.0f;
+    double yaw_sum = 0.0;
+    int n = 0;
+    for (int i = 0; i < ticks; ++i) {
+        s = sim::step_sled(s, in, p, f, 1.0 / 60.0);
+        if (i >= ticks / 2) {
+            const glm::dvec3 upl = glm::normalize(s.position);
+            const glm::dmat3 Rl = glm::mat3_cast(s.orientation);
+            yaw_sum += std::abs(glm::dot(Rl * s.angular_vel, upl));
+            ++n;
+        }
+    }
+    if (yaw_mean) *yaw_mean = n > 0 ? yaw_sum / n : 0.0;
+    if (v_end) *v_end = s.ground_speed_ms;
+    return s;
+}
+
+}  // namespace
+
+TEST_CASE("sled_ice_bite_zero_is_the_identity", "[sled][n2][icebite]") {
+    // ★ THE HERMETIC SURROGATE FOR THE SEVEN-TAPE REPLAY (the
+    // `sled_tail_shed_hoist_is_a_pure_refactor` shape): a synthetic 600-tick
+    // full-lock ice drive at walking pace -- exactly the regime the dial is
+    // built for -- with the dial at its STRUCT DEFAULT, final state pinned as
+    // a 17-digit golden RECORDED ON THE PRE-EDIT BUILD (lane tip cf35d4019,
+    // sim/sled.cpp untouched). The struct default is the identity 0.0 forever
+    // (it doubles as the tape-absent reconstruction, test/harness/sled_tape.h),
+    // so this leg is the permanent net over "0.0 == today's bytes".
+    //
+    // ⚠ A 17-DIGIT ABSOLUTE-TRAJECTORY GOLDEN, pinned to THIS toolchain
+    // (Windows 11 / WinLibs LLVM via Ninja, CMAKE_BUILD_TYPE=Debug, vendored
+    // GLM). If it reds after a compiler or GLM move rather than a code move,
+    // re-measure with the printf below and SAY SO IN THE COMMIT -- never a
+    // tolerance.
+    // KILLED BY: the ice-bite term leaking into the identity (anything but a
+    // `> 0.0` BRANCH), or any reorder that moves an input to the lateral bite.
+    const IceField ice;
+    const sim::SledParams p;  // struct defaults: ice_bite_mu 0.0 (identity)
+    double v_end = 0.0;
+    const sim::SledState s = ice_turn(p, ice.f, 3.0, 0.10f, 600, nullptr,
+                                      &v_end);
+    REQUIRE(s.surface == world::Surface::LakeIce);
+    std::printf("[N2 identity golden] %.17g %.17g %.17g  %.17g %.17g %.17g  "
+                "%.17g %.17g %.17g %.17g  v_end %.4g\n",
+                s.position.x, s.position.y, s.position.z, s.velocity.x,
+                s.velocity.y, s.velocity.z, s.orientation.w, s.orientation.x,
+                s.orientation.y, s.orientation.z, v_end);
+    REQUIRE(v_end < 8.0);  // non-vacuity: inside the band the dial lives in
+    REQUIRE(s.position.x == -1.2915751740703936);
+    REQUIRE(s.position.y == 19.541377414901582);
+    REQUIRE(s.position.z == 6371000.7816440267);
+    REQUIRE(s.velocity.x == -3.3923027028396482);
+    REQUIRE(s.velocity.y == -3.1113642120635152);
+    REQUIRE(s.velocity.z == 8.5631066917732708e-06);
+    REQUIRE(s.orientation.w == 0.27298592724347537);
+    REQUIRE(s.orientation.x == 0.27042769953802387);
+    REQUIRE(s.orientation.y == 0.66155980626184319);
+    REQUIRE(s.orientation.z == 0.64396130752428371);
+}
+
+TEST_CASE("sled_ice_bite_keeps_the_high_speed_limit", "[sled][n2][icebite]") {
+    // "at least at high speed it given limits turning" -- the limit he called
+    // real is KEPT, and kept by arithmetic: above kIceBiteVrefMs (8 m/s) the
+    // added term is +0.0 on every ski, so the whole SledState (the tape's own
+    // roster, SLEDTAPE_PIN_D) is bit-identical between the dial at the TOP of
+    // its env band and the identity. Three arms on the same 20 m/s full-lock
+    // drive: identity 0.0, the SHIPPED toml value (the machine the game
+    // builds), and the band top 0.45.
+    // MEASURED (docs/SLED_KERNEL_N2_ICEBITE.md): 20 m/s row, 0.15/0.25/0.35/
+    // 0.45 all "[whole state == dial 0]"; 10 m/s and below differ.
+    // KILLED BY: the fade not reaching EXACTLY zero (a `1 - u` ramp, a clamp
+    // at a nonzero floor, or v_ref moved above the fixture's speed).
+    const IceField ice;
+    sim::SledParams p0;
+    p0.comfort.ice_bite_mu = 0.0;
+    sim::SledParams p_ship;
+    p_ship.comfort = shipped_comfort();
+    REQUIRE(p_ship.comfort.ice_bite_mu > 0.0);  // non-vacuity: it ships live
+    sim::SledParams p_ship0 = p_ship;
+    p_ship0.comfort.ice_bite_mu = 0.0;
+    sim::SledParams p_top;
+    p_top.comfort.ice_bite_mu = 0.45;
+    double v0 = 0.0, v1 = 0.0, v2 = 0.0, v3 = 0.0;
+    const sim::SledState a = ice_turn(p0, ice.f, 20.0, 0.45f, 480, nullptr, &v0);
+    const sim::SledState b = ice_turn(p_top, ice.f, 20.0, 0.45f, 480, nullptr,
+                                      &v1);
+    const sim::SledState c = ice_turn(p_ship, ice.f, 20.0, 0.45f, 480, nullptr,
+                                      &v2);
+    const sim::SledState d = ice_turn(p_ship0, ice.f, 20.0, 0.45f, 480,
+                                      nullptr, &v3);
+    std::printf("[N2 high-speed] v_end identity %.4g top %.4g shipped %.4g\n",
+                v0, v1, v2);
+    REQUIRE(a.surface == world::Surface::LakeIce);
+    REQUIRE(v0 > 8.0);  // the fixture never enters the band
+    REQUIRE_FALSE(a.rolled);
+    REQUIRE(same_pin(a, b));
+    REQUIRE(same_pin(c, d));
+}
+
+TEST_CASE("sled_ice_bite_is_ice_only", "[sled][n2][icebite]") {
+    // Surface-gated: on Bush, TrailMain and Road the term is `w_ice == 0` and
+    // never reaches `mu_l`. Whole-state equality at the band top vs the
+    // identity, at WALKING PACE (v0 3 m/s, the regime where the term would be
+    // at FULL strength if the gate leaked) -- the strongest form of the claim.
+    // KILLED BY: dropping the LakeIce test on `gs.surf` (or blending against
+    // the wrong class), or reading `s.surface` (the TRACK's class) instead of
+    // the patch's own sample.
+    sim::SledParams p0;
+    p0.comfort.ice_bite_mu = 0.0;
+    sim::SledParams p_top;
+    p_top.comfort.ice_bite_mu = 0.45;
+
+    const world::HeightField hf_bush = flat_field();
+    const world::SnowpackField f_bush = field_at_depth(hf_bush, 0.30);
+    world::HeightField hf_trail;
+    world::LineNetwork net_trail;
+    const world::SnowpackField f_trail = corridor_field(
+        hf_trail, net_trail, world::LineKind::TrailMain, 4.5, 0.30);
+    world::HeightField hf_road;
+    world::LineNetwork net_road;
+    const world::SnowpackField f_road = corridor_field(
+        hf_road, net_road, world::LineKind::RoadMinor, 6.0, 0.30);
+
+    struct Arm {
+        const char* name;
+        const world::SnowpackField* f;
+        world::Surface expect;
+    };
+    const Arm arms[] = {{"Bush", &f_bush, world::Surface::Bush},
+                        {"TrailMain", &f_trail, world::Surface::TrailMain},
+                        {"Road", &f_road, world::Surface::Road}};
+    for (const Arm& arm : arms) {
+        double va = 0.0;
+        const sim::SledState a =
+            ice_turn(p0, *arm.f, 3.0, 0.10f, 480, nullptr, &va);
+        const sim::SledState b = ice_turn(p_top, *arm.f, 3.0, 0.10f, 480);
+        std::printf("[N2 ice-only] %s surface %d v_end %.4g\n", arm.name,
+                    static_cast<int>(a.surface), va);
+        INFO(arm.name);
+        REQUIRE(a.surface == arm.expect);
+        REQUIRE(va < 8.0);  // non-vacuity: inside the band
+        REQUIRE(same_pin(a, b));
+    }
+}
+
+TEST_CASE("sled_ice_bite_raises_low_speed_yaw", "[sled][n2][icebite]") {
+    // The other half of his sentence: "less grip at lower speeds than I would
+    // like". At walking pace on ice, full lock, the mean yaw rate rises
+    // MONOTONICALLY up the ladder 0.15 / 0.25 / 0.35 and every rung is above
+    // the identity; nothing rolls. MEASURED (docs/SLED_KERNEL_N2_ICEBITE.md,
+    // v0 3 m/s, throttle 0): 26.07 -> 31.53 / 34.33 / 36.74 deg/s.
+    // KILLING MUTATION (run, recorded in that doc): `!g.steered` at the term
+    // -- the bite lands on the track instead of the skis and the yaw rate
+    // FALLS with the dial (more rear hold, same front), so this ordering reds.
+    const IceField ice;
+    auto yaw_at = [&](double dial, bool* rolled) {
+        sim::SledParams p;
+        p.comfort.ice_bite_mu = dial;
+        double ym = 0.0, ve = 0.0;
+        const sim::SledState s = ice_turn(p, ice.f, 3.0, 0.0f, 480, &ym, &ve);
+        *rolled = s.rolled;
+        std::printf("[N2 low-speed yaw] dial %.2f yaw %.4f deg/s v_end %.3g\n",
+                    dial, ym * 57.29577951308232, ve);
+        REQUIRE(ve < 8.0);
+        return ym;
+    };
+    bool r0 = false, r1 = false, r2 = false, r3 = false;
+    const double y0 = yaw_at(0.0, &r0);
+    const double y1 = yaw_at(0.15, &r1);
+    const double y2 = yaw_at(0.25, &r2);
+    const double y3 = yaw_at(0.35, &r3);
+    REQUIRE_FALSE(r0);
+    REQUIRE_FALSE(r1);
+    REQUIRE_FALSE(r2);
+    REQUIRE_FALSE(r3);
+    REQUIRE(y0 < y1);
+    REQUIRE(y1 < y2);
+    REQUIRE(y2 < y3);
+    // And the shipped value is ON the ladder, not beside it.
+    REQUIRE(shipped_comfort().ice_bite_mu == 0.25);
+}
